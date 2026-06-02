@@ -51,6 +51,7 @@ function UploadArea({ onFilesUploaded }: { onFilesUploaded: (files: File[]) => v
   }, []);
 
   const handleUpload = useCallback((files: File[]) => {
+    // test
     setIsUploading(true);
     setUploadProgress(0);
 
