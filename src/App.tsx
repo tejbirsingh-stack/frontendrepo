@@ -12,7 +12,6 @@ import './config/axios'; // Setup axios interceptors
 import './styles/noah-design-system.css';
 
 // Toast Notifications Component
-// dfgndjsgnjdsgnfdsfdsfdsf
 function ToastNotifications() {
   return null ; // Placeholder for now
 }
