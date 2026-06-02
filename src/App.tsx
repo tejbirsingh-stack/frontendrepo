@@ -12,7 +12,6 @@ import './config/axios'; // Setup axios interceptors
 import './styles/noah-design-system.css';
 
 // Toast Notifications Component
-// dfgndjsgnjdsgnfdsfdsfdsf
 function ToastNotifications() {
   return null; // Placeholder for now
 }
@@ -51,7 +50,6 @@ function UploadArea({ onFilesUploaded }: { onFilesUploaded: (files: File[]) => v
   }, []);
 
   const handleUpload = useCallback((files: File[]) => {
-    // test
     setIsUploading(true);
     setUploadProgress(0);
 
