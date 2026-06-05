@@ -199,14 +199,16 @@ export default function EnhancedProfessionalVideoPlayer({
   const [localDrawActive, setLocalDrawActive] = useState(false);
   
   const [internalDrawingTool, setInternalDrawingTool] = useState<DrawingData['tool']>('rectangle');
-  const drawingTool = (externalDrawingTool as DrawingData['tool']) || internalDrawingTool;
-  const setDrawingTool = externalDrawingTool ? () => {} : setInternalDrawingTool;
+  const externalDrawingToolValue = externalDrawingTool as DrawingData['tool'] | undefined;
+  const drawingTool = localDrawActive ? internalDrawingTool : (externalDrawingToolValue || internalDrawingTool);
+  const setDrawingTool = setInternalDrawingTool;
   
   const [internalDrawingColor, setInternalDrawingColor] = useState('#FF0000');
-  const drawingColor = externalDrawingColor || internalDrawingColor;
-  const setDrawingColor = externalDrawingColor ? () => {} : setInternalDrawingColor;
+  const drawingColor = localDrawActive ? internalDrawingColor : (externalDrawingColor || internalDrawingColor);
+  const setDrawingColor = setInternalDrawingColor;
   
-  const effectiveEnableAnnotations = enableAnnotations || localDrawActive || annotationMode === 'draw';
+  const effectiveAnnotationMode = localDrawActive ? 'draw' : annotationMode;
+  const effectiveEnableAnnotations = enableAnnotations || localDrawActive || effectiveAnnotationMode === 'draw';
   
   const [strokeWidth, setStrokeWidth] = useState(3);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -214,16 +216,27 @@ export default function EnhancedProfessionalVideoPlayer({
   const [penPoints, setPenPoints] = useState<{ x: number; y: number }[]>([]);
 
   useEffect(() => {
-    // If the parent controls draw mode, allow starting drawing immediately.
     if (externalAnnotationMode === 'draw') {
-      setCanStartDrawing(true);
       setLocalDrawActive(true);
       setShowDrawingTools(true);
-    } else if (externalAnnotationMode) {
+      setCanStartDrawing(Boolean(externalDrawingTool && externalDrawingColor));
+      if (externalDrawingTool) {
+        setInternalDrawingTool(externalDrawingTool as DrawingData['tool']);
+      }
+      if (externalDrawingColor) {
+        setInternalDrawingColor(externalDrawingColor);
+      }
+      console.log('Activated drawing mode from panel:', { tool: externalDrawingTool, color: externalDrawingColor });
+    } else if (externalAnnotationMode === 'comment') {
       setLocalDrawActive(false);
+      setShowDrawingTools(false);
+      setCanStartDrawing(false);
+    } else if (externalAnnotationMode === 'view' && !localDrawActive) {
+      setShowDrawingTools(false);
       setCanStartDrawing(false);
     }
-  }, [externalAnnotationMode]);
+  }, [externalAnnotationMode, externalDrawingTool, externalDrawingColor, localDrawActive]);
+
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
   const [commentText, setCommentText] = useState('');
   const [replyText, setReplyText] = useState('');
@@ -232,18 +245,6 @@ export default function EnhancedProfessionalVideoPlayer({
   const [showDetailsOverlay, setShowDetailsOverlay] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [videoQuality, setVideoQuality] = useState('auto');
-
-  // Handle external annotation mode changes
-  useEffect(() => {
-    if (externalAnnotationMode === 'draw' && externalDrawingTool && externalDrawingColor) {
-      setShowDrawingTools(true);
-      setCanStartDrawing(true);
-      console.log('Activated drawing mode from panel:', { tool: externalDrawingTool, color: externalDrawingColor });
-    } else if (externalAnnotationMode === 'view') {
-      setShowDrawingTools(false);
-      setCanStartDrawing(false);
-    }
-  }, [externalAnnotationMode, externalDrawingTool, externalDrawingColor]);
   const [showSubtitles, setShowSubtitles] = useState(false);
   const [highlightedAnnotation, setHighlightedAnnotation] = useState<string | null>(null);
   const [internalAnnotations, setInternalAnnotations] = useState<Annotation[]>([]);
@@ -491,11 +492,9 @@ export default function EnhancedProfessionalVideoPlayer({
 
   const showControlsTemporarily = useCallback(() => {
     setShowControls(true);
-    if (!isPlaying && enableAnnotations && annotationMode === 'draw') {
-      setShowTools(true);
-    }
-    // Don't hide controls - keep them always visible
-  }, [isPlaying, enableAnnotations, annotationMode]);
+    // Only show the tools dropdown when the user explicitly clicks the tools button.
+    // Keep controls visible on hover without reopening the dropdown.
+  }, [isPlaying, effectiveEnableAnnotations, effectiveAnnotationMode]);
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
@@ -691,7 +690,7 @@ export default function EnhancedProfessionalVideoPlayer({
     }
 
     // Visual feedback when in draw mode
-    if (annotationMode === 'draw' && showDrawingTools) {
+    if (effectiveAnnotationMode === 'draw' && showDrawingTools) {
       ctx.strokeStyle = canStartDrawing ? '#00FF00' : '#FFA500';
       ctx.lineWidth = 2;
       ctx.globalAlpha = 0.2;
@@ -700,7 +699,7 @@ export default function EnhancedProfessionalVideoPlayer({
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
     }
-  }, [currentTime, mergedAnnotations, isDrawing, currentDrawing, annotationMode, highlightedAnnotation, showDrawingTools, canStartDrawing]);
+  }, [currentTime, mergedAnnotations, isDrawing, currentDrawing, effectiveAnnotationMode, highlightedAnnotation, showDrawingTools, canStartDrawing]);
 
   const drawAnnotation = (ctx: CanvasRenderingContext2D, drawing: DrawingData) => {
     ctx.strokeStyle = drawing.color || '#FF0000';
@@ -900,7 +899,7 @@ export default function EnhancedProfessionalVideoPlayer({
   }, [annotationMode, localDrawActive, canStartDrawing, drawingTool, drawingColor, strokeWidth, currentTime, canvasDimensions, videoDisplayDimensions, addAnnotation, assetDetails]);
 
   const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    console.log('handleCanvasMouseMove fired', { isDrawing, currentDrawing: !!currentDrawing });
+    // Rapid updates for freehand pen - draw incremental segments directly to canvas for immediate feedback
     if (!isDrawing || !currentDrawing) return;
 
     const canvas = canvasRef.current;
@@ -909,12 +908,35 @@ export default function EnhancedProfessionalVideoPlayer({
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvasDimensions.width / rect.width;
     const scaleY = canvasDimensions.height / rect.height;
-    
+
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
-    console.log('canvas move coords', { x, y });
 
     if (drawingTool === 'pen') {
+      // Draw the newest segment directly to the canvas for real-time feedback
+      try {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const prevPoints = (currentDrawing.points && currentDrawing.points.length > 0)
+            ? currentDrawing.points
+            : penPoints;
+          const prev = prevPoints[prevPoints.length - 1] || { x, y };
+
+          ctx.save();
+          ctx.strokeStyle = drawingColor || '#FF0000';
+          ctx.lineWidth = (strokeWidth || 3) * 2;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          ctx.moveTo(prev.x, prev.y);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+          ctx.restore();
+        }
+      } catch (err) {
+        /* ignore drawing errors */
+      }
+
       const newPoints = [...(currentDrawing.points || []), { x, y }];
       setCurrentDrawing(prev => ({
         ...prev!,
@@ -922,14 +944,21 @@ export default function EnhancedProfessionalVideoPlayer({
         endX: x,
         endY: y
       }));
+      setPenPoints((prev) => [...prev, { x, y }]);
     } else {
       setCurrentDrawing(prev => ({
         ...prev!,
         endX: x,
         endY: y
       }));
+      // Force an immediate redraw so shape previews update without waiting for RAF
+      try {
+        updateCanvas();
+      } catch (err) {
+        /* ignore */
+      }
     }
-  }, [isDrawing, currentDrawing, drawingTool, canvasDimensions, videoDisplayDimensions]);
+  }, [isDrawing, currentDrawing, drawingTool, canvasDimensions, videoDisplayDimensions, drawingColor, strokeWidth, penPoints]);
 
   const handleCanvasMouseUp = useCallback(() => {
     console.log('handleCanvasMouseUp fired', { isDrawing, currentDrawing });
@@ -1043,14 +1072,33 @@ export default function EnhancedProfessionalVideoPlayer({
   const handleClear = () => {
     setClearActive(!clearActive);
 
-    // Your clear annotations logic
-    // setAnnotations([]);
-  };
+    // Clear current drawing session
+    setIsDrawing(false);
+    setCurrentDrawing(null);
+    setPenPoints([]);
+    setSelectedAnnotation(null);
+    setHighlightedAnnotation(null);
 
+    // Remove only drawing annotations, keep comments intact
+    setInternalAnnotations((prev) => prev.filter((annotation) => annotation.type !== 'drawing'));
+
+    if (onAnnotationDelete) {
+      mergedAnnotations
+        .filter((annotation) => annotation.type === 'drawing')
+        .forEach((annotation) => onAnnotationDelete(annotation.id));
+    }
+  };
 
   const [showTools, setShowTools] = useState(false);
 
-const tools = [
+  const closeToolsDropdown = useCallback(() => {
+    setShowTools(false);
+    setActive(false);
+    setShowColorPickerLocal(false);
+    setShowLineWidths(false);
+  }, []);
+
+  const tools = [
   "Select",
   "Zoom",
   "Pan",
@@ -1128,7 +1176,6 @@ const [selectedTool, setSelectedTool] = useState("Select");
           onMouseMove={effectiveEnableAnnotations ? handleCanvasMouseMove : undefined}
           onMouseUp={effectiveEnableAnnotations ? handleCanvasMouseUp : undefined}
           onMouseLeave={effectiveEnableAnnotations ? handleCanvasMouseUp : undefined}
-          onClick={effectiveEnableAnnotations ? handleCanvasMouseDown : undefined}
           onPointerDown={effectiveEnableAnnotations ? ((e) => handleCanvasMouseDown(e as unknown as React.MouseEvent<HTMLCanvasElement>)) : undefined}
           onPointerMove={effectiveEnableAnnotations ? ((e) => handleCanvasMouseMove(e as unknown as React.MouseEvent<HTMLCanvasElement>)) : undefined}
           onPointerUp={effectiveEnableAnnotations ? (() => handleCanvasMouseUp()) : undefined}
@@ -1594,15 +1641,17 @@ const [selectedTool, setSelectedTool] = useState("Select");
                     </button>
                     <button
                       onClick={() => {
-                        if (annotationMode === 'draw') {
+                        if (effectiveAnnotationMode === 'draw') {
                           exitDrawMode();
                         } else {
-                          setAnnotationMode('draw');
+                          setLocalDrawActive(true);
                           setShowDrawingTools(true);
+                          setCanStartDrawing(false);
+                          console.log('📐 Draw mode activated from controls');
                         }
                       }}
                       className={`p-1.5 rounded-full transition-colors ${
-                        annotationMode === 'draw' ? 'bg-yellow-600 text-white' : 'hover:bg-white/10 text-white'
+                        effectiveAnnotationMode === 'draw' ? 'bg-yellow-600 text-white' : 'hover:bg-white/10 text-white'
                       }`}
                       title="Drawing Mode (D)"
                     >
@@ -1681,7 +1730,8 @@ const [selectedTool, setSelectedTool] = useState("Select");
             className={`list-group-item list-group-item-action d-flex justify-content-between align-items-center ${
               selectedTool === tool ? "active" : ""
             }`}
-            onClick={() => {
+            onClick={(event) => {
+              event.stopPropagation();
               setSelectedTool(tool);
               const toolMap: Record<string, DrawingData['tool'] | null> = {
                 Pencil: 'pen',
@@ -1705,7 +1755,7 @@ const [selectedTool, setSelectedTool] = useState("Select");
                 setAnnotationMode('view');
                 setCanStartDrawing(false);
               }
-              setShowTools(false);
+              closeToolsDropdown();
             }}
           >
             {tool}
@@ -1835,16 +1885,24 @@ const [selectedTool, setSelectedTool] = useState("Select");
         >
           <div className="p-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
             <button
+              type="button"
               className="btn btn-sm btn-light w-100 mb-2"
-              onClick={() => setStrokeWidth((prev) => widths[Math.min(widths.length - 1, widths.indexOf(prev) + 1)])}
+              onClick={(event) => {
+                event.stopPropagation();
+                setStrokeWidth((prev) => widths[Math.min(widths.length - 1, widths.indexOf(prev) + 1)]);
+              }}
               style={{ width: '100%', padding: '6px 14px', marginBottom: 6 ,}}
             >
               Increase ]
             </button>
 
             <button
+              type="button"
               className="btn btn-sm btn-light w-100"
-              onClick={() => setStrokeWidth((prev) => widths[Math.max(0, widths.indexOf(prev) - 1)])}
+              onClick={(event) => {
+                event.stopPropagation();
+                setStrokeWidth((prev) => widths[Math.max(0, widths.indexOf(prev) - 1)]);
+              }}
               style={{ width: '100%', padding: '6px 14px' }}
             >
               Decrease [
@@ -1855,8 +1913,13 @@ const [selectedTool, setSelectedTool] = useState("Select");
             {widths.map((width) => (
               <button
                 key={width}
+                type="button"
                 className={`width-option ${strokeWidth === width ? 'selected' : ''}`}
-                onClick={() => setStrokeWidth(width)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setStrokeWidth(width);
+                  closeToolsDropdown();
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
