@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sailboat, Eye, EyeOff, ArrowRight, KeyRound, AlertTriangle, Loader2, X } from 'lucide-react';
+import { Sailboat, Eye, EyeOff, ArrowRight, KeyRound, AlertTriangle, Loader2, X, CheckCircle } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 
 // Force Railway deployment update - debug UI should be visible
@@ -26,6 +26,7 @@ export default function AuthPage() {
   });
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [registerSuccessMsg, setRegisterSuccessMsg] = useState('');
 
   useEffect(() => {
     const fetchOrganizations = async () => {
@@ -165,7 +166,7 @@ export default function AuthPage() {
       } else {
         // Registration
         console.log('📝 Attempting registration...');
-        await register({
+        const response = await register({
           name: formData.fullName,
           email: formData.email,
           password: formData.password,
@@ -173,7 +174,18 @@ export default function AuthPage() {
           phone: formData.phone,
           jobTitle: formData.jobTitle,
         });
-        console.log('✅ Registration successful');
+
+        if (response && response.success !== false) {
+          console.log('✅ Registration successful');
+          setRegisterSuccessMsg('Registration successful! Please sign in with your credentials.');
+          setIsLogin(true); // Redirect to login view
+          // Reset form passwords
+          setFormData(prev => ({
+            ...prev,
+            password: '',
+            confirmPassword: ''
+          }));
+        }
       }
     } catch (err: any) {
       console.error('❌ Authentication error:', err.message);
@@ -386,6 +398,19 @@ export default function AuthPage() {
         </button>
       </div> */}
 
+      {registerSuccessMsg && (
+        <div className="p-3 mb-4 bg-green-800/30 border border-green-600 rounded-lg flex items-center">
+          <CheckCircle className="w-5 h-5 text-green-400 mr-2 flex-shrink-0" />
+          <p className="text-green-200 text-sm flex-1">{registerSuccessMsg}</p>
+          <button
+            className="text-green-300 hover:text-white"
+            onClick={() => setRegisterSuccessMsg('')}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="p-3 mb-4 bg-red-800/30 border border-red-600 rounded-lg flex items-center">
           <AlertTriangle className="w-5 h-5 text-red-400 mr-2 flex-shrink-0" />
@@ -592,7 +617,12 @@ export default function AuthPage() {
         <p className="text-gray-400 text-sm">
           {isLogin ? "Don't have an account?" : "Already have an account?"}
           <button
-            onClick={() => setIsLogin(!isLogin)}
+            onClick={() => {
+              setIsLogin(!isLogin);
+              clearError();
+              setRegisterSuccessMsg('');
+              setValidationErrors({});
+            }}
             className="text-blue-400 hover:text-blue-300 ml-1 font-medium transition-colors"
             disabled={isLoading}
           >

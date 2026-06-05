@@ -227,18 +227,9 @@ export const useAuthStore = create<AuthState>()(
             hubspotUtk // Add this to the request payload
           });
 
-          const { user, accessToken, refreshToken } = response.data;
-
-          // Set auth header for future requests
-          axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
-
           set({
-            user,
-            token: accessToken,
-            refreshToken,
-            organization: user.organization,
-            isAuthenticated: true,
-            isLoading: false
+            isLoading: false,
+            error: null
           });
 
           return response.data;
@@ -294,7 +285,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
 
         try {
-          await axios.post(`${API_URL}/auth/reset-password`, { email });
+          await axios.post(`${API_URL}/auth/forgot-password`, { email });
           set({ isLoading: false });
           return true;
         } catch (error: any) {
