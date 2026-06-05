@@ -216,7 +216,7 @@ export default function MediaBrowser() {
                       onChange={(e) => setFilters({ ...filters, type: e.target.value })}
                       className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-purple-500 outline-none"
                     >
-                      <option value="all">All Types</option>
+                      <option value="all">All Files</option>
                       <option value="image">Images</option>
                       <option value="video">Videos</option>
                       <option value="audio">Audio</option>
