@@ -195,6 +195,8 @@ export default function EnhancedProfessionalVideoPlayer({
   
   const [showDrawingTools, setShowDrawingTools] = useState(false);
   const [canStartDrawing, setCanStartDrawing] = useState(false);
+  // Local draw-active flag to allow drawing even when parent controls `annotationMode`
+  const [localDrawActive, setLocalDrawActive] = useState(false);
   
   const [internalDrawingTool, setInternalDrawingTool] = useState<DrawingData['tool']>('rectangle');
   const drawingTool = (externalDrawingTool as DrawingData['tool']) || internalDrawingTool;
@@ -204,10 +206,24 @@ export default function EnhancedProfessionalVideoPlayer({
   const drawingColor = externalDrawingColor || internalDrawingColor;
   const setDrawingColor = externalDrawingColor ? () => {} : setInternalDrawingColor;
   
+  const effectiveEnableAnnotations = enableAnnotations || localDrawActive || annotationMode === 'draw';
+  
   const [strokeWidth, setStrokeWidth] = useState(3);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentDrawing, setCurrentDrawing] = useState<Partial<DrawingData> | null>(null);
   const [penPoints, setPenPoints] = useState<{ x: number; y: number }[]>([]);
+
+  useEffect(() => {
+    // If the parent controls draw mode, allow starting drawing immediately.
+    if (externalAnnotationMode === 'draw') {
+      setCanStartDrawing(true);
+      setLocalDrawActive(true);
+      setShowDrawingTools(true);
+    } else if (externalAnnotationMode) {
+      setLocalDrawActive(false);
+      setCanStartDrawing(false);
+    }
+  }, [externalAnnotationMode]);
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
   const [commentText, setCommentText] = useState('');
   const [replyText, setReplyText] = useState('');
@@ -230,8 +246,13 @@ export default function EnhancedProfessionalVideoPlayer({
   }, [externalAnnotationMode, externalDrawingTool, externalDrawingColor]);
   const [showSubtitles, setShowSubtitles] = useState(false);
   const [highlightedAnnotation, setHighlightedAnnotation] = useState<string | null>(null);
+  const [internalAnnotations, setInternalAnnotations] = useState<Annotation[]>([]);
+  const mergedAnnotations = useMemo(() => {
+    const externalIds = new Set(annotations.map((a) => a.id));
+    return [...annotations, ...internalAnnotations.filter((a) => !externalIds.has(a.id))];
+  }, [annotations, internalAnnotations]);
 
-  const hideControlsTimeout = useRef<NodeJS.Timeout>();
+  const hideControlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Update canvas dimensions to match actual video display area
   useEffect(() => {
@@ -326,6 +347,11 @@ export default function EnhancedProfessionalVideoPlayer({
     const handlePause = () => {
       setIsPlaying(false);
       onPlayPause?.(false);
+      if (enableAnnotations) {
+        setAnnotationMode('draw');
+        setShowTools(true);
+        setCanStartDrawing(true);
+      }
     };
     const handleEnded = () => {
       setIsPlaying(false);
@@ -351,7 +377,7 @@ export default function EnhancedProfessionalVideoPlayer({
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('error', handleError);
     };
-  }, [onDurationChange, onTimeUpdate, onPlayPause]);
+  }, [enableAnnotations, onDurationChange, onTimeUpdate, onPlayPause]);
 
   // Set canvas element dimensions to match video display area
   useEffect(() => {
@@ -388,7 +414,7 @@ export default function EnhancedProfessionalVideoPlayer({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [currentTime, annotations, isDrawing, currentDrawing, highlightedAnnotation]);
+  }, [currentTime, mergedAnnotations, isDrawing, currentDrawing, highlightedAnnotation]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -465,8 +491,11 @@ export default function EnhancedProfessionalVideoPlayer({
 
   const showControlsTemporarily = useCallback(() => {
     setShowControls(true);
+    if (!isPlaying && enableAnnotations && annotationMode === 'draw') {
+      setShowTools(true);
+    }
     // Don't hide controls - keep them always visible
-  }, []);
+  }, [isPlaying, enableAnnotations, annotationMode]);
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
@@ -563,6 +592,7 @@ export default function EnhancedProfessionalVideoPlayer({
     } else {
       // Step 1: Enter draw mode and show tools
       setAnnotationMode('draw');
+      setLocalDrawActive(true);
       setShowDrawingTools(true);
       setCanStartDrawing(false);
       console.log('📐 Draw mode activated - Select a tool first');
@@ -571,6 +601,7 @@ export default function EnhancedProfessionalVideoPlayer({
 
   const exitDrawMode = useCallback(() => {
     setAnnotationMode('view');
+    setLocalDrawActive(false);
     setShowDrawingTools(false);
     setCanStartDrawing(false);
     setIsDrawing(false);
@@ -580,8 +611,11 @@ export default function EnhancedProfessionalVideoPlayer({
   }, []);
 
   const handleToolSelect = useCallback((tool: DrawingData['tool']) => {
+    setAnnotationMode('draw');
     setDrawingTool(tool);
     setCanStartDrawing(true);
+    setLocalDrawActive(true);
+    setShowDrawingTools(true);
     console.log(`🛠️ Tool selected: ${tool} - Click on video to start drawing`);
   }, []);
 
@@ -604,10 +638,10 @@ export default function EnhancedProfessionalVideoPlayer({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Display all annotations that should be visible at current time
-    const visibleAnnotations = annotations.filter(a => {
+    const visibleAnnotations = mergedAnnotations.filter(a => {
       if (a.type === 'drawing') {
         // Show annotation for 10 seconds or until next annotation
-        const nextAnnotation = annotations.find(nextA => 
+        const nextAnnotation = mergedAnnotations.find(nextA => 
           nextA.timestamp > a.timestamp && nextA.type === 'drawing'
         );
         const displayUntil = nextAnnotation 
@@ -666,7 +700,7 @@ export default function EnhancedProfessionalVideoPlayer({
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
     }
-  }, [currentTime, annotations, isDrawing, currentDrawing, annotationMode, highlightedAnnotation, showDrawingTools, canStartDrawing]);
+  }, [currentTime, mergedAnnotations, isDrawing, currentDrawing, annotationMode, highlightedAnnotation, showDrawingTools, canStartDrawing]);
 
   const drawAnnotation = (ctx: CanvasRenderingContext2D, drawing: DrawingData) => {
     ctx.strokeStyle = drawing.color || '#FF0000';
@@ -762,9 +796,31 @@ export default function EnhancedProfessionalVideoPlayer({
     ctx.stroke();
   };
 
+  const addAnnotation = useCallback((annotation: Annotation) => {
+    if (onAnnotationAdd) {
+      onAnnotationAdd(annotation);
+    } else {
+      setInternalAnnotations((prev) => [...prev, annotation]);
+    }
+  }, [onAnnotationAdd]);
+
+  const deleteAnnotation = useCallback((id: string) => {
+    if (onAnnotationDelete) {
+      onAnnotationDelete(id);
+    } else {
+      setInternalAnnotations((prev) => prev.filter((annotation) => annotation.id !== id));
+    }
+  }, [onAnnotationDelete]);
+
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (annotationMode !== 'draw' || !canStartDrawing) {
-      if (annotationMode === 'draw' && !canStartDrawing) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Debug: log attempts to start drawing
+    console.log('handleCanvasMouseDown fired', { annotationMode, localDrawActive, canStartDrawing, drawingTool });
+
+    // Allow drawing when either global annotationMode is 'draw' or local tool activation is set
+    if (!(annotationMode === 'draw' || localDrawActive) || !canStartDrawing) {
+      if ((annotationMode === 'draw' || localDrawActive) && !canStartDrawing) {
         console.log('⚠️ Please select a drawing tool first');
       }
       return;
@@ -774,13 +830,16 @@ export default function EnhancedProfessionalVideoPlayer({
     const video = videoRef.current;
     if (!canvas || !video) return;
 
-    // Calculate position relative to actual video display area
+    // Calculate position relative to actual canvas display area
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvasDimensions.width / videoDisplayDimensions.width;
-    const scaleY = canvasDimensions.height / videoDisplayDimensions.height;
-    
-    const x = (e.clientX - rect.left - videoDisplayDimensions.left) * scaleX;
-    const y = (e.clientY - rect.top - videoDisplayDimensions.top) * scaleY;
+    // Use the actual rendered rect to scale to canvas internal resolution
+    const scaleX = canvasDimensions.width / rect.width;
+    const scaleY = canvasDimensions.height / rect.height;
+
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    console.log('canvas coords', { x, y, rectWidth: rect.width, rectHeight: rect.height, canvasDimensions });
     
     // Ensure coordinates are within canvas bounds
     if (x < 0 || y < 0 || x > canvasDimensions.width || y > canvasDimensions.height) {
@@ -810,7 +869,7 @@ export default function EnhancedProfessionalVideoPlayer({
           userId: 'user-1',
           createdAt: new Date()
         };
-        onAnnotationAdd?.(annotation);
+        addAnnotation(annotation);
         console.log('📝 Text annotation added:', text);
       }
       return;
@@ -838,20 +897,22 @@ export default function EnhancedProfessionalVideoPlayer({
         strokeWidth: strokeWidth
       });
     }
-  }, [annotationMode, canStartDrawing, drawingTool, drawingColor, strokeWidth, currentTime, canvasDimensions, videoDisplayDimensions, onAnnotationAdd, assetDetails]);
+  }, [annotationMode, localDrawActive, canStartDrawing, drawingTool, drawingColor, strokeWidth, currentTime, canvasDimensions, videoDisplayDimensions, addAnnotation, assetDetails]);
 
   const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    console.log('handleCanvasMouseMove fired', { isDrawing, currentDrawing: !!currentDrawing });
     if (!isDrawing || !currentDrawing) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvasDimensions.width / videoDisplayDimensions.width;
-    const scaleY = canvasDimensions.height / videoDisplayDimensions.height;
+    const scaleX = canvasDimensions.width / rect.width;
+    const scaleY = canvasDimensions.height / rect.height;
     
-    const x = (e.clientX - rect.left - videoDisplayDimensions.left) * scaleX;
-    const y = (e.clientY - rect.top - videoDisplayDimensions.top) * scaleY;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    console.log('canvas move coords', { x, y });
 
     if (drawingTool === 'pen') {
       const newPoints = [...(currentDrawing.points || []), { x, y }];
@@ -871,36 +932,47 @@ export default function EnhancedProfessionalVideoPlayer({
   }, [isDrawing, currentDrawing, drawingTool, canvasDimensions, videoDisplayDimensions]);
 
   const handleCanvasMouseUp = useCallback(() => {
+    console.log('handleCanvasMouseUp fired', { isDrawing, currentDrawing });
     if (!isDrawing || !currentDrawing) return;
 
     console.log('🎨 Finishing drawing:', currentDrawing);
 
     if ((currentDrawing.endX && currentDrawing.endY) || (drawingTool === 'pen' && currentDrawing.points)) {
-      if (onAnnotationAdd) {
-        const annotation: Annotation = {
-          id: `annotation-${Date.now()}`,
-          timestamp: currentTime,
-          type: 'drawing',
-          content: currentDrawing as DrawingData,
-          user: assetDetails?.owner || 'Current User',
-          userId: 'user-1',
-          createdAt: new Date()
-        };
-        console.log('📝 Creating annotation:', annotation);
-        onAnnotationAdd(annotation);
-        
-        // Force canvas update
-        updateCanvas();
-      }
+      const annotation: Annotation = {
+        id: `annotation-${Date.now()}`,
+        timestamp: currentTime,
+        type: 'drawing',
+        content: currentDrawing as DrawingData,
+        user: assetDetails?.owner || 'Current User',
+        userId: 'user-1',
+        createdAt: new Date()
+      };
+      console.log('📝 Creating annotation:', annotation);
+      addAnnotation(annotation);
+      // Force canvas update
+      updateCanvas();
     }
 
     setIsDrawing(false);
     setCurrentDrawing(null);
     setPenPoints([]);
-  }, [isDrawing, currentDrawing, currentTime, onAnnotationAdd, drawingTool, assetDetails, updateCanvas]);
+  }, [isDrawing, currentDrawing, currentTime, addAnnotation, drawingTool, assetDetails, updateCanvas]);
+
+  const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    return handleCanvasMouseDown(e as unknown as React.MouseEvent<HTMLCanvasElement>);
+  }, [handleCanvasMouseDown]);
+
+  const handleCanvasPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    return handleCanvasMouseMove(e as unknown as React.MouseEvent<HTMLCanvasElement>);
+  }, [handleCanvasMouseMove]);
+
+  const handleCanvasPointerUp = useCallback(() => {
+    return handleCanvasMouseUp();
+  }, [handleCanvasMouseUp]);
 
   const addComment = useCallback(() => {
-    if (!commentText.trim() || !onAnnotationAdd) return;
+    if (!commentText.trim()) return;
 
     const annotation: Annotation = {
       id: `annotation-${Date.now()}`,
@@ -913,10 +985,10 @@ export default function EnhancedProfessionalVideoPlayer({
       replies: []
     };
     
-    onAnnotationAdd(annotation);
+    addAnnotation(annotation);
     setCommentText('');
     setAnnotationMode('view');
-  }, [commentText, currentTime, onAnnotationAdd, assetDetails]);
+  }, [commentText, currentTime, addAnnotation, assetDetails]);
 
   const addReply = useCallback(() => {
     if (!replyText.trim() || !replyingTo || !onCommentReply) return;
@@ -951,6 +1023,49 @@ export default function EnhancedProfessionalVideoPlayer({
   }, [updateCanvas]);
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  const [isOn, setIsOn] = useState(false);
+
+  const [active, setActive] = useState(true);
+
+
+  const [selected, setSelected] = useState(false);
+  
+  // Local UI state for showing the inline color picker near the small color button
+  const [showColorPickerLocal, setShowColorPickerLocal] = useState(false);
+
+  // Line width picker state and available widths
+  const [showLineWidths, setShowLineWidths] = useState(false);
+  const widths = [1, 2, 4, 6, 8, 10];
+
+  const [clearActive, setClearActive] = useState(false);
+
+  const handleClear = () => {
+    setClearActive(!clearActive);
+
+    // Your clear annotations logic
+    // setAnnotations([]);
+  };
+
+
+  const [showTools, setShowTools] = useState(false);
+
+const tools = [
+  "Select",
+  "Zoom",
+  "Pan",
+  "Pencil",
+  "Arrow",
+  "Circle",
+  "Rectangle",
+  "Line",
+  "Text",
+  "Laser",
+];
+
+const [selectedTool, setSelectedTool] = useState("Select");
+
+
 
   return (
     <div
@@ -994,21 +1109,36 @@ export default function EnhancedProfessionalVideoPlayer({
           ref={canvasRef}
           className="absolute"
           style={{ 
+            position: 'absolute',
             top: 0,
             left: 0,
             right: 0,
             bottom: 0,
-            zIndex: enableAnnotations && annotationMode === 'draw' ? 10 : 2,
-            cursor: enableAnnotations && annotationMode === 'draw' ? 'crosshair' : 'default',
+            // Put canvas above the controls (zIndex 10000) when drawing is active
+            zIndex: effectiveEnableAnnotations ? 10001 : 2,
+            cursor: effectiveEnableAnnotations ? 'crosshair' : 'default',
             width: '100%',
             height: '100%',
-            pointerEvents: enableAnnotations && annotationMode === 'draw' ? 'auto' : 'none' // Only block events in draw mode
+            backgroundColor: effectiveEnableAnnotations ? 'rgba(255,255,255,0.02)' : 'transparent',
+            outline: effectiveEnableAnnotations ? '1px dashed rgba(255,0,0,0.4)' : undefined,
+            pointerEvents: effectiveEnableAnnotations ? 'auto' : 'none', // Only block events in draw mode
+            touchAction: 'none'
           }}
-          onMouseDown={enableAnnotations && annotationMode === 'draw' ? handleCanvasMouseDown : undefined}
-          onMouseMove={enableAnnotations && annotationMode === 'draw' ? handleCanvasMouseMove : undefined}
-          onMouseUp={enableAnnotations && annotationMode === 'draw' ? handleCanvasMouseUp : undefined}
-          onMouseLeave={enableAnnotations && annotationMode === 'draw' ? handleCanvasMouseUp : undefined}
+          onMouseDown={effectiveEnableAnnotations ? handleCanvasMouseDown : undefined}
+          onMouseMove={effectiveEnableAnnotations ? handleCanvasMouseMove : undefined}
+          onMouseUp={effectiveEnableAnnotations ? handleCanvasMouseUp : undefined}
+          onMouseLeave={effectiveEnableAnnotations ? handleCanvasMouseUp : undefined}
+          onClick={effectiveEnableAnnotations ? handleCanvasMouseDown : undefined}
+          onPointerDown={effectiveEnableAnnotations ? ((e) => handleCanvasMouseDown(e as unknown as React.MouseEvent<HTMLCanvasElement>)) : undefined}
+          onPointerMove={effectiveEnableAnnotations ? ((e) => handleCanvasMouseMove(e as unknown as React.MouseEvent<HTMLCanvasElement>)) : undefined}
+          onPointerUp={effectiveEnableAnnotations ? (() => handleCanvasMouseUp()) : undefined}
+          onPointerCancel={effectiveEnableAnnotations ? (() => handleCanvasMouseUp()) : undefined}
         />
+        {effectiveEnableAnnotations && (
+          <div style={{ zIndex: 10002 }} className="absolute top-3 left-3 px-2 py-1 text-xs font-semibold text-white bg-red-600/80 rounded">
+            DRAW MODE ACTIVE
+          </div>
+        )}
 
         {/* Remove the Drawing Tools Panel - it's now in the right panel */}
         {false && annotationMode === 'draw' && showDrawingTools && (
@@ -1147,7 +1277,7 @@ export default function EnhancedProfessionalVideoPlayer({
               <h3 className="text-white font-semibold text-lg">Annotations & Comments</h3>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">
-                  {annotations.length} total
+                  {mergedAnnotations.length} total
                 </span>
                 <button
                   onClick={() => setShowAnnotationPanel(false)}
@@ -1163,7 +1293,7 @@ export default function EnhancedProfessionalVideoPlayer({
               <button
                 onClick={() => {
                   if (confirm('Delete all annotations? This cannot be undone.')) {
-                    annotations.forEach(ann => onAnnotationDelete?.(ann.id));
+                    mergedAnnotations.forEach((ann) => deleteAnnotation(ann.id));
                     localStorage.removeItem(`annotations_${assetDetails?.id}`);
                     console.log('🗑️ All annotations deleted');
                   }
@@ -1175,7 +1305,7 @@ export default function EnhancedProfessionalVideoPlayer({
               </button>
               <button
                 onClick={() => {
-                  const data = JSON.stringify(annotations, null, 2);
+                  const data = JSON.stringify(mergedAnnotations, null, 2);
                   const blob = new Blob([data], { type: 'application/json' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
@@ -1194,7 +1324,7 @@ export default function EnhancedProfessionalVideoPlayer({
           
           <div className="p-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
             <div className="space-y-2">
-            {annotations.sort((a, b) => a.timestamp - b.timestamp).map(annotation => (
+            {mergedAnnotations.slice().sort((a, b) => a.timestamp - b.timestamp).map(annotation => (
               <div
                 key={annotation.id}
                 className={`p-3 rounded bg-gray-800 cursor-pointer hover:bg-gray-700 ${
@@ -1349,7 +1479,7 @@ export default function EnhancedProfessionalVideoPlayer({
                 </div>
               )}
 
-              {annotations.map(annotation => (
+              {mergedAnnotations.map(annotation => (
                 <div
                   key={annotation.id}
                   className="absolute top-0 bottom-0 w-1 bg-yellow-500 opacity-75"
@@ -1423,6 +1553,17 @@ export default function EnhancedProfessionalVideoPlayer({
                     className="w-24"
                   />
                 </div>
+                <select
+                  value={playbackSpeed}
+                  onChange={(e) => changePlaybackSpeed(parseFloat(e.target.value))}
+                  className="bg-transparent text-white text-sm px-2 py-1 rounded hover:bg-white/10"
+                >
+                  {PLAYBACK_SPEEDS.map(speed => (
+                    <option key={speed} value={speed} className="bg-black">
+                      {speed}x
+                    </option>
+                  ))}
+                </select>
 
                 <div className="text-white text-xs ml-2">
                   {formatTime(currentTime)} / {formatTime(duration)}
@@ -1469,18 +1610,299 @@ export default function EnhancedProfessionalVideoPlayer({
                     </button>
                   </>
                 )}
+
+
+                  <button
+                  className={`toggle-btn ${isOn ? "active" : ""}`}
+                  onClick={() => {
+                    const next = !isOn;
+                    setIsOn(next);
+                    if (next) {
+                      setShowTools(false);
+                      setShowColorPickerLocal(false);
+                      setShowLineWidths(false);
+                    }
+                  }}
+                  >
+               <span className="toggle-slider"></span>
+               <span className="toggle-text">
+                </span>
                 
-                <select
-                  value={playbackSpeed}
-                  onChange={(e) => changePlaybackSpeed(parseFloat(e.target.value))}
-                  className="bg-transparent text-white text-sm px-2 py-1 rounded hover:bg-white/10"
-                >
-                  {PLAYBACK_SPEEDS.map(speed => (
-                    <option key={speed} value={speed} className="bg-black">
-                      {speed}x
-                    </option>
-                  ))}
-                </select>
+    </button>
+
+
+<div className="position-relative">
+  <button
+    type="button"
+    disabled={isOn}
+    className={`annotation-btn ${active ? "active" : ""}`}
+    onClick={() => {
+      setActive(!active);
+      setShowTools((prev) => {
+        const next = !prev;
+        if (next) {
+          setShowColorPickerLocal(false);
+          setShowLineWidths(false);
+        }
+        return next;
+      });
+    }}
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+    >
+      <path
+        fill="currentColor"
+        d="M20.92 12.38a1 1 0 0 0-.22-1.09l-2.5-2.5a.996.996 0 1 0-1.41 1.41l.79.79h-4.59V6.4l.79.79c.2.2.45.29.71.29s.51-.1.71-.29a.996.996 0 0 0 0-1.41l-2.5-2.5a1 1 0 0 0-1.42 0l-2.5 2.5a.996.996 0 1 0 1.41 1.41l.79-.79v4.59H6.39l.79-.79a.996.996 0 1 0-1.41-1.41l-2.5 2.5a1 1 0 0 0 0 1.42l2.5 2.5c.2.2.45.29.71.29s.51-.1.71-.29a.996.996 0 0 0 0-1.41l-.79-.79h4.59v4.59l-.79-.79a.996.996 0 1 0-1.41 1.41l2.5 2.5c.09.09.2.17.33.22.12.05.25.08.38.08s.26-.03.38-.08.23-.12.33-.22l2.5-2.5a.996.996 0 1 0-1.41-1.41l-.79.79v-4.59h4.59l-.79.79a.996.996 0 0 0 .71 1.7c.26 0 .51-.1.71-.29l2.5-2.5c.09-.09.17-.2.22-.33z"
+      />
+    </svg>
+  </button>
+
+  {showTools && (
+    <div
+      className="tools-dropdown card shadow position-absolute"
+      style={{
+        width: "220px",
+        zIndex: 1000,
+        left: 0,
+      }}
+    >
+      <div className="card-header fw-bold">Tools</div>
+
+      <div className="list-group list-group-flush">
+        {tools.map((tool) => (
+          <button
+            key={tool}
+            type="button"
+            className={`list-group-item list-group-item-action d-flex justify-content-between align-items-center ${
+              selectedTool === tool ? "active" : ""
+            }`}
+            onClick={() => {
+              setSelectedTool(tool);
+              const toolMap: Record<string, DrawingData['tool'] | null> = {
+                Pencil: 'pen',
+                Arrow: 'arrow',
+                Circle: 'circle',
+                Rectangle: 'rectangle',
+                Line: 'line',
+                Text: 'text',
+                Laser: 'pen',
+                Select: null,
+                Zoom: null,
+                Pan: null,
+              };
+              const mappedTool = toolMap[tool] ?? null;
+              if (mappedTool) {
+                handleToolSelect(mappedTool);
+                setAnnotationMode('draw');
+                setShowDrawingTools(true);
+                setCanStartDrawing(true);
+              } else {
+                setAnnotationMode('view');
+                setCanStartDrawing(false);
+              }
+              setShowTools(false);
+            }}
+          >
+            {tool}
+
+            {selectedTool === tool && (
+              <span className="badge bg-light text-dark">✓</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  )}
+</div>
+
+
+ 
+
+
+
+     <button
+  type="button"
+  disabled={isOn}
+  className={`annotation-color-btn ${selected ? "active" : ""}`}
+  onClick={() => {
+    setShowColorPickerLocal((s) => {
+      const next = !s;
+      if (next) {
+        setShowTools(false);
+        setShowLineWidths(false);
+      }
+      return next;
+    });
+    setSelected(true);
+  }}
+>
+      <div
+        className="color-swatch"
+        style={{ backgroundColor: "#ffffff" }}
+      />
+    </button>
+
+    {showColorPickerLocal && (
+      <div
+        className="color-picker-popover"
+        style={{
+          position: 'absolute',
+          zIndex: 1200,
+          top: '0px',
+          display: 'flex',
+          gap: 8,
+          padding: 8,
+          background: '#0f172a',
+          borderRadius: 8,
+          border: '1px solid rgba(255,255,255,0.06)',
+          marginTop: 6
+        }}
+      >
+        {DRAWING_COLORS.map((c) => (
+          <button
+            key={c}
+            onClick={() => {
+              setDrawingColor(c);
+              setShowColorPickerLocal(false);
+              setSelected(true);
+              if (annotationMode !== 'draw') {
+                setAnnotationMode('draw');
+                setShowDrawingTools(true);
+                setCanStartDrawing(true);
+              }
+            }}
+            className="w-6 h-6 rounded"
+            style={{
+              backgroundColor: c,
+              border: drawingColor === c ? '2px solid white' : '1px solid rgba(255,255,255,0.06)'
+            }}
+            title={c}
+          />
+        ))}
+      </div>
+    )}
+
+    <div className="position-relative" style={{ position: 'relative' }}>
+      <button
+        type="button"
+        disabled={isOn}
+        className={`line-width-btn ${active ? "active" : ""}`}
+        onClick={() => {
+          setActive(!active);
+          setShowLineWidths((s) => {
+            const next = !s;
+            if (next) {
+              setShowTools(false);
+              setShowColorPickerLocal(false);
+            }
+            return next;
+          });
+        }}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+        >
+          <path
+            fill="currentColor"
+            d="M20 4H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1m0 8H4a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1m0 6H4a1 1 0 1 0 0 2h16a1 1 0 1 0 0-2"
+          />
+        </svg>
+      </button>
+
+      {showLineWidths && (
+        <div
+          className="linewidth-popover"
+          style={{
+            position: 'absolute',
+            zIndex: 1200,
+            top: '-457px',
+            left: '-71px',
+            width: 245,
+            background: '#0f172a',
+            borderRadius: 8,
+            padding: 8,
+            border: '1px solid rgba(255,255,255,0.06)'
+          }}
+        >
+          <div className="p-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+            <button
+              className="btn btn-sm btn-light w-100 mb-2"
+              onClick={() => setStrokeWidth((prev) => widths[Math.min(widths.length - 1, widths.indexOf(prev) + 1)])}
+              style={{ width: '100%', padding: '6px 14px', marginBottom: 6 ,}}
+            >
+              Increase ]
+            </button>
+
+            <button
+              className="btn btn-sm btn-light w-100"
+              onClick={() => setStrokeWidth((prev) => widths[Math.max(0, widths.indexOf(prev) - 1)])}
+              style={{ width: '100%', padding: '6px 14px' }}
+            >
+              Decrease [
+            </button>
+          </div>
+
+          <div className="p-3" style={{ display: 'flex', flexDirection:'column', gap: 8, flexWrap: 'wrap' }}>
+            {widths.map((width) => (
+              <button
+                key={width}
+                className={`width-option ${strokeWidth === width ? 'selected' : ''}`}
+                onClick={() => setStrokeWidth(width)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width:200,
+                  height: 40,
+                  borderRadius: 6,
+                  background: strokeWidth === width ? 'rgba(255,255,255,0.08)' : 'transparent',
+                  border: strokeWidth === width ? '1px solid white' : '1px solid rgba(255,255,255,0.04)'
+                }}
+              >
+                <div className="width-preview" style={{ width: '80%', height: `${width}px`, background: 'white', borderRadius: 2 }} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+
+
+<button
+  type="button"
+  disabled={isOn}
+  className={`btn btn-light border ${clearActive ? "btn-danger" : ""}`}
+  onClick={handleClear}
+>
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    width="18"
+    height="18"
+  >
+    <path
+      fill="currentColor"
+      d="M18 5H8.24c-1.14 0-2.17.64-2.68 1.66l-2.01 4c-.42.84-.42 1.84 0 2.68l2 4A2.99 2.99 0 0 0 8.23 19h9.76c1.65 0 3-1.35 3-3V8c0-1.65-1.35-3-3-3zm1 11c0 .55-.45 1-1 1H8.24c-.38 0-.72-.21-.89-.55l-2-4a1 1 0 0 1 0-.89l2-4c.17-.34.51-.55.89-.55H18c.55 0 1 .45 1 1v8z"
+    />
+    <path
+      fill="currentColor"
+      d="M15.71 9.29a.996.996 0 0 0-1.41 0l-1.29 1.29-1.29-1.29a.996.996 0 1 0-1.41 1.41l1.29 1.29-1.29 1.29a.996.996 0 0 0 .71 1.7c.26 0 .51-.1.71-.29l1.29-1.29 1.29 1.29c.2.2.45.29.71.29s.51-.1.71-.29a.996.996 0 0 0 0-1.41l-1.29-1.29 1.29-1.29a.996.996 0 0 0 0-1.41z"
+    />
+  </svg>
+</button>
+
+                
+                
 
                 <button
                   onClick={toggleFullscreen}
