@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 FROM node:18-alpine
+=======
+FROM node:20-alpine
+>>>>>>> 32192ed (Add frontend deployment buildspec)
 
 WORKDIR /app
 
