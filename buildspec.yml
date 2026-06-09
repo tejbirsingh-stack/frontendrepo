@@ -12,10 +12,7 @@ phases:
           --document-name "AWS-RunShellScript" \
           --parameters '{
             "commands":[
-              "git config --global --add safe.directory /opt/noah-frontend",
-              "cd /opt/noah-frontend",
-              "git pull origin qa",
-              "cd /opt/noah",
-              "docker compose up -d --build frontend"
+              "cd /opt/noah-frontend && git pull origin qa && cd /opt/noah && docker compose up -d --build frontend"
             ]
-          }'
+          }' \
+          --output text
