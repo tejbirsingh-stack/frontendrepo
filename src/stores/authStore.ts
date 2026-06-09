@@ -12,7 +12,7 @@ const getApiUrl = () => {
 
   // In production, use the backend Railway URL directly
   if (window.location.hostname.includes('railway.app') ||
-      window.location.hostname.includes('vercel.app')) {
+    window.location.hostname.includes('vercel.app')) {
     const backendUrl = 'https://noah-production-e15c.up.railway.app/api';
     console.log('🔗 Using production backend URL:', backendUrl);
     return backendUrl;
@@ -60,6 +60,9 @@ interface RegisterCredentials {
   email: string;
   password: string;
   orgId: string;
+  hubspotUtk?: string; // Store Hubspot token for tracking user
+  phone?: string;
+  jobTitle?: string;
 }
 
 interface AuthState {
@@ -119,12 +122,12 @@ export const useAuthStore = create<AuthState>()(
             console.error('❌ Login failed - success=false:', response.data.error);
             throw new Error(response.data.error || 'Login failed');
           }
-          
+
           const { user, accessToken, refreshToken } = response.data;
-          
+
           // Set auth header for future requests
           axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
-          
+
           set({
             user,
             token: accessToken,
@@ -137,7 +140,7 @@ export const useAuthStore = create<AuthState>()(
             mfaPassword: null,
             error: null // Clear error on successful login
           });
-          
+
           return response.data;
         } catch (error: any) {
           console.error('❌ Login error:', {
@@ -158,10 +161,10 @@ export const useAuthStore = create<AuthState>()(
             });
             return error.response.data;
           }
-          
+
           // Better error message handling
           let errorMessage = 'Login failed';
-          
+
           if (error.code === 'NETWORK_ERROR' || !error.response) {
             errorMessage = 'Cannot connect to server. Please check your connection.';
           } else if (error.response?.status === 401) {
@@ -173,7 +176,7 @@ export const useAuthStore = create<AuthState>()(
           } else {
             errorMessage = error.response?.data?.error || error.response?.data?.message || 'Login failed';
           }
-          
+
           set({
             isLoading: false,
             error: errorMessage,
@@ -190,11 +193,11 @@ export const useAuthStore = create<AuthState>()(
 
       submitMfaCode: async (code: string) => {
         const { mfaEmail, mfaPassword } = get();
-        
+
         if (!mfaEmail || !mfaPassword) {
           throw new Error('MFA session data is missing');
         }
-        
+
         return get().login({
           email: mfaEmail,
           password: mfaPassword,
@@ -202,31 +205,33 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      register: async ({ name, email, password, orgId }: RegisterCredentials) => {
+      register: async ({ name, email, password, orgId, phone, jobTitle }: RegisterCredentials) => {
         set({ isLoading: true, error: null });
-        
+
+        // Extract HubSpot tracking cookie from the browser
+        const hubspotUtk = typeof document !== 'undefined'
+          ? document.cookie
+            .split('; ')
+            .find(row => row.startsWith('hubspotutk='))
+            ?.split('=')[1]
+          : undefined;
+
         try {
           const response = await axios.post<AuthResponse>(`${API_URL}/auth/register`, {
             name,
             email,
             password,
-            orgId
+            orgId,
+            phone,
+            jobTitle,
+            hubspotUtk // Add this to the request payload
           });
-          
-          const { user, accessToken, refreshToken } = response.data;
-          
-          // Set auth header for future requests
-          axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
-          
+
           set({
-            user,
-            token: accessToken,
-            refreshToken,
-            organization: user.organization,
-            isAuthenticated: true,
-            isLoading: false
+            isLoading: false,
+            error: null
           });
-          
+
           return response.data;
         } catch (error: any) {
           const errorMessage = error.response?.data?.message || 'Registration failed';
@@ -250,12 +255,12 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         const { token } = get();
         set({ isLoading: true, error: null });
-        
+
         try {
           if (token) {
             await axios.post(
-              `${API_URL}/auth/logout`, 
-              {}, 
+              `${API_URL}/auth/logout`,
+              {},
               { headers: { Authorization: `Bearer ${token}` } }
             );
           }
@@ -264,7 +269,7 @@ export const useAuthStore = create<AuthState>()(
         } finally {
           // Clear auth header
           delete axios.defaults.headers.common['Authorization'];
-          
+
           set({
             user: null,
             token: null,
@@ -278,16 +283,16 @@ export const useAuthStore = create<AuthState>()(
 
       resetPassword: async (email: string) => {
         set({ isLoading: true, error: null });
-        
+
         try {
-          await axios.post(`${API_URL}/auth/reset-password`, { email });
+          await axios.post(`${API_URL}/auth/forgot-password`, { email });
           set({ isLoading: false });
           return true;
         } catch (error: any) {
           const errorMessage = error.response?.data?.message || 'Failed to send password reset email';
-          set({ 
-            isLoading: false, 
-            error: errorMessage 
+          set({
+            isLoading: false,
+            error: errorMessage
           });
           return false;
         }
@@ -298,18 +303,18 @@ export const useAuthStore = create<AuthState>()(
         if (!refreshToken) {
           throw new Error('No refresh token available');
         }
-        
+
         try {
           const response = await axios.post(`${API_URL}/auth/refresh`, {
             refreshToken
           });
-          
+
           if (response.data.success) {
             const { accessToken } = response.data;
-            
+
             // Update auth header
             axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
-            
+
             set({ token: accessToken });
           } else {
             throw new Error('Failed to refresh token');
@@ -321,11 +326,11 @@ export const useAuthStore = create<AuthState>()(
           throw error;
         }
       },
-      
+
       setUser: (user: User) => {
         set({ user, organization: user.organization });
       },
-      
+
       clearError: () => {
         set({ error: null });
       }

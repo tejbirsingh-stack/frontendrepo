@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Sailboat, Eye, EyeOff, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState('');
@@ -48,7 +48,7 @@ export default function ResetPasswordPage() {
     setError(null);
     
     try {
-      await axios.post(`${API_URL}/api/auth/reset-password`, {
+      await axios.post(`${API_URL}/auth/reset-password`, {
         token,
         newPassword: password
       });

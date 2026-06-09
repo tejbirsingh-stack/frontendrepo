@@ -214,7 +214,7 @@ export default function DetailsPanelWithAnnotationsEnhanced({
         >
           <div className="flex items-center justify-center gap-2">
             <MessageSquare className="w-4 h-4" />
-            Comments & Annotations
+            Comments & Annotation
           </div>
         </button>
         <button

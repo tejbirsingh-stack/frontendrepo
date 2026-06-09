@@ -3,6 +3,8 @@ import { ArrowLeft, Download, Share2, Maximize2, Info, PanelRightClose, PanelRig
 import EnhancedProfessionalVideoPlayer from './EnhancedProfessionalVideoPlayer';
 import DetailsPanelWithAnnotationsEnhanced from './DetailsPanelWithAnnotationsEnhanced';
 
+
+
 // Export type definitions for use by other components
 export interface MediaMetadata {
   width?: number;
@@ -18,6 +20,8 @@ export interface MediaMetadata {
   audioChannels?: number;
   sampleRate?: number;
 }
+
+
 
 export interface MediaAssetDetails {
   id: string;

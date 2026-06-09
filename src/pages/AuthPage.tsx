@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Sailboat, Eye, EyeOff, ArrowRight, KeyRound, AlertTriangle, Loader2, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Sailboat, Eye, EyeOff, ArrowRight, KeyRound, AlertTriangle, Loader2, X, CheckCircle } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 
 // Force Railway deployment update - debug UI should be visible
@@ -11,7 +11,7 @@ export default function AuthPage() {
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
   const [organizations, setOrganizations] = useState([
-    { id: 'org-1', name: 'Visit Detroit' }, 
+    { id: 'org-1', name: 'Visit Detroit' },
     { id: 'org-2', name: 'Custom Organization' }
   ]);
   const [formData, setFormData] = useState({
@@ -22,58 +22,172 @@ export default function AuthPage() {
     confirmPassword: '',
     orgId: 'org-1',
     mfaCode: '',
+    jobTitle: '',
   });
 
-  const { 
-    login, 
-    register, 
-    isLoading, 
-    requiresMfa, 
-    submitMfaCode, 
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [registerSuccessMsg, setRegisterSuccessMsg] = useState('');
+
+  useEffect(() => {
+    const fetchOrganizations = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || '/api';
+        const response = await fetch(`${apiUrl}/organizations`);
+
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setOrganizations(data);
+            // Automatically select the first real organization ID
+            setFormData(prev => ({
+              ...prev,
+              orgId: data[0].id
+            }));
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching organizations:', err);
+      }
+    };
+    fetchOrganizations();
+  }, []);
+
+  const {
+    login,
+    register,
+    isLoading,
+    requiresMfa,
+    submitMfaCode,
     resetPassword,
     error,
     clearError
   } = useAuthStore();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: value
     }));
+    // Clear validation error when user updates the field
+    if (validationErrors[name]) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
+  };
+
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+
+    // Email Validation (both Login & Register)
+    if (!formData.email.trim()) {
+      errors.email = 'Email address is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    // Password Validation (both Login & Register)
+    if (!formData.password) {
+      errors.password = 'Password is required';
+    } else if (formData.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters long';
+    }
+
+    // Register-only Validations
+    if (!isLogin) {
+      // Full Name Validation
+      if (!formData.fullName.trim()) {
+        errors.fullName = 'Full name is required';
+      } else if (formData.fullName.trim().split(' ').filter(Boolean).length < 2) {
+        errors.fullName = 'Please enter your first and last name';
+      }
+
+      // Phone Number Validation
+      const phoneDigits = formData.phone.replace(/\D/g, '');
+      if (!formData.phone.trim()) {
+        errors.phone = 'Phone number is required';
+      } else if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+        errors.phone = 'Please enter a valid 10-15 digit phone number';
+      }
+
+      // Organization Validation
+      if (!formData.orgId || formData.orgId === '') {
+        errors.orgId = 'Please select an organization';
+      }
+
+      // Job Title Validation
+      if (!formData.jobTitle.trim()) {
+        errors.jobTitle = 'Job title is required';
+      }
+
+      // Confirm Password Validation
+      if (!formData.confirmPassword) {
+        errors.confirmPassword = 'Confirm password is required';
+      } else if (formData.password !== formData.confirmPassword) {
+        errors.confirmPassword = 'Passwords do not match';
+      }
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('🔐 Form submitted:', { email: formData.email, isLogin, requiresMfa });
-    
+    clearError(); // Clear auth store error
+    setValidationErrors({}); // Clear validation errors
+
+    if (requiresMfa) {
+      if (!formData.mfaCode) {
+        setValidationErrors({ mfaCode: 'MFA Code is required' });
+        return;
+      }
+      console.log('🔑 Submitting MFA code...');
+      await submitMfaCode(formData.mfaCode);
+      return;
+    }
+
+    // Trigger validation
+    if (!validateForm()) {
+      console.log('⚠️ Form validation failed:', validationErrors);
+      return;
+    }
+
     try {
-      if (requiresMfa) {
-        console.log('🔑 Submitting MFA code...');
-        await submitMfaCode(formData.mfaCode);
-      } else if (isLogin) {
+      if (isLogin) {
         console.log('🔑 Attempting login...');
-        await login({ 
-          email: formData.email, 
-          password: formData.password 
+        await login({
+          email: formData.email,
+          password: formData.password
         });
         console.log('✅ Login successful');
       } else {
         // Registration
-        if (formData.password !== formData.confirmPassword) {
-          throw new Error('Passwords do not match');
-        }
-        
         console.log('📝 Attempting registration...');
-        await register({
+        const response = await register({
           name: formData.fullName,
           email: formData.email,
           password: formData.password,
-          orgId: formData.orgId
+          orgId: formData.orgId,
+          phone: formData.phone,
+          jobTitle: formData.jobTitle,
         });
-        console.log('✅ Registration successful');
+
+        if (response && response.success !== false) {
+          console.log('✅ Registration successful');
+          setRegisterSuccessMsg('Registration successful! Please sign in with your credentials.');
+          setIsLogin(true); // Redirect to login view
+          // Reset form passwords
+          setFormData(prev => ({
+            ...prev,
+            password: '',
+            confirmPassword: ''
+          }));
+        }
       }
     } catch (err: any) {
-      // Error is handled in the auth store
       console.error('❌ Authentication error:', err.message);
       console.error('❌ Full error:', err);
     }
@@ -81,7 +195,7 @@ export default function AuthPage() {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       const success = await resetPassword(forgotPasswordEmail);
       if (success) {
@@ -91,7 +205,7 @@ export default function AuthPage() {
       console.error('Password reset error:', err);
     }
   };
-  
+
   const renderMfaForm = () => (
     <>
       <div className="text-center mb-8">
@@ -141,7 +255,7 @@ export default function AuthPage() {
       </form>
     </>
   );
-  
+
   const renderForgotPasswordForm = () => (
     <>
       <div className="text-center mb-8">
@@ -208,7 +322,7 @@ export default function AuthPage() {
       )}
     </>
   );
-  
+
   const renderAuthForm = () => (
     <>
       <div className="text-center mb-8">
@@ -216,15 +330,15 @@ export default function AuthPage() {
           {isLogin ? 'WELCOME BACK' : 'CREATE ACCOUNT'}
         </h1>
         <p className="text-gray-300 text-sm">
-          {isLogin 
-            ? 'Sign in to your media asset management platform' 
+          {isLogin
+            ? 'Sign in to your media asset management platform'
             : 'Join our media asset management platform'
           }
         </p>
       </div>
 
       {/* Debug info */}
-      <div className="mb-2 p-2 bg-blue-800/20 border border-blue-600 rounded text-xs text-blue-200">
+      {/* <div className="mb-2 p-2 bg-blue-800/20 border border-blue-600 rounded text-xs text-blue-200">
         Debug: error="{error}" | isLoading={isLoading.toString()} | requiresMfa={requiresMfa.toString()}
         <br />
         Form data: email="{formData.email}" | password="{formData.password ? '***' : ''}"
@@ -282,13 +396,26 @@ export default function AuthPage() {
         >
           Test Direct
         </button>
-      </div>
+      </div> */}
+
+      {registerSuccessMsg && (
+        <div className="p-3 mb-4 bg-green-800/30 border border-green-600 rounded-lg flex items-center">
+          <CheckCircle className="w-5 h-5 text-green-400 mr-2 flex-shrink-0" />
+          <p className="text-green-200 text-sm flex-1">{registerSuccessMsg}</p>
+          <button
+            className="text-green-300 hover:text-white"
+            onClick={() => setRegisterSuccessMsg('')}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="p-3 mb-4 bg-red-800/30 border border-red-600 rounded-lg flex items-center">
           <AlertTriangle className="w-5 h-5 text-red-400 mr-2 flex-shrink-0" />
           <p className="text-red-200 text-sm flex-1">{error}</p>
-          <button 
+          <button
             className="text-red-300 hover:text-white"
             onClick={clearError}
           >
@@ -297,73 +424,155 @@ export default function AuthPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {!isLogin && (
-          <div>
-            <input
-              type="text"
-              name="fullName"
-              placeholder="Full Name"
-              value={formData.fullName}
-              onChange={handleInputChange}
-              className="input-field w-full"
-              required
-            />
-          </div>
-        )}
-
-        <div>
-          <input
-            type="email"
-            name="email"
-            placeholder="Email Address"
-            value={formData.email}
-            onChange={handleInputChange}
-            className="input-field w-full"
-            required
-          />
-        </div>
-
-        {!isLogin && (
-          <div className="flex gap-4">
-            <select className="input-field flex-shrink-0">
-              <option value="US">US +1</option>
-              <option value="UK">UK +44</option>
-              <option value="CA">CA +1</option>
-            </select>
-            <input
-              type="tel"
-              name="phone"
-              placeholder="(555) 123-4567"
-              value={formData.phone}
-              onChange={handleInputChange}
-              className="input-field flex-1"
-              required
-            />
-          </div>
-        )}
-
-        <div className="relative">
-          <input
-            type={showPassword ? 'text' : 'password'}
-            name="password"
-            placeholder="Password"
-            value={formData.password}
-            onChange={handleInputChange}
-            className="input-field w-full pr-12"
-            required
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-          >
-            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-          </button>
-        </div>
-
-        {!isLogin && (
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        {isLogin ? (
           <>
+            <div>
+              <input
+                type="email"
+                name="email"
+                placeholder="Email Address"
+                value={formData.email}
+                onChange={handleInputChange}
+                className="input-field w-full"
+                style={validationErrors.email ? { borderColor: '#ef4444', outline: 'none' } : {}}
+              />
+              {validationErrors.email && (
+                <p className="text-red-500 text-xs mt-1 text-left">{validationErrors.email}</p>
+              )}
+            </div>
+
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                placeholder="Password"
+                value={formData.password}
+                onChange={handleInputChange}
+                className="input-field w-full pr-12"
+                style={validationErrors.password ? { borderColor: '#ef4444', outline: 'none' } : {}}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+              {validationErrors.password && (
+                <p className="text-red-500 text-xs mt-1 text-left">{validationErrors.password}</p>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <input
+                type="text"
+                name="fullName"
+                placeholder="Full Name"
+                value={formData.fullName}
+                onChange={handleInputChange}
+                className="input-field w-full"
+                style={validationErrors.fullName ? { borderColor: '#ef4444', outline: 'none' } : {}}
+              />
+              {validationErrors.fullName && (
+                <p className="text-red-500 text-xs mt-1 text-left">{validationErrors.fullName}</p>
+              )}
+            </div>
+
+            <div>
+              <input
+                type="email"
+                name="email"
+                placeholder="Email Address"
+                value={formData.email}
+                onChange={handleInputChange}
+                className="input-field w-full"
+                style={validationErrors.email ? { borderColor: '#ef4444', outline: 'none' } : {}}
+              />
+              {validationErrors.email && (
+                <p className="text-red-500 text-xs mt-1 text-left">{validationErrors.email}</p>
+              )}
+            </div>
+
+            <div>
+              <div className="flex gap-4">
+                <select className="input-field flex-shrink-0">
+                  <option value="US">US +1</option>
+                  <option value="UK">UK +44</option>
+                  <option value="CA">CA +1</option>
+                </select>
+                <input
+                  type="tel"
+                  name="phone"
+                  placeholder="(555) 123-4567"
+                  value={formData.phone}
+                  onChange={handleInputChange}
+                  className="input-field flex-1"
+                  style={validationErrors.phone ? { borderColor: '#ef4444', outline: 'none' } : {}}
+                />
+              </div>
+              {validationErrors.phone && (
+                <p className="text-red-500 text-xs mt-1 text-left">{validationErrors.phone}</p>
+              )}
+            </div>
+
+            <div>
+              <select
+                name="orgId"
+                value={formData.orgId}
+                onChange={handleInputChange}
+                className="input-field w-full"
+                style={validationErrors.orgId ? { borderColor: '#ef4444', outline: 'none' } : {}}
+              >
+                <option value="" disabled>Select Organization</option>
+                {organizations.map(org => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </select>
+              {validationErrors.orgId && (
+                <p className="text-red-500 text-xs mt-1 text-left">{validationErrors.orgId}</p>
+              )}
+            </div>
+
+            <div>
+              <input
+                type="text"
+                name="jobTitle"
+                placeholder="Job Title"
+                value={formData.jobTitle}
+                onChange={handleInputChange}
+                className="input-field w-full"
+                style={validationErrors.jobTitle ? { borderColor: '#ef4444', outline: 'none' } : {}}
+              />
+              {validationErrors.jobTitle && (
+                <p className="text-red-500 text-xs mt-1 text-left">{validationErrors.jobTitle}</p>
+              )}
+            </div>
+
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                placeholder="Password"
+                value={formData.password}
+                onChange={handleInputChange}
+                className="input-field w-full pr-12"
+                style={validationErrors.password ? { borderColor: '#ef4444', outline: 'none' } : {}}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+              {validationErrors.password && (
+                <p className="text-red-500 text-xs mt-1 text-left">{validationErrors.password}</p>
+              )}
+            </div>
+
             <div>
               <input
                 type="password"
@@ -372,23 +581,11 @@ export default function AuthPage() {
                 value={formData.confirmPassword}
                 onChange={handleInputChange}
                 className="input-field w-full"
-                required
+                style={validationErrors.confirmPassword ? { borderColor: '#ef4444', outline: 'none' } : {}}
               />
-            </div>
-            
-            <div>
-              <select
-                name="orgId"
-                value={formData.orgId}
-                onChange={handleInputChange}
-                className="input-field w-full"
-                required
-              >
-                <option value="" disabled>Select Organization</option>
-                {organizations.map(org => (
-                  <option key={org.id} value={org.id}>{org.name}</option>
-                ))}
-              </select>
+              {validationErrors.confirmPassword && (
+                <p className="text-red-500 text-xs mt-1 text-left">{validationErrors.confirmPassword}</p>
+              )}
             </div>
           </>
         )}
@@ -415,11 +612,17 @@ export default function AuthPage() {
         </button>
       </form>
 
+
       <div className="mt-6 text-center">
         <p className="text-gray-400 text-sm">
           {isLogin ? "Don't have an account?" : "Already have an account?"}
           <button
-            onClick={() => setIsLogin(!isLogin)}
+            onClick={() => {
+              setIsLogin(!isLogin);
+              clearError();
+              setRegisterSuccessMsg('');
+              setValidationErrors({});
+            }}
             className="text-blue-400 hover:text-blue-300 ml-1 font-medium transition-colors"
             disabled={isLoading}
           >
@@ -430,7 +633,7 @@ export default function AuthPage() {
 
       {isLogin && (
         <div className="mt-4 text-center">
-          <button 
+          <button
             onClick={() => setShowForgotPassword(true)}
             className="text-gray-400 hover:text-white text-sm transition-colors mr-4"
           >
@@ -465,9 +668,9 @@ export default function AuthPage() {
 
         {/* Form Card */}
         <div className="glass-card p-8">
-          {requiresMfa ? renderMfaForm() : 
-           showForgotPassword ? renderForgotPasswordForm() : 
-           renderAuthForm()}
+          {requiresMfa ? renderMfaForm() :
+            showForgotPassword ? renderForgotPasswordForm() :
+              renderAuthForm()}
         </div>
       </div>
     </div>

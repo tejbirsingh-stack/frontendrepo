@@ -178,3 +178,14 @@
   background: #2563eb;
   transform: scale(1.2);
 }
+
+/* Select option styling for dark theme dropdowns */
+select option {
+  background-color: #1e1b4b;
+  color: #ffffff;
+}
+
+/* Style disabled placeholder option differently if needed */
+select option:disabled {
+  color: #9ca3af;
+}
