@@ -5,7 +5,7 @@ phases:
       - echo "Deploying Frontend..."
       - |
         aws ssm send-command \
-        --region us-east-1 \
+        --region us-east-2 \
         --instance-ids i-00c9c1576a9b26183 \
         --document-name "AWS-RunShellScript" \
         --parameters '{"commands":["cd /opt/noah-frontend && git pull origin qa && cd /opt/noah && docker compose up -d --build frontend"]}' \
