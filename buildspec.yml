@@ -3,7 +3,7 @@ version: 0.2
 phases:
   build:
     commands:
-      - echo "Deploying frontend...."
+      - echo "Deploying frontend..."
 
       - |
         aws ssm send-command \
