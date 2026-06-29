@@ -1,0 +1,514 @@
+import { Box, Checkbox, IconButton, Tooltip, Typography } from '@mui/material';
+import { cv } from '../../theme/cssVars';
+import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
+import StarIcon from '@mui/icons-material/Star';
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import GraphicEqIcon from '@mui/icons-material/GraphicEq';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
+import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import MediaItemActionsMenu from './MediaItemActionsMenu';
+import TruncatedText from '../TruncatedText';
+import { useNavigate } from 'react-router-dom';
+import type { MediaItem, MediaType } from '../../data/mockMedia';
+import { getMediaViewerPath } from '../../utils/mediaNavigation';
+import { getMediaDragPayload, hasMediaDragPayload, setMediaDragPayload } from '../../utils/mediaDrag';
+import { removeMediaDragGhost, setMediaDragImage } from '../../utils/mediaDragPreview';
+import {
+  folderAccentBackground,
+  folderAccentTint,
+  resolveFolderColor,
+} from '../../utils/folderColorStyle';
+import VideoHoverPreview from './VideoHoverPreview';
+import {
+  thumbnailOverlayChipHoverStyles,
+  thumbnailOverlayChipStyles,
+} from '../../utils/thumbnailOverlayStyles';
+import { formatFolderItemCount, getFolderChildCount } from '../../utils/folderItemCount';
+import { useDashboard } from '../../context/DashboardContext';
+
+interface MediaItemCardProps {
+  item: MediaItem;
+  isFavorite: boolean;
+  isSelected: boolean;
+  isDragging: boolean;
+  isDropTarget?: boolean;
+  selectedMediaIds: Set<string>;
+  onToggleFavorite: (id: string) => void;
+  onToggleSelect: (id: string) => void;
+  onDragStart: (ids: string[]) => void;
+  onDragEnd: () => void;
+  onDropOnFolder?: (folderId: string, mediaIds: string[]) => void;
+  onFolderDragOver?: (folderId: string) => void;
+  onFolderDragLeave?: () => void;
+}
+
+const typeConfig: Record<
+  MediaType,
+  { label: string; accent: string; icon: typeof FolderOutlinedIcon }
+> = {
+  folder: {
+    label: 'Folder',
+    accent: cv.yellowAccentSurface,
+    icon: FolderOutlinedIcon,
+  },
+  video: {
+    label: 'Video',
+    accent: cv.blueAccentSurface,
+    icon: VideocamOutlinedIcon,
+  },
+  image: {
+    label: 'Image',
+    accent: cv.greenAccentSurface,
+    icon: ImageOutlinedIcon,
+  },
+  audio: {
+    label: 'Audio',
+    accent: cv.purpleAccentSurface,
+    icon: AudioFileOutlinedIcon,
+  },
+};
+
+function FavoriteButton({
+  isFavorite,
+  onToggle,
+}: {
+  isFavorite: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Tooltip
+      title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+      arrow
+      placement="top"
+    >
+      <IconButton
+        size="small"
+        aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+        sx={{
+          width: 32,
+          height: 32,
+          ...thumbnailOverlayChipStyles,
+          color: isFavorite ? cv.warning : cv.textInverse,
+          transition: 'all 0.2s ease',
+          '&:hover': {
+            ...thumbnailOverlayChipHoverStyles,
+            transform: 'scale(1.05)',
+          },
+        }}
+      >
+        {isFavorite ? (
+          <StarIcon sx={{ fontSize: 18 }} />
+        ) : (
+          <StarBorderOutlinedIcon sx={{ fontSize: 18 }} />
+        )}
+      </IconButton>
+    </Tooltip>
+  );
+}
+
+function TypeBadge({ type }: { type: MediaType }) {
+  const config = typeConfig[type];
+  const Icon = config.icon;
+
+  return (
+    <Tooltip title={config.label} arrow placement="top">
+      <Box
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.5,
+          px: 0.875,
+          py: 0.25,
+          borderRadius: '999px',
+          ...thumbnailOverlayChipStyles,
+        }}
+      >
+        <Icon sx={{ fontSize: 12, color: cv.textInverse }} />
+        <Typography
+          variant="caption"
+          sx={{ fontSize: '0.6875rem', fontWeight: 500, color: cv.textInverse }}
+        >
+          {config.label}
+        </Typography>
+      </Box>
+    </Tooltip>
+  );
+}
+
+function FolderPreview({ item, childCount }: { item: MediaItem; childCount: number }) {
+  const folderColor = resolveFolderColor(item.folderColor);
+
+  return (
+    <Box
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: folderAccentBackground(item.folderColor),
+        gap: 1,
+      }}
+    >
+      <FolderOutlinedIcon sx={{ fontSize: 48, color: folderColor }} />
+      <Typography variant="caption" sx={{ color: cv.textMuted }}>
+        {formatFolderItemCount(childCount)}
+      </Typography>
+    </Box>
+  );
+}
+
+function VideoPreview({ item }: { item: MediaItem }) {
+  return (
+    <VideoHoverPreview
+      videoSrc={item.videoSrc}
+      thumbnail={item.thumbnail}
+      title={item.title}
+      duration={item.duration}
+      accent={typeConfig.video.accent}
+      showPlayOverlay
+    />
+  );
+}
+
+function ImagePreview({ item }: { item: MediaItem }) {
+  return (
+    <Box
+      component="img"
+      src={item.thumbnail}
+      alt={item.title}
+      loading="lazy"
+      sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+    />
+  );
+}
+
+function AudioPreview({ item }: { item: MediaItem }) {
+  return (
+    <Box
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: `linear-gradient(160deg, ${typeConfig.audio.accent} 0%, ${cv.mediaTypeGradientEnd} 100%)`,
+        gap: 1.5,
+        px: 2,
+      }}
+    >
+      <GraphicEqIcon sx={{ fontSize: 52, color: cv.brandPurple, opacity: 0.85 }} />
+      {item.duration && (
+        <Typography variant="caption" sx={{ color: cv.textSecondary, fontWeight: 500 }}>
+          {item.duration}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+function MediaPreview({ item, folderChildCount }: { item: MediaItem; folderChildCount?: number }) {
+  switch (item.type) {
+    case 'folder':
+      return <FolderPreview item={item} childCount={folderChildCount ?? 0} />;
+    case 'video':
+      return <VideoPreview item={item} />;
+    case 'image':
+      return <ImagePreview item={item} />;
+    case 'audio':
+      return <AudioPreview item={item} />;
+    default:
+      return null;
+  }
+}
+
+export default function MediaItemCard({
+  item,
+  isFavorite,
+  isSelected,
+  isDragging,
+  isDropTarget = false,
+  selectedMediaIds,
+  onToggleFavorite,
+  onToggleSelect,
+  onDragStart,
+  onDragEnd,
+  onDropOnFolder,
+  onFolderDragOver,
+  onFolderDragLeave,
+}: MediaItemCardProps) {
+  const navigate = useNavigate();
+  const { mediaItems, trashedIds } = useDashboard();
+  const config = typeConfig[item.type];
+  const isFolder = item.type === 'folder';
+  const folderChildCount = isFolder
+    ? getFolderChildCount(item.id, mediaItems, {
+        workspaceId: item.workspaceId,
+        trashedIds,
+      })
+    : 0;
+  const folderFooterAccent = isFolder ? folderAccentTint(item.folderColor) : config.accent;
+  const selectionActive = selectedMediaIds.size > 0;
+
+  const openPath = getMediaViewerPath(item);
+
+  const handleOpen = () => {
+    if (openPath && !selectionActive) {
+      navigate(openPath);
+    }
+  };
+
+  const getDragIds = () => {
+    if (selectedMediaIds.has(item.id) && selectedMediaIds.size > 0) {
+      return [...selectedMediaIds];
+    }
+    return [item.id];
+  };
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.stopPropagation();
+    const dragIds = getDragIds();
+    setMediaDragPayload(e, dragIds);
+    setMediaDragImage(e, item.title, item.type, dragIds.length);
+    onDragStart(dragIds);
+  };
+
+  const handleDragEnd = () => {
+    removeMediaDragGhost();
+    onDragEnd();
+  };
+
+  const handleFolderDragOver = (e: React.DragEvent) => {
+    if (!isFolder || !hasMediaDragPayload(e)) return;
+    const dragIds = getMediaDragPayload(e);
+    if (dragIds.includes(item.id)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    onFolderDragOver?.(item.id);
+  };
+
+  const handleFolderDrop = (e: React.DragEvent) => {
+    if (!isFolder) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const dragIds = getMediaDragPayload(e).filter((id) => id !== item.id);
+    if (dragIds.length > 0) {
+      onDropOnFolder?.(item.id, dragIds);
+    }
+    onFolderDragLeave?.();
+  };
+
+  const borderColor = isDropTarget
+    ? cv.brandPurple
+    : isSelected
+      ? cv.borderFocus
+      : isDragging
+        ? cv.borderFocus
+        : cv.border;
+
+  return (
+    <Box
+      onClick={openPath && !selectionActive ? handleOpen : undefined}
+      onDragOver={handleFolderDragOver}
+      onDragLeave={isFolder ? onFolderDragLeave : undefined}
+      onDrop={handleFolderDrop}
+      sx={{
+        borderRadius: '14px',
+        border: `1px solid ${borderColor}`,
+        overflow: 'hidden',
+        cursor: openPath && !selectionActive ? 'pointer' : 'default',
+        background: isDropTarget ? cv.purpleSelectionSoft : 'var(--noah-footer-tint)',
+        opacity: isDragging ? 0.45 : 1,
+        boxShadow: isDropTarget ? cv.purpleSelectionStrong : 'none',
+        transition: 'all 0.2s ease',
+        '&:hover .media-select-checkbox': {
+          opacity: 1,
+        },
+        '&:hover .video-summary-overlay': {
+          opacity: 1,
+        },
+        '&:hover': {
+          borderColor: isDropTarget ? cv.brandPurple : cv.borderInputHover,
+          transform: isDragging || isDropTarget ? 'none' : 'translateY(-2px)',
+          boxShadow:
+            isDragging || isDropTarget ? undefined : cv.cardHoverShadow,
+        },
+      }}
+    >
+      <Box sx={{ position: 'relative', aspectRatio: '16 / 9', overflow: 'hidden' }}>
+        <MediaPreview item={item} folderChildCount={folderChildCount} />
+
+        {item.type === 'video' && item.summary?.trim() ? (
+          <Box
+            className="video-summary-overlay"
+            aria-hidden
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'flex-end',
+              p: 1.5,
+              pb: 2,
+              pr: item.duration ? 5 : 1.5,
+              background:
+                cv.videoScrimGradient,
+              opacity: 0,
+              transition: 'opacity 0.2s ease',
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: '0.8125rem',
+                lineHeight: 1.45,
+                color: cv.textInverse,
+                display: '-webkit-box',
+                WebkitLineClamp: 4,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }}
+            >
+              {item.summary.trim()}
+            </Typography>
+          </Box>
+        ) : null}
+
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 8,
+            left: 8,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+          }}
+        >
+          <FavoriteButton
+            isFavorite={isFavorite}
+            onToggle={() => onToggleFavorite(item.id)}
+          />
+          <TypeBadge type={item.type} />
+        </Box>
+
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+          }}
+        >
+          <Tooltip title="Drag to move" arrow placement="top">
+            <Box
+              draggable
+              aria-label={`Drag ${item.title}`}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onClick={(e) => e.stopPropagation()}
+              sx={{
+                width: 28,
+                height: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: cv.textInverse,
+                opacity: 0.85,
+                cursor: 'grab',
+                borderRadius: '6px',
+                '&:hover': {
+                  opacity: 1,
+                  ...thumbnailOverlayChipStyles,
+                  ...thumbnailOverlayChipHoverStyles,
+                },
+                '&:active': { cursor: 'grabbing' },
+              }}
+            >
+              <DragIndicatorIcon sx={{ fontSize: 18, pointerEvents: 'none' }} />
+            </Box>
+          </Tooltip>
+          <Tooltip
+            title={isSelected ? 'Deselect' : 'Select'}
+            arrow
+            placement="top"
+          >
+            <Checkbox
+              size="small"
+              className="media-select-checkbox"
+              checked={isSelected}
+              onClick={(e) => e.stopPropagation()}
+              onChange={() => onToggleSelect(item.id)}
+              slotProps={{ input: { 'aria-label': `Select ${item.title}` } }}
+              sx={{
+                p: 0,
+                width: 32,
+                height: 32,
+                ...thumbnailOverlayChipStyles,
+                borderRadius: '8px',
+                color: cv.textInverse,
+                opacity: isSelected || selectionActive ? 1 : 0,
+                transition: 'opacity 0.15s ease, background-color 0.15s ease',
+                '&.Mui-checked': {
+                  color: cv.brandOrchid,
+                },
+                '&:hover': {
+                  ...thumbnailOverlayChipHoverStyles,
+                },
+              }}
+            />
+          </Tooltip>
+        </Box>
+
+        {isDropTarget ? (
+          <Box
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: cv.purpleSurfaceActive,
+              border: `2px dashed ${cv.brandPurple}`,
+              borderRadius: '12px',
+              m: 1,
+              pointerEvents: 'none',
+            }}
+          >
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
+              Drop to add
+            </Typography>
+          </Box>
+        ) : null}
+      </Box>
+
+      <Box
+        onClick={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+        sx={{
+          px: 2,
+          py: 1.5,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          borderTop: "1px solid var(--noah-border)",
+          background: folderFooterAccent,
+        }}
+      >
+        <TruncatedText
+          variant="body2"
+          text={item.title}
+          sx={{ flex: 1, minWidth: 0, fontWeight: 500, fontSize: '0.875rem', textAlign: 'left' }}
+        />
+        <MediaItemActionsMenu item={item} />
+      </Box>
+    </Box>
+  );
+}

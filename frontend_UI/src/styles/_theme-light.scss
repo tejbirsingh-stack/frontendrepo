@@ -1,0 +1,175 @@
+@use 'palette' as *;
+
+// Light theme — overrides :root dark defaults when data-theme="light"
+[data-theme='light'] {
+  color-scheme: light;
+
+  // Core surfaces
+  --noah-bg: #{$noah-light-bg};
+  --noah-surface: #{$noah-light-surface};
+  --noah-surface-hover: #{$noah-light-surface-hover};
+  --noah-surface-muted: #{$noah-light-surface-muted};
+  --noah-surface-subtle: #{$noah-light-surface-subtle};
+  --noah-surface-strong: #{$noah-light-surface-strong};
+  --noah-surface-raised: #{$noah-light-surface-raised};
+  --noah-surface-active: #{$noah-light-surface-active};
+  --noah-skeleton-base: #dce0e8;
+  --noah-skeleton-highlight: #{rgba($noah-slate-charcoal, 0.22)};
+  --noah-border: #{$noah-light-border};
+  --noah-border-strong: #{$noah-light-border-strong};
+  --noah-border-input-hover: #{rgba($noah-royal-purple, 0.38)};
+  --noah-divider-subtle: #{$noah-light-divider-subtle};
+  --noah-divider: #{$noah-light-divider};
+
+  // Typography
+  --noah-text-primary: #{$noah-text-on-light};
+  --noah-text-secondary: #{$noah-text-on-light-secondary};
+  --noah-text-subheader: #{$noah-text-on-light-subheader};
+  --noah-text-muted: #{$noah-text-on-light-muted};
+  --noah-text-inverse: #{$noah-white};
+  --noah-text-on-cta: #{$noah-white};
+
+  // Destructive — darker reds for contrast on light surfaces
+  --noah-destructive: #{$noah-red-600};
+  --noah-destructive-hover: #{rgba($noah-red-500, 0.1)};
+  --noah-destructive-surface: #{rgba($noah-red-500, 0.12)};
+  --noah-destructive-border-soft: #{rgba($noah-red-600, 0.35)};
+  --noah-error-text: #{$noah-red-700};
+
+  // Brand shadows — softer on light backgrounds
+  --noah-brand-shadow: 0 4px 16px #{rgba($noah-royal-purple, 0.22)};
+  --noah-brand-shadow-soft: 0 4px 14px #{rgba($noah-royal-purple, 0.14)};
+  --noah-brand-shadow-strong: 0 8px 24px #{rgba($noah-electric-orchid, 0.18)};
+  --noah-blue-selection-surface: #{rgba($noah-royal-purple, 0.1)};
+  --noah-blue-selection-hover: #{rgba($noah-royal-purple, 0.06)};
+  --noah-blue-drag-surface: #{rgba($noah-royal-purple, 0.08)};
+  --noah-blue-accent-surface: #{rgba($noah-royal-purple, 0.1)};
+
+  // Purple selection — readable text on light tinted surfaces
+  --noah-purple-light: #{$noah-royal-purple-dark};
+  --noah-purple-lighter: #{$noah-royal-purple};
+  --noah-purple-selection: #{rgba($noah-royal-purple, 0.16)};
+  --noah-purple-selection-soft: #{$noah-light-purple-alpha-08};
+  --noah-purple-selection-strong: #{rgba($noah-royal-purple, 0.32)};
+  --noah-purple-selection-hover: #{$noah-light-purple-alpha-10};
+  --noah-purple-selection-medium: #{rgba($noah-royal-purple, 0.2)};
+  --noah-purple-selection-bg: #{rgba($noah-royal-purple, 0.12)};
+  --noah-purple-selection-border: #{rgba($noah-royal-purple, 0.32)};
+  --noah-purple-selection-ring: #{rgba($noah-royal-purple, 0.55)};
+  --noah-purple-focus-ring: #{rgba($noah-royal-purple, 0.22)};
+  --noah-purple-chip-border: #{rgba($noah-royal-purple, 0.24)};
+  --noah-purple-surface: #{$noah-light-purple-alpha-06};
+  --noah-purple-surface-hover: #{$noah-light-purple-alpha-10};
+  --noah-purple-light-strong: #{$noah-royal-purple};
+  --noah-purple-light-dashed: #{rgba($noah-royal-purple, 0.72)};
+
+  // Layered surfaces
+  --noah-drawer-surface: #{$noah-light-white-alpha-96};
+  --noah-dialog-surface: #{$noah-light-surface};
+  --noah-dialog-surface-strong: #{$noah-light-bg-subtle};
+  --noah-header-background: #{$noah-light-white-alpha-88};
+  --noah-popover-surface: #{$noah-light-white-alpha-98};
+  --noah-popover-surface-deep: #{$noah-light-surface};
+  --noah-glass-background: #{$noah-light-white-alpha-82};
+  --noah-island-surface: #{$noah-light-white-alpha-92};
+  --noah-footer-tint: #{rgba($noah-light-bg-subtle, 0.92)};
+  --noah-sidebar-surface: #{$noah-sidebar-surface-brand};
+  --noah-sidebar-scrim: #{$noah-sidebar-scrim-brand};
+  --noah-panel-tint: #{rgba($noah-light-bg-subtle, 0.75)};
+  --noah-elevated-surface: #{$noah-light-surface};
+  --noah-video-stage: #{$noah-light-video-stage};
+  --noah-backdrop-scrim: #{$noah-black-alpha-35};
+  --noah-backdrop-scrim-strong: #{$noah-black-alpha-45};
+  --noah-overlay-scrim: #{rgba($noah-slate-charcoal, 0.55)};
+  --noah-toolbar-surface: #{$noah-light-white-alpha-94};
+  --noah-subtoolbar-surface: #{$noah-light-white-alpha-96};
+
+  // Shadows & highlights
+  --noah-card-shadow: #{$noah-light-shadow-strong}, inset 0 1px 0 #{$noah-light-inset-highlight};
+  --noah-dialog-shadow: 0 24px 64px #{rgba($noah-slate-charcoal, 0.14)}, inset 0 1px 0 #{$noah-light-inset-highlight};
+  --noah-popover-shadow: #{$noah-light-shadow-medium}, inset 0 1px 0 #{$noah-light-inset-highlight-soft};
+  --noah-dropdown-shadow: #{$noah-light-shadow-medium};
+  --noah-tooltip-shadow: 0 12px 32px #{rgba($noah-slate-charcoal, 0.2)};
+  --noah-tooltip-surface: #{$noah-graphite-neutral};
+  --noah-tooltip-text: #{$noah-white};
+  --noah-tooltip-text-muted: #{rgba($noah-white, 0.72)};
+  --noah-inset-highlight: #{$noah-light-inset-highlight-soft};
+  --noah-inset-highlight-soft: #{rgba($noah-white, 0.45)};
+  --noah-grid-dot: #{$noah-light-grid-dot};
+
+  // Link chip
+  --noah-link-chip-text: #{$noah-light-link-text};
+  --noah-link-chip-bg: #{$noah-light-link-bg};
+  --noah-link-chip-bg-hover: #{$noah-light-link-bg-hover};
+
+  // Wave background fills — brand-tinted on light shell
+  --noah-wave-fill-1: #{$noah-light-purple-alpha-10};
+  --noah-wave-fill-2: #{$noah-light-purple-alpha-08};
+  --noah-wave-fill-3: #{$noah-light-purple-alpha-06};
+  --noah-wave-fill-4: #{$noah-light-teal-alpha-06};
+
+  // Extended UI tokens
+  --noah-island-shadow: #{$noah-light-shadow-soft}, inset 0 1px 0 #{$noah-light-inset-highlight-soft};
+  --noah-toolbar-shadow: #{$noah-light-shadow-medium}, inset 0 1px 0 #{$noah-light-inset-highlight-soft};
+  --noah-emoji-picker-surface: #{$noah-light-emoji-surface};
+  --noah-emoji-picker-border: #{$noah-light-border};
+  --noah-emoji-picker-input-border: #{rgba($noah-royal-purple, 0.35)};
+  --noah-emoji-picker-text: #{$noah-text-on-light};
+  --noah-emoji-picker-placeholder: #{$noah-text-on-light-muted};
+  --noah-stroke-focus-ring: #{rgba($noah-royal-purple, 0.28)};
+  --noah-gray-900-ui: #{$noah-light-gray-900-ui};
+  --noah-checker-dark: #{$noah-light-checker-dark};
+  --noah-checker-light: #{$noah-light-checker-light};
+  --noah-annotation-guide: #{rgba($noah-mist-gray, 0.22)};
+  --noah-white-border-soft: #{rgba($noah-slate-charcoal, 0.12)};
+  --noah-white-border-dashed: #{rgba($noah-mist-gray, 0.28)};
+  --noah-ink-overlay-04: #{$noah-light-ink-overlay-04};
+  --noah-ink-overlay-06: #{$noah-light-ink-overlay-06};
+  --noah-ink-overlay-08: #{$noah-light-ink-overlay-08};
+  --noah-ink-overlay-10: #{$noah-light-ink-overlay-10};
+  --noah-ink-overlay-12: #{$noah-light-ink-overlay-12};
+  --noah-ink-overlay-14: #{rgba($noah-slate-charcoal, 0.14)};
+  --noah-ink-overlay-16: #{$noah-light-ink-overlay-16};
+  --noah-ink-overlay-18: #{rgba($noah-slate-charcoal, 0.18)};
+  --noah-ink-overlay-20: #{$noah-light-ink-overlay-20};
+  --noah-ink-overlay-25: #{rgba($noah-slate-charcoal, 0.25)};
+  --noah-ink-overlay-28: #{rgba($noah-slate-charcoal, 0.28)};
+  --noah-ink-overlay-35: #{rgba($noah-slate-charcoal, 0.35)};
+  --noah-ink-overlay-38: #{rgba($noah-slate-charcoal, 0.38)};
+  --noah-success-text: #{$noah-teal-dark};
+  --noah-selected-toolbar-shadow: #{$noah-light-shadow-medium}, inset 0 1px 0 #{$noah-light-inset-highlight-soft};
+  --noah-drawer-scrim: #{rgba($noah-slate-charcoal, 0.22)};
+  --noah-timeline-scrim: #{rgba($noah-slate-charcoal, 0.16)};
+  --noah-preview-play-shadow: 0 4px 16px #{rgba($noah-slate-charcoal, 0.12)};
+  --noah-preview-card-shadow: #{$noah-light-shadow-soft};
+  --noah-upload-preview-gradient: linear-gradient(160deg, #{rgba($noah-royal-purple, 0.1)} 0%, #{rgba($noah-obsidian-teal, 0.06)} 100%);
+  --noah-comment-card-shadow: 0 12px 40px #{rgba($noah-slate-charcoal, 0.08)}, 0 2px 8px #{rgba($noah-slate-charcoal, 0.04)};
+  --noah-comment-hover-shadow: 0 10px 32px #{rgba($noah-slate-charcoal, 0.1)}, 0 2px 8px #{rgba($noah-slate-charcoal, 0.04)};
+  --noah-marker-shadow: 0 8px 28px #{rgba($noah-slate-charcoal, 0.1)}, 0 2px 8px #{rgba($noah-slate-charcoal, 0.05)};
+  --noah-stamp-marker-shadow: 0 6px 18px #{rgba($noah-slate-charcoal, 0.14)};
+  --noah-popover-shadow-elevated: 0 20px 48px #{rgba($noah-slate-charcoal, 0.14)}, inset 0 1px 0 #{$noah-light-inset-highlight-soft};
+  --noah-island-shadow-strong: #{$noah-light-shadow-medium}, inset 0 1px 0 #{$noah-light-inset-highlight-soft};
+  --noah-card-hover-shadow: #{$noah-light-shadow-soft};
+  --noah-shape-picker-shadow: 0 4px 16px #{rgba($noah-slate-charcoal, 0.1)};
+  --noah-plan-badge-glow: 0 0 12px #{rgba($noah-royal-purple, 0.26)}, 0 0 24px #{rgba($noah-electric-orchid, 0.14)}, inset 0 1px 0 #{rgba($noah-electric-orchid, 0.12)};
+  --noah-badge-filled-gradient: #{$noah-badge-filled-gradient};
+  --noah-badge-filled-border: #{rgba($noah-royal-purple, 0.28)};
+  --noah-badge-filled-text: #{$noah-white};
+  --noah-badge-outlined-bg: #{$noah-light-purple-alpha-08};
+  --noah-badge-outlined-border: #{rgba($noah-royal-purple, 0.32)};
+  --noah-badge-outlined-text: #{$noah-royal-purple-dark};
+  --noah-liquid-blue-orb: radial-gradient(circle, #{rgba($noah-royal-purple, 0.35)} 0%, transparent 70%);
+  --noah-liquid-purple-orb: radial-gradient(circle, #{rgba($noah-electric-orchid, 0.28)} 0%, transparent 70%);
+  --noah-liquid-indigo-orb: radial-gradient(circle, #{rgba($noah-obsidian-teal, 0.22)} 0%, transparent 70%);
+  --noah-liquid-floor-glow: radial-gradient(ellipse 80% 50% at 50% 100%, #{rgba($noah-royal-purple, 0.08)} 0%, transparent 60%);
+  --noah-billing-hero-gradient: linear-gradient(135deg, #{rgba($noah-royal-purple, 0.1)} 0%, #{rgba($noah-light-bg-subtle, 0.95)} 48%);
+  --noah-stamp-gradient: linear-gradient(135deg, #{rgba($noah-royal-purple, 0.22)} 0%, #{rgba($noah-electric-orchid, 0.18)} 100%);
+  --noah-login-brand-shadow: 0 8px 32px #{rgba($noah-royal-purple, 0.22)};
+  --noah-login-brand-shadow-hover: 0 12px 40px #{rgba($noah-electric-orchid, 0.28)};
+  --noah-logo-glow: drop-shadow(0 12px 32px #{rgba($noah-royal-purple, 0.25)});
+  --noah-stamp-text-shadow: 2px 3px 4px #{rgba($noah-slate-charcoal, 0.18)};
+  --noah-stamp-text-stroke: #{$noah-white};
+  --noah-drag-preview-border: 1px solid #{$noah-light-border};
+  --noah-drag-preview-shadow: #{$noah-light-shadow-soft};
+  --noah-avatar-surplus-bg: #{$noah-light-bg-subtle};
+}

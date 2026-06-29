@@ -1,0 +1,203 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { cv } from '../../theme/cssVars';
+import { thumbnailOverlayChipStyles } from '../../utils/thumbnailOverlayStyles';
+import { Box, Typography } from '@mui/material';
+import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
+
+const PREVIEW_DURATION_SEC = 5;
+
+interface VideoHoverPreviewProps {
+  videoSrc?: string;
+  thumbnail?: string;
+  title: string;
+  duration?: string;
+  showPlayOverlay?: boolean;
+  accent?: string;
+}
+
+export default function VideoHoverPreview({
+  videoSrc,
+  thumbnail,
+  title,
+  duration,
+  showPlayOverlay = true,
+  accent = cv.blueAccentSurface,
+}: VideoHoverPreviewProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isHovering, setIsHovering] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
+
+  const stopPreview = useCallback(() => {
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.currentTime = 0;
+    }
+    setIsPreviewing(false);
+  }, []);
+
+  const handleMouseEnter = () => {
+    if (!videoSrc) return;
+    setShouldLoadVideo(true);
+    setIsHovering(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovering(false);
+    stopPreview();
+  };
+
+  useEffect(() => {
+    if (!isHovering || !videoSrc || !shouldLoadVideo) return;
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleTimeUpdate = () => {
+      if (video.currentTime >= PREVIEW_DURATION_SEC) {
+        video.currentTime = 0;
+      }
+    };
+
+    const handlePlaying = () => setIsPreviewing(true);
+    const handlePause = () => {
+      if (!isHovering) setIsPreviewing(false);
+    };
+
+    video.currentTime = 0;
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('playing', handlePlaying);
+    video.addEventListener('pause', handlePause);
+
+    const playPromise = video.play();
+    if (playPromise) {
+      playPromise.catch(() => setIsPreviewing(false));
+    }
+
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('playing', handlePlaying);
+      video.removeEventListener('pause', handlePause);
+    };
+  }, [isHovering, shouldLoadVideo, videoSrc]);
+
+  useEffect(() => {
+    if (!isHovering) stopPreview();
+  }, [isHovering, stopPreview]);
+
+  return (
+    <Box
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      aria-label={`${title} video. Hover to preview the first ${PREVIEW_DURATION_SEC} seconds.`}
+      sx={{ position: 'relative', width: '100%', height: '100%' }}
+    >
+      {thumbnail ? (
+        <Box
+          component="img"
+          src={thumbnail}
+          alt=""
+          loading="lazy"
+          sx={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: 'block',
+            opacity: isPreviewing ? 0 : 1,
+            transition: 'opacity 0.2s ease',
+          }}
+        />
+      ) : (
+        <Box
+          sx={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: `linear-gradient(160deg, ${accent} 0%, ${cv.surfaceSubtle} 100%)`,
+            opacity: isPreviewing ? 0 : 1,
+            transition: 'opacity 0.2s ease',
+          }}
+        >
+          <VideocamOutlinedIcon sx={{ fontSize: 48, color: cv.brandBlue, opacity: 0.85 }} />
+        </Box>
+      )}
+
+      {videoSrc && shouldLoadVideo ? (
+        <Box
+          component="video"
+          ref={videoRef}
+          src={videoSrc}
+          poster={thumbnail}
+          muted
+          playsInline
+          preload="metadata"
+          aria-hidden
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: 'block',
+            opacity: isPreviewing ? 1 : 0,
+            transition: 'opacity 0.2s ease',
+            pointerEvents: 'none',
+          }}
+        />
+      ) : null}
+
+      {showPlayOverlay && !isPreviewing ? (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: cv.inkOverlay20,
+            pointerEvents: 'none',
+          }}
+        >
+          <Box
+            sx={{
+              width: 44,
+              height: 44,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              ...thumbnailOverlayChipStyles,
+            }}
+          >
+            <PlayArrowRoundedIcon sx={{ fontSize: 28, color: cv.textInverse }} />
+          </Box>
+        </Box>
+      ) : null}
+
+      {duration ? (
+        <Typography
+          variant="caption"
+          sx={{
+            position: 'absolute',
+            bottom: 8,
+            right: 8,
+            px: 0.75,
+            py: 0.25,
+            borderRadius: '6px',
+            ...thumbnailOverlayChipStyles,
+            fontSize: '0.75rem',
+            fontWeight: 500,
+            color: cv.textInverse,
+            pointerEvents: 'none',
+          }}
+        >
+          {duration}
+        </Typography>
+      ) : null}
+    </Box>
+  );
+}
