@@ -1,0 +1,26 @@
+import type { MediaType } from '../data/mockMedia';
+
+export type UploadableMediaType = Exclude<MediaType, 'folder'>;
+
+export interface MediaUploadOptions {
+  /** Media library folder to nest uploaded files under (dashboard folder view). */
+  parentFolderId?: string | null;
+}
+
+export interface PendingMediaUpload {
+  id: string;
+  type: UploadableMediaType;
+  file: File;
+  previewSrc: string;
+  defaultTitle: string;
+  parentFolderId?: string | null;
+}
+
+export interface MediaUploadDetails {
+  title: string;
+  summary?: string;
+  thumbnail?: string;
+  tags: string[];
+  folderId: string | null;
+  duration?: string;
+}

@@ -1,0 +1,41 @@
+@use 'palette' as *;
+
+// Light app theme keeps a dark sidebar chrome (matches dark-theme shell).
+[data-theme='light'] [data-app-sidebar] {
+  color-scheme: dark;
+
+  --noah-sidebar-surface: #{$noah-sidebar-surface-brand};
+  --noah-sidebar-scrim: #{$noah-sidebar-scrim-brand};
+
+  --noah-text-primary: #{$noah-text-on-dark};
+  --noah-text-secondary: #{$noah-text-secondary-readable};
+  --noah-text-subheader: #{$noah-text-subheader};
+  --noah-text-muted: #{rgba($noah-text-on-dark, 0.55)};
+
+  --noah-border: #{rgba($noah-mist-gray, 0.45)};
+  --noah-border-strong: #{rgba($noah-mist-gray, 0.65)};
+  --noah-divider-subtle: #{rgba($noah-mist-gray, 0.28)};
+  --noah-divider: #{rgba($noah-mist-gray, 0.38)};
+
+  --noah-surface: #{$noah-mist-alpha-18};
+  --noah-surface-hover: #{$noah-mist-alpha-28};
+  --noah-surface-muted: #{$noah-slate-alpha-12};
+  --noah-surface-subtle: #{rgba($noah-graphite-neutral, 0.35)};
+  --noah-surface-strong: #{$noah-mist-alpha-40};
+  --noah-surface-raised: #{rgba($noah-mist-gray, 0.55)};
+  --noah-surface-active: #{rgba($noah-mist-gray, 0.72)};
+
+  --noah-purple-selection: #{$noah-purple-alpha-28};
+  --noah-purple-selection-soft: #{$noah-purple-alpha-12};
+  --noah-purple-selection-hover: #{$noah-purple-alpha-18};
+  --noah-blue-selection-hover: #{$noah-blue-alpha-08};
+  --noah-blue-selection-surface: #{rgba($noah-royal-purple, 0.14)};
+
+  --noah-destructive: #{$noah-red-400};
+  --noah-destructive-hover: #{$noah-red-alpha-12};
+  --noah-destructive-border: #{$noah-red-500};
+  --noah-destructive-surface: #{$noah-red-alpha-15};
+  --noah-destructive-border-soft: #{$noah-red-alpha-35};
+  --noah-glass-background: #{rgba($noah-graphite-neutral, 0.55)};
+  --noah-input-placeholder: #{rgba($noah-text-on-dark, 0.55)};
+}

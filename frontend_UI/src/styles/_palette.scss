@@ -1,0 +1,305 @@
+// Primitive palette — single source of truth for all NOAH color values.
+
+// ── Brand guide (primary + secondary neutrals) ──────────────────────────────
+$noah-midnight-black: #121212; // Body, app shell, dividers on dark
+$noah-deep-space-black: #1c1c1c; // Dark panels, inactive regions
+$noah-graphite-neutral: #2d3142; // Cards, secondary panels
+$noah-mist-gray: #4a4e69; // Subtle panels, hover surfaces
+$noah-slate-charcoal: #1f2a44; // Section chrome, borders, subheader bands
+$noah-royal-purple: #8e44ad; // Logos, key branding headers
+$noah-electric-orchid: #d28cff; // Interactive accents, CTAs
+$noah-obsidian-teal: #16a085; // Highlights, success accents
+
+// Readable text on dark surfaces (WCAG AA+ on midnight black)
+$noah-text-on-dark: #f0f0f5;
+$noah-text-subheader: #b4b9c9;
+$noah-text-secondary-readable: #9aa3b8;
+$noah-royal-purple-dark: #703688;
+$noah-royal-purple-light: #a569bd;
+$noah-electric-orchid-dark: #b86ef0;
+$noah-teal-light: #1abc9c;
+$noah-teal-dark: #128f76;
+
+// Neutrals (legacy aliases → brand neutrals)
+$noah-white: #ffffff;
+$noah-black: #000000;
+$noah-gray-50: $noah-text-on-dark;
+$noah-gray-100: #f3f4f6;
+$noah-gray-300: #d1d5db;
+$noah-gray-400: #9ca3af;
+$noah-gray-500: $noah-mist-gray;
+$noah-gray-700: $noah-slate-charcoal;
+$noah-gray-800: $noah-graphite-neutral;
+$noah-gray-850: $noah-graphite-neutral;
+$noah-gray-900: $noah-deep-space-black;
+$noah-gray-920: $noah-deep-space-black;
+$noah-gray-950: $noah-midnight-black;
+$noah-gray-980: $noah-deep-space-black;
+$noah-ink: $noah-midnight-black;
+
+// Brand purples & interactive hues (legacy aliases → brand guide)
+$noah-blue-300: #c9a0e8;
+$noah-blue-400: $noah-electric-orchid-dark;
+$noah-blue-500: $noah-electric-orchid;
+$noah-blue-600: $noah-royal-purple;
+$noah-blue-700: $noah-royal-purple-dark;
+$noah-sky-400: $noah-teal-light;
+$noah-indigo-300: #d8b4fe;
+$noah-indigo-400: $noah-electric-orchid;
+$noah-indigo-500: $noah-royal-purple;
+$noah-violet-accent: $noah-electric-orchid;
+$noah-purple-200: #f3d9ff;
+$noah-purple-300: #e8b4ff;
+$noah-purple-400: $noah-electric-orchid;
+$noah-purple-500: $noah-royal-purple-light;
+$noah-purple-600: $noah-royal-purple;
+$noah-purple-700: $noah-royal-purple-dark;
+
+// Status & accent hues
+$noah-green-300: #7dcea0;
+$noah-green-400: $noah-teal-light;
+$noah-green-500: $noah-obsidian-teal;
+$noah-green-700: $noah-teal-dark;
+$noah-teal-300: #5eead4;
+$noah-teal-400: $noah-teal-light;
+$noah-teal-500: $noah-obsidian-teal;
+$noah-yellow-300: #fde047;
+$noah-yellow-400: #fbbf24;
+$noah-yellow-500: #eab308;
+$noah-orange-400: #fdba74;
+$noah-orange-500: #f97316;
+$noah-red-300: #fca5a5;
+$noah-red-400: #f87171;
+$noah-red-500: #ef4444;
+$noah-pink-300: #f9a8d4;
+$noah-pink-400: #f472b8;
+$noah-pink-500: #ec4899;
+$noah-cyan-500: #06b6d4;
+$noah-amber-500: #f59e0b;
+
+// Component-specific literals
+$noah-link-navy: $noah-text-on-dark;
+$noah-link-blue-bg: rgba($noah-electric-orchid, 0.18);
+$noah-link-blue-bg-hover: rgba($noah-electric-orchid, 0.28);
+
+// Brand-tinted overlays
+$noah-mist-alpha-18: rgba($noah-mist-gray, 0.18);
+$noah-mist-alpha-28: rgba($noah-mist-gray, 0.28);
+$noah-mist-alpha-40: rgba($noah-mist-gray, 0.4);
+$noah-graphite-alpha-88: rgba($noah-graphite-neutral, 0.88);
+$noah-graphite-alpha-92: rgba($noah-graphite-neutral, 0.92);
+$noah-deep-space-alpha-96: rgba($noah-deep-space-black, 0.96);
+$noah-deep-space-alpha-98: rgba($noah-deep-space-black, 0.98);
+$noah-midnight-alpha-60: rgba($noah-midnight-black, 0.6);
+$noah-midnight-alpha-75: rgba($noah-midnight-black, 0.75);
+$noah-slate-alpha-12: rgba($noah-slate-charcoal, 0.12);
+$noah-teal-alpha-12: rgba($noah-obsidian-teal, 0.12);
+$noah-teal-alpha-15: rgba($noah-obsidian-teal, 0.15);
+$noah-orchid-alpha-12: rgba($noah-electric-orchid, 0.12);
+$noah-orchid-alpha-20: rgba($noah-electric-orchid, 0.2);
+
+// Thumbnail overlays — readable on light and dark preview images
+$noah-thumbnail-chip-bg: rgba($noah-midnight-black, 0.72);
+$noah-thumbnail-chip-bg-hover: rgba($noah-midnight-black, 0.86);
+$noah-thumbnail-chip-border: rgba($noah-white, 0.22);
+$noah-thumbnail-chip-shadow: 0 2px 10px rgba($noah-black, 0.38);
+
+// Sidebar shell — brand Slate Charcoal
+$noah-sidebar-surface-brand: $noah-slate-charcoal;
+$noah-sidebar-scrim-brand: #{mix($noah-midnight-black, $noah-slate-charcoal, 38%)};
+
+// Light theme primitives (brand accents unchanged; surfaces + text inverted)
+$noah-light-bg: #f4f5f9;
+$noah-light-bg-subtle: #eef0f6;
+$noah-light-surface: #ffffff;
+$noah-light-surface-hover: rgba($noah-mist-gray, 0.1);
+$noah-light-surface-muted: rgba($noah-slate-charcoal, 0.06);
+$noah-light-surface-subtle: rgba($noah-graphite-neutral, 0.05);
+$noah-light-surface-strong: rgba($noah-mist-gray, 0.12);
+$noah-light-surface-raised: rgba($noah-mist-gray, 0.08);
+$noah-light-surface-active: rgba($noah-mist-gray, 0.18);
+$noah-light-border: rgba($noah-mist-gray, 0.22);
+$noah-light-border-strong: rgba($noah-mist-gray, 0.36);
+$noah-light-divider-subtle: rgba($noah-mist-gray, 0.14);
+$noah-light-divider: rgba($noah-mist-gray, 0.2);
+$noah-text-on-light: $noah-midnight-black;
+$noah-text-on-light-secondary: #5c6078;
+$noah-text-on-light-subheader: $noah-graphite-neutral;
+$noah-text-on-light-muted: rgba($noah-slate-charcoal, 0.62);
+$noah-light-white-alpha-82: rgba($noah-white, 0.82);
+$noah-light-white-alpha-88: rgba($noah-white, 0.88);
+$noah-light-white-alpha-92: rgba($noah-white, 0.92);
+$noah-light-white-alpha-94: rgba($noah-white, 0.94);
+$noah-light-white-alpha-96: rgba($noah-white, 0.96);
+$noah-light-white-alpha-98: rgba($noah-white, 0.98);
+$noah-light-purple-alpha-06: rgba($noah-royal-purple, 0.06);
+$noah-light-purple-alpha-08: rgba($noah-royal-purple, 0.08);
+$noah-light-purple-alpha-10: rgba($noah-royal-purple, 0.1);
+$noah-light-teal-alpha-06: rgba($noah-obsidian-teal, 0.06);
+$noah-light-ink-overlay-04: rgba($noah-slate-charcoal, 0.04);
+$noah-light-ink-overlay-06: rgba($noah-slate-charcoal, 0.06);
+$noah-light-ink-overlay-08: rgba($noah-slate-charcoal, 0.08);
+$noah-light-ink-overlay-10: rgba($noah-slate-charcoal, 0.1);
+$noah-light-ink-overlay-12: rgba($noah-slate-charcoal, 0.12);
+$noah-light-ink-overlay-16: rgba($noah-slate-charcoal, 0.16);
+$noah-light-ink-overlay-20: rgba($noah-slate-charcoal, 0.2);
+$noah-light-shadow-soft: 0 12px 32px rgba($noah-slate-charcoal, 0.08);
+$noah-light-shadow-medium: 0 16px 40px rgba($noah-slate-charcoal, 0.1);
+$noah-light-shadow-strong: 0 24px 48px rgba($noah-slate-charcoal, 0.12);
+$noah-light-inset-highlight: rgba($noah-white, 0.9);
+$noah-light-inset-highlight-soft: rgba($noah-white, 0.65);
+$noah-light-grid-dot: rgba($noah-mist-gray, 0.14);
+$noah-light-video-stage: #e4e7ef;
+$noah-light-emoji-surface: #ffffff;
+$noah-light-gray-900-ui: #eef0f6;
+$noah-light-checker-dark: #c5c9d4;
+$noah-light-checker-light: #e8eaef;
+$noah-light-link-text: $noah-royal-purple;
+$noah-light-link-bg: rgba($noah-royal-purple, 0.1);
+$noah-light-link-bg-hover: rgba($noah-royal-purple, 0.16);
+
+// Alpha overlays (computed from base colors)
+$noah-white-alpha-02: rgba($noah-white, 0.02);
+$noah-white-alpha-03: rgba($noah-white, 0.03);
+$noah-white-alpha-04: rgba($noah-white, 0.04);
+$noah-white-alpha-05: rgba($noah-white, 0.05);
+$noah-white-alpha-06: rgba($noah-white, 0.06);
+$noah-white-alpha-07: rgba($noah-white, 0.07);
+$noah-white-alpha-08: rgba($noah-white, 0.08);
+$noah-white-alpha-12: rgba($noah-white, 0.12);
+$noah-white-alpha-15: rgba($noah-white, 0.15);
+$noah-white-alpha-20: rgba($noah-white, 0.2);
+$noah-white-alpha-35: rgba($noah-white, 0.35);
+$noah-white-alpha-55: rgba($noah-white, 0.55);
+$noah-white-alpha-055: rgba($noah-white, 0.055);
+
+$noah-gray-200: #e5e7eb;
+$noah-gray-600: $noah-mist-gray;
+$noah-slate-500: $noah-mist-gray;
+$noah-gray-900-ui: $noah-graphite-neutral;
+$noah-emoji-surface: $noah-graphite-neutral;
+$noah-ink-dark: $noah-deep-space-black;
+$noah-red-600: #dc2626;
+$noah-red-700: #b91c1c;
+
+$noah-white-alpha-10: rgba($noah-white, 0.1);
+$noah-white-alpha-28: rgba($noah-white, 0.28);
+$noah-white-alpha-92: rgba($noah-white, 0.92);
+$noah-white-alpha-96: rgba($noah-white, 0.96);
+
+$noah-black-alpha-04: rgba($noah-black, 0.04);
+$noah-black-alpha-06: rgba($noah-black, 0.06);
+$noah-black-alpha-08: rgba($noah-black, 0.08);
+$noah-black-alpha-10: rgba($noah-black, 0.1);
+$noah-black-alpha-12: rgba($noah-black, 0.12);
+$noah-black-alpha-14: rgba($noah-black, 0.14);
+$noah-black-alpha-16: rgba($noah-black, 0.16);
+$noah-black-alpha-18: rgba($noah-black, 0.18);
+$noah-black-alpha-20: rgba($noah-black, 0.2);
+$noah-black-alpha-25: rgba($noah-black, 0.25);
+$noah-black-alpha-28: rgba($noah-black, 0.28);
+$noah-black-alpha-35: rgba($noah-black, 0.35);
+$noah-black-alpha-38: rgba($noah-black, 0.38);
+$noah-black-alpha-80: rgba($noah-black, 0.8);
+$noah-black-alpha-88: rgba($noah-black, 0.88);
+
+$noah-ink-alpha-72: rgba($noah-ink, 0.72);
+$noah-ink-alpha-88: rgba($noah-ink, 0.88);
+
+$noah-blue-alpha-08: rgba($noah-blue-600, 0.08);
+$noah-blue-alpha-10: rgba($noah-blue-600, 0.1);
+$noah-blue-alpha-15: rgba($noah-blue-600, 0.15);
+$noah-blue-alpha-18: rgba($noah-blue-600, 0.18);
+
+$noah-purple-alpha-22: rgba($noah-purple-600, 0.22);
+$noah-purple-alpha-24: rgba($noah-purple-600, 0.24);
+$noah-purple-alpha-50: rgba($noah-purple-600, 0.5);
+$noah-purple-light-alpha-85: rgba($noah-purple-400, 0.85);
+$noah-purple-light-alpha-95: rgba($noah-purple-400, 0.95);
+
+$noah-green-400-alpha-12: rgba($noah-green-400, 0.12);
+$noah-yellow-alpha-15: rgba($noah-yellow-400, 0.15);
+$noah-red-alpha-25: rgba($noah-red-500, 0.25);
+$noah-indigo-alpha-15: rgba($noah-indigo-500, 0.15);
+
+$noah-blue-200: #e4c4f7;
+$noah-pink-accent: #e879a8;
+$noah-slate-muted: $noah-text-secondary-readable;
+
+$noah-blue-alpha-06: rgba($noah-blue-600, 0.06);
+$noah-blue-alpha-14: rgba($noah-blue-600, 0.14);
+$noah-blue-alpha-28: rgba($noah-blue-600, 0.28);
+$noah-blue-alpha-35: rgba($noah-blue-600, 0.35);
+$noah-blue-alpha-45: rgba($noah-blue-600, 0.45);
+$noah-blue-alpha-50: rgba($noah-blue-600, 0.5);
+
+$noah-green-alpha-14: rgba($noah-green-500, 0.14);
+$noah-green-alpha-15: rgba($noah-green-500, 0.15);
+$noah-purple-alpha-15: rgba($noah-purple-600, 0.15);
+
+$noah-black-alpha-30: rgba($noah-black, 0.3);
+$noah-black-alpha-70: rgba($noah-black, 0.7);
+$noah-white-alpha-55-muted: rgba($noah-white, 0.55);
+
+$noah-brand-gradient-horizontal: linear-gradient(90deg, #{$noah-royal-purple} 0%, #{$noah-electric-orchid} 100%);
+$noah-brand-gradient: linear-gradient(135deg, #{$noah-royal-purple} 0%, #{$noah-electric-orchid} 100%);
+$noah-brand-gradient-hover: linear-gradient(135deg, #{$noah-royal-purple-dark} 0%, #{$noah-electric-orchid-dark} 100%);
+$noah-badge-filled-gradient: linear-gradient(
+  135deg,
+  #{$noah-royal-purple-dark} 0%,
+  #{$noah-royal-purple} 52%,
+  #{$noah-royal-purple-light} 100%
+);
+$noah-badge-filled-border: #{rgba($noah-electric-orchid, 0.32)};
+$noah-badge-filled-text: #{$noah-white};
+$noah-rainbow-conic: conic-gradient(#{$noah-red-500}, #{$noah-yellow-500}, #{$noah-obsidian-teal}, #{$noah-royal-purple}, #{$noah-electric-orchid}, #{$noah-red-500});
+
+$noah-white-alpha-25: rgba($noah-white, 0.25);
+$noah-white-alpha-45: rgba($noah-white, 0.45);
+$noah-white-alpha-50: rgba($noah-white, 0.5);
+$noah-white-alpha-75: rgba($noah-white, 0.75);
+
+$noah-black-alpha-40: rgba($noah-black, 0.4);
+$noah-black-alpha-45: rgba($noah-black, 0.45);
+$noah-white-alpha-14: rgba($noah-white, 0.14);
+$noah-black-alpha-50: rgba($noah-black, 0.5);
+$noah-black-alpha-55: rgba($noah-black, 0.55);
+$noah-black-alpha-65: rgba($noah-black, 0.65);
+$noah-black-alpha-72: rgba($noah-black, 0.72);
+
+$noah-blue-alpha-12: rgba($noah-blue-600, 0.12);
+$noah-blue-alpha-22: rgba($noah-blue-600, 0.22);
+$noah-blue-alpha-25: rgba($noah-blue-600, 0.25);
+$noah-blue-alpha-30: rgba($noah-blue-600, 0.3);
+
+$noah-purple-alpha-08: rgba($noah-purple-600, 0.08);
+$noah-purple-alpha-12: rgba($noah-purple-600, 0.12);
+$noah-purple-alpha-14: rgba($noah-purple-600, 0.14);
+$noah-purple-alpha-16: rgba($noah-purple-600, 0.16);
+$noah-purple-alpha-18: rgba($noah-purple-600, 0.18);
+$noah-purple-alpha-20: rgba($noah-purple-600, 0.2);
+$noah-purple-alpha-25: rgba($noah-purple-600, 0.25);
+$noah-purple-alpha-28: rgba($noah-purple-600, 0.28);
+$noah-purple-alpha-35: rgba($noah-purple-600, 0.35);
+$noah-purple-alpha-45: rgba($noah-purple-600, 0.45);
+$noah-purple-alpha-85: rgba($noah-purple-600, 0.85);
+
+$noah-badge-outlined-bg: #{$noah-purple-alpha-12};
+$noah-badge-outlined-border: #{$noah-purple-alpha-45};
+$noah-badge-outlined-text: #{$noah-electric-orchid-dark};
+
+$noah-indigo-alpha-12: rgba($noah-indigo-500, 0.12);
+$noah-indigo-alpha-20: rgba($noah-indigo-500, 0.2);
+
+$noah-red-alpha-12: rgba($noah-red-500, 0.12);
+$noah-red-alpha-15: rgba($noah-red-500, 0.15);
+$noah-red-alpha-35: rgba($noah-red-500, 0.35);
+
+$noah-green-alpha-12: rgba($noah-green-500, 0.12);
+$noah-yellow-alpha-12: rgba($noah-yellow-400, 0.12);
+
+$noah-gray-900-alpha-96: $noah-deep-space-alpha-96;
+$noah-gray-920-alpha-98: $noah-deep-space-alpha-98;
+$noah-gray-980-alpha-98: $noah-deep-space-alpha-98;
+$noah-gray-950-alpha-60: $noah-midnight-alpha-60;
+$noah-gray-950-alpha-75: $noah-midnight-alpha-75;

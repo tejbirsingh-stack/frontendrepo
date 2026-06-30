@@ -1,0 +1,305 @@
+@use 'palette' as *;
+
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  // Core surfaces
+  --noah-bg: #{$noah-midnight-black};
+  --noah-surface: #{$noah-mist-alpha-18};
+  --noah-surface-hover: #{$noah-mist-alpha-28};
+  --noah-surface-muted: #{$noah-slate-alpha-12};
+  --noah-surface-subtle: #{rgba($noah-graphite-neutral, 0.35)};
+  --noah-surface-strong: #{$noah-mist-alpha-40};
+  --noah-surface-raised: #{rgba($noah-mist-gray, 0.55)};
+  --noah-surface-active: #{rgba($noah-mist-gray, 0.72)};
+  --noah-skeleton-base: #{rgba($noah-graphite-neutral, 0.85)};
+  --noah-skeleton-highlight: #{rgba($noah-mist-gray, 0.55)};
+  --noah-border: #{rgba($noah-mist-gray, 0.45)};
+  --noah-border-strong: #{rgba($noah-mist-gray, 0.65)};
+  --noah-border-focus: #{$noah-electric-orchid};
+  --noah-border-input-hover: #{rgba($noah-electric-orchid, 0.45)};
+  --noah-divider-subtle: #{rgba($noah-mist-gray, 0.28)};
+  --noah-divider: #{rgba($noah-mist-gray, 0.38)};
+
+  // Typography
+  --noah-text-primary: #{$noah-text-on-dark};
+  --noah-text-secondary: #{$noah-text-secondary-readable};
+  --noah-text-subheader: #{$noah-text-subheader};
+  --noah-text-muted: #{rgba($noah-text-on-dark, 0.55)};
+  --noah-text-inverse: #{$noah-white};
+  --noah-text-on-cta: #{$noah-white};
+
+  // Brand
+  --noah-brand-blue: #{$noah-royal-purple};
+  --noah-brand-blue-light: #{$noah-electric-orchid};
+  --noah-brand-blue-dark: #{$noah-royal-purple-dark};
+  --noah-brand-purple: #{$noah-royal-purple};
+  --noah-brand-purple-light: #{$noah-electric-orchid};
+  --noah-brand-purple-dark: #{$noah-royal-purple-dark};
+  --noah-brand-orchid: #{$noah-electric-orchid};
+  --noah-brand-teal: #{$noah-obsidian-teal};
+  --noah-brand-gradient: #{$noah-brand-gradient};
+  --noah-brand-gradient-hover: #{$noah-brand-gradient-hover};
+  --noah-brand-shadow: 0 4px 16px #{rgba($noah-royal-purple, 0.35)};
+  --noah-brand-shadow-soft: 0 4px 14px #{rgba($noah-royal-purple, 0.22)};
+  --noah-brand-shadow-strong: 0 8px 24px #{rgba($noah-electric-orchid, 0.28)};
+  --noah-blue-selection-surface: #{rgba($noah-royal-purple, 0.14)};
+
+  // Accent / indigo
+  --noah-indigo: #{$noah-royal-purple};
+  --noah-indigo-light: #{$noah-electric-orchid};
+  --noah-indigo-surface: #{$noah-orchid-alpha-12};
+  --noah-violet-accent: #{$noah-electric-orchid};
+
+  // Purple selection states
+  --noah-purple-light: #{$noah-purple-400};
+  --noah-purple-lighter: #{$noah-purple-200};
+  --noah-purple-selection: #{$noah-purple-alpha-28};
+  --noah-purple-selection-soft: #{$noah-purple-alpha-12};
+  --noah-purple-selection-strong: #{$noah-purple-alpha-35};
+  --noah-purple-selection-hover: #{$noah-purple-alpha-18};
+  --noah-purple-selection-bg: #{$noah-purple-alpha-14};
+  --noah-purple-selection-border: #{$noah-purple-alpha-45};
+  --noah-purple-selection-ring: #{$noah-purple-alpha-85};
+  --noah-purple-focus-ring: #{$noah-purple-alpha-25};
+  --noah-purple-chip-border: #{$noah-purple-alpha-20};
+  --noah-purple-surface: #{$noah-purple-alpha-08};
+  --noah-purple-surface-hover: #{$noah-purple-alpha-16};
+
+  // Destructive
+  --noah-destructive: #{$noah-red-400};
+  --noah-destructive-hover: #{$noah-red-alpha-12};
+  --noah-destructive-border: #{$noah-red-500};
+  --noah-destructive-surface: #{$noah-red-alpha-15};
+  --noah-destructive-border-soft: #{$noah-red-alpha-35};
+
+  // Status
+  --noah-success: #{$noah-obsidian-teal};
+  --noah-success-dark: #{$noah-teal-dark};
+  --noah-success-text: #{$noah-teal-light};
+  --noah-success-surface: #{$noah-teal-alpha-12};
+  --noah-warning: #{$noah-yellow-400};
+  --noah-warning-surface: #{$noah-yellow-alpha-12};
+  --noah-error-text: #{$noah-red-300};
+  --noah-error-surface: #{$noah-red-alpha-12};
+  --noah-favorite: #{$noah-yellow-400};
+
+  // Layered surfaces
+  --noah-drawer-surface: #{$noah-deep-space-alpha-96};
+  --noah-dialog-surface: #{$noah-deep-space-black};
+  --noah-dialog-surface-strong: #{$noah-graphite-neutral};
+  --noah-header-background: #{$noah-midnight-alpha-75};
+  --noah-popover-surface: #{$noah-deep-space-alpha-98};
+  --noah-popover-surface-deep: #{$noah-midnight-black};
+  --noah-glass-background: #{rgba($noah-graphite-neutral, 0.72)};
+  --noah-island-surface: #{$noah-graphite-alpha-88};
+  --noah-footer-tint: #{rgba($noah-deep-space-black, 0.85)};
+  --noah-sidebar-surface: #{$noah-sidebar-surface-brand};
+  --noah-panel-tint: #{rgba($noah-slate-charcoal, 0.55)};
+  --noah-elevated-surface: #{$noah-graphite-neutral};
+  --noah-video-stage: #{$noah-midnight-black};
+  --noah-backdrop-scrim: #{$noah-black-alpha-65};
+  --noah-backdrop-scrim-strong: #{$noah-black-alpha-72};
+  --noah-overlay-scrim: #{rgba($noah-midnight-black, 0.78)};
+  --noah-sidebar-scrim: #{$noah-sidebar-scrim-brand};
+  --noah-toolbar-surface: #{$noah-graphite-alpha-92};
+  --noah-subtoolbar-surface: #{$noah-deep-space-alpha-96};
+
+  // Shadows & highlights
+  --noah-card-shadow: 0 24px 48px #{$noah-black-alpha-35}, inset 0 1px 0 #{$noah-white-alpha-05};
+  --noah-dialog-shadow: 0 24px 64px #{$noah-black-alpha-55}, inset 0 1px 0 #{$noah-white-alpha-06};
+  --noah-popover-shadow: 0 16px 48px #{$noah-black-alpha-50}, inset 0 1px 0 #{$noah-white-alpha-04};
+  --noah-dropdown-shadow: 0 16px 40px #{$noah-black-alpha-45};
+  --noah-tooltip-shadow: 0 12px 32px #{$noah-black-alpha-45};
+  --noah-tooltip-surface: #{$noah-deep-space-alpha-96};
+  --noah-tooltip-text: #{$noah-text-on-dark};
+  --noah-tooltip-text-muted: #{rgba($noah-text-on-dark, 0.58)};
+  --noah-inset-highlight: #{$noah-white-alpha-06};
+  --noah-inset-highlight-soft: #{$noah-white-alpha-04};
+  --noah-grid-dot: #{$noah-white-alpha-055};
+
+  // Avatar stack
+  --noah-avatar-1: #{$noah-royal-purple};
+  --noah-avatar-2: #{$noah-electric-orchid};
+  --noah-avatar-3: #{$noah-obsidian-teal};
+  --noah-avatar-4: #{$noah-mist-gray};
+  --noah-avatar-5: #{$noah-slate-charcoal};
+  --noah-avatar-6: #{$noah-pink-accent};
+  --noah-avatar-surplus-bg: #{$noah-graphite-neutral};
+
+  // Link chip (collaborators)
+  --noah-link-chip-text: #{$noah-link-navy};
+  --noah-link-chip-bg: #{$noah-link-blue-bg};
+  --noah-link-chip-bg-hover: #{$noah-link-blue-bg-hover};
+
+  // Wave background fills
+  --noah-wave-fill-1: #{$noah-white-alpha-12};
+  --noah-wave-fill-2: #{$noah-white-alpha-08};
+  --noah-wave-fill-3: #{$noah-white-alpha-05};
+  --noah-wave-fill-4: #{$noah-white-alpha-03};
+
+  // User-selectable palette (tags, workspaces, annotations)
+  --noah-palette-black: #{$noah-ink};
+  --noah-palette-gray: #{$noah-gray-500};
+  --noah-palette-gray-light: #{$noah-gray-300};
+  --noah-palette-white: #{$noah-white};
+  --noah-palette-white-soft: #{$noah-gray-100};
+  --noah-palette-red: #{$noah-red-500};
+  --noah-palette-red-light: #{$noah-red-300};
+  --noah-palette-orange: #{$noah-orange-500};
+  --noah-palette-orange-light: #{$noah-orange-400};
+  --noah-palette-yellow: #{$noah-yellow-500};
+  --noah-palette-yellow-light: #{$noah-yellow-300};
+  --noah-palette-green: #{$noah-green-500};
+  --noah-palette-green-light: #{$noah-green-300};
+  --noah-palette-teal: #{$noah-teal-500};
+  --noah-palette-teal-light: #{$noah-teal-300};
+  --noah-palette-blue: #{$noah-blue-500};
+  --noah-palette-blue-light: #{$noah-blue-300};
+  --noah-palette-sky: #{$noah-sky-400};
+  --noah-palette-purple: #{$noah-purple-500};
+  --noah-palette-purple-light: #{$noah-purple-300};
+  --noah-palette-pink: #{$noah-pink-500};
+  --noah-palette-pink-light: #{$noah-pink-300};
+  --noah-palette-cyan: #{$noah-cyan-500};
+  --noah-palette-amber: #{$noah-amber-500};
+
+  // Extended UI tokens
+  --noah-purple-focus-ring-tight: 0 0 0 1px #{$noah-purple-alpha-12};
+  --noah-purple-border-soft: #{$noah-purple-alpha-25};
+  --noah-blue-glow-18: #{rgba($noah-blue-600, 0.18)};
+  --noah-blue-glow-24: #{rgba($noah-blue-600, 0.24)};
+  --noah-blue-glow-30: #{$noah-blue-alpha-30};
+  --noah-blue-glow-35: #{rgba($noah-blue-600, 0.35)};
+  --noah-purple-glow-24: #{rgba($noah-purple-600, 0.24)};
+  --noah-purple-glow-40: #{rgba($noah-purple-600, 0.4)};
+  --noah-island-shadow: 0 12px 32px #{$noah-black-alpha-40}, inset 0 1px 0 #{$noah-white-alpha-06};
+  --noah-toolbar-shadow: 0 16px 48px #{$noah-black-alpha-45}, inset 0 1px 0 #{$noah-white-alpha-06};
+  --noah-emoji-picker-surface: #{$noah-emoji-surface};
+  --noah-emoji-picker-border: #{$noah-white-alpha-08};
+  --noah-emoji-picker-input-border: #{rgba($noah-purple-600, 0.65)};
+  --noah-emoji-picker-text: #{$noah-gray-100};
+  --noah-emoji-picker-placeholder: #{rgba($noah-gray-100, 0.55)};
+  --noah-stroke-focus-ring: #{rgba($noah-electric-orchid, 0.35)};
+  --noah-shape-default: #{$noah-green-500};
+  --noah-slate-avatar: #{$noah-slate-500};
+  --noah-gray-900-ui: #{$noah-gray-900-ui};
+  --noah-checker-dark: #{$noah-gray-500};
+  --noah-checker-light: #{$noah-gray-400};
+  --noah-annotation-guide: #{$noah-white-alpha-14};
+  --noah-white-border-soft: #{$noah-white-alpha-10};
+  --noah-white-border-dashed: #{$noah-white-alpha-28};
+  --noah-white-surface-strong: #{$noah-white-alpha-96};
+  --noah-white-surface-medium: #{$noah-white-alpha-92};
+  --noah-ink-overlay-04: #{$noah-black-alpha-04};
+  --noah-ink-overlay-06: #{$noah-black-alpha-06};
+  --noah-ink-overlay-08: #{$noah-black-alpha-08};
+  --noah-ink-overlay-10: #{$noah-black-alpha-10};
+  --noah-ink-overlay-12: #{$noah-black-alpha-12};
+  --noah-ink-overlay-14: #{$noah-black-alpha-14};
+  --noah-ink-overlay-16: #{$noah-black-alpha-16};
+  --noah-ink-overlay-18: #{$noah-black-alpha-18};
+  --noah-ink-overlay-20: #{$noah-black-alpha-20};
+  --noah-ink-overlay-25: #{$noah-black-alpha-25};
+  --noah-ink-overlay-28: #{$noah-black-alpha-28};
+  --noah-ink-overlay-35: #{$noah-black-alpha-35};
+  --noah-ink-overlay-38: #{$noah-black-alpha-38};
+  --noah-ink-overlay-80: #{$noah-black-alpha-80};
+  --noah-ink-overlay-88: #{$noah-black-alpha-88};
+  --noah-ink-scrim-72: #{$noah-ink-alpha-72};
+  --noah-ink-scrim-88: #{$noah-ink-alpha-88};
+  --noah-ink-dark: #{$noah-ink-dark};
+  --noah-gray-200: #{$noah-gray-200};
+  --noah-gray-600: #{$noah-gray-600};
+  --noah-destructive-strong: #{$noah-red-600};
+  --noah-destructive-deep: #{$noah-red-700};
+  --noah-blue-selection-hover: #{$noah-blue-alpha-08};
+  --noah-blue-drag-surface: #{$noah-blue-alpha-10};
+  --noah-blue-accent-surface: #{$noah-blue-alpha-15};
+  --noah-blue-purple-gradient: linear-gradient(90deg, #{$noah-blue-alpha-18} 0%, #{$noah-purple-alpha-18} 100%);
+  --noah-purple-selection-medium: #{$noah-purple-alpha-22};
+  --noah-purple-glow-soft: #{$noah-purple-alpha-24};
+  --noah-purple-focus-border: #{$noah-purple-alpha-50};
+  --noah-purple-light-strong: #{$noah-purple-light-alpha-85};
+  --noah-purple-light-dashed: #{$noah-purple-light-alpha-95};
+  --noah-purple-surface-active: #{$noah-purple-alpha-20};
+  --noah-green-bright: #{$noah-green-400};
+  --noah-green-bright-surface: #{$noah-green-400-alpha-12};
+  --noah-yellow-accent-surface: #{$noah-yellow-alpha-15};
+  --noah-indigo-accent-surface: #{$noah-indigo-alpha-15};
+  --noah-red-glow-soft: #{$noah-red-alpha-25};
+  --noah-playhead-ring: 0 0 0 1px #{$noah-black-alpha-35};
+  --noah-focus-ring-blue: 0 0 0 6px #{$noah-blue-alpha-22};
+  --noah-focus-ring-purple-4: 0 0 0 4px #{rgba($noah-purple-400, 0.25)};
+  --noah-focus-ring-purple-2: 0 0 0 2px #{$noah-purple-alpha-25};
+  --noah-comment-card-shadow: 0 12px 40px #{$noah-black-alpha-16}, 0 2px 8px #{$noah-black-alpha-06};
+  --noah-comment-hover-shadow: 0 10px 32px #{$noah-black-alpha-14}, 0 2px 8px #{$noah-black-alpha-06};
+  --noah-marker-shadow: 0 8px 28px #{$noah-black-alpha-18}, 0 2px 8px #{$noah-black-alpha-08};
+  --noah-stamp-marker-shadow: 0 6px 18px #{$noah-black-alpha-28};
+  --noah-avatar-pin-shadow: 0 2px 8px #{$noah-purple-alpha-35};
+  --noah-selected-toolbar-shadow: 0 16px 40px #{$noah-black-alpha-50}, inset 0 1px 0 #{$noah-white-alpha-06};
+  --noah-drawer-scrim: #{$noah-black-alpha-35};
+  --noah-timeline-scrim: #{$noah-black-alpha-28};
+  --noah-preview-play-shadow: 0 4px 16px #{$noah-black-alpha-18};
+  --noah-preview-card-shadow: 0 12px 32px #{$noah-black-alpha-25};
+  --noah-upload-preview-gradient: linear-gradient(160deg, #{$noah-purple-alpha-16} 0%, #{$noah-blue-alpha-08} 100%);
+  --noah-rainbow-red: #{$noah-red-500};
+  --noah-rainbow-yellow: #{$noah-yellow-500};
+  --noah-rainbow-green: #{$noah-green-500};
+  --noah-rainbow-blue: #{$noah-blue-500};
+  --noah-rainbow-purple: #{$noah-purple-500};
+  --noah-brand-gradient-horizontal: #{$noah-brand-gradient-horizontal};
+  --noah-rainbow-conic: #{$noah-rainbow-conic};
+  --noah-blue-200: #{$noah-blue-200};
+  --noah-pink-accent: #{$noah-pink-accent};
+  --noah-slate-muted: #{$noah-slate-muted};
+  --noah-blue-selection-faint: #{$noah-blue-alpha-06};
+  --noah-blue-accent-medium: #{$noah-blue-alpha-14};
+  --noah-blue-glow-strong: #{$noah-blue-alpha-28};
+  --noah-blue-border-strong: #{$noah-blue-alpha-45};
+  --noah-blue-border-soft: #{rgba($noah-blue-600, 0.2)};
+  --noah-blue-glow-50: #{$noah-blue-alpha-50};
+  --noah-green-accent-medium: #{$noah-green-alpha-14};
+  --noah-green-accent-surface: #{$noah-green-alpha-15};
+  --noah-purple-accent-surface: #{$noah-purple-alpha-15};
+  --noah-black-scrim-30: #{$noah-black-alpha-30};
+  --noah-black-scrim-70: #{$noah-black-alpha-70};
+  --noah-text-inverse-muted: #{$noah-white-alpha-55-muted};
+  --noah-popover-shadow-elevated: 0 20px 48px #{$noah-black-alpha-55}, inset 0 1px 0 #{$noah-white-alpha-06};
+  --noah-island-shadow-strong: 0 12px 32px #{$noah-black-alpha-45}, inset 0 1px 0 #{$noah-white-alpha-06};
+  --noah-card-hover-shadow: 0 12px 32px #{$noah-black-alpha-30};
+  --noah-video-scrim-gradient: linear-gradient(to top, #{$noah-black-alpha-88} 0%, #{$noah-black-alpha-45} 50%, transparent 100%);
+  --noah-media-type-gradient-end: #{$noah-purple-alpha-08};
+  --noah-notification-glow: 0 0 8px #{$noah-blue-alpha-50};
+  --noah-shape-picker-shadow: 0 4px 16px #{$noah-black-alpha-35};
+  --noah-text-inverse-soft: #{$noah-white-alpha-75};
+  --noah-text-inverse-faint: #{$noah-white-alpha-50};
+  --noah-text-inverse-dim: #{$noah-white-alpha-45};
+  --noah-plan-badge-glow: 0 0 14px #{rgba($noah-royal-purple, 0.42)}, 0 0 28px #{rgba($noah-electric-orchid, 0.22)}, inset 0 1px 0 #{rgba($noah-electric-orchid, 0.2)};
+  --noah-badge-filled-gradient: #{$noah-badge-filled-gradient};
+  --noah-badge-filled-border: #{$noah-badge-filled-border};
+  --noah-badge-filled-text: #{$noah-badge-filled-text};
+  --noah-badge-outlined-bg: #{$noah-badge-outlined-bg};
+  --noah-badge-outlined-border: #{$noah-badge-outlined-border};
+  --noah-badge-outlined-text: #{$noah-badge-outlined-text};
+  --noah-comment-pin-glow: drop-shadow(0 2px 8px #{rgba($noah-purple-600, 0.4)});
+  --noah-liquid-blue-orb: radial-gradient(circle, #{$noah-royal-purple} 0%, transparent 70%);
+  --noah-liquid-purple-orb: radial-gradient(circle, #{$noah-electric-orchid} 0%, transparent 70%);
+  --noah-liquid-indigo-orb: radial-gradient(circle, #{$noah-obsidian-teal} 0%, transparent 70%);
+  --noah-liquid-floor-glow: radial-gradient(ellipse 80% 50% at 50% 100%, #{rgba($noah-royal-purple, 0.14)} 0%, transparent 60%);
+  --noah-billing-hero-gradient: linear-gradient(135deg, #{rgba($noah-royal-purple, 0.16)} 0%, #{rgba($noah-graphite-neutral, 0.55)} 48%);
+  --noah-stamp-gradient: linear-gradient(135deg, #{rgba($noah-royal-purple, 0.38)} 0%, #{rgba($noah-electric-orchid, 0.32)} 100%);
+  --noah-login-brand-shadow: 0 8px 32px #{rgba($noah-royal-purple, 0.38)};
+  --noah-login-brand-shadow-hover: 0 12px 40px #{rgba($noah-electric-orchid, 0.42)};
+  --noah-logo-glow: drop-shadow(0 12px 32px #{rgba($noah-royal-purple, 0.45)});
+  --noah-stamp-text-shadow: 3px 5px 5px #{$noah-black-alpha-28};
+  --noah-stamp-text-stroke: #{$noah-white};
+  --noah-stamp-selected-glow: drop-shadow(0 0 6px #{$noah-purple-light-alpha-85});
+  --noah-drag-preview-border: 1px solid #{$noah-white-alpha-14};
+  --noah-drag-preview-shadow: 0 12px 32px #{$noah-black-alpha-45};
+  --noah-thumbnail-chip-bg: #{$noah-thumbnail-chip-bg};
+  --noah-thumbnail-chip-bg-hover: #{$noah-thumbnail-chip-bg-hover};
+  --noah-thumbnail-chip-border: #{$noah-thumbnail-chip-border};
+  --noah-thumbnail-chip-shadow: #{$noah-thumbnail-chip-shadow};
+}
