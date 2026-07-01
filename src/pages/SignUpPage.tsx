@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import {
   Box,
   Button,
@@ -19,14 +20,13 @@ import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo from '../components/NoahLogo';
-import { useAuth } from '../auth/AuthContext';
 import { cv } from '../theme/cssVars';
 import { validatePassword } from '../utils/authValidation';
+import { registerUser } from "../api/auth.service";
 
 export default function SignUpPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signup } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [name, setName] = useState('');
@@ -36,47 +36,66 @@ export default function SignUpPage() {
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError("");
 
-    const trimmedName = name.trim();
-    if (trimmedName.length < 2) {
-      setError('Please enter your full name.');
-      return;
+  const trimmedName = name.trim();
+
+  if (trimmedName.length < 2) {
+    setError("Please enter your full name.");
+    return;
+  }
+
+  const passwordError = validatePassword(password);
+  if (passwordError) {
+    setError(passwordError);
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    setError("Passwords do not match.");
+    return;
+  }
+
+  if (!agreeToTerms) {
+    setError("Please accept the terms to continue.");
+    return;
+  }
+
+  try {
+    const response = await registerUser({
+      name: trimmedName,
+      email,
+      password,
+      orgName: "Noah AI",
+      phone: "",
+      jobTitle: "",
+      hubspotUtk: "",
+    });
+
+    // Save token if your backend returns one
+    if (response.token) {
+      localStorage.setItem("response", response);
     }
 
-    const passwordError = validatePassword(password);
-    if (passwordError) {
-      setError(passwordError);
-      return;
-    }
+    // Navigate after successful registration
+    navigate("/home", { replace: true });
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
+  } catch (err: unknown) {
+    if (axios.isAxiosError(err)) {
+      setError(
+        err.response?.data?.message ||
+        err.message ||
+        "Unable to create account."
+      );
+    } else if (err instanceof Error) {
+      setError(err.message);
+    } else {
+      setError("Unable to create account.");
     }
-
-    if (!agreeToTerms) {
-      setError('Please accept the terms to continue.');
-      return;
-    }
-
-    const redirectPath =
-      typeof location.state === 'object' &&
-      location.state !== null &&
-      'from' in location.state &&
-      typeof (location.state as { from?: unknown }).from === 'string'
-        ? (location.state as { from: string }).from
-        : '/home';
-
-    try {
-      await signup({ name: trimmedName, email, password });
-      navigate(redirectPath, { replace: true });
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Unable to create account.');
-    }
-  };
+  }
+};
 
   return (
     <Box

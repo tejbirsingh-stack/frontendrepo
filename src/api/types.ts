@@ -25,6 +25,18 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+
+export interface RegisterData {
+  name: string;
+  email: string;
+  password: string;
+  orgId?: string;
+  orgName?: string;
+  phone?: string;
+  jobTitle?: string;
+  hubspotUtk?: string;
+}
+
 export interface AuthUserDto {
   id: string;
   name: string;

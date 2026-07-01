@@ -9,7 +9,20 @@ import { env } from '../config/env';
 import { sanitizeEmailInput, sanitizeTextInput } from '../utils/sanitize';
 import { getNameInitials, validatePassword } from '../utils/authValidation';
 import { apiClient } from './client';
-import type { AuthUserDto, LoginRequestDto, LoginResponseDto, SignUpRequestDto } from './types';
+import type { AuthUserDto, LoginRequestDto, LoginResponseDto, RegisterData, SignUpRequestDto } from './types';
+
+import axios from "axios";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+export const registerUser = async (data: RegisterData) => {
+  const response = await axios.post(
+    `${API_BASE_URL}/auth/register`,
+    data
+  );
+
+  return response.data;
+};
 
 function mapCurrentUserToDto(): AuthUserDto {
   return {
