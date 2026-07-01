@@ -54,10 +54,18 @@ export default defineConfig({
         main: path.resolve(__dirname, 'index.html'),
       },
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-          ui: ['framer-motion', 'lucide-react'],
+        manualChunks(id: string) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react/') || id.includes('react-dom/')) {
+              return 'vendor';
+            }
+            if (id.includes('react-router-dom')) {
+              return 'router';
+            }
+            if (id.includes('@mui')) {
+              return 'mui';
+            }
+          }
         },
       },
     },

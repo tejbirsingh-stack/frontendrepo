@@ -13,7 +13,7 @@ import type { AuthUserDto, LoginRequestDto, LoginResponseDto, RegisterData, Sign
 
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 export const registerUser = async (data: RegisterData) => {
   const response = await axios.post(
