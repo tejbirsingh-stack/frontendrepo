@@ -74,13 +74,18 @@ const handleSubmit = async (e: React.FormEvent) => {
       hubspotUtk: "",
     });
 
-    // Save token if your backend returns one
-    if (response.token) {
-      localStorage.setItem("response", response);
+    if (response) {
+      localStorage.setItem("response", JSON.stringify(response));
+    }
+    if (response?.token) {
+      localStorage.setItem("noah.auth.session", response.token);
+    }
+    if (response?.user) {
+      localStorage.setItem("noah.auth.user", JSON.stringify(response.user));
     }
 
     // Navigate after successful registration
-    navigate("/home", { replace: true });
+    navigate("/", { replace: true });
 
   } catch (err: unknown) {
     if (axios.isAxiosError(err)) {
