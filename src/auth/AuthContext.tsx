@@ -55,8 +55,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await logoutRequest();
     clearSession();
+    try {
+      await logoutRequest();
+    } catch {
+      // Remote logout failures should not block session clearing
+    }
   }, [clearSession]);
 
   useEffect(() => {
