@@ -66,8 +66,8 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
-    const idToken = "YOUR_GOOGLE_ID_TOKEN_HERE";
     setError('');
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "967923512322-0oullb620hh9se1ff0prs8stvbspi829.apps.googleusercontent.com";
 
     const redirectPath =
       typeof location.state === 'object' &&
@@ -77,17 +77,54 @@ export default function LoginPage() {
         ? (location.state as { from: string }).from
         : '/home';
 
+    // Helper function to dynamically load Google Identity Services SDK
+    const loadGoogleScript = (): Promise<any> => {
+      return new Promise((resolve) => {
+        if ((window as any).google?.accounts?.oauth2) {
+          resolve((window as any).google);
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve((window as any).google);
+        document.head.appendChild(script);
+      });
+    };
+
     try {
-      const response = await loginWithGoogle(idToken);
-      const token = response.accessToken || response.token;
-      if (token) {
-        localStorage.setItem('noah_session_token', token);
-        localStorage.setItem('noah_session_user', JSON.stringify(response.user));
-      }
-      window.location.href = redirectPath;
-    } catch (submitError: any) {
-      console.error(submitError);
-      setError(submitError.response?.data?.message || submitError.message || 'Google Login Failed.');
+      const google = await loadGoogleScript();
+
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+        callback: async (tokenResponse: any) => {
+          if (!tokenResponse || !tokenResponse.access_token) {
+            setError('Google login cancelled or failed.');
+            return;
+          }
+          try {
+            // Send token to backend /auth/loging-google
+            const response = await loginWithGoogle(tokenResponse.access_token);
+            const token = response.accessToken || response.token;
+            if (token) {
+              localStorage.setItem('noah_session_token', token);
+              localStorage.setItem('noah_session_user', JSON.stringify(response.user));
+            }
+            window.location.href = redirectPath;
+          } catch (submitError: any) {
+            console.error(submitError);
+            setError(submitError.response?.data?.message || submitError.message || 'Google Login Failed.');
+          }
+        },
+      });
+
+      // Open the Google login popup window
+      client.requestAccessToken();
+    } catch (err: any) {
+      console.error('Failed to load Google SDK:', err);
+      setError('Could not initialize Google Login service.');
     }
   };
 
