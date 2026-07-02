@@ -23,6 +23,7 @@ import NoahLogo from '../components/NoahLogo';
 // Demo-only: remove this import and <LoginDemoAccountsBubble /> below to drop the picker.
 import LoginDemoAccountsBubble from '../components/demo/LoginDemoAccountsBubble';
 import { useAuth } from '../auth/AuthContext';
+import { loginUser } from '../api/auth.service';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -47,10 +48,21 @@ export default function LoginPage() {
         : '/home';
 
     try {
-      await login({ email, password, rememberMe });
-      navigate(redirectPath, { replace: true });
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Unable to sign in.');
+      // Use the custom loginUser function to hit the real API directly
+      const response = await loginUser({ email, password });
+      
+      // Manually set the session in localStorage so the app recognizes the user
+      const token = response.accessToken || response.token;
+      if (token) {
+        localStorage.setItem('noah_session_token', token);
+        localStorage.setItem('noah_session_user', JSON.stringify(response.user));
+      }
+      
+      // Force a full page reload to the redirect path so AuthContext picks up the new localStorage values
+      window.location.href = redirectPath;
+    } catch (submitError: any) {
+      console.error(submitError);
+      setError(submitError.response?.data?.message || submitError.message || 'Unable to sign in.');
     }
   };
 

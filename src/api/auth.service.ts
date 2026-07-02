@@ -24,6 +24,17 @@ export const registerUser = async (data: RegisterData) => {
   return response.data;
 };
 
+
+export const loginUser = async (data: LoginRequestDto) => {
+  const response = await axios.post(
+    `${API_BASE_URL}/auth/login`,
+    data
+  );
+
+  return response.data;
+};
+
+
 function mapCurrentUserToDto(): AuthUserDto {
   return {
     id: 'current-user',
