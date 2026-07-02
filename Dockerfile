@@ -12,4 +12,6 @@ RUN node -e "const fs=require('fs');let c=fs.readFileSync('vite.config.ts','utf8
 
 EXPOSE 3002
 
-CMD ["npx", "vite", "--host", "0.0.0.0", "--port", "3002", "--no-hmr"]
+ENV VITE_HMR_ENABLED=false
+
+CMD ["npx", "vite", "--host", "0.0.0.0", "--port", "3002"]
