@@ -35,6 +35,16 @@ export const loginUser = async (data: LoginRequestDto) => {
 };
 
 
+export const loginWithGoogle = async (idToken: string) => {
+  const response = await axios.post(
+    `${API_BASE_URL}/auth/loging-google`,
+    { idToken }
+  );
+
+  return response.data;
+};
+
+
 function mapCurrentUserToDto(): AuthUserDto {
   return {
     id: 'current-user',

@@ -20,10 +20,9 @@ import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo from '../components/NoahLogo';
-// Demo-only: remove this import and <LoginDemoAccountsBubble /> below to drop the picker.
 import LoginDemoAccountsBubble from '../components/demo/LoginDemoAccountsBubble';
 import { useAuth } from '../auth/AuthContext';
-import { loginUser } from '../api/auth.service';
+import { loginUser, loginWithGoogle } from '../api/auth.service';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -63,6 +62,32 @@ export default function LoginPage() {
     } catch (submitError: any) {
       console.error(submitError);
       setError(submitError.response?.data?.message || submitError.message || 'Unable to sign in.');
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    const idToken = "YOUR_GOOGLE_ID_TOKEN_HERE";
+    setError('');
+
+    const redirectPath =
+      typeof location.state === 'object' &&
+      location.state !== null &&
+      'from' in location.state &&
+      typeof (location.state as { from?: unknown }).from === 'string'
+        ? (location.state as { from: string }).from
+        : '/home';
+
+    try {
+      const response = await loginWithGoogle(idToken);
+      const token = response.accessToken || response.token;
+      if (token) {
+        localStorage.setItem('noah_session_token', token);
+        localStorage.setItem('noah_session_user', JSON.stringify(response.user));
+      }
+      window.location.href = redirectPath;
+    } catch (submitError: any) {
+      console.error(submitError);
+      setError(submitError.response?.data?.message || submitError.message || 'Google Login Failed.');
     }
   };
 
@@ -241,6 +266,7 @@ export default function LoginPage() {
             <Button
               fullWidth
               variant="outlined"
+              onClick={handleGoogleLogin}
               startIcon={<GoogleIcon />}
               sx={{
                 py: 1.5,
