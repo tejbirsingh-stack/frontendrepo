@@ -13,6 +13,9 @@ export default defineConfig({
     allowedHosts: ['qa.noahcloud.ai', 'all'],
     port: 3002,
     host: true,
+    hmr: {
+      clientPort: 443,
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3000',
