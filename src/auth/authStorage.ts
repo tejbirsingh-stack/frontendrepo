@@ -1,7 +1,7 @@
 import type { AuthSessionUser } from './types';
 
-const SESSION_TOKEN_KEY = 'noah.auth.session';
-const SESSION_USER_KEY = 'noah.auth.user';
+const SESSION_TOKEN_KEY = 'noah_session_token';
+const SESSION_USER_KEY = 'noah_session_user';
 const REMEMBER_ME_KEY = 'noah.auth.remember';
 
 export function persistSession(
