@@ -31,6 +31,8 @@ export default function SignUpPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
@@ -41,9 +43,21 @@ const handleSubmit = async (e: React.FormEvent) => {
   setError("");
 
   const trimmedName = name.trim();
+  const trimmedCompanyName = companyName.trim();
+  const trimmedPhone = phone.trim();
 
   if (trimmedName.length < 2) {
     setError("Please enter your full name.");
+    return;
+  }
+
+  if (trimmedCompanyName.length < 2) {
+    setError("Please enter your company name.");
+    return;
+  }
+
+  if (trimmedPhone.length !== 10) {
+    setError("Please enter a valid 10-digit phone number.");
     return;
   }
 
@@ -68,8 +82,8 @@ const handleSubmit = async (e: React.FormEvent) => {
       name: trimmedName,
       email,
       password,
-      orgName: "Noah AI",
-      phone: "",
+      orgName: trimmedCompanyName,
+      phone: trimmedPhone,
       jobTitle: "",
       hubspotUtk: "",
     });
@@ -184,6 +198,38 @@ const handleSubmit = async (e: React.FormEvent) => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
+              sx={{ mb: 2.5 }}
+              slotProps={{
+                inputLabel: { shrink: true },
+              }}
+            />
+
+            <TextField
+              fullWidth
+              label="Company Name"
+              type="text"
+              placeholder="Company Name"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              sx={{ mb: 2.5 }}
+              slotProps={{
+                inputLabel: { shrink: true },
+              }}
+            />
+
+            <TextField
+              fullWidth
+              label="Phone Number"
+              type="tel"
+              placeholder="Phone Number"
+              value={phone}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '');
+                if (val.length <= 10) {
+                  setPhone(val);
+                }
+              }}
+              autoComplete="tel"
               sx={{ mb: 2.5 }}
               slotProps={{
                 inputLabel: { shrink: true },
