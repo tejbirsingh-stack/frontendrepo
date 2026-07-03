@@ -42,6 +42,11 @@ import type {
   MediaUploadOptions,
 } from '../types/mediaUpload';
 import type { SidebarSelection } from '../types/sidebarSelection';
+import {
+  uploadMediaFileRequest,
+  getMediaAssetsRequest,
+  type MediaAssetResponseDto,
+} from '../api';
 
 interface DashboardContextValue {
   workspaces: Workspace[];
@@ -89,14 +94,20 @@ interface DashboardContextValue {
   uploadMediaFiles: (files: File[], options?: MediaUploadOptions) => number;
   pendingMediaUpload: PendingMediaUpload | null;
   pendingMediaUploadCount: number;
-  completeMediaUpload: (details: MediaUploadDetails) => void;
+  completeMediaUpload: (
+    details: MediaUploadDetails,
+    onProgress?: (progress: { loaded: number; total: number }) => void,
+  ) => Promise<void>;
   cancelMediaUpload: () => void;
   /** @deprecated Use pendingMediaUpload */
   pendingVideoUpload: PendingMediaUpload | null;
   /** @deprecated Use pendingMediaUploadCount */
   pendingVideoUploadCount: number;
   /** @deprecated Use completeMediaUpload */
-  completeVideoUpload: (details: MediaUploadDetails) => void;
+  completeVideoUpload: (
+    details: MediaUploadDetails,
+    onProgress?: (progress: { loaded: number; total: number }) => void,
+  ) => Promise<void>;
   /** @deprecated Use cancelMediaUpload */
   cancelVideoUpload: () => void;
   createRootMediaFolder: (
@@ -156,6 +167,45 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setWorkspaces((current) => mergeWorkspaceFolderMetadata(current));
   }, []);
+
+  useEffect(() => {
+    getMediaAssetsRequest()
+      .then((assets) => {
+        if (assets && assets.length > 0) {
+          setMediaItems((prev) => {
+            const existingIds = new Set(prev.map((item) => item.id));
+            const newItems: MediaItem[] = assets
+              .filter((a) => !existingIds.has(a.id))
+              .map((a) => {
+                const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.name);
+                const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.name);
+                const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.name);
+                const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
+
+                return {
+                  id: a.id,
+                  title: a.name,
+                  type,
+                  workspaceId: activeWorkspaceId,
+                  createdAt: a.uploadDate || new Date().toISOString(),
+                  sizeBytes: a.size || 0,
+                  storageProvider: 'b2',
+                  uploadedBy: CURRENT_USER.name,
+                  thumbnail: a.thumbnail || undefined,
+                  videoSrc: isVideo ? a.url : undefined,
+                  duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
+                  tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
+                  location: null,
+                };
+              });
+            return [...prev, ...newItems];
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load media assets from backend:', err);
+      });
+  }, [activeWorkspaceId]);
 
   useEffect(() => {
     saveTrashedMedia(trashedAtById);
@@ -1057,7 +1107,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const cancelVideoUpload = cancelMediaUpload;
 
   const completeMediaUpload = useCallback(
-    (details: MediaUploadDetails) => {
+    async (
+      details: MediaUploadDetails,
+      onProgress?: (progress: { loaded: number; total: number }) => void,
+    ) => {
       const current = pendingMediaQueueRef.current[0];
       if (!current) return;
 
@@ -1069,15 +1122,39 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       const parentFolderId = current.parentFolderId ?? null;
 
+      let uploadedAssetDto: MediaAssetResponseDto | null = null;
+      try {
+        let durationSecs: number | undefined;
+        if (details.duration) {
+          const parts = details.duration.split(':').map(Number);
+          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            durationSecs = parts[0] * 60 + parts[1];
+          } else if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+            durationSecs = parts[0] * 3600 + parts[1] * 60 + parts[2];
+          } else if (!isNaN(Number(details.duration))) {
+            durationSecs = Number(details.duration);
+          }
+        }
+        uploadedAssetDto = await uploadMediaFileRequest(
+          current.file,
+          { durationSeconds: durationSecs },
+          onProgress,
+        );
+      } catch (error) {
+        console.error('Failed to upload media file to Backblaze B2 backend:', error);
+      }
+
+      const itemId = uploadedAssetDto?.id || current.id.replace(/^pending-media-/, 'media-');
+
       const newItem: MediaItem = {
-        id: current.id.replace(/^pending-media-/, 'media-'),
+        id: itemId,
         title: trimmedTitle,
         ...(trimmedSummary ? { summary: trimmedSummary } : {}),
         type: current.type,
         workspaceId: activeWorkspaceId,
-        createdAt: new Date().toISOString(),
+        createdAt: uploadedAssetDto?.uploadDate || new Date().toISOString(),
         sizeBytes: current.file.size,
-        storageProvider: 'local',
+        storageProvider: uploadedAssetDto ? 'b2' : 'local',
         uploadedBy: CURRENT_USER.name,
         originallyCreatedAt: new Date(current.file.lastModified).toISOString(),
         tags: details.tags,
@@ -1087,12 +1164,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           : null,
         ...(current.type === 'video'
           ? {
-              thumbnail: details.thumbnail,
-              videoSrc: current.previewSrc,
+              thumbnail: details.thumbnail || uploadedAssetDto?.thumbnail || undefined,
+              videoSrc: uploadedAssetDto?.url || current.previewSrc,
               duration: details.duration,
             }
           : {}),
-        ...(current.type === 'image' ? { thumbnail: details.thumbnail } : {}),
+        ...(current.type === 'image' ? { thumbnail: details.thumbnail || uploadedAssetDto?.thumbnail || undefined } : {}),
         ...(current.type === 'audio' && details.duration ? { duration: details.duration } : {}),
       };
 

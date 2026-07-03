@@ -36,9 +36,12 @@ function DashboardLayoutContent() {
     setMobileSidebarOpen(false);
   }, [location.pathname]);
 
-  const handleCompleteMediaUpload = (details: MediaUploadDetails) => {
+  const handleCompleteMediaUpload = async (
+    details: MediaUploadDetails,
+    onProgress?: (progress: { loaded: number; total: number }) => void,
+  ) => {
     const parentFolderId = pendingMediaUpload?.parentFolderId ?? null;
-    completeMediaUpload(details);
+    await completeMediaUpload(details, onProgress);
     if (pendingMediaUploadCount <= 1) {
       navigate(parentFolderId ? getMediaFolderPath(parentFolderId) : '/home');
     }

@@ -12,6 +12,7 @@ import {
   IconButton,
   InputAdornment,
   InputLabel,
+  LinearProgress,
   MenuItem,
   Popover,
   Select,
@@ -45,7 +46,10 @@ interface MediaUploadDetailsModalProps {
   pendingUpload: PendingMediaUpload | null;
   queueCount: number;
   onClose: () => void;
-  onUpload: (details: MediaUploadDetails) => void;
+  onUpload: (
+    details: MediaUploadDetails,
+    onProgress?: (progress: { loaded: number; total: number }) => void,
+  ) => Promise<void> | void;
 }
 
 const mediaTypeCopy: Record<
@@ -403,6 +407,8 @@ export default function MediaUploadDetailsModal({
   const [selectedTags, setSelectedTags] = useState<ManagedTag[]>([]);
   const [folderId, setFolderId] = useState('');
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [createTagOpen, setCreateTagOpen] = useState(false);
 
@@ -427,6 +433,8 @@ export default function MediaUploadDetailsModal({
     setDuration(undefined);
     setSelectedTags([]);
     setFolderId('');
+    setIsUploading(false);
+    setUploadProgress(null);
 
     let cancelled = false;
 
@@ -539,19 +547,35 @@ export default function MediaUploadDetailsModal({
     Boolean(title.trim()) &&
     selectedTags.length > 0 &&
     !isGeneratingThumbnail &&
+    !isUploading &&
     (isAudio || Boolean(thumbnail));
 
-  const handleSubmit = () => {
-    if (!canUpload) return;
-    const trimmedSummary = summary.trim();
-    onUpload({
-      title: title.trim(),
-      ...(trimmedSummary ? { summary: trimmedSummary } : {}),
-      ...(thumbnail ? { thumbnail } : {}),
-      tags: selectedTags.map((tag) => tag.name),
-      folderId: folderId || null,
-      ...(duration ? { duration } : {}),
-    });
+  const handleSubmit = async () => {
+    if (!canUpload || isUploading) return;
+    setIsUploading(true);
+    setUploadProgress(0);
+    try {
+      const trimmedSummary = summary.trim();
+      await onUpload(
+        {
+          title: title.trim(),
+          ...(trimmedSummary ? { summary: trimmedSummary } : {}),
+          ...(thumbnail ? { thumbnail } : {}),
+          tags: selectedTags.map((tag) => tag.name),
+          folderId: folderId || null,
+          ...(duration ? { duration } : {}),
+        },
+        (progress) => {
+          if (progress.total > 0) {
+            const percent = Math.min(100, Math.round((progress.loaded / progress.total) * 100));
+            setUploadProgress(percent);
+          }
+        },
+      );
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(null);
+    }
   };
 
   const trimmedSummary = summary.trim();
@@ -976,9 +1000,36 @@ export default function MediaUploadDetailsModal({
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 3, pt: 1, gap: 1 }}>
+      {isUploading && (
+        <Box sx={{ px: 3, pt: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.8 }}>
+            <Typography variant="caption" sx={{ color: cv.textSecondary, fontWeight: 600 }}>
+              Streaming to Backblaze B2...
+            </Typography>
+            <Typography variant="caption" sx={{ color: cv.brandBlue, fontWeight: 700 }}>
+              {uploadProgress !== null ? `${uploadProgress}%` : 'Starting...'}
+            </Typography>
+          </Box>
+          <LinearProgress
+            variant={uploadProgress !== null && uploadProgress > 0 ? 'determinate' : 'indeterminate'}
+            value={uploadProgress ?? 0}
+            sx={{
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: cv.surfaceHover,
+              '& .MuiLinearProgress-bar': {
+                borderRadius: 3,
+                background: cv.brandGradient,
+              },
+            }}
+          />
+        </Box>
+      )}
+
+      <DialogActions sx={{ px: 3, pb: 3, pt: 1.5, gap: 1 }}>
         <Button
           onClick={onClose}
+          disabled={isUploading}
           sx={{
             color: cv.textSecondary,
             borderRadius: '10px',
@@ -989,7 +1040,7 @@ export default function MediaUploadDetailsModal({
         </Button>
         <Button
           onClick={handleSubmit}
-          disabled={!canUpload}
+          disabled={!canUpload || isUploading}
           variant="contained"
           sx={{
             borderRadius: '10px',
@@ -1005,7 +1056,11 @@ export default function MediaUploadDetailsModal({
             },
           }}
         >
-          Upload
+          {isUploading
+            ? uploadProgress !== null
+              ? `Uploading to B2 (${uploadProgress}%)`
+              : 'Uploading to B2...'
+            : 'Upload'}
         </Button>
       </DialogActions>
 
