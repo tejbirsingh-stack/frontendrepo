@@ -1,3 +1,5 @@
+@use "sass:color";
+
 // Primitive palette — single source of truth for all NOAH color values.
 
 // ── Brand guide (primary + secondary neutrals) ──────────────────────────────
@@ -106,7 +108,7 @@ $noah-thumbnail-chip-shadow: 0 2px 10px rgba($noah-black, 0.38);
 
 // Sidebar shell — brand Slate Charcoal
 $noah-sidebar-surface-brand: $noah-slate-charcoal;
-$noah-sidebar-scrim-brand: #{mix($noah-midnight-black, $noah-slate-charcoal, 38%)};
+$noah-sidebar-scrim-brand: #{color.mix($noah-midnight-black, $noah-slate-charcoal, 38%)};
 
 // Light theme primitives (brand accents unchanged; surfaces + text inverted)
 $noah-light-bg: #f4f5f9;
