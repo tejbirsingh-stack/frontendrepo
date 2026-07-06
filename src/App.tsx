@@ -18,6 +18,7 @@ import {
   TagsManagementPage,
   TrashPage,
   VideoPlayerPage,
+  MfaAuthPage,
 } from './routes/lazyPages';
 
 function App() {
@@ -31,6 +32,14 @@ function App() {
             element={
               <GuestRoute>
                 <LoginPage />
+              </GuestRoute>
+            }
+          />
+          <Route
+            path="/mfaAuth"
+            element={
+              <GuestRoute>
+                <MfaAuthPage />
               </GuestRoute>
             }
           />

@@ -25,3 +25,4 @@ export const TrashPage = lazyPage(() => import('../pages/TrashPage'));
 export const SettingsSectionPage = lazyPage(() => import('../pages/settings/SettingsSectionPage'));
 export const VideoPlayerPage = lazyPage(() => import('../pages/VideoPlayerPage'));
 export const NotFoundPage = lazyPage(() => import('../pages/NotFoundPage'));
+export const MfaAuthPage = lazyPage(() => import('../pages/MfaAuthPage'));

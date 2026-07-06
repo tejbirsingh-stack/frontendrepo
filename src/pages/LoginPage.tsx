@@ -47,8 +47,10 @@ export default function LoginPage() {
         : '/home';
 
     try {
-      // Use the custom loginUser function to hit the real API directly
-      const response = await loginUser({ email, password });
+      const response = await loginUser({ 
+        email, 
+        password, 
+      });
       
       // Manually set the session in localStorage so the app recognizes the user
       const token = response.accessToken || response.token;
@@ -61,7 +63,13 @@ export default function LoginPage() {
       window.location.href = redirectPath;
     } catch (submitError: any) {
       console.error(submitError);
-      setError(submitError.response?.data?.message || submitError.message || 'Unable to sign in.');
+      
+      // If the backend says MFA is required, transition to the MFA step
+      if (submitError.response?.data?.requiresMfa) {
+        navigate('/mfaAuth', { state: { email, password, requiresMfa: true, from: redirectPath } });
+      } else {
+        setError(submitError.response?.data?.message || submitError.message || 'Unable to sign in.');
+      }
     }
   };
 
@@ -300,24 +308,24 @@ export default function LoginPage() {
               or
             </Divider>
 
-            <Button
-              fullWidth
-              variant="outlined"
-              onClick={handleGoogleLogin}
-              startIcon={<GoogleIcon />}
-              sx={{
-                py: 1.5,
-                borderColor: cv.border,
-                color: cv.textPrimary,
-                backgroundColor: 'var(--noah-footer-tint)',
-                '&:hover': {
-                  borderColor: cv.borderStrong,
-                  backgroundColor: cv.surfaceHover,
-                },
-              }}
-            >
-              Continue with Google
-            </Button>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  onClick={handleGoogleLogin}
+                  startIcon={<GoogleIcon />}
+                  sx={{
+                    py: 1.5,
+                    borderColor: cv.border,
+                    color: cv.textPrimary,
+                    backgroundColor: 'var(--noah-footer-tint)',
+                    '&:hover': {
+                      borderColor: cv.borderStrong,
+                      backgroundColor: cv.surfaceHover,
+                    },
+                  }}
+                >
+                  Continue with Google
+                </Button>
 
             <Typography
               variant="body2"
