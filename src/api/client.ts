@@ -6,9 +6,12 @@ function resolveUrl(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
-  const base = env.apiBaseUrl.replace(/\/$/, '');
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return base ? `${base}${normalizedPath}` : normalizedPath;
+  const base = (env.apiBaseUrl || '/api').replace(/\/$/, '');
+  let normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (base.endsWith('/api') && normalizedPath.startsWith('/api/')) {
+    normalizedPath = normalizedPath.slice(4);
+  }
+  return `${base}${normalizedPath}`;
 }
 
 function mapStatusToCode(status: number): ApiError['code'] {
