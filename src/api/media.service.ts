@@ -22,6 +22,228 @@ export interface MediaAssetResponseDto {
   transcodingStatus?: string | null;
 }
 
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB chunks for Backblaze B2 / AWS S3 multipart upload
+
+async function uploadChunkDirectToB2(
+  url: string,
+  chunkBlob: Blob,
+  onProgress?: (loaded: number) => void,
+): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url, true);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(event.loaded);
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const etag =
+          xhr.getResponseHeader('ETag') ||
+          xhr.getResponseHeader('etag') ||
+          xhr.getResponseHeader('x-amz-meta-etag');
+        if (!etag) {
+          // If CORS policy blocks reading ETag header, resolve as null to trigger backend fallback
+          resolve(null);
+          return;
+        }
+        resolve(etag);
+      } else {
+        reject(new Error(`Direct B2 upload failed with status ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during direct B2 upload'));
+    };
+
+    xhr.send(chunkBlob);
+  });
+}
+
+async function uploadChunkViaServer(
+  sessionId: string,
+  partNumber: number,
+  chunkBlob: Blob,
+  onProgress?: (loaded: number) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const token = getAccessToken();
+    const base = (env.apiBaseUrl || '/api').replace(/\/$/, '');
+    const url = `${base}/media/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&partNumber=${partNumber}`;
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url, true);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(event.loaded);
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status === 401) {
+        handleUnauthorized();
+        reject(new Error('Unauthorized'));
+        return;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const res = JSON.parse(xhr.responseText);
+          if (res.success && res.etag) {
+            resolve(res.etag);
+          } else {
+            reject(new Error(res.message || 'Server did not return ETag for chunk'));
+          }
+        } catch {
+          reject(new Error('Failed to parse server response for chunk upload'));
+        }
+      } else {
+        reject(new Error(`Server chunk upload failed with status ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during server chunk upload'));
+    };
+
+    xhr.send(chunkBlob);
+  });
+}
+
+async function uploadSingleChunkWithFallback(
+  sessionId: string,
+  partNumber: number,
+  chunkBlob: Blob,
+  presignedUrl: string | null,
+  onProgress?: (loaded: number) => void,
+  onDirectB2Fail?: () => void,
+): Promise<string> {
+  if (presignedUrl) {
+    try {
+      const etag = await uploadChunkDirectToB2(presignedUrl, chunkBlob, onProgress);
+      if (etag) {
+        return etag;
+      }
+      if (onDirectB2Fail) onDirectB2Fail();
+    } catch (err) {
+      console.warn(`Direct B2 upload failed for chunk ${partNumber}, falling back to server upload...`, err);
+      if (onDirectB2Fail) onDirectB2Fail();
+    }
+  }
+  return await uploadChunkViaServer(sessionId, partNumber, chunkBlob, onProgress);
+}
+
+async function uploadResumableChunkedFile(
+  file: File,
+  options?: { durationSeconds?: number },
+  progressCallback?: (progress: UploadMediaProgress) => void,
+): Promise<MediaAssetResponseDto> {
+  const initRes = await apiClient.post<{ sessionId: string; uploadId: string; key: string }>(
+    '/media/upload/init',
+    {
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type || 'application/octet-stream',
+      durationSeconds: options?.durationSeconds || null,
+    },
+  );
+
+  const { sessionId } = initRes;
+  const totalParts = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+  const parts: { PartNumber: number; ETag: string }[] = [];
+  const partLoadedBytes = new Array(totalParts + 1).fill(0);
+  let directB2Failed = false; // Once direct B2 fails (CORS/network), skip trying it for remaining chunks to avoid delay!
+
+  const reportProgress = () => {
+    if (!progressCallback) return;
+    const totalLoadedBytes = partLoadedBytes.reduce((a, b) => a + b, 0);
+    progressCallback({ loaded: Math.min(totalLoadedBytes, file.size), total: file.size });
+  };
+
+  const uploadTasks = Array.from({ length: totalParts }, (_, i) => i + 1);
+  const CONCURRENCY = 3; // Upload up to 3 chunks in parallel for maximum speed!
+
+  try {
+    const runWorker = async () => {
+      while (uploadTasks.length > 0) {
+        const partNumber = uploadTasks.shift()!;
+        const start = (partNumber - 1) * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunkBlob = file.slice(start, end);
+
+        let presignedUrl: string | null = null;
+        if (!directB2Failed) {
+          try {
+            const urlRes = await apiClient.get<{ success: boolean; partNumber: number; presignedUrl: string }>(
+              `/media/upload/chunk-url?sessionId=${encodeURIComponent(sessionId)}&partNumber=${partNumber}`,
+            );
+            presignedUrl = urlRes.presignedUrl;
+          } catch (err) {
+            console.warn(`Could not get presigned B2 URL for chunk ${partNumber}`, err);
+            directB2Failed = true;
+          }
+        }
+
+        const etag = await uploadSingleChunkWithFallback(
+          sessionId,
+          partNumber,
+          chunkBlob,
+          presignedUrl,
+          (chunkLoaded) => {
+            partLoadedBytes[partNumber] = chunkLoaded;
+            reportProgress();
+          },
+          () => {
+            directB2Failed = true;
+          },
+        );
+
+        partLoadedBytes[partNumber] = chunkBlob.size;
+        parts.push({ PartNumber: partNumber, ETag: etag });
+        reportProgress();
+      }
+    };
+
+    const workers = Array.from({ length: Math.min(CONCURRENCY, totalParts) }, () => runWorker());
+    await Promise.all(workers);
+
+    const completeRes = await apiClient.post<{ success: boolean; asset: MediaAssetResponseDto }>(
+      '/media/upload/complete',
+      {
+        sessionId,
+        parts,
+      },
+    );
+
+    if (progressCallback) {
+      progressCallback({ loaded: file.size, total: file.size });
+    }
+
+    if (!completeRes.asset) {
+      throw new Error('Upload completed but server did not return asset metadata');
+    }
+
+    return completeRes.asset;
+  } catch (error) {
+    try {
+      await apiClient.delete(`/media/upload/abort/${encodeURIComponent(sessionId)}`);
+    } catch {
+      // Ignore cleanup error
+    }
+    throw error;
+  }
+}
+
 /**
  * Uploads a file directly to Backblaze B2 via backend API and records it in the PostgreSQL database.
  */
@@ -34,6 +256,12 @@ export async function uploadMediaFileRequest(
   onProgress?: (progress: UploadMediaProgress) => void,
 ): Promise<MediaAssetResponseDto> {
   const progressCallback = onProgress || options?.onProgress;
+
+  // Use chunked resumable B2 upload for video assets or large files (> 5MB)
+  if (file.type.startsWith('video/') || file.size > CHUNK_SIZE) {
+    return uploadResumableChunkedFile(file, options, progressCallback);
+  }
+
   const formData = new FormData();
   formData.append('file', file);
 
@@ -112,23 +340,21 @@ export async function uploadMediaFileRequest(
 
       if (errorMessage) {
         reject(new Error(errorMessage));
-        return;
-      }
-
-      if (completedAsset) {
+      } else if (completedAsset) {
+        if (progressCallback) progressCallback({ loaded: file.size, total: file.size });
         resolve(completedAsset);
-        return;
+      } else {
+        if (progressCallback) progressCallback({ loaded: file.size, total: file.size });
+        // Fallback asset if backend didn't return NDJSON complete object
+        resolve({
+          id: `media-${Date.now()}`,
+          name: file.name,
+          type: file.type.split('/')[0] || 'document',
+          size: file.size,
+          uploadDate: new Date().toISOString(),
+          url: '',
+        });
       }
-
-      // Fallback asset if backend didn't return NDJSON complete object
-      resolve({
-        id: `media-${Date.now()}`,
-        name: file.name,
-        type: file.type.split('/')[0] || 'document',
-        size: file.size,
-        uploadDate: new Date().toISOString(),
-        url: '',
-      });
     };
 
     xhr.onerror = () => {
