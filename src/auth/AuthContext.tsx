@@ -90,6 +90,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       accessTokenRef.current = persistedToken;
       setAccessToken(persistedToken);
+      registerAuthTokenBridge(
+        () => accessTokenRef.current,
+        () => {
+          void logout();
+        },
+      );
 
       const persistedUser = readPersistedSessionUser();
       if (persistedUser) {

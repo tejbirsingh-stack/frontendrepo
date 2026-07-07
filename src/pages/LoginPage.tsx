@@ -56,7 +56,6 @@ export default function LoginPage() {
       const token = response.accessToken || response.token;
       if (token) {
         localStorage.setItem('noah_session_token', token);
-        localStorage.setItem('noah_session_user', JSON.stringify(response.user));
       }
       
       // Force a full page reload to the redirect path so AuthContext picks up the new localStorage values
