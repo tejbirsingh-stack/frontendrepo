@@ -15,6 +15,7 @@ export interface LoginCredentials {
   email: string;
   password: string;
   rememberMe?: boolean;
+  mfaCode?: string;
 }
 
 export interface SignUpCredentials {
@@ -32,4 +33,5 @@ export interface AuthContextValue {
   login: (credentials: LoginCredentials) => Promise<void>;
   signup: (credentials: SignUpCredentials) => Promise<void>;
   logout: () => Promise<void>;
+  loginGoogle: (idToken: string, rememberMe?: boolean) => Promise<void>;
 }

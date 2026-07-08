@@ -80,10 +80,13 @@ async function mockLogin(credentials: LoginRequestDto): Promise<LoginResponseDto
 }
 
 export async function loginRequest(credentials: LoginRequestDto): Promise<LoginResponseDto> {
-  const payload = {
+  const payload: Record<string, unknown> = {
     email: sanitizeEmailInput(credentials.email),
     password: credentials.password,
   };
+  if (credentials.mfaCode) {
+    payload.mfaCode = credentials.mfaCode;
+  }
 
   if (!env.isApiConfigured) {
     return mockLogin(payload);
@@ -182,4 +185,40 @@ export function mapAuthUserDtoToSessionUser(user: AuthUserDto) {
     accountName: user.accountName,
     accountInitials: user.accountInitials,
   };
+}
+
+export function extractUserFromTokenOrResponse(response: LoginResponseDto): AuthUserDto {
+  if (response.user) {
+    return response.user;
+  }
+  const token = response.accessToken || response.token;
+  if (!token) {
+    throw new Error('No access token received from login');
+  }
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      window
+        .atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const decoded = JSON.parse(jsonPayload);
+    const name = decoded.name || decoded.email?.split('@')[0] || 'User';
+    return {
+      id: decoded.id || 'user-id',
+      name: name,
+      email: decoded.email || '',
+      role: decoded.role || 'user',
+      initials: getNameInitials(name),
+      avatarUrl: decoded.avatarUrl,
+      accountName: decoded.organization?.name || decoded.accountName || `${name}'s Account`,
+      accountInitials: getNameInitials(decoded.organization?.name || name),
+    };
+  } catch (err) {
+    console.error('Failed to decode JWT token payload:', err);
+    throw new Error('Failed to parse user information from login token');
+  }
 }

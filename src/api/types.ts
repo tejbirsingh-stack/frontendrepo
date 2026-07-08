@@ -51,6 +51,7 @@ export interface AuthUserDto {
 export interface LoginRequestDto {
   email: string;
   password: string;
+  mfaCode?: string;
 }
 
 export interface SignUpRequestDto {
@@ -60,8 +61,9 @@ export interface SignUpRequestDto {
 }
 
 export interface LoginResponseDto {
-  accessToken: string;
-  user: AuthUserDto;
+  accessToken?: string;
+  token?: string;
+  user?: AuthUserDto;
 }
 
 export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {

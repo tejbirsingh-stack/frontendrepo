@@ -9,8 +9,10 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  extractUserFromTokenOrResponse,
   fetchCurrentUserRequest,
   loginRequest,
+  loginWithGoogle,
   logoutRequest,
   mapAuthUserDtoToSessionUser,
   signUpRequest,
@@ -132,11 +134,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession]);
 
   const login = useCallback(
-    async ({ email, password, rememberMe = false }: LoginCredentials) => {
-      const response = await loginRequest({ email, password });
-      const sessionUser = mapAuthUserDtoToSessionUser(response.user);
-      setSession(response.accessToken, sessionUser);
-      persistSession(response.accessToken, sessionUser, rememberMe);
+    async ({ email, password, rememberMe = false, mfaCode }: LoginCredentials) => {
+      const response = await loginRequest({ email, password, mfaCode });
+      const token = response.accessToken || response.token;
+      if (!token) throw new Error('No access token returned from login');
+      const userDto = extractUserFromTokenOrResponse(response);
+      const sessionUser = mapAuthUserDtoToSessionUser(userDto);
+      setSession(token, sessionUser);
+      persistSession(token, sessionUser, rememberMe);
     },
     [setSession],
   );
@@ -144,9 +149,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signup = useCallback(
     async ({ name, email, password, rememberMe = false }: SignUpCredentials) => {
       const response = await signUpRequest({ name, email, password });
-      const sessionUser = mapAuthUserDtoToSessionUser(response.user);
-      setSession(response.accessToken, sessionUser);
-      persistSession(response.accessToken, sessionUser, rememberMe);
+      const token = response.accessToken || response.token;
+      if (!token) throw new Error('No access token returned from signup');
+      const userDto = extractUserFromTokenOrResponse(response);
+      const sessionUser = mapAuthUserDtoToSessionUser(userDto);
+      setSession(token, sessionUser);
+      persistSession(token, sessionUser, rememberMe);
+    },
+    [setSession],
+  );
+
+  const loginGoogle = useCallback(
+    async (idToken: string, rememberMe = false) => {
+      const response = await loginWithGoogle(idToken);
+      const token = response.accessToken || response.token;
+      if (!token) throw new Error('No access token returned from Google login');
+      const userDto = extractUserFromTokenOrResponse(response);
+      const sessionUser = mapAuthUserDtoToSessionUser(userDto);
+      setSession(token, sessionUser);
+      persistSession(token, sessionUser, rememberMe);
     },
     [setSession],
   );
@@ -160,8 +181,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       signup,
       logout,
+      loginGoogle,
     }),
-    [accessToken, isInitializing, login, logout, signup, user],
+    [accessToken, isInitializing, login, logout, signup, user, loginGoogle],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

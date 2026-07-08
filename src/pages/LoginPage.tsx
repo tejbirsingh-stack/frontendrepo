@@ -22,12 +22,11 @@ import WaveBackground from '../components/WaveBackground';
 import NoahLogo from '../components/NoahLogo';
 import LoginDemoAccountsBubble from '../components/demo/LoginDemoAccountsBubble';
 import { useAuth } from '../auth/AuthContext';
-import { loginUser, loginWithGoogle } from '../api/auth.service';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, loginGoogle } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -47,24 +46,18 @@ export default function LoginPage() {
         : '/home';
 
     try {
-      const response = await loginUser({ 
+      await login({ 
         email, 
-        password, 
+        password,
+        rememberMe,
       });
       
-      // Manually set the session in localStorage so the app recognizes the user
-      const token = response.accessToken || response.token;
-      if (token) {
-        localStorage.setItem('noah_session_token', token);
-      }
-      
-      // Force a full page reload to the redirect path so AuthContext picks up the new localStorage values
-      window.location.href = redirectPath;
+      navigate(redirectPath);
     } catch (submitError: any) {
       console.error(submitError);
       
       // If the backend says MFA is required, transition to the MFA step
-      if (submitError.response?.data?.requiresMfa) {
+      if (submitError.response?.data?.requiresMfa || submitError.details?.requiresMfa || submitError.requiresMfa) {
         navigate('/mfaAuth', { state: { email, password, requiresMfa: true, from: redirectPath } });
       } else {
         setError(submitError.response?.data?.message || submitError.message || 'Unable to sign in.');
@@ -112,14 +105,8 @@ export default function LoginPage() {
             return;
           }
           try {
-            // Send token to backend /auth/loging-google
-            const response = await loginWithGoogle(tokenResponse.access_token);
-            const token = response.accessToken || response.token;
-            if (token) {
-              localStorage.setItem('noah_session_token', token);
-              localStorage.setItem('noah_session_user', JSON.stringify(response.user));
-            }
-            window.location.href = redirectPath;
+            await loginGoogle(tokenResponse.access_token);
+            navigate(redirectPath);
           } catch (submitError: any) {
             console.error(submitError);
             setError(submitError.response?.data?.message || submitError.message || 'Google Login Failed.');

@@ -12,11 +12,12 @@ import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo from '../components/NoahLogo';
-import { loginUser } from '../api/auth.service';
+import { useAuth } from '../auth/AuthContext';
 
 export default function MfaAuthPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { login } = useAuth();
   const [mfaCode, setMfaCode] = useState('');
   const [error, setError] = useState('');
 
@@ -38,21 +39,13 @@ export default function MfaAuthPage() {
     const redirectPath = state?.from || '/home';
 
     try {
-      // Use the custom loginUser function to hit the real API directly
-      const response = await loginUser({ 
+      await login({ 
         email: state.email, 
         password: state.password, 
         mfaCode: mfaCode 
       });
       
-      // Manually set the session in localStorage so the app recognizes the user
-      const token = response.accessToken || response.token;
-      if (token) {
-        localStorage.setItem('noah_session_token', token);
-      }
-      
-      // Force a full page reload to the redirect path so AuthContext picks up the new localStorage values
-      window.location.href = redirectPath;
+      navigate(redirectPath);
     } catch (submitError: any) {
       console.error(submitError);
       setError(submitError.response?.data?.message || submitError.message || 'Unable to verify code.');
