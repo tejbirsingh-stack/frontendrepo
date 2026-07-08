@@ -19,6 +19,7 @@ import {
   TrashPage,
   VideoPlayerPage,
   MfaAuthPage,
+  ResetPasswordPage,
 } from './routes/lazyPages';
 
 function App() {
@@ -48,6 +49,14 @@ function App() {
             element={
               <GuestRoute>
                 <SignUpPage />
+              </GuestRoute>
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={
+              <GuestRoute>
+                <ResetPasswordPage />
               </GuestRoute>
             }
           />

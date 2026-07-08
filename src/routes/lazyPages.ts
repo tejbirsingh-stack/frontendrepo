@@ -26,3 +26,4 @@ export const SettingsSectionPage = lazyPage(() => import('../pages/settings/Sett
 export const VideoPlayerPage = lazyPage(() => import('../pages/VideoPlayerPage'));
 export const NotFoundPage = lazyPage(() => import('../pages/NotFoundPage'));
 export const MfaAuthPage = lazyPage(() => import('../pages/MfaAuthPage'));
+export const ResetPasswordPage = lazyPage(() => import('../pages/ResetPasswordPage'));

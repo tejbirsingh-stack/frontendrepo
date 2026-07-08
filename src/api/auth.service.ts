@@ -9,7 +9,16 @@ import { env } from '../config/env';
 import { sanitizeEmailInput, sanitizeTextInput } from '../utils/sanitize';
 import { getNameInitials, validatePassword } from '../utils/authValidation';
 import { apiClient } from './client';
-import type { AuthUserDto, LoginRequestDto, LoginResponseDto, RegisterData, SignUpRequestDto } from './types';
+import { getAccessToken } from '../auth/authTokenBridge';
+import type {
+  AuthUserDto,
+  LoginRequestDto,
+  LoginResponseDto,
+  RegisterData,
+  RegisterRoleDto,
+  RoleItem,
+  SignUpRequestDto,
+} from './types';
 
 import axios from "axios";
 
@@ -20,7 +29,6 @@ export const registerUser = async (data: RegisterData) => {
     `${API_BASE_URL}/auth/register`,
     data
   );
-
   return response.data;
 };
 
@@ -43,6 +51,47 @@ export const loginWithGoogle = async (idToken: string) => {
 
   return response.data;
 };
+
+
+export const registerRole = async (data: RegisterRoleDto) => {
+  const token = getAccessToken();
+  const response = await axios.post(
+    `${API_BASE_URL}/auth/registerrole`,
+    data,
+    token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+  );
+  return response.data;
+};
+
+
+export const fetchRoles = async (): Promise<RoleItem[]> => {
+  const token = getAccessToken();
+  const response = await axios.get(
+    `${API_BASE_URL}/auth/roles`,
+    token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+  );
+  return response.data?.roles || response.data || [];
+};
+
+
+export const resetPasswordRequest = async (data: { token: string; password?: string; newPassword?: string; name?: string }) => {
+  const response = await axios.post(
+    `${API_BASE_URL}/auth/reset-password`,
+    data
+  );
+  return response.data;
+};
+
+
+export const forgotPasswordRequest = async (email: string) => {
+  const response = await axios.post(
+    `${API_BASE_URL}/auth/forgot-password`,
+    { email }
+  );
+  return response.data;
+};
+
+
 
 
 function mapCurrentUserToDto(): AuthUserDto {
@@ -89,7 +138,7 @@ export async function loginRequest(credentials: LoginRequestDto): Promise<LoginR
   }
 
   if (!env.isApiConfigured) {
-    return mockLogin(payload);
+    return mockLogin(payload as unknown as LoginRequestDto);
   }
 
   return apiClient.post<LoginResponseDto>('/auth/login', payload, { skipAuth: true });

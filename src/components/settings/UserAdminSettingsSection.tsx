@@ -34,6 +34,8 @@ import { SettingsSectionCard } from './SettingsSectionCard';
 import { SettingsTableContainer } from './SettingsContentLayout';
 import TruncatedText from '../TruncatedText';
 import { USER_ROLES, type UserRole } from '../../constants/userRoles';
+import { fetchRoles, registerRole } from '../../api/auth.service';
+import type { RoleItem } from '../../api/types';
 import {
   createInvitedUser,
   createUserGroup,
@@ -115,12 +117,39 @@ function AddUserDialog({
   const isEdit = Boolean(initialUser);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('Collaborator');
+  const [rolesList, setRolesList] = useState<RoleItem[]>([]);
+  const [roleId, setRoleId] = useState<string>('');
   const [emailError, setEmailError] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      fetchRoles()
+        .then((data) => {
+          setRolesList(data);
+          if (data.length > 0) {
+            if (initialUser) {
+              const matched = data.find(
+                (r) => r.name.toLowerCase() === initialUser.role.toLowerCase() || r.id === (initialUser as any).roleId
+              );
+              if (matched) {
+                setRoleId(matched.id);
+                setRole(matched.name as UserRole);
+                return;
+              }
+            }
+            setRoleId(data[0].id);
+            setRole(data[0].name as UserRole);
+          }
+        })
+        .catch((err) => console.error('Failed to fetch roles:', err));
+    }
+  }, [open, initialUser]);
 
   useEffect(() => {
     if (!open) {
       setEmail('');
       setRole('Collaborator');
+      setRoleId('');
       setEmailError('');
       return;
     }
@@ -131,13 +160,20 @@ function AddUserDialog({
     }
   }, [open, initialUser]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const trimmed = email.trim();
     if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       setEmailError('Enter a valid email address');
       return;
     }
-    onInvite(trimmed, role);
+    const finalRoleId = roleId || role;
+    try {
+      await registerRole({ email: trimmed, roleId: finalRoleId });
+    } catch (err) {
+      console.error('Error calling registerRole API:', err);
+    }
+    const selectedRoleName = rolesList.find((r) => r.id === finalRoleId)?.name || role;
+    onInvite(trimmed, selectedRoleName as UserRole);
     onClose();
   };
 
@@ -147,7 +183,9 @@ function AddUserDialog({
       setEmailError('Enter a valid email address');
       return;
     }
-    onSave?.(trimmed, role);
+    const finalRoleId = roleId || role;
+    const selectedRoleName = rolesList.find((r) => r.id === finalRoleId)?.name || role;
+    onSave?.(trimmed, selectedRoleName as UserRole);
     onClose();
   };
 
@@ -209,20 +247,39 @@ function AddUserDialog({
           <Select
             labelId="add-user-role-label"
             label="Role"
-            value={role}
-            onChange={(event: SelectChangeEvent) => setRole(event.target.value as UserRole)}
+            value={roleId || role}
+            onChange={(event: SelectChangeEvent) => {
+              const val = event.target.value;
+              setRoleId(val);
+              const matchedRole = rolesList.find((r) => r.id === val);
+              if (matchedRole) {
+                setRole(matchedRole.name as UserRole);
+              } else {
+                setRole(val as UserRole);
+              }
+            }}
             MenuProps={selectInDialogMenuProps}
             sx={dialogSelectSx}
           >
-            {USER_ROLES.map((roleOption) => (
-              <MenuItem
-                key={roleOption}
-                value={roleOption}
-                sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
-              >
-                {roleOption}
-              </MenuItem>
-            ))}
+            {rolesList.length > 0
+              ? rolesList.map((roleOption) => (
+                  <MenuItem
+                    key={roleOption.id}
+                    value={roleOption.id}
+                    sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
+                  >
+                    {roleOption.name}
+                  </MenuItem>
+                ))
+              : USER_ROLES.map((roleOption) => (
+                  <MenuItem
+                    key={roleOption}
+                    value={roleOption}
+                    sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
+                  >
+                    {roleOption}
+                  </MenuItem>
+                ))}
           </Select>
         </FormControl>
         <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary }}>

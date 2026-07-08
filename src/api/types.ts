@@ -60,6 +60,17 @@ export interface SignUpRequestDto {
   password: string;
 }
 
+export interface RegisterRoleDto {
+  email: string;
+  roleId: string;
+  orgId?: string;
+}
+
+export interface RoleItem {
+  id: string;
+  name: string;
+}
+
 export interface LoginResponseDto {
   accessToken?: string;
   token?: string;
