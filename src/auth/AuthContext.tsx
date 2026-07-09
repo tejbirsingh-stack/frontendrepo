@@ -12,6 +12,7 @@ import {
   extractUserFromTokenOrResponse,
   fetchCurrentUserRequest,
   loginRequest,
+  loginUser,
   loginWithGoogle,
   logoutRequest,
   mapAuthUserDtoToSessionUser,
@@ -135,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async ({ email, password, rememberMe = false, mfaCode }: LoginCredentials) => {
-      const response = await loginRequest({ email, password, mfaCode });
+      const response = await loginUser({ email, password, ...(mfaCode ? { mfaCode } : {}) });
       const token = response.accessToken || response.token;
       if (!token) throw new Error('No access token returned from login');
       const userDto = extractUserFromTokenOrResponse(response);
