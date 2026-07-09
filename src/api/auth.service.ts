@@ -52,6 +52,13 @@ export const loginWithGoogle = async (idToken: string) => {
   return response.data;
 };
 
+export const loginWithMicrosoft = async (idToken : string) => {
+  const response = await axios.post(
+    `${API_BASE_URL}/auth/login-microsoft`,
+    { idToken }
+  );
+  return response.data;
+};
 
 export const registerRole = async (data: RegisterRoleDto) => {
   const token = getAccessToken();

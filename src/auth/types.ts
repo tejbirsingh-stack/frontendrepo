@@ -35,4 +35,5 @@ export interface AuthContextValue {
   logout: () => Promise<void>;
   loginGoogle: (idToken: string, rememberMe?: boolean) => Promise<void>;
   clearSession: () => void;
+  loginMicrosoft: (idToken: string, rememberMe?: boolean) => Promise<void>;
 }
