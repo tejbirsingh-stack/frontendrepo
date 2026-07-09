@@ -37,7 +37,12 @@ export default function Header({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { clearSession } = useAuth();
+  const { clearSession, user } = useAuth();
+  const displayName = user?.name ? user.name.split(' ')[0] : CURRENT_USER.name.split(' ')[0];
+  const rawRole = user?.role || CURRENT_USER.role;
+  const displayRole = rawRole.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const displayInitials = user?.initials || CURRENT_USER.initials;
+  const displayAvatar = user?.avatarUrl || CURRENT_USER.avatarUrl;
   const isSettingsRoute = location.pathname.startsWith('/home/settings');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const profileButtonRef = useRef<HTMLDivElement>(null);
@@ -237,8 +242,8 @@ export default function Header({
         }}
       >
         <Avatar
-          src={CURRENT_USER.avatarUrl}
-          alt={CURRENT_USER.name}
+          src={displayAvatar}
+          alt={user?.name || CURRENT_USER.name}
           sx={{
             width: 36,
             height: 36,
@@ -247,7 +252,7 @@ export default function Header({
             flexShrink: 0,
           }}
         >
-          {CURRENT_USER.initials}
+          {displayInitials}
         </Avatar>
         <Box sx={{ display: { xs: 'none', sm: 'block' }, minWidth: 0 }}>
           <Typography
@@ -259,7 +264,7 @@ export default function Header({
               color: cv.textPrimary,
             }}
           >
-            {CURRENT_USER.name.split(' ')[0]}
+            {displayName}
           </Typography>
           <Typography
             variant="caption"
@@ -270,7 +275,7 @@ export default function Header({
               display: 'block',
             }}
           >
-            {CURRENT_USER.role}
+            {displayRole}
           </Typography>
         </Box>
         <ExpandMoreIcon

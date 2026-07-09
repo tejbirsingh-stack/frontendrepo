@@ -10,6 +10,7 @@ import PaymentOutlinedIcon from '@mui/icons-material/PaymentOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { CURRENT_USER } from '../../constants/currentUser';
+import { useAuth } from '../../auth/AuthContext';
 import {
   DEFAULT_SETTINGS_PATH,
   SETTINGS_BASE_PATH,
@@ -214,6 +215,14 @@ export default function ProfileMenuDropdown({
   onSettings,
   onKeyboardShortcuts,
 }: ProfileMenuDropdownProps) {
+  const { user } = useAuth();
+  const displayName = user?.name || CURRENT_USER.name;
+  const displayEmail = user?.email || CURRENT_USER.email;
+  const displayInitials = user?.initials || CURRENT_USER.initials;
+  const displayAvatar = user?.avatarUrl || CURRENT_USER.avatarUrl;
+  const displayAccountName = user?.accountName || CURRENT_USER.accountName;
+  const displayAccountInitials = user?.accountInitials || CURRENT_USER.accountInitials;
+
   useEffect(() => {
     if (!open) return;
 
@@ -256,8 +265,8 @@ export default function ProfileMenuDropdown({
           }}
         >
           <Avatar
-            src={CURRENT_USER.avatarUrl}
-            alt={CURRENT_USER.name}
+            src={displayAvatar}
+            alt={displayName}
             sx={{
               width: 72,
               height: 72,
@@ -269,7 +278,7 @@ export default function ProfileMenuDropdown({
               color: cv.textPrimary,
             }}
           >
-            {CURRENT_USER.initials}
+            {displayInitials}
           </Avatar>
           <Typography
             sx={{
@@ -279,7 +288,7 @@ export default function ProfileMenuDropdown({
               lineHeight: 1.3,
             }}
           >
-            {CURRENT_USER.name}
+            {displayName}
           </Typography>
           <Typography
             sx={{
@@ -290,7 +299,7 @@ export default function ProfileMenuDropdown({
               wordBreak: 'break-word',
             }}
           >
-            {CURRENT_USER.email}
+            {displayEmail}
           </Typography>
         </Box>
 
@@ -322,10 +331,10 @@ export default function ProfileMenuDropdown({
                 color: cv.textPrimary,
               }}
             >
-              {CURRENT_USER.accountInitials}
+              {displayAccountInitials}
             </Avatar>
             <Typography sx={{ fontSize: '0.9375rem', fontWeight: 500, color: cv.textPrimary }}>
-              {CURRENT_USER.accountName}
+              {displayAccountName}
             </Typography>
           </Box>
         </Box>

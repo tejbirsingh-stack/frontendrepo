@@ -106,6 +106,12 @@ export const logoutUser = async (userId: string) => {
 
 
 
+export async function fetchCurrentUserRequest(): Promise<AuthUserDto> {
+  return apiClient.get<AuthUserDto>('/auth/me');
+}
+
+
+
 
 function mapCurrentUserToDto(): AuthUserDto {
   return {
@@ -228,20 +234,17 @@ export async function logoutRequest(): Promise<void> {
   }
 }
 
-export async function fetchCurrentUserRequest(): Promise<AuthUserDto> {
-  if (!env.isApiConfigured) {
-    return mapCurrentUserToDto();
-  }
-
-  return apiClient.get<AuthUserDto>('/auth/me');
-}
 
 export function mapAuthUserDtoToSessionUser(user: AuthUserDto) {
+  const formattedRole = user.role
+    ? user.role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    : 'User';
+
   return {
     id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: formattedRole,
     initials: user.initials,
     avatarUrl: user.avatarUrl,
     accountName: user.accountName,
