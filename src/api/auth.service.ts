@@ -107,7 +107,8 @@ export const logoutUser = async (userId: string) => {
 
 
 export async function fetchCurrentUserRequest(): Promise<AuthUserDto> {
-  return apiClient.get<AuthUserDto>('/auth/me');
+  const response = await apiClient.get<any>('/auth/me');
+  return response?.user || response?.data || response;
 }
 
 
@@ -235,20 +236,23 @@ export async function logoutRequest(): Promise<void> {
 }
 
 
-export function mapAuthUserDtoToSessionUser(user: AuthUserDto) {
+export function mapAuthUserDtoToSessionUser(input: any) {
+  const user = input?.user || input || {};
   const formattedRole = user.role
-    ? user.role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    ? user.role.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
     : 'User';
 
+  const name = user.name || user.email?.split('@')[0] || 'User';
+
   return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
+    id: user.id || 'user-id',
+    name: name,
+    email: user.email || '',
     role: formattedRole,
-    initials: user.initials,
+    initials: user.initials || getNameInitials(name),
     avatarUrl: user.avatarUrl,
-    accountName: user.accountName,
-    accountInitials: user.accountInitials,
+    accountName: user.accountName || (user.organization && user.organization.name) || `${name}'s Account`,
+    accountInitials: user.accountInitials || getNameInitials((user.organization && user.organization.name) || name),
   };
 }
 

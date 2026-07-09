@@ -94,20 +94,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       );
 
-      const persistedUser = readPersistedSessionUser();
-      if (persistedUser) {
-        if (!cancelled) {
-          setUser(persistedUser);
-        }
-        await waitForMinimumSkeletonTime(startedAt);
-        if (!cancelled) setIsInitializing(false);
-        return;
-      }
-
       try {
         const currentUser = await fetchCurrentUserRequest();
-        if (!cancelled) {
-          setUser(mapAuthUserDtoToSessionUser(currentUser));
+        if (!cancelled && currentUser) {
+          const sessionUser = mapAuthUserDtoToSessionUser(currentUser);
+          setUser(sessionUser);
+          persistSession(persistedToken, sessionUser);
         }
       } catch {
         if (!cancelled) {

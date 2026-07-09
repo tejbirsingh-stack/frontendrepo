@@ -20,7 +20,6 @@ import ProfileMenuDropdown from './ProfileMenuDropdown';
 import PlanBadge from './PlanBadge';
 import NoahLogo from '../NoahLogo';
 import { HEADER_LOGO_WIDTH, DASHBOARD_TOP_BAR_HEIGHT, DASHBOARD_TOP_BAR_BORDER } from '../../constants/layout';
-import { CURRENT_USER } from '../../constants/currentUser';
 import {
   notifications as initialNotifications,
   type Notification,
@@ -38,11 +37,11 @@ export default function Header({
   const navigate = useNavigate();
   const location = useLocation();
   const { clearSession, user } = useAuth();
-  const displayName = user?.name ? user.name.split(' ')[0] : CURRENT_USER.name.split(' ')[0];
-  const rawRole = user?.role || CURRENT_USER.role;
+  const displayName = user?.name ? user.name.split(' ')[0] : 'User';
+  const rawRole = user?.role || 'Member';
   const displayRole = rawRole.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  const displayInitials = user?.initials || CURRENT_USER.initials;
-  const displayAvatar = user?.avatarUrl || CURRENT_USER.avatarUrl;
+  const displayInitials = user?.initials || 'U';
+  const displayAvatar = user?.avatarUrl;
   const isSettingsRoute = location.pathname.startsWith('/home/settings');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const profileButtonRef = useRef<HTMLDivElement>(null);
@@ -243,7 +242,7 @@ export default function Header({
       >
         <Avatar
           src={displayAvatar}
-          alt={user?.name || CURRENT_USER.name}
+          alt={user?.name || 'User'}
           sx={{
             width: 36,
             height: 36,

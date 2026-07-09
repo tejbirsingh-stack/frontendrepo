@@ -8,8 +8,6 @@ import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import PaymentOutlinedIcon from '@mui/icons-material/PaymentOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
-import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import { CURRENT_USER } from '../../constants/currentUser';
 import { useAuth } from '../../auth/AuthContext';
 import {
   DEFAULT_SETTINGS_PATH,
@@ -216,12 +214,12 @@ export default function ProfileMenuDropdown({
   onKeyboardShortcuts,
 }: ProfileMenuDropdownProps) {
   const { user } = useAuth();
-  const displayName = user?.name || CURRENT_USER.name;
-  const displayEmail = user?.email || CURRENT_USER.email;
-  const displayInitials = user?.initials || CURRENT_USER.initials;
-  const displayAvatar = user?.avatarUrl || CURRENT_USER.avatarUrl;
-  const displayAccountName = user?.accountName || CURRENT_USER.accountName;
-  const displayAccountInitials = user?.accountInitials || CURRENT_USER.accountInitials;
+  const displayName = user?.name || 'User';
+  const displayEmail = user?.email || '';
+  const displayInitials = user?.initials || 'U';
+  const displayAvatar = user?.avatarUrl;
+  const displayAccountName = user?.accountName || `${displayName}'s Account`;
+  const displayAccountInitials = user?.accountInitials || 'U';
 
   useEffect(() => {
     if (!open) return;
