@@ -11,9 +11,9 @@ import {
 import {
   extractUserFromTokenOrResponse,
   fetchCurrentUserRequest,
-  loginRequest,
   loginUser,
   loginWithGoogle,
+  loginWithMicrosoft,
   logoutRequest,
   mapAuthUserDtoToSessionUser,
   signUpRequest,
@@ -173,6 +173,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [setSession],
   );
 
+  const loginMicrosoft = useCallback(
+    async ( idToken : string, rememberMe = false) => {
+      const response = await loginWithMicrosoft(idToken);
+      const token = response.accessToken || response.token;
+      if (!token) throw new Error('No access token returned from Microsoft login');
+      const userDto = extractUserFromTokenOrResponse(response);
+      const sessionUser = mapAuthUserDtoToSessionUser(userDto);
+      setSession(token, sessionUser);
+      persistSession(token, sessionUser, rememberMe);
+    },
+    [setSession],
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -183,8 +196,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signup,
       logout,
       loginGoogle,
+      loginMicrosoft,
     }),
-    [accessToken, isInitializing, login, logout, signup, user, loginGoogle],
+    [accessToken, isInitializing, login, logout, signup, user, loginGoogle,loginMicrosoft],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

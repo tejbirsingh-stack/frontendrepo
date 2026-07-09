@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cv } from '../theme/cssVars';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -13,6 +13,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { useMsal } from "@azure/msal-react";
+import { EventType } from "@azure/msal-browser";
+import MicrosoftIcon from '@mui/icons-material/Window'; // Basic Windows/Microsoft Icon
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import GoogleIcon from '@mui/icons-material/Google';
@@ -24,9 +27,10 @@ import LoginDemoAccountsBubble from '../components/demo/LoginDemoAccountsBubble'
 import { useAuth } from '../auth/AuthContext';
 
 export default function LoginPage() {
+  const { instance } = useMsal();
+  const { login, loginGoogle, loginMicrosoft } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, loginGoogle } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,23 +43,23 @@ export default function LoginPage() {
 
     const redirectPath =
       typeof location.state === 'object' &&
-      location.state !== null &&
-      'from' in location.state &&
-      typeof (location.state as { from?: unknown }).from === 'string'
+        location.state !== null &&
+        'from' in location.state &&
+        typeof (location.state as { from?: unknown }).from === 'string'
         ? (location.state as { from: string }).from
         : '/home';
 
     try {
-      await login({ 
-        email, 
+      await login({
+        email,
         password,
         rememberMe,
       });
-      
+
       navigate(redirectPath);
     } catch (submitError: any) {
       console.error(submitError);
-      
+
       // If the backend says MFA is required, transition to the MFA step
       if (submitError.response?.data?.requiresMfa || submitError.details?.requiresMfa || submitError.requiresMfa) {
         navigate('/mfaAuth', { state: { email, password, requiresMfa: true, from: redirectPath } });
@@ -67,13 +71,13 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setError('');
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "967923512322-0oullb620hh9se1ff0prs8stvbspi829.apps.googleusercontent.com";
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
     const redirectPath =
       typeof location.state === 'object' &&
-      location.state !== null &&
-      'from' in location.state &&
-      typeof (location.state as { from?: unknown }).from === 'string'
+        location.state !== null &&
+        'from' in location.state &&
+        typeof (location.state as { from?: unknown }).from === 'string'
         ? (location.state as { from: string }).from
         : '/home';
 
@@ -121,6 +125,49 @@ export default function LoginPage() {
       setError('Could not initialize Google Login service.');
     }
   };
+
+  // Add this inside the component to handle the redirect back from Microsoft
+  useEffect(() => {
+    // Only process the redirect promise if we explicitly initiated it
+    if (sessionStorage.getItem('msal_redirecting') === 'true') {
+      instance.handleRedirectPromise()
+        .then((response) => {
+          sessionStorage.removeItem('msal_redirecting'); // Clear the flag instantly
+          // If response is present, it means we JUST returned from Microsoft successfully!
+          if (response && response.idToken) {
+            const redirectPath =
+              typeof location.state === 'object' && location.state !== null && 'from' in location.state
+                ? (location.state as any).from
+                : '/home';
+                
+            // Pass it to our backend
+            return loginMicrosoft(response.idToken).then(() => navigate(redirectPath));
+          }
+        })
+        .catch((err: any) => {
+          sessionStorage.removeItem('msal_redirecting');
+          console.error(err);
+          setError(err.response?.data?.message || err.message || 'Microsoft Login Failed.');
+        });
+    }
+  }, [instance, loginMicrosoft, navigate, location.state]);
+
+  const handleMicrosoftLogin = async () => {
+    setError('');
+    try {
+      // Set a flag so we know to process the redirect when we return
+      sessionStorage.setItem('msal_redirecting', 'true');
+      
+      // Use redirect instead of popup to completely bypass browser isolation/timeout bugs
+      await instance.loginRedirect({
+        scopes: ["User.Read", "profile", "email", "openid"]
+      });
+    } catch (err: any) {
+      sessionStorage.removeItem('msal_redirecting');
+      console.error(err);
+      setError(err.response?.data?.message || err.message || 'Microsoft Login Failed.');
+    }
+  }
 
   return (
     <Box
@@ -294,24 +341,45 @@ export default function LoginPage() {
               or
             </Divider>
 
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  onClick={handleGoogleLogin}
-                  startIcon={<GoogleIcon />}
-                  sx={{
-                    py: 1.5,
-                    borderColor: cv.border,
-                    color: cv.textPrimary,
-                    backgroundColor: 'var(--noah-footer-tint)',
-                    '&:hover': {
-                      borderColor: cv.borderStrong,
-                      backgroundColor: cv.surfaceHover,
-                    },
-                  }}
-                >
-                  Continue with Google
-                </Button>
+            <Box sx={{ display: 'flex', gap: 2, width: '100%' }}>
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={handleGoogleLogin}
+                startIcon={<GoogleIcon />}
+                sx={{
+                  py: 1.5,
+                  borderColor: cv.border,
+                  color: cv.textPrimary,
+                  backgroundColor: 'var(--noah-footer-tint)',
+                  '&:hover': {
+                    borderColor: cv.borderStrong,
+                    backgroundColor: cv.surfaceHover,
+                  },
+                }}
+              >
+                Google
+              </Button>
+
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={handleMicrosoftLogin}
+                startIcon={<MicrosoftIcon />}
+                sx={{
+                  py: 1.5,
+                  borderColor: cv.border,
+                  color: cv.textPrimary,
+                  backgroundColor: 'var(--noah-footer-tint)',
+                  '&:hover': {
+                    borderColor: cv.borderStrong,
+                    backgroundColor: cv.surfaceHover,
+                  },
+                }}
+              >
+                Microsoft
+              </Button>
+            </Box>
 
             <Typography
               variant="body2"
