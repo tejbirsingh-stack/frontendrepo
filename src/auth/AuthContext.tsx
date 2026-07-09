@@ -13,7 +13,6 @@ import {
   fetchCurrentUserRequest,
   loginUser,
   loginWithGoogle,
-  logoutRequest,
   mapAuthUserDtoToSessionUser,
   signUpRequest,
 } from '../api/auth.service';
@@ -58,11 +57,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     clearSession();
-    try {
-      await logoutRequest();
-    } catch {
-      // Remote logout failures should not block session clearing
-    }
   }, [clearSession]);
 
   useEffect(() => {
