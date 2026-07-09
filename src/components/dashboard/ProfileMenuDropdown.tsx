@@ -8,6 +8,7 @@ import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import PaymentOutlinedIcon from '@mui/icons-material/PaymentOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { useAuth } from '../../auth/AuthContext';
 import {
   DEFAULT_SETTINGS_PATH,
