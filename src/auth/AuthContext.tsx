@@ -136,7 +136,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async ({ email, password, rememberMe = false, mfaCode }: LoginCredentials) => {
-      const response = await loginUser({ email, password, ...(mfaCode ? { mfaCode } : {}) });
+      const response: any = await loginUser({ email, password, ...(mfaCode ? { mfaCode } : {}) });
+      if (response?.requiresMfa || response?.data?.requiresMfa || response?.status === 'MFA_REQUIRED') {
+        const error: any = new Error('MFA verification required');
+        error.requiresMfa = true;
+        error.response = { data: { requiresMfa: true } };
+        throw error;
+      }
       const token = response.accessToken || response.token;
       if (!token) throw new Error('No access token returned from login');
       const userDto = extractUserFromTokenOrResponse(response);
