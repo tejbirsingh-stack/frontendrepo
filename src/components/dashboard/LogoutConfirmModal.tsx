@@ -106,7 +106,7 @@ export default function LogoutConfirmModal({
             },
           }}
         >
-          Log out
+          Logout
         </Button>
       </DialogActions>
     </Dialog>

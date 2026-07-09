@@ -11,7 +11,6 @@ import {
 import {
   extractUserFromTokenOrResponse,
   fetchCurrentUserRequest,
-  loginRequest,
   loginUser,
   loginWithGoogle,
   logoutRequest,
@@ -57,27 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearPersistedSession();
   }, []);
 
-  const logout = useCallback(async () => {
-    clearSession();
-    try {
-      await logoutRequest();
-    } catch {
-      // Remote logout failures should not block session clearing
-    }
-  }, [clearSession]);
-
-  useEffect(() => {
-    registerAuthTokenBridge(
-      () => accessTokenRef.current,
-      () => {
-        void logout();
-      },
-    );
-
-    return () => {
-      clearAuthTokenBridge();
-    };
-  }, [logout]);
 
   useEffect(() => {
     let cancelled = false;
@@ -189,8 +167,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signup,
       logout,
       loginGoogle,
+      clearSession,
     }),
-    [accessToken, isInitializing, login, logout, signup, user, loginGoogle],
+    [accessToken, isInitializing, login, logout, signup, user, loginGoogle, clearSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

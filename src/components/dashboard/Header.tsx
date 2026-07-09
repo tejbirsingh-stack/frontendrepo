@@ -37,7 +37,7 @@ export default function Header({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth();
+  const { clearSession } = useAuth();
   const isSettingsRoute = location.pathname.startsWith('/home/settings');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const profileButtonRef = useRef<HTMLDivElement>(null);
@@ -59,11 +59,12 @@ export default function Header({
     setLogoutModalOpen(true);
   };
 
-  const handleLogoutConfirm = async () => {
+  const handleLogoutConfirm = () => {
     setLogoutModalOpen(false);
-    await logout();
-    navigate('/', { replace: true, state: { from: `${location.pathname}${location.search}` } });
+    clearSession();
+    navigate('/', { replace: true });
   };
+
 
   return (
     <Box

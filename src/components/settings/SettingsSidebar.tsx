@@ -25,14 +25,14 @@ export default function SettingsSidebar({
   onClose,
 }: SettingsSidebarProps) {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { clearSession } = useAuth();
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const isDrawer = variant === 'drawer';
 
-  const handleLogoutConfirm = async () => {
+  const handleLogoutConfirm = () => {
     setLogoutModalOpen(false);
     onClose?.();
-    await logout();
+    clearSession();
     navigate('/', { replace: true });
   };
 

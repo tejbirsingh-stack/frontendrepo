@@ -34,4 +34,5 @@ export interface AuthContextValue {
   signup: (credentials: SignUpCredentials) => Promise<void>;
   logout: () => Promise<void>;
   loginGoogle: (idToken: string, rememberMe?: boolean) => Promise<void>;
+  clearSession: () => void;
 }
