@@ -82,3 +82,23 @@ export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
   skipAuth?: boolean;
   timeoutMs?: number;
 }
+
+
+export interface OrganizationUserItem {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  status: string;
+  lastLoginAt?: string | null;
+  lastActiveAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+  jobTitle?: string | null;
+  phone?: string | null;
+  organization?: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+}

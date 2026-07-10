@@ -69,6 +69,7 @@ import {
 import InviteTeamMemberModal from '../components/common/InviteTeamMemberModal';
 import { createWorkspaceTeamMember } from '../data/mockSettingsData';
 import type { WorkspaceTeamMember } from '../data/mockSettingsData';
+import { fetchOrganizationUsers } from '../api/auth.service';
 
 type ViewMode = 'grid' | 'list' | 'folder';
 type SortField = 'date' | 'name' | 'type' | 'size';
@@ -308,10 +309,59 @@ export default function DashboardPage({
   const [folderTeamMembers, setFolderTeamMembers] = useState<
     Record<string, WorkspaceTeamMember[]>
   >({});
+  const [orgTeamMembers, setOrgTeamMembers] = useState<WorkspaceTeamMember[]>([]);
   const lastSelectedIdRef = useRef<string | null>(null);
   const { getShortcut } = useResolvedKeyboardShortcuts();
   const helpMenuShortcut =
     getShortcut('dashboard-open-help-menu') ?? getHelpMenuShortcutLabel();
+
+  useEffect(() => {
+    let mounted = true;
+    fetchOrganizationUsers()
+      .then((apiUsers) => {
+        if (!mounted || !apiUsers || !Array.isArray(apiUsers) || apiUsers.length === 0) return;
+        const mapped: WorkspaceTeamMember[] = apiUsers.map((u) => {
+          const name = u.name || u.email.split('@')[0];
+          const initials = name
+            .split(' ')
+            .filter(Boolean)
+            .map((part) => part[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2);
+
+          const isCurrent =
+            u.email?.toLowerCase() === CURRENT_USER.email?.toLowerCase() ||
+            u.id === CURRENT_USER.id;
+
+          return {
+            id: u.id,
+            name,
+            initials: initials || 'U',
+            email: u.email,
+            avatarUrl: isCurrent ? CURRENT_USER.avatarUrl : undefined,
+            access: (u.role && u.role.toLowerCase().includes('super')) ? 'Full Access' : 'Can edit',
+            memberType: 'Member',
+            isCurrentUser: isCurrent,
+          };
+        });
+
+        // Sort current user first, then alphabetically by name
+        mapped.sort((a, b) => {
+          if (a.isCurrentUser && !b.isCurrentUser) return -1;
+          if (!a.isCurrentUser && b.isCurrentUser) return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+        setOrgTeamMembers(mapped);
+      })
+      .catch((err) => {
+        console.error('Failed to load organization users for avatar stack:', err);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const selectedContainerId = sidebarSelection?.folderId ?? null;
 
@@ -328,7 +378,7 @@ export default function DashboardPage({
 
   const displayedTeamMembers = useMemo(() => {
     if (!sidebarSelection) {
-      return initialToolbarTeamMembers;
+      return orgTeamMembers;
     }
 
     if (selectedContainerId && folderTeamMembers[selectedContainerId]?.length) {
@@ -336,11 +386,11 @@ export default function DashboardPage({
     }
 
     if (canInviteToFolder || isProjectSelection(sidebarSelection)) {
-      return initialToolbarTeamMembers;
+      return orgTeamMembers;
     }
 
     return [];
-  }, [sidebarSelection, selectedContainerId, folderTeamMembers, canInviteToFolder]);
+  }, [sidebarSelection, selectedContainerId, folderTeamMembers, canInviteToFolder, orgTeamMembers]);
 
   useEffect(() => {
     if (!canInviteToFolder && inviteTeamMemberOpen) {

@@ -14,6 +14,7 @@ import type {
   AuthUserDto,
   LoginRequestDto,
   LoginResponseDto,
+  OrganizationUserItem,
   RegisterData,
   RegisterRoleDto,
   RoleItem,
@@ -78,6 +79,18 @@ export const fetchRoles = async (): Promise<RoleItem[]> => {
     token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
   );
   return response.data?.roles || response.data || [];
+};
+
+
+
+
+export const fetchOrganizationUsers = async (): Promise<OrganizationUserItem[]> => {
+  const token = getAccessToken();
+  const response = await axios.get(
+    `${API_BASE_URL}/auth/users`,
+    token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+  );
+  return response.data?.users || response.data || [];
 };
 
 

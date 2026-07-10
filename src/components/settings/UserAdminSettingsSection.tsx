@@ -34,7 +34,8 @@ import { SettingsSectionCard } from './SettingsSectionCard';
 import { SettingsTableContainer } from './SettingsContentLayout';
 import TruncatedText from '../TruncatedText';
 import { USER_ROLES, type UserRole } from '../../constants/userRoles';
-import { fetchRoles, registerRole } from '../../api/auth.service';
+import { fetchRoles, registerRole, fetchOrganizationUsers,} from '../../api/auth.service';
+import type {OrganizationUserItem} from '../../api/types';
 import type { RoleItem } from '../../api/types';
 import {
   createInvitedUser,
@@ -811,8 +812,97 @@ function UserGroupsTab({
 
 export default function UserAdminSettingsSection() {
   const [activeTab, setActiveTab] = useState(0);
-  const [users, setUsers] = useState<SettingsUserRow[]>(MOCK_SETTINGS_USERS);
+  const [users, setUsers] = useState<SettingsUserRow[]>([]);
   const [groups, setGroups] = useState<SettingsUserGroup[]>(MOCK_SETTINGS_USER_GROUPS);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchOrganizationUsers()
+      .then((apiUsers) => {
+        if (!mounted || !apiUsers || !Array.isArray(apiUsers) || apiUsers.length === 0) return;
+
+        const formatUserRoleLabel = (rawRole?: string): UserRole => {
+          if (!rawRole) return 'Viewer';
+          const normalized = rawRole.toLowerCase().trim().replace(/[_-]+/g, ' ');
+          if (normalized === 'super admin' || normalized === 'superadmin') return 'Super Admin';
+          if (normalized === 'admin') return 'Admin';
+          if (normalized === 'collaborator') return 'Collaborator';
+          if (normalized === 'editor') return 'Editor';
+          if (normalized === 'viewer') return 'Viewer';
+          return rawRole
+            .split(/[._-]+/)
+            .filter(Boolean)
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+            .join(' ') as UserRole;
+        };
+
+        const getRolePriority = (roleLabel: string): number => {
+          const r = roleLabel.toLowerCase();
+          if (r.includes('super')) return 1;
+          if (r.includes('system')) return 2;
+          if (r === 'admin') return 3;
+          if (r === 'collaborator') return 4;
+          if (r === 'editor') return 5;
+          if (r === 'viewer') return 6;
+          return 99;
+        };
+
+        const mappedUsers: SettingsUserRow[] = apiUsers.map((u) => {
+          const name = u.name || u.email.split('@')[0];
+          const initials = name
+            .split(' ')
+            .filter(Boolean)
+            .map((part) => part[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2);
+
+          let lastActiveText = 'Never';
+          if (u.lastActiveAt) {
+            const date = new Date(u.lastActiveAt);
+            const diffMinutes = Math.floor((Date.now() - date.getTime()) / (1000 * 60));
+            if (diffMinutes <= 1) lastActiveText = 'Just now';
+            else if (diffMinutes < 60) lastActiveText = `${diffMinutes} mins ago`;
+            else if (diffMinutes < 1440) lastActiveText = `${Math.floor(diffMinutes / 60)} hours ago`;
+            else lastActiveText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          } else if (u.lastLoginAt) {
+            const date = new Date(u.lastLoginAt);
+            lastActiveText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          }
+
+          const joinedDate = u.createdAt
+            ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : '—';
+
+          return {
+            id: u.id,
+            name,
+            initials: initials || 'U',
+            email: u.email,
+            lastActive: lastActiveText,
+            joinedDate,
+            role: formatUserRoleLabel(u.role),
+            status: u.status === 'active' ? 'Active' : 'Pending',
+          };
+        });
+
+        // Sort users by role order: Super Admin > System Admin > Admin > Collaborator > Editor > Viewer
+        mappedUsers.sort((a, b) => {
+          const priorityA = getRolePriority(a.role);
+          const priorityB = getRolePriority(b.role);
+          if (priorityA !== priorityB) return priorityA - priorityB;
+          return a.name.localeCompare(b.name);
+        });
+
+        setUsers(mappedUsers);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch users from API:', err);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <SettingsTableContainer>
