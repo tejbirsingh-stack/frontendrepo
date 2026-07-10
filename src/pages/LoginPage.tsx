@@ -71,7 +71,7 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setError('');
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "967923512322-0oullb620hh9se1ff0prs8stvbspi829.apps.googleusercontent.com";
 
     const redirectPath =
       typeof location.state === 'object' &&
