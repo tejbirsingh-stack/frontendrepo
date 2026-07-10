@@ -17,7 +17,7 @@ export default function GuestRoute({ children }: { children: React.ReactNode }) 
     return <AuthPageSkeleton />;
   }
 
-  if (isAuthenticated) {
+  if (isAuthenticated && location.pathname !== '/reset-password') {
     return <Navigate to={redirectPath} replace />;
   }
 
