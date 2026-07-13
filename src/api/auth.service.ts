@@ -43,6 +43,14 @@ export const loginUser = async (data: LoginRequestDto) => {
   return response.data;
 };
 
+export const verifyEmailRequest = async (token: string) => {
+  const response = await axios.post(
+    `${API_BASE_URL}/auth/verify-email`,
+    { token }
+  );
+  return response.data;
+};
+
 
 export const loginWithGoogle = async (idToken: string) => {
   const response = await axios.post(
