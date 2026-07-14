@@ -2391,7 +2391,22 @@ export default function VideoPlayerPage() {
                       zIndex: 10,
                     }}
                   >
-                    <CircularProgress size={48} sx={{ color: cv.brandBlue, mb: 3 }} />
+                    {liveProgress && liveProgress !== 'processing' ? (
+                      <CircularProgress 
+                        variant="determinate" 
+                        value={parseInt(liveProgress.replace('%', '')) || 0} 
+                        size={48} 
+                        sx={{ 
+                          color: cv.brandBlue, 
+                          mb: 3,
+                          '& .MuiCircularProgress-circle': {
+                            transition: 'stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
+                          }
+                        }} 
+                      />
+                    ) : (
+                      <CircularProgress size={48} sx={{ color: cv.brandBlue, mb: 3 }} />
+                    )}
                     <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
                       Processing Video...
                     </Typography>
