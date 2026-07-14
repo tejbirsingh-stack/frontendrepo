@@ -16,12 +16,13 @@ import {
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import GoogleIcon from '@mui/icons-material/Google';
+import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
 import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo from '../components/NoahLogo';
 import { cv } from '../theme/cssVars';
-import { validatePassword } from '../utils/authValidation';
+import { validateBusinessEmail, validatePassword } from '../utils/authValidation';
 import { registerUser } from "../api/auth.service";
 
 export default function SignUpPage() {
@@ -37,6 +38,8 @@ export default function SignUpPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [error, setError] = useState('');
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
 
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -48,6 +51,12 @@ const handleSubmit = async (e: React.FormEvent) => {
 
   if (trimmedName.length < 2) {
     setError("Please enter your full name.");
+    return;
+  }
+
+  const emailError = validateBusinessEmail(email);
+  if (emailError) {
+    setError(emailError);
     return;
   }
 
@@ -91,15 +100,8 @@ const handleSubmit = async (e: React.FormEvent) => {
     if (response) {
       localStorage.setItem("response", JSON.stringify(response));
     }
-    if (response?.token) {
-      localStorage.setItem("noah.auth.session", response.token);
-    }
-    if (response?.user) {
-      localStorage.setItem("noah.auth.user", JSON.stringify(response.user));
-    }
-
-    // Navigate after successful registration
-    navigate("/", { replace: true });
+    setRegisteredEmail(email);
+    setIsRegistered(true);
 
   } catch (err: unknown) {
     if (axios.isAxiosError(err)) {
@@ -150,8 +152,43 @@ const handleSubmit = async (e: React.FormEvent) => {
             width: '100%',
           }}
         >
-          <Box
-            component="form"
+          {isRegistered ? (
+            <Box
+              sx={{
+                p: { xs: 4, sm: 5 },
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                textAlign: 'center',
+              }}
+            >
+              <MarkEmailReadOutlinedIcon sx={{ fontSize: 64, color: cv.brandBlue, mb: 2 }} />
+              <Typography variant="h5" sx={{ fontWeight: 600, mb: 1.5, color: cv.textPrimary }}>
+                Verification Email Sent
+              </Typography>
+              <Typography variant="body2" sx={{ color: cv.textSecondary, mb: 3.5, lineHeight: 1.6 }}>
+                Verification email sent to your email (<strong>{registeredEmail}</strong>). Please check your email and verify your account before logging in.
+              </Typography>
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={() => navigate('/', { replace: true })}
+                sx={{
+                  py: 1.5,
+                  background: cv.brandGradient,
+                  boxShadow: cv.loginBrandShadow,
+                  '&:hover': {
+                    background: cv.brandGradientHover,
+                    boxShadow: cv.loginBrandShadowHover,
+                  },
+                }}
+              >
+                Go to Sign In
+              </Button>
+            </Box>
+          ) : (
+            <Box
+              component="form"
             onSubmit={handleSubmit}
             sx={{
               p: { xs: 3, sm: 4 },
@@ -396,6 +433,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               </Link>
             </Typography>
           </Box>
+          )}
         </GlassCard>
       </Box>
     </Box>

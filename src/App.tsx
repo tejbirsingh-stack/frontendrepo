@@ -20,6 +20,7 @@ import {
   VideoPlayerPage,
   MfaAuthPage,
   ResetPasswordPage,
+  VerifyEmailPage,
 } from './routes/lazyPages';
 
 function App() {
@@ -55,6 +56,10 @@ function App() {
           <Route
             path="/reset-password"
             element={<ResetPasswordPage />}
+          />
+          <Route
+            path="/verify-email"
+            element={<VerifyEmailPage />}
           />
           <Route
             path="/home"

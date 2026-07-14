@@ -5,6 +5,11 @@ export interface AuthSessionUser {
   name: string;
   email: string;
   role: UserRole | string;
+  roleId?: string;
+  roleRelation?: {
+    id: string;
+    name: string;
+  };
   initials: string;
   avatarUrl?: string;
   accountName?: string;

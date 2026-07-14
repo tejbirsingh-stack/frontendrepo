@@ -318,7 +318,7 @@ export function SettingsUserCell({
         {initials}
       </Box>
       <TruncatedText
-        text={isCurrentUser ? `${name} (you)` : name}
+        text={isCurrentUser ? `${name} (You)` : name}
         tooltip={name}
         sx={{
           fontSize: '0.875rem',
@@ -330,7 +330,7 @@ export function SettingsUserCell({
         {isCurrentUser ? (
           <Box component="span" sx={{ color: cv.textSecondary, fontWeight: 400 }}>
             {' '}
-            (you)
+            (You)
           </Box>
         ) : null}
       </TruncatedText>

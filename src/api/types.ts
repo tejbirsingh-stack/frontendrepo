@@ -42,6 +42,11 @@ export interface AuthUserDto {
   name: string;
   email: string;
   role: string;
+  roleId?: string;
+  roleRelation?: {
+    id: string;
+    name: string;
+  };
   initials: string;
   avatarUrl?: string;
   accountName?: string;
@@ -89,6 +94,11 @@ export interface OrganizationUserItem {
   name: string | null;
   email: string;
   role: string;
+  roleId?: string;
+  roleRelation?: {
+    id: string;
+    name: string;
+  };
   status: string;
   lastLoginAt?: string | null;
   lastActiveAt?: string | null;

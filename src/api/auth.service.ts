@@ -35,11 +35,27 @@ export const registerUser = async (data: RegisterData) => {
 
 
 export const loginUser = async (data: LoginRequestDto) => {
-  const response = await axios.post(
-    `${API_BASE_URL}/auth/login`,
-    data
-  );
+  try {
+    const response = await axios.post(
+      `${API_BASE_URL}/auth/login`,
+      data
+    );
+    return response.data;
+  } catch (error: any) {
+    // If backend returned 400 for MFA Required, return the response data instead of crashing
+    if (error.response?.data?.requiresMfa) {
+      return error.response.data;
+    }
+    throw error;
+  }
+};
 
+
+export const verifyEmailRequest = async (token: string) => {
+  const response = await axios.post(
+    `${API_BASE_URL}/auth/verify-email`,
+    { token }
+  );
   return response.data;
 };
 
@@ -134,7 +150,7 @@ export async function fetchCurrentUserRequest(): Promise<AuthUserDto> {
 
 
 
-function mapCurrentUserToDto(): AuthUserDto {
+export function mapCurrentUserToDto(): AuthUserDto {
   return {
     id: 'current-user',
     name: CURRENT_USER.name,
@@ -258,8 +274,9 @@ export async function logoutRequest(): Promise<void> {
 
 export function mapAuthUserDtoToSessionUser(input: any) {
   const user = input?.user || input || {};
-  const formattedRole = user.role
-    ? user.role.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+  const rawRole = (user.roleRelation && user.roleRelation.name) || user.role || 'User';
+  const formattedRole = rawRole
+    ? rawRole.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
     : 'User';
 
   const name = user.name || user.email?.split('@')[0] || 'User';
@@ -269,6 +286,8 @@ export function mapAuthUserDtoToSessionUser(input: any) {
     name: name,
     email: user.email || '',
     role: formattedRole,
+    roleId: user.roleId || user.roleRelation?.id,
+    roleRelation: user.roleRelation,
     initials: user.initials || getNameInitials(name),
     avatarUrl: user.avatarUrl,
     accountName: user.accountName || (user.organization && user.organization.name) || `${name}'s Account`,
@@ -278,7 +297,10 @@ export function mapAuthUserDtoToSessionUser(input: any) {
 
 export function extractUserFromTokenOrResponse(response: LoginResponseDto): AuthUserDto {
   if (response.user) {
-    return response.user;
+    const userObj = response.user as any;
+    const dynamicRole = userObj.roleRelation?.name || userObj.role || 'Member';
+    userObj.role = dynamicRole;
+    return userObj;
   }
   const token = response.accessToken || response.token;
   if (!token) {
@@ -295,12 +317,15 @@ export function extractUserFromTokenOrResponse(response: LoginResponseDto): Auth
         .join('')
     );
     const decoded = JSON.parse(jsonPayload);
+    const rawRole = (decoded.roleRelation && decoded.roleRelation.name) || decoded.role || 'Member';
     const name = decoded.name || decoded.email?.split('@')[0] || 'User';
     return {
       id: decoded.id || 'user-id',
       name: name,
       email: decoded.email || '',
-      role: decoded.role || 'user',
+      role: rawRole,
+      roleId: decoded.roleId || decoded.roleRelation?.id,
+      roleRelation: decoded.roleRelation,
       initials: getNameInitials(name),
       avatarUrl: decoded.avatarUrl,
       accountName: decoded.organization?.name || decoded.accountName || `${name}'s Account`,
@@ -311,3 +336,4 @@ export function extractUserFromTokenOrResponse(response: LoginResponseDto): Auth
     throw new Error('Failed to parse user information from login token');
   }
 }
+
