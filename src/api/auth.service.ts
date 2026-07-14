@@ -35,13 +35,21 @@ export const registerUser = async (data: RegisterData) => {
 
 
 export const loginUser = async (data: LoginRequestDto) => {
-  const response = await axios.post(
-    `${API_BASE_URL}/auth/login`,
-    data
-  );
-
-  return response.data;
+  try {
+    const response = await axios.post(
+      `${API_BASE_URL}/auth/login`,
+      data
+    );
+    return response.data;
+  } catch (error: any) {
+    // If backend returned 400 for MFA Required, return the response data instead of crashing
+    if (error.response?.data?.requiresMfa) {
+      return error.response.data;
+    }
+    throw error;
+  }
 };
+
 
 export const verifyEmailRequest = async (token: string) => {
   const response = await axios.post(
@@ -290,9 +298,8 @@ export function mapAuthUserDtoToSessionUser(input: any) {
 export function extractUserFromTokenOrResponse(response: LoginResponseDto): AuthUserDto {
   if (response.user) {
     const userObj = response.user as any;
-    if (userObj.roleRelation && userObj.roleRelation.name) {
-      userObj.role = userObj.roleRelation.name;
-    }
+    const dynamicRole = userObj.roleRelation?.name || userObj.role || 'Member';
+    userObj.role = dynamicRole;
     return userObj;
   }
   const token = response.accessToken || response.token;
@@ -310,7 +317,7 @@ export function extractUserFromTokenOrResponse(response: LoginResponseDto): Auth
         .join('')
     );
     const decoded = JSON.parse(jsonPayload);
-    const rawRole = (decoded.roleRelation && decoded.roleRelation.name) || decoded.role || 'user';
+    const rawRole = (decoded.roleRelation && decoded.roleRelation.name) || decoded.role || 'Member';
     const name = decoded.name || decoded.email?.split('@')[0] || 'User';
     return {
       id: decoded.id || 'user-id',
@@ -329,3 +336,4 @@ export function extractUserFromTokenOrResponse(response: LoginResponseDto): Auth
     throw new Error('Failed to parse user information from login token');
   }
 }
+

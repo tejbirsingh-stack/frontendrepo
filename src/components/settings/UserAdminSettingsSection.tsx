@@ -35,6 +35,7 @@ import { SettingsTableContainer } from './SettingsContentLayout';
 import TruncatedText from '../TruncatedText';
 import { USER_ROLES, type UserRole } from '../../constants/userRoles';
 import { fetchRoles, registerRole, fetchOrganizationUsers,} from '../../api/auth.service';
+import { useAuth } from '../../auth/AuthContext';
 import type { RoleItem } from '../../api/types';
 import {
   createInvitedUser,
@@ -809,6 +810,7 @@ function UserGroupsTab({
 }
 
 export default function UserAdminSettingsSection() {
+  const { user: currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
   const [users, setUsers] = useState<SettingsUserRow[]>([]);
   const [groups, setGroups] = useState<SettingsUserGroup[]>(MOCK_SETTINGS_USER_GROUPS);
@@ -871,7 +873,11 @@ export default function UserAdminSettingsSection() {
           const joinedDate = u.createdAt
             ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
             : '—';
-
+          const isMe = Boolean(
+            currentUser &&
+            (u.id === currentUser.id ||
+              (u.email && currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase()))
+          );
           return {
             id: u.id,
             name,
@@ -883,6 +889,7 @@ export default function UserAdminSettingsSection() {
             roleId: u.roleId || u.roleRelation?.id,
             roleRelation: u.roleRelation,
             status: u.status === 'active' ? 'Active' : 'Pending',
+            isCurrentUser: isMe,
           };
         });
 
@@ -902,7 +909,7 @@ export default function UserAdminSettingsSection() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [currentUser?.id, currentUser?.email]);
 
   return (
     <SettingsTableContainer>
