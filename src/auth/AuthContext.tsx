@@ -58,7 +58,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    clearSession();
+    try {
+      await logoutRequest();
+    } catch {
+      // ignore logout API failure
+    } finally {
+      clearSession();
+    }
   }, [clearSession]);
 
   useEffect(() => {
@@ -96,6 +102,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       );
 
+      const persistedUser = readPersistedSessionUser();
+      if (persistedUser) {
+        setUser(persistedUser);
+      }
+
       try {
         const currentUser = await fetchCurrentUserRequest();
         if (!cancelled && currentUser) {
@@ -104,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           persistSession(persistedToken, sessionUser);
         }
       } catch {
-        if (!cancelled) {
+        if (!cancelled && !persistedUser) {
           clearSession();
         }
       } finally {

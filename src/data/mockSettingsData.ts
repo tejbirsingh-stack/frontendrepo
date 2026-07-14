@@ -11,6 +11,11 @@ export interface SettingsUserRow {
   lastActive: string;
   joinedDate: string;
   role: SettingsUserRole;
+  roleId?: string;
+  roleRelation?: {
+    id: string;
+    name: string;
+  };
   status: 'Active' | 'Pending';
   isCurrentUser?: boolean;
   isOrganizationMember?: boolean;

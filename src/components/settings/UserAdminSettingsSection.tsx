@@ -35,13 +35,11 @@ import { SettingsTableContainer } from './SettingsContentLayout';
 import TruncatedText from '../TruncatedText';
 import { USER_ROLES, type UserRole } from '../../constants/userRoles';
 import { fetchRoles, registerRole, fetchOrganizationUsers,} from '../../api/auth.service';
-import type {OrganizationUserItem} from '../../api/types';
 import type { RoleItem } from '../../api/types';
 import {
   createInvitedUser,
   createUserGroup,
   MOCK_SETTINGS_USER_GROUPS,
-  MOCK_SETTINGS_USERS,
   type SettingsUserGroup,
   type SettingsUserRow,
 } from '../../data/mockSettingsData';
@@ -881,7 +879,9 @@ export default function UserAdminSettingsSection() {
             email: u.email,
             lastActive: lastActiveText,
             joinedDate,
-            role: formatUserRoleLabel(u.role),
+            role: formatUserRoleLabel((u.roleRelation && u.roleRelation.name) || u.role),
+            roleId: u.roleId || u.roleRelation?.id,
+            roleRelation: u.roleRelation,
             status: u.status === 'active' ? 'Active' : 'Pending',
           };
         });

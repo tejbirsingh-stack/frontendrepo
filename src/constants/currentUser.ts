@@ -1,6 +1,7 @@
 import type { UserRole } from './userRoles';
 
 export const CURRENT_USER = {
+  id: 'u1',
   name: 'Aviral Kataria',
   initials: 'AK',
   email: 'aviral.kataria@mtxb2b.com',

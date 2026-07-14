@@ -4,8 +4,13 @@ const SESSION_TOKEN_KEY = 'noah_session_token';
 const SESSION_USER_KEY = 'noah_session_user';
 
 
-export function persistSession(token: string,): void {
+export function persistSession(token: string, user?: AuthSessionUser | null, _rememberMe?: boolean): void {
   localStorage.setItem(SESSION_TOKEN_KEY, token);
+  if (user) {
+    localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(SESSION_USER_KEY);
+  }
 }
 
 export function readPersistedSessionToken(): string | null {
@@ -25,5 +30,6 @@ export function readPersistedSessionUser(): AuthSessionUser | null {
 
 export function clearPersistedSession(): void {
   localStorage.removeItem(SESSION_TOKEN_KEY);
+  localStorage.removeItem(SESSION_USER_KEY);
 }
 

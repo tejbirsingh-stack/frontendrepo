@@ -14,7 +14,6 @@ import {
   Typography,
 } from '@mui/material';
 import { useMsal } from "@azure/msal-react";
-import { EventType } from "@azure/msal-browser";
 import MicrosoftIcon from '@mui/icons-material/Window'; // Basic Windows/Microsoft Icon
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
