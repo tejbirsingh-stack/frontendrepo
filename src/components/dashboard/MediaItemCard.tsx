@@ -165,6 +165,11 @@ function FolderPreview({ item, childCount }: { item: MediaItem; childCount: numb
 }
 
 function VideoPreview({ item }: { item: MediaItem }) {
+  const isProcessing =
+    item.compressionStatus === 'processing' ||
+    item.compressionStatus === 'queued' ||
+    item.compressionStatus === 'in_progress';
+
   return (
     <VideoHoverPreview
       videoSrc={item.videoSrc}
@@ -173,6 +178,8 @@ function VideoPreview({ item }: { item: MediaItem }) {
       duration={item.duration}
       accent={typeConfig.video.accent}
       showPlayOverlay
+      isProcessing={isProcessing}
+      progress={item.customMetadata?.transcodingProgress as string | undefined}
     />
   );
 }

@@ -14,6 +14,8 @@ interface VideoHoverPreviewProps {
   duration?: string;
   showPlayOverlay?: boolean;
   accent?: string;
+  isProcessing?: boolean;
+  progress?: string;
 }
 
 export default function VideoHoverPreview({
@@ -23,6 +25,8 @@ export default function VideoHoverPreview({
   duration,
   showPlayOverlay = true,
   accent = cv.blueAccentSurface,
+  isProcessing = false,
+  progress,
 }: VideoHoverPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isHovering, setIsHovering] = useState(false);
@@ -39,7 +43,7 @@ export default function VideoHoverPreview({
   }, []);
 
   const handleMouseEnter = () => {
-    if (!videoSrc) return;
+    if (!videoSrc || isProcessing) return;
     setShouldLoadVideo(true);
     setIsHovering(true);
   };
@@ -109,6 +113,22 @@ export default function VideoHoverPreview({
             transition: 'opacity 0.2s ease',
           }}
         />
+      ) : videoSrc ? (
+        <Box
+          component="video"
+          src={`${videoSrc}#t=0.1`}
+          preload="metadata"
+          muted
+          playsInline
+          sx={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: 'block',
+            opacity: isPreviewing ? 0 : 1,
+            transition: 'opacity 0.2s ease',
+          }}
+        />
       ) : (
         <Box
           sx={{
@@ -158,23 +178,31 @@ export default function VideoHoverPreview({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: cv.inkOverlay20,
+            background: isProcessing ? 'rgba(0, 0, 0, 0.5)' : cv.inkOverlay20,
             pointerEvents: 'none',
           }}
         >
-          <Box
-            sx={{
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              ...thumbnailOverlayChipStyles,
-            }}
-          >
-            <PlayArrowRoundedIcon sx={{ fontSize: 28, color: cv.textInverse }} />
-          </Box>
+          {isProcessing ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+               <Typography variant="caption" sx={{ fontWeight: 600, color: cv.textInverse, background: 'rgba(0,0,0,0.6)', px: 1, py: 0.5, borderRadius: '4px' }}>
+                 {progress ? `Processing ${progress}` : 'Processing...'}
+               </Typography>
+            </Box>
+          ) : (
+            <Box
+              sx={{
+                width: 44,
+                height: 44,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                ...thumbnailOverlayChipStyles,
+              }}
+            >
+              <PlayArrowRoundedIcon sx={{ fontSize: 28, color: cv.textInverse }} />
+            </Box>
+          )}
         </Box>
       ) : null}
 

@@ -10,6 +10,7 @@ export { ApiError } from './types';
 export {
   uploadMediaFileRequest,
   getMediaAssetsRequest,
+  getMediaAssetByIdRequest,
   deleteMediaFileRequest,
 } from './media.service';
 export type { MediaAssetResponseDto, UploadMediaProgress } from './media.service';

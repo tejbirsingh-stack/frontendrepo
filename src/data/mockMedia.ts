@@ -36,6 +36,8 @@ export interface MediaItem {
   uploadedBy?: string;
   /** Original capture/creation time from file metadata (e.g. EXIF) */
   originallyCreatedAt?: string;
+  compressionStatus?: string;
+  customMetadata?: Record<string, unknown>;
 }
 
 export const initialMediaItems: MediaItem[] = [

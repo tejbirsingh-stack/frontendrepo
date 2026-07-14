@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cv } from '../theme/cssVars';
-import { Alert, Box, Button, IconButton, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
+import { Alert, Box, Button, Chip, CircularProgress, IconButton, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
@@ -144,6 +144,8 @@ import {
 } from '../utils/playerToolUtils';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
+import { getMediaAssetByIdRequest } from '../api';
+import type { MediaItem, MediaType } from '../data/mockMedia';
 
 function collaboratorsToTeamMembers(collaborators: MediaCollaborator[]): WorkspaceTeamMember[] {
   return collaborators.map((collaborator) => ({
@@ -204,7 +206,47 @@ export default function VideoPlayerPage() {
 
   const clampPercent = (value: number) => Math.min(100, Math.max(0, value));
 
-  const item = mediaItems.find((media) => media.id === mediaId);
+  const contextItem = mediaItems.find((media) => media.id === mediaId);
+  const [fetchedItem, setFetchedItem] = useState<MediaItem | null>(null);
+  const [isFetching, setIsFetching] = useState(!contextItem);
+  const [fetchError, setFetchError] = useState(false);
+
+  useEffect(() => {
+    if (!contextItem && mediaId) {
+      setIsFetching(true);
+      getMediaAssetByIdRequest(mediaId)
+        .then((asset) => {
+          setFetchedItem({
+            id: asset.id,
+            title: asset.name,
+            type: (asset.type.split('/')[0] as MediaType) || 'document',
+            workspaceId: 'default',
+            createdAt: asset.uploadDate || new Date().toISOString(),
+            sizeBytes: asset.size,
+            storageProvider: 'b2',
+            uploadedBy: 'Unknown',
+            tags: Array.isArray(asset.customMetadata?.tags) ? asset.customMetadata.tags : [],
+            location: null,
+            thumbnail: asset.thumbnail || undefined,
+            videoSrc: asset.url,
+            compressionStatus: asset.compressionStatus || 'completed',
+            customMetadata: asset.customMetadata,
+            duration: asset.customMetadata?.duration as string | undefined,
+          });
+        })
+        .catch((err) => {
+          console.error(err);
+          setFetchError(true);
+        })
+        .finally(() => {
+          setIsFetching(false);
+        });
+    } else {
+      setIsFetching(false);
+    }
+  }, [contextItem, mediaId]);
+
+  const item = contextItem || fetchedItem;
 
   const [activeTool, setActiveTool] = useState<AnnotationTool>('select');
   const [activeDrawTool, setActiveDrawTool] = useState<DrawTool>('pencil');
@@ -380,8 +422,8 @@ export default function VideoPlayerPage() {
             : undefined,
           draft:
             draftComment &&
-            ((shapeId && draftComment.linkedShapeId === shapeId) ||
-              (strokeId && draftComment.linkedDrawingId === strokeId))
+              ((shapeId && draftComment.linkedShapeId === shapeId) ||
+                (strokeId && draftComment.linkedDrawingId === strokeId))
               ? { xPercent: draftComment.xPercent, yPercent: draftComment.yPercent }
               : undefined,
         };
@@ -394,10 +436,10 @@ export default function VideoPlayerPage() {
           prev.map((comment) =>
             comment.id === commentId
               ? {
-                  ...comment,
-                  xPercent: clampPercent(origin.comment!.xPercent + dx),
-                  yPercent: clampPercent(origin.comment!.yPercent + dy),
-                }
+                ...comment,
+                xPercent: clampPercent(origin.comment!.xPercent + dx),
+                yPercent: clampPercent(origin.comment!.yPercent + dy),
+              }
               : comment,
           ),
         );
@@ -857,17 +899,17 @@ export default function VideoPlayerPage() {
         exif:
           item.originallyCreatedAt || stream.resolution
             ? {
-                dateTimeOriginal: item.originallyCreatedAt,
-                resolution: stream.resolution,
-                orientation: stream.orientation,
-                make: 'Apple',
-                model: item.type === 'video' ? 'iPhone 15 Pro' : 'iPhone 15 Pro',
-                lens: item.type === 'video' ? 'Wide Camera' : 'Wide Camera',
-                exposureTime: '1/120',
-                fNumber: 'f/1.8',
-                iso: 'ISO 64',
-                focalLength: '24mm',
-              }
+              dateTimeOriginal: item.originallyCreatedAt,
+              resolution: stream.resolution,
+              orientation: stream.orientation,
+              make: 'Apple',
+              model: item.type === 'video' ? 'iPhone 15 Pro' : 'iPhone 15 Pro',
+              lens: item.type === 'video' ? 'Wide Camera' : 'Wide Camera',
+              exposureTime: '1/120',
+              fNumber: 'f/1.8',
+              iso: 'ISO 64',
+              focalLength: '24mm',
+            }
             : undefined,
       }));
     };
@@ -977,9 +1019,9 @@ export default function VideoPlayerPage() {
     setDraftComment((current) =>
       current
         ? {
-            ...current,
-            imageUrl: imageUrl ?? undefined,
-          }
+          ...current,
+          imageUrl: imageUrl ?? undefined,
+        }
         : current,
     );
   }, []);
@@ -1044,12 +1086,12 @@ export default function VideoPlayerPage() {
         current.map((entry) =>
           entry.id === linkedEntryId
             ? {
-                ...entry,
-                detail: commentText,
-                sourceCommentId: commentId,
-                linkedDrawingId: draftComment.linkedDrawingId,
-                linkedShapeId: draftComment.linkedShapeId,
-              }
+              ...entry,
+              detail: commentText,
+              sourceCommentId: commentId,
+              linkedDrawingId: draftComment.linkedDrawingId,
+              linkedShapeId: draftComment.linkedShapeId,
+            }
             : entry,
         ),
       );
@@ -1117,22 +1159,22 @@ export default function VideoPlayerPage() {
       prev.map((comment) =>
         comment.id === commentId
           ? {
-              ...comment,
-              replies: [
-                ...comment.replies,
-                {
-                  id: replyId,
-                  text: text.trim(),
-                  imageUrl,
-                  createdAt: Date.now(),
-                  author: {
-                    name: CURRENT_USER.name,
-                    avatarUrl: CURRENT_USER.avatarUrl,
-                    initials: CURRENT_USER.initials,
-                  },
+            ...comment,
+            replies: [
+              ...comment.replies,
+              {
+                id: replyId,
+                text: text.trim(),
+                imageUrl,
+                createdAt: Date.now(),
+                author: {
+                  name: CURRENT_USER.name,
+                  avatarUrl: CURRENT_USER.avatarUrl,
+                  initials: CURRENT_USER.initials,
                 },
-              ],
-            }
+              },
+            ],
+          }
           : comment,
       ),
     );
@@ -1175,10 +1217,10 @@ export default function VideoPlayerPage() {
         prev.map((comment) =>
           comment.id === commentId
             ? {
-                ...comment,
-                text: trimmedText,
-                imageUrl,
-              }
+              ...comment,
+              text: trimmedText,
+              imageUrl,
+            }
             : comment,
         ),
       );
@@ -1198,17 +1240,17 @@ export default function VideoPlayerPage() {
         prev.map((comment) =>
           comment.id === commentId
             ? {
-                ...comment,
-                replies: comment.replies.map((reply) =>
-                  reply.id === replyId
-                    ? {
-                        ...reply,
-                        text: text.trim(),
-                        imageUrl,
-                      }
-                    : reply,
-                ),
-              }
+              ...comment,
+              replies: comment.replies.map((reply) =>
+                reply.id === replyId
+                  ? {
+                    ...reply,
+                    text: text.trim(),
+                    imageUrl,
+                  }
+                  : reply,
+              ),
+            }
             : comment,
         ),
       );
@@ -1254,12 +1296,12 @@ export default function VideoPlayerPage() {
               return current.map((entry) =>
                 entry.id === strokeEntryId
                   ? {
-                      ...entry,
-                      author: actor,
-                      createdAt: Date.now(),
-                      erasedAt: undefined,
-                      erasedBy: undefined,
-                    }
+                    ...entry,
+                    author: actor,
+                    createdAt: Date.now(),
+                    erasedAt: undefined,
+                    erasedBy: undefined,
+                  }
                   : entry,
               );
             }
@@ -1797,7 +1839,51 @@ export default function VideoPlayerPage() {
     [handleDeleteEntry],
   );
 
-  if (!item) {
+  const [liveAssetStatus, setLiveAssetStatus] = useState<string | null>(null);
+  const [liveProgress, setLiveProgress] = useState<string | null>(null);
+  const [videoSrcVersion, setVideoSrcVersion] = useState(0);
+
+  useEffect(() => {
+    setLiveAssetStatus(item?.compressionStatus ?? null);
+    setLiveProgress((item?.customMetadata?.transcodingProgress as string) || null);
+    setVideoSrcVersion(0);
+  }, [item?.id, item?.compressionStatus, item?.customMetadata?.transcodingProgress]);
+
+  useEffect(() => {
+    if (!mediaId || !liveAssetStatus) return;
+    if (liveAssetStatus === 'completed' || liveAssetStatus === 'failed' || liveAssetStatus === 'ready') return;
+
+    const interval = setInterval(async () => {
+      try {
+        const asset = await getMediaAssetByIdRequest(mediaId);
+        const currentStatus = asset.compressionStatus ?? 'completed';
+        setLiveAssetStatus(currentStatus);
+
+        if (asset.customMetadata?.transcodingProgress) {
+          setLiveProgress(asset.customMetadata.transcodingProgress as string);
+        }
+
+        if (currentStatus === 'completed' || currentStatus === 'ready' || currentStatus === 'failed') {
+          setVideoSrcVersion((v) => v + 1);
+          clearInterval(interval);
+        }
+      } catch (err) {
+        console.error('Failed to poll media asset status:', err);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [mediaId, liveAssetStatus]);
+
+  if (isFetching) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', width: '100%', backgroundColor: cv.videoStage }}>
+        <Typography sx={{ color: cv.textInverse }}>Loading video...</Typography>
+      </Box>
+    );
+  }
+
+  if (fetchError || !item) {
     return <Navigate to="/home" replace />;
   }
 
@@ -1805,7 +1891,13 @@ export default function VideoPlayerPage() {
     return <Navigate to="/home" replace />;
   }
 
-  const videoSrc = item.videoSrc ?? SAMPLE_VIDEO_SRC;
+  const isProcessing =
+    liveAssetStatus === 'processing' ||
+    liveAssetStatus === 'queued' ||
+    liveAssetStatus === 'in_progress';
+
+  const baseSrc = item.videoSrc ?? SAMPLE_VIDEO_SRC;
+  const videoSrc = isProcessing ? '' : `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}`;
   const surfaceEnabled = SURFACE_TOOLS.includes(activeTool);
 
   return (
@@ -2165,7 +2257,7 @@ export default function VideoPlayerPage() {
           onInvite={handleShareInviteMember}
           onUpdateMemberAccess={handleShareUpdateMemberAccess}
           onRemoveMember={handleShareRemoveMember}
-          onRestrictedChange={() => {}}
+          onRestrictedChange={() => { }}
           onVisibilityChange={handleShareVisibilityChange}
         />
       ) : null}
@@ -2208,8 +2300,35 @@ export default function VideoPlayerPage() {
               display: 'flex',
               flexDirection: 'column',
               backgroundColor: cv.videoStage,
+              position: 'relative',
+              overflow: 'hidden',
             }}
           >
+            {(liveAssetStatus === 'in_progress' || liveAssetStatus === 'queued' || liveAssetStatus === 'processing') && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 24,
+                  right: 24,
+                  zIndex: 50,
+                  pointerEvents: 'none'
+                }}
+              >
+                <Chip
+                  size="medium"
+                  color="primary"
+                  label={liveProgress ? `Compressing: ${liveProgress}` : 'Processing Video...'}
+                  sx={{
+                    backdropFilter: 'blur(8px)',
+                    backgroundColor: 'rgba(25, 118, 210, 0.85)',
+                    fontWeight: 600,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    px: 1,
+                    py: 2
+                  }}
+                />
+              </Box>
+            )}
             <Box
               sx={{
                 position: 'relative',
@@ -2229,122 +2348,152 @@ export default function VideoPlayerPage() {
                   transformOrigin: 'center center',
                 }}
               >
-              <Box
-                component="video"
-                ref={videoRef}
-                key={videoSrc}
-                src={videoSrc}
-                poster={item.thumbnail}
-                playsInline
-                preload="metadata"
-                sx={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'block',
-                  objectFit: playerActualMediaSize ? 'none' : 'contain',
-                  backgroundColor: 'transparent',
-                  transform: getVideoTransform(
-                    playerRotationSteps,
-                    playerFlipHorizontal,
-                    playerFlipVertical,
-                  ),
-                  transformOrigin: 'center center',
-                  pointerEvents:
-                    annotationsVisible && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
-                      ? 'none'
-                      : 'auto',
-                }}
-              >
-                <track kind="captions" />
-              </Box>
-
-              {playerShowAudioMeter ? (
                 <Box
-                  aria-hidden
+                  component="video"
+                  ref={videoRef}
+                  key={videoSrc}
+                  src={isProcessing ? undefined : videoSrc}
+                  poster={item.thumbnail}
+                  playsInline
+                  preload="metadata"
                   sx={{
-                    position: 'absolute',
-                    left: 16,
-                    top: 16,
-                    display: 'flex',
-                    alignItems: 'flex-end',
-                    gap: 0.5,
-                    px: 1,
-                    py: 0.75,
-                    borderRadius: '10px',
-                    backgroundColor: 'var(--noah-overlay-scrim)',
-                    border: "1px solid var(--noah-border)",
+                    width: '100%',
+                    height: '100%',
+                    display: 'block',
+                    objectFit: playerActualMediaSize ? 'none' : 'contain',
+                    backgroundColor: 'transparent',
+                    transform: getVideoTransform(
+                      playerRotationSteps,
+                      playerFlipHorizontal,
+                      playerFlipVertical,
+                    ),
+                    transformOrigin: 'center center',
+                    pointerEvents:
+                      annotationsVisible && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
+                        ? 'none'
+                        : 'auto',
                   }}
                 >
-                  {[0.35, 0.6, 0.9, 0.55, 0.75].map((height, index) => (
-                    <Box
-                      key={index}
-                      sx={{
-                        width: 4,
-                        height: `${height * 28}px`,
-                        borderRadius: '999px',
-                        backgroundColor: cv.textPrimary,
-                        opacity: 0.85,
-                      }}
-                    />
-                  ))}
+                  <track kind="captions" />
                 </Box>
-              ) : null}
 
-              <VideoAnnotationSurface
-                activeTool={activeTool}
-                enabled={surfaceEnabled}
-                annotationsVisible={annotationsVisible}
-                resolvedOverlayEntryIds={resolvedOverlayEntryIds}
-                currentVideoTime={currentVideoTime}
-                strokes={drawings}
-                onStrokesChange={setDrawings}
-                shapes={shapes}
-                onShapesChange={setShapes}
-                stamps={stamps}
-                onStampsChange={setStamps}
-                activeStamp={activeStamp}
-                customStamp={customStamp}
-                drawTool={activeDrawTool}
-                drawStroke={activeDrawStroke}
-                drawColor={activeDrawColor}
-                shapeTool={activeShape}
-                shapeStroke={activeShapeStroke}
-                shapeColor={activeShapeColor}
-                onRecord={handleAnnotationRecord}
-                onAnnotationActionStart={handleAnnotationActionStart}
-                onAnnotationNeedsComment={handleAnnotationNeedsComment}
-                annotationCommentPending={annotationCommentPending}
-                onMoveLinkedComment={handleMoveLinkedComment}
-              />
+                {isProcessing ? (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                      backdropFilter: 'blur(8px)',
+                      zIndex: 10,
+                    }}
+                  >
+                    <CircularProgress size={48} sx={{ color: cv.brandBlue, mb: 3 }} />
+                    <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
+                      Processing Video...
+                    </Typography>
+                    {liveProgress ? (
+                      <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em' }}>
+                        {liveProgress}
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em' }}>
+                        This may take a few moments
+                      </Typography>
+                    )}
+                  </Box>
+                ) : null}
 
-              <VideoCommentLayer
-                active={activeTool === 'comment'}
-                panActive={activeTool === 'pan'}
-                annotationsVisible={annotationsVisible}
-                currentVideoTime={currentVideoTime}
-                comments={comments}
-                draftComment={draftComment}
-                onPlaceDraft={handlePlaceDraft}
-                onDraftTextChange={handleDraftTextChange}
-                onDraftImageChange={handleDraftImageChange}
-                onSubmitDraft={handleSubmitDraft}
-                onCancelDraft={handleCancelDraft}
-                onAddReply={handleAddReply}
-                onToggleCommentResolved={handleToggleCommentResolved}
-                onMarkCommentUnread={handleMarkCommentUnread}
-                onCopyCommentLink={handleCopyCommentLink}
-                onDeleteComment={handleDeleteComment}
-                onEditComment={handleEditComment}
-                onEditReply={handleEditReply}
-                onThreadOpenChange={setCommentThreadOpen}
-                annotationGroups={annotationGroups}
-                collaborators={collaborators}
-                onCommentVisibilityChange={handleCommentVisibilityChange}
-                onCreateAnnotationGroup={handleCreateAnnotationGroup}
-                onAddCollaborator={handleAddCollaboratorForGroup}
-                onMoveComment={handleMoveComment}
-                onPanActionStart={handleAnnotationActionStart}
-              />
+                {playerShowAudioMeter ? (
+                  <Box
+                    aria-hidden
+                    sx={{
+                      position: 'absolute',
+                      left: 16,
+                      top: 16,
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      gap: 0.5,
+                      px: 1,
+                      py: 0.75,
+                      borderRadius: '10px',
+                      backgroundColor: 'var(--noah-overlay-scrim)',
+                      border: "1px solid var(--noah-border)",
+                    }}
+                  >
+                    {[0.35, 0.6, 0.9, 0.55, 0.75].map((height, index) => (
+                      <Box
+                        key={index}
+                        sx={{
+                          width: 4,
+                          height: `${height * 28}px`,
+                          borderRadius: '999px',
+                          backgroundColor: cv.textPrimary,
+                          opacity: 0.85,
+                        }}
+                      />
+                    ))}
+                  </Box>
+                ) : null}
+
+                <VideoAnnotationSurface
+                  activeTool={activeTool}
+                  enabled={surfaceEnabled}
+                  annotationsVisible={annotationsVisible}
+                  resolvedOverlayEntryIds={resolvedOverlayEntryIds}
+                  currentVideoTime={currentVideoTime}
+                  strokes={drawings}
+                  onStrokesChange={setDrawings}
+                  shapes={shapes}
+                  onShapesChange={setShapes}
+                  stamps={stamps}
+                  onStampsChange={setStamps}
+                  activeStamp={activeStamp}
+                  customStamp={customStamp}
+                  drawTool={activeDrawTool}
+                  drawStroke={activeDrawStroke}
+                  drawColor={activeDrawColor}
+                  shapeTool={activeShape}
+                  shapeStroke={activeShapeStroke}
+                  shapeColor={activeShapeColor}
+                  onRecord={handleAnnotationRecord}
+                  onAnnotationActionStart={handleAnnotationActionStart}
+                  onAnnotationNeedsComment={handleAnnotationNeedsComment}
+                  annotationCommentPending={annotationCommentPending}
+                  onMoveLinkedComment={handleMoveLinkedComment}
+                />
+
+                <VideoCommentLayer
+                  active={activeTool === 'comment'}
+                  panActive={activeTool === 'pan'}
+                  annotationsVisible={annotationsVisible}
+                  currentVideoTime={currentVideoTime}
+                  comments={comments}
+                  draftComment={draftComment}
+                  onPlaceDraft={handlePlaceDraft}
+                  onDraftTextChange={handleDraftTextChange}
+                  onDraftImageChange={handleDraftImageChange}
+                  onSubmitDraft={handleSubmitDraft}
+                  onCancelDraft={handleCancelDraft}
+                  onAddReply={handleAddReply}
+                  onToggleCommentResolved={handleToggleCommentResolved}
+                  onMarkCommentUnread={handleMarkCommentUnread}
+                  onCopyCommentLink={handleCopyCommentLink}
+                  onDeleteComment={handleDeleteComment}
+                  onEditComment={handleEditComment}
+                  onEditReply={handleEditReply}
+                  onThreadOpenChange={setCommentThreadOpen}
+                  annotationGroups={annotationGroups}
+                  collaborators={collaborators}
+                  onCommentVisibilityChange={handleCommentVisibilityChange}
+                  onCreateAnnotationGroup={handleCreateAnnotationGroup}
+                  onAddCollaborator={handleAddCollaboratorForGroup}
+                  onMoveComment={handleMoveComment}
+                  onPanActionStart={handleAnnotationActionStart}
+                />
               </Box>
             </Box>
 
@@ -2379,154 +2528,154 @@ export default function VideoPlayerPage() {
               }}
             >
               {isDesktopAnnotationToolbar ? (
-              <Box
-                sx={{
-                  display: 'flex',
-                  width: '100%',
-                  minWidth: 0,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  position: 'relative',
-                }}
-              >
-                {showClearIsland ? (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    width: '100%',
+                    minWidth: 0,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    position: 'relative',
+                  }}
+                >
+                  {showClearIsland ? (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        left: 16,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        zIndex: 2,
+                      }}
+                    >
+                      <AnnotationUndoIsland
+                        canClear={canClearAnnotations}
+                        onClear={handleOpenClearAnnotationsModal}
+                      />
+                    </Box>
+                  ) : null}
+
+                  <Box
+                    sx={{
+                      width: '100%',
+                      minWidth: 0,
+                      boxSizing: 'border-box',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      pl: showClearIsland ? '88px' : 2,
+                      pr: '148px',
+                    }}
+                  >
+                    <AnnotationToolbar
+                      activeTool={activeTool}
+                      onToolChange={handleToolChange}
+                      activeDrawTool={activeDrawTool}
+                      onDrawToolChange={setActiveDrawTool}
+                      activeDrawStroke={activeDrawStroke}
+                      onDrawStrokeChange={setActiveDrawStroke}
+                      activeDrawColor={activeDrawColor}
+                      onDrawColorChange={setActiveDrawColor}
+                      activeShape={activeShape}
+                      onShapeChange={setActiveShape}
+                      activeColor={activeShapeColor}
+                      onColorChange={setActiveShapeColor}
+                      activeShapeStroke={activeShapeStroke}
+                      onShapeStrokeChange={setActiveShapeStroke}
+                      activeStamp={activeStamp}
+                      customStamp={customStamp}
+                      onStampSelect={setActiveStamp}
+                      onAddCustomStamp={handleAddCustomStamp}
+                      keyboardShortcutsDisabled={Boolean(draftComment) || commentThreadOpen}
+                      toolsDrawerOpen={toolsDrawerOpen}
+                      onMoreToolsClick={() => setToolsDrawerOpen((open) => !open)}
+                      onToolsDrawerClose={() => setToolsDrawerOpen(false)}
+                      moreToolsButtonRef={moreToolsButtonRef}
+                      moreToolsAnchorRef={moreToolsAnchorRef}
+                      pinnedPlayerTools={pinnedPlayerTools}
+                      playerToolsViewState={playerToolsViewState}
+                      playerToolHandlers={playerToolHandlers}
+                      canUndo={canUndo}
+                      canRedo={canRedo}
+                      onUndo={handleUndo}
+                      onRedo={handleRedo}
+                    />
+                  </Box>
+
                   <Box
                     sx={{
                       position: 'absolute',
-                      left: 16,
+                      right: 16,
                       top: '50%',
                       transform: 'translateY(-50%)',
                       zIndex: 2,
                     }}
                   >
-                    <AnnotationUndoIsland
-                      canClear={canClearAnnotations}
-                      onClear={handleOpenClearAnnotationsModal}
+                    <WorkspaceControlsIsland
+                      canZoomOut={canWorkspaceZoomOut}
+                      canZoomIn={canWorkspaceZoomIn}
+                      onZoomOut={handleWorkspaceZoomOut}
+                      onZoomIn={handleWorkspaceZoomIn}
+                      onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
                     />
                   </Box>
-                ) : null}
-
-                <Box
-                  sx={{
-                    width: '100%',
-                    minWidth: 0,
-                    boxSizing: 'border-box',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    pl: showClearIsland ? '88px' : 2,
-                    pr: '148px',
-                  }}
-                >
-                  <AnnotationToolbar
-                  activeTool={activeTool}
-                  onToolChange={handleToolChange}
-                  activeDrawTool={activeDrawTool}
-                  onDrawToolChange={setActiveDrawTool}
-                  activeDrawStroke={activeDrawStroke}
-                  onDrawStrokeChange={setActiveDrawStroke}
-                  activeDrawColor={activeDrawColor}
-                  onDrawColorChange={setActiveDrawColor}
-                  activeShape={activeShape}
-                  onShapeChange={setActiveShape}
-                  activeColor={activeShapeColor}
-                  onColorChange={setActiveShapeColor}
-                  activeShapeStroke={activeShapeStroke}
-                  onShapeStrokeChange={setActiveShapeStroke}
-                  activeStamp={activeStamp}
-                  customStamp={customStamp}
-                  onStampSelect={setActiveStamp}
-                  onAddCustomStamp={handleAddCustomStamp}
-                  keyboardShortcutsDisabled={Boolean(draftComment) || commentThreadOpen}
-                  toolsDrawerOpen={toolsDrawerOpen}
-                  onMoreToolsClick={() => setToolsDrawerOpen((open) => !open)}
-                  onToolsDrawerClose={() => setToolsDrawerOpen(false)}
-                  moreToolsButtonRef={moreToolsButtonRef}
-                  moreToolsAnchorRef={moreToolsAnchorRef}
-                  pinnedPlayerTools={pinnedPlayerTools}
-                  playerToolsViewState={playerToolsViewState}
-                  playerToolHandlers={playerToolHandlers}
-                  canUndo={canUndo}
-                  canRedo={canRedo}
-                  onUndo={handleUndo}
-                    onRedo={handleRedo}
-                  />
                 </Box>
-
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    right: 16,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    zIndex: 2,
-                  }}
-                >
-                  <WorkspaceControlsIsland
-                    canZoomOut={canWorkspaceZoomOut}
-                    canZoomIn={canWorkspaceZoomIn}
-                    onZoomOut={handleWorkspaceZoomOut}
-                    onZoomIn={handleWorkspaceZoomIn}
-                    onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
-                  />
-                </Box>
-              </Box>
               ) : (
-              <Box sx={mobileIslandScrollSx}>
-                <Box sx={mergedMobileIslandSx}>
-                  <AnnotationToolbar
-                    compact
-                    mobilePlayerFooterRef={mobilePlayerFooterRef}
-                    activeTool={activeTool}
-                    onToolChange={handleToolChange}
-                    activeDrawTool={activeDrawTool}
-                    onDrawToolChange={setActiveDrawTool}
-                    activeDrawStroke={activeDrawStroke}
-                    onDrawStrokeChange={setActiveDrawStroke}
-                    activeDrawColor={activeDrawColor}
-                    onDrawColorChange={setActiveDrawColor}
-                    activeShape={activeShape}
-                    onShapeChange={setActiveShape}
-                    activeColor={activeShapeColor}
-                    onColorChange={setActiveShapeColor}
-                    activeShapeStroke={activeShapeStroke}
-                    onShapeStrokeChange={setActiveShapeStroke}
-                    activeStamp={activeStamp}
-                    customStamp={customStamp}
-                    onStampSelect={setActiveStamp}
-                    onAddCustomStamp={handleAddCustomStamp}
-                    keyboardShortcutsDisabled={Boolean(draftComment) || commentThreadOpen}
-                    toolsDrawerOpen={toolsDrawerOpen}
-                    onMoreToolsClick={() => setToolsDrawerOpen((open) => !open)}
-                    onToolsDrawerClose={() => setToolsDrawerOpen(false)}
-                    moreToolsButtonRef={moreToolsButtonRef}
-                  moreToolsAnchorRef={moreToolsAnchorRef}
-                    pinnedPlayerTools={pinnedPlayerTools}
-                    playerToolsViewState={playerToolsViewState}
-                    playerToolHandlers={playerToolHandlers}
-                    canUndo={canUndo}
-                    canRedo={canRedo}
-                    onUndo={handleUndo}
-                    onRedo={handleRedo}
-                  />
-                  <WorkspaceControlsIsland
-                    compact
-                    canZoomOut={canWorkspaceZoomOut}
-                    canZoomIn={canWorkspaceZoomIn}
-                    onZoomOut={handleWorkspaceZoomOut}
-                    onZoomIn={handleWorkspaceZoomIn}
-                    onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
-                    insertBeforeHelp={
-                      showClearIsland ? (
-                        <AnnotationUndoIsland
-                          compact
-                          canClear={canClearAnnotations}
-                          onClear={handleOpenClearAnnotationsModal}
-                        />
-                      ) : null
-                    }
-                  />
+                <Box sx={mobileIslandScrollSx}>
+                  <Box sx={mergedMobileIslandSx}>
+                    <AnnotationToolbar
+                      compact
+                      mobilePlayerFooterRef={mobilePlayerFooterRef}
+                      activeTool={activeTool}
+                      onToolChange={handleToolChange}
+                      activeDrawTool={activeDrawTool}
+                      onDrawToolChange={setActiveDrawTool}
+                      activeDrawStroke={activeDrawStroke}
+                      onDrawStrokeChange={setActiveDrawStroke}
+                      activeDrawColor={activeDrawColor}
+                      onDrawColorChange={setActiveDrawColor}
+                      activeShape={activeShape}
+                      onShapeChange={setActiveShape}
+                      activeColor={activeShapeColor}
+                      onColorChange={setActiveShapeColor}
+                      activeShapeStroke={activeShapeStroke}
+                      onShapeStrokeChange={setActiveShapeStroke}
+                      activeStamp={activeStamp}
+                      customStamp={customStamp}
+                      onStampSelect={setActiveStamp}
+                      onAddCustomStamp={handleAddCustomStamp}
+                      keyboardShortcutsDisabled={Boolean(draftComment) || commentThreadOpen}
+                      toolsDrawerOpen={toolsDrawerOpen}
+                      onMoreToolsClick={() => setToolsDrawerOpen((open) => !open)}
+                      onToolsDrawerClose={() => setToolsDrawerOpen(false)}
+                      moreToolsButtonRef={moreToolsButtonRef}
+                      moreToolsAnchorRef={moreToolsAnchorRef}
+                      pinnedPlayerTools={pinnedPlayerTools}
+                      playerToolsViewState={playerToolsViewState}
+                      playerToolHandlers={playerToolHandlers}
+                      canUndo={canUndo}
+                      canRedo={canRedo}
+                      onUndo={handleUndo}
+                      onRedo={handleRedo}
+                    />
+                    <WorkspaceControlsIsland
+                      compact
+                      canZoomOut={canWorkspaceZoomOut}
+                      canZoomIn={canWorkspaceZoomIn}
+                      onZoomOut={handleWorkspaceZoomOut}
+                      onZoomIn={handleWorkspaceZoomIn}
+                      onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
+                      insertBeforeHelp={
+                        showClearIsland ? (
+                          <AnnotationUndoIsland
+                            compact
+                            canClear={canClearAnnotations}
+                            onClear={handleOpenClearAnnotationsModal}
+                          />
+                        ) : null
+                      }
+                    />
+                  </Box>
                 </Box>
-              </Box>
               )}
             </Box>
           </Box>

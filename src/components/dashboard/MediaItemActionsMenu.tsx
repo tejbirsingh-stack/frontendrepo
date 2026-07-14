@@ -15,6 +15,7 @@ import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutli
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
 import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
+import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import type { MediaItem } from '../../data/mockMedia';
 import { useDashboard } from '../../context/DashboardContext';
 import RenameMediaModal from './RenameMediaModal';
@@ -189,6 +190,70 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           </ListItemIcon>
           Rename
         </MenuItem>
+        
+        {item.type === 'video' ? (
+          <>
+            <MenuItem
+              onClick={(event) => {
+                consumeMenuPointerEvent(event);
+                window.open(`/api/media/${encodeURIComponent(item.id)}/download`, '_blank');
+              }}
+              onMouseDown={consumeMenuPointerEvent}
+              sx={{
+                py: 1,
+                fontSize: '0.875rem',
+                color: cv.textSecondary,
+                '&:hover': { backgroundColor: cv.surfaceHover },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 32 }}>
+                <DownloadOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+              </ListItemIcon>
+              Download Proxy File
+            </MenuItem>
+
+            {item.customMetadata?.originalFilePath && (
+              <MenuItem
+                onClick={(event) => {
+                  consumeMenuPointerEvent(event);
+                  const encodedPath = encodeURIComponent(item.customMetadata?.originalFilePath as string);
+                  window.open(`/api/media/${encodedPath}/download`, '_blank');
+                }}
+                onMouseDown={consumeMenuPointerEvent}
+                sx={{
+                  py: 1,
+                  fontSize: '0.875rem',
+                  color: cv.textSecondary,
+                  '&:hover': { backgroundColor: cv.surfaceHover },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 32 }}>
+                  <DownloadOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+                </ListItemIcon>
+                Download Original Raw File
+              </MenuItem>
+            )}
+          </>
+        ) : (
+          <MenuItem
+            onClick={(event) => {
+              consumeMenuPointerEvent(event);
+              window.open(`/api/media/${encodeURIComponent(item.id)}/download`, '_blank');
+            }}
+            onMouseDown={consumeMenuPointerEvent}
+            sx={{
+              py: 1,
+              fontSize: '0.875rem',
+              color: cv.textSecondary,
+              '&:hover': { backgroundColor: cv.surfaceHover },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 32 }}>
+              <DownloadOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+            </ListItemIcon>
+            Download File
+          </MenuItem>
+        )}
         <MenuItem
           onClick={(event) => {
             consumeMenuPointerEvent(event);

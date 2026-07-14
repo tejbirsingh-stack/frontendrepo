@@ -196,6 +196,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                   duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
                   tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
                   location: null,
+                  compressionStatus: a.transcodingStatus || 'completed',
+                  customMetadata: a.customMetadata,
                 };
               });
             return [...prev, ...newItems];
