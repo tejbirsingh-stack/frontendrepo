@@ -216,8 +216,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
               <MenuItem
                 onClick={(event) => {
                   consumeMenuPointerEvent(event);
-                  const encodedPath = encodeURIComponent(item.customMetadata?.originalFilePath as string);
-                  window.open(`/api/media/${encodedPath}/download`, '_blank');
+                  window.open(`/api/media/${encodeURIComponent(item.id)}/download?raw=true`, '_blank');
                 }}
                 onMouseDown={consumeMenuPointerEvent}
                 sx={{
