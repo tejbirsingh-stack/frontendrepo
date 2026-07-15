@@ -236,11 +236,13 @@ export default function DashboardPage({
   folderMedia,
 }: DashboardPageProps) {
   const isFavoritesView = libraryView === 'favorites';
+  const isDuplicatesView = libraryView === 'duplicates';
   const isFolderView = Boolean(folderMedia);
 
   const {
     rootMediaItems,
     favoriteMediaItems,
+    duplicateMediaItems,
     mediaItems,
     activeWorkspaceId,
     globalSearchQuery,
@@ -270,7 +272,9 @@ export default function DashboardPage({
     ? folderMedia.title
     : isFavoritesView
       ? 'Favorites'
-      : selectionTitle ?? 'All media';
+      : isDuplicatesView
+        ? 'Duplicates'
+        : selectionTitle ?? 'All media';
   const folderAccent = folderMedia ? resolveFolderColor(folderMedia.folderColor) : null;
 
   const folderBreadcrumbs = useMemo(() => {
@@ -439,6 +443,7 @@ export default function DashboardPage({
 
   const librarySourceItems = useMemo(() => {
     if (isFavoritesView) return favoriteMediaItems;
+    if (isDuplicatesView) return duplicateMediaItems;
 
     if (folderMedia) {
       return mediaItems.filter(
@@ -459,7 +464,9 @@ export default function DashboardPage({
     return filterMediaBySidebarSelection(workspaceItems, sidebarSelection, mediaItems);
   }, [
     isFavoritesView,
+    isDuplicatesView,
     favoriteMediaItems,
+    duplicateMediaItems,
     folderMedia,
     mediaItems,
     activeWorkspaceId,
@@ -472,7 +479,9 @@ export default function DashboardPage({
     const query = globalSearchQuery.trim().toLowerCase();
     const searchableItems = isFavoritesView
       ? favoriteMediaItems
-      : mediaItems.filter(
+      : isDuplicatesView
+        ? duplicateMediaItems
+        : mediaItems.filter(
           (item) =>
             item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
         );
@@ -520,7 +529,9 @@ export default function DashboardPage({
   }, [
     librarySourceItems,
     favoriteMediaItems,
+    duplicateMediaItems,
     isFavoritesView,
+    isDuplicatesView,
     mediaItems,
     activeWorkspaceId,
     globalSearchQuery,
@@ -534,6 +545,32 @@ export default function DashboardPage({
     refreshKey,
     sidebarSelection,
   ]);
+
+  const duplicateClusters = useMemo(() => {
+    if (!isDuplicatesView) return [];
+    
+    const clusters = new Map<string, typeof duplicateMediaItems>();
+    
+    duplicateMediaItems.forEach(item => {
+      const originalIds = item.customMetadata?.duplicates as string[] | undefined;
+      if (originalIds && originalIds.length > 0) {
+        const originalId = originalIds[0];
+        if (!clusters.has(originalId)) {
+          clusters.set(originalId, []);
+        }
+        clusters.get(originalId)!.push(item);
+      }
+    });
+
+    return Array.from(clusters.entries()).map(([originalId, duplicates]) => {
+      const originalItem = mediaItems.find(m => m.id === originalId);
+      return {
+        originalId,
+        originalItem,
+        duplicates
+      };
+    });
+  }, [isDuplicatesView, duplicateMediaItems, mediaItems]);
 
   const groupedItems = useMemo(() => {
     const groups: Record<MediaType, typeof displayedItems> = {
@@ -1159,6 +1196,10 @@ export default function DashboardPage({
               ? librarySourceItems.length === 0
                 ? 'No favorites yet'
                 : 'No favorites match your filters'
+              : isDuplicatesView
+              ? librarySourceItems.length === 0
+                ? 'No duplicates found'
+                : 'No duplicates match your filters'
               : librarySourceItems.length === 0
                 ? 'No media in this workspace'
                 : 'No items match your filters'}
@@ -1172,10 +1213,53 @@ export default function DashboardPage({
               ? librarySourceItems.length === 0
                 ? 'Star files and folders from All media to see them here.'
                 : 'Try adjusting your filter settings.'
+              : isDuplicatesView
+              ? librarySourceItems.length === 0
+                ? 'Upload videos to see if they match existing files in this workspace.'
+                : 'Try adjusting your filter settings.'
               : librarySourceItems.length === 0
                 ? 'Drag items into folders in the sidebar, or switch workspace to see more.'
                 : 'Try adjusting your filter settings.'}
           </Typography>
+        </Box>
+      ) : isDuplicatesView ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {duplicateClusters.length === 0 ? (
+            <Typography variant="body1" sx={{ color: cv.textSecondary }}>
+              No duplicates found.
+            </Typography>
+          ) : (
+            duplicateClusters.map((cluster) => (
+              <Box key={cluster.originalId}>
+                <Typography
+                  variant="subtitle2"
+                  sx={{
+                    mb: 1.5,
+                    fontWeight: 600,
+                    color: cv.textSecondary,
+                    fontSize: '0.8125rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  Original: {cluster.originalItem?.title || 'Unknown Video'} & its Duplicates
+                </Typography>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: '1fr',
+                      sm: 'repeat(auto-fill, minmax(280px, 1fr))',
+                    },
+                    gap: { xs: 2, sm: 2.5 },
+                  }}
+                >
+                  {cluster.originalItem && renderMediaItem(cluster.originalItem)}
+                  {cluster.duplicates.map((dup) => renderMediaItem(dup))}
+                </Box>
+              </Box>
+            ))
+          )}
         </Box>
       ) : viewMode === 'folder' ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
