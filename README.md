@@ -114,3 +114,4 @@ src/
 ## Version
 
 Current release: **5.1.0 — Auth** (see `src/constants/appVersion.ts`).
+
