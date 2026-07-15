@@ -19,6 +19,7 @@ import {
 import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import StarIcon from '@mui/icons-material/Star';
+import ControlPointDuplicateOutlinedIcon from '@mui/icons-material/ControlPointDuplicateOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import UploadOutlinedIcon from '@mui/icons-material/UploadOutlined';
@@ -1700,6 +1701,15 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
             onClick={() => {
               clearSidebarSelection();
               navigateAndClose('/home/favorites');
+            }}
+          />
+          <NavItem
+            icon={<ControlPointDuplicateOutlinedIcon />}
+            label="Duplicates"
+            active={location.pathname === '/home/duplicates'}
+            onClick={() => {
+              clearSidebarSelection();
+              navigateAndClose('/home/duplicates');
             }}
           />
           <NavItem icon={<ShareOutlinedIcon />} label="Shared" />

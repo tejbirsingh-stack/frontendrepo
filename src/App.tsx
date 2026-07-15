@@ -73,6 +73,7 @@ function App() {
           >
             <Route index element={<DashboardPage libraryView="recent" />} />
             <Route path="favorites" element={<DashboardPage libraryView="favorites" />} />
+            <Route path="duplicates" element={<DashboardPage libraryView="duplicates" />} />
             <Route path="folder/:folderId" element={<FolderPage />} />
             <Route path="tags" element={<TagsManagementPage />} />
             <Route path="trash" element={<TrashPage />} />
