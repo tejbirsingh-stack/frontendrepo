@@ -47,6 +47,7 @@ import {
   getMediaAssetsRequest,
   type MediaAssetResponseDto,
 } from '../api';
+const token = (await import('../auth/authTokenBridge')).getAccessToken();
 
 interface DashboardContextValue {
   workspaces: Workspace[];
@@ -165,11 +166,40 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const trashedIds = useMemo(() => new Set(Object.keys(trashedAtById)), [trashedAtById]);
 
   useEffect(() => {
-    setWorkspaces((current) => mergeWorkspaceFolderMetadata(current));
+    const fetchWorkspaces = async () => {
+      try {
+        const { apiClient } = await import('../api/client');
+
+        // apiClient automatically handles /api prefix and tokens
+        const response = await apiClient.get<Workspace[]>('/workspaces/find-all', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = Array.isArray(response) ? response : (response as any).data;
+
+        if (data && Array.isArray(data) && data.length > 0) {
+          const sanitizedWorkspaces = data.map((w: any) => ({
+            ...w,
+            folders: w.folders || initialWorkspaces[0].folders,
+            projectFolders: w.projectFolders || initialWorkspaces[0].projectFolders,
+          }));
+          setWorkspaces(mergeWorkspaceFolderMetadata(sanitizedWorkspaces));
+          setActiveWorkspaceId(sanitizedWorkspaces[0].id);
+        } else {
+          setWorkspaces(mergeWorkspaceFolderMetadata(initialWorkspaces));
+        }
+      } catch (err) {
+        console.error('Failed to load workspaces from backend:', err);
+        setWorkspaces(mergeWorkspaceFolderMetadata(initialWorkspaces));
+      }
+    };
+
+    fetchWorkspaces();
+    // setWorkspaces((current) => mergeWorkspaceFolderMetadata(current));
+
   }, []);
 
   useEffect(() => {
-    getMediaAssetsRequest()
+    getMediaAssetsRequest(activeWorkspaceId)
       .then((assets) => {
         if (assets && assets.length > 0) {
           setMediaItems((prev) => {
@@ -371,23 +401,34 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const createWorkspace = useCallback((data: CreateWorkspaceFormData) => {
-    const newWorkspace: Workspace = {
-      id: `workspace-${Date.now()}`,
-      name: data.name,
-      description: data.description,
-      color: data.color,
-      folders: defaultWorkspaceFolders.map((folder) => ({
-        ...folder,
-        id: `${folder.id}-${Date.now()}`,
-      })),
-      projectFolders: defaultWorkspaceProjectFolders.map((folder) => ({
-        ...folder,
-        id: `${folder.id}-${Date.now()}`,
-      })),
-    };
-    setWorkspaces((prev) => [...prev, newWorkspace]);
-    setActiveWorkspaceId(newWorkspace.id);
+  const createWorkspace = useCallback(async (data: CreateWorkspaceFormData) => {
+    try {
+      const { apiClient } = await import('../api/client');
+
+      const payload = {
+        name: data.name,
+        description: data.description,
+        color: data.color,
+      };
+
+      const response = await apiClient.post<Workspace>('/workspaces/add', payload, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const newWorkspace = (response as any).data || response;
+
+      // Ensure the returned workspace has required structures
+      const sanitizedWorkspace: Workspace = {
+        ...newWorkspace,
+        folders: newWorkspace.folders || defaultWorkspaceFolders.map((f) => ({ ...f, id: `${f.id}-${Date.now()}` })),
+        projectFolders: newWorkspace.projectFolders || defaultWorkspaceProjectFolders.map((f) => ({ ...f, id: `${f.id}-${Date.now()}` })),
+      };
+
+      setWorkspaces((prev) => [...prev, sanitizedWorkspace]);
+      setActiveWorkspaceId(sanitizedWorkspace.id);
+    } catch (error) {
+      console.error('Failed to create workspace:', error);
+      // Optional: Add a toast notification or error handling here if desired
+    }
   }, []);
 
   const moveMediaToFolder = useCallback(
@@ -421,12 +462,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         prev.map((item) =>
           item.id === mediaId
             ? {
-                ...item,
-                location: {
-                  folderId,
-                  childLabel: childLabel ?? media.title,
-                },
-              }
+              ...item,
+              location: {
+                folderId,
+                childLabel: childLabel ?? media.title,
+              },
+            }
             : item,
         ),
       );
@@ -769,9 +810,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         prev.map((tag) =>
           tag.id === id
             ? {
-                ...tag,
-                name: nextName,
-              }
+              ...tag,
+              name: nextName,
+            }
             : tag,
         ),
       );
@@ -1166,10 +1207,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           : null,
         ...(current.type === 'video'
           ? {
-              thumbnail: details.thumbnail || uploadedAssetDto?.thumbnail || undefined,
-              videoSrc: uploadedAssetDto?.url || current.previewSrc,
-              duration: details.duration,
-            }
+            thumbnail: details.thumbnail || uploadedAssetDto?.thumbnail || undefined,
+            videoSrc: uploadedAssetDto?.url || current.previewSrc,
+            duration: details.duration,
+          }
           : {}),
         ...(current.type === 'image' ? { thumbnail: details.thumbnail || uploadedAssetDto?.thumbnail || undefined } : {}),
         ...(current.type === 'audio' && details.duration ? { duration: details.duration } : {}),

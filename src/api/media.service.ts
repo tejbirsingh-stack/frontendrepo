@@ -369,9 +369,9 @@ export async function uploadMediaFileRequest(
 /**
  * Fetch all media assets stored in backend database.
  */
-export async function getMediaAssetsRequest(): Promise<MediaAssetResponseDto[]> {
+export async function getMediaAssetsRequest(workspaceId: string): Promise<MediaAssetResponseDto[]> {
   const res = await apiClient.get<{ success: boolean; assets: MediaAssetResponseDto[] }>(
-    '/media/getmediaassets',
+    `/media/getmediaassets?ownerId=${workspaceId}&ownerType=WORKSPACE`,
   );
   return res.assets || [];
 }
