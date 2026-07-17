@@ -9,7 +9,6 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  extractUserFromTokenOrResponse,
   fetchCurrentUserRequest,
   loginUser,
   loginWithGoogle,
@@ -144,14 +143,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const token = response.accessToken || response.token;
       if (!token) throw new Error('No access token returned from login');
-      
+
       // 1. Set token into ref so the API Client immediately sends Authorization: Bearer <token>
       accessTokenRef.current = token;
-      
+
       // 2. Fetch User + Role directly from the Database via API (/auth/me) instead of token payload/response
       const currentUserDto = await fetchCurrentUserRequest();
       const sessionUser = mapAuthUserDtoToSessionUser(currentUserDto);
-      
+
       setSession(token, sessionUser);
       persistSession(token, sessionUser, rememberMe);
     },
@@ -163,11 +162,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await signUpRequest({ name, email, password });
       const token = response.accessToken || response.token;
       if (!token) throw new Error('No access token returned from signup');
-      
+
       accessTokenRef.current = token;
       const currentUserDto = await fetchCurrentUserRequest();
       const sessionUser = mapAuthUserDtoToSessionUser(currentUserDto);
-      
+
       setSession(token, sessionUser);
       persistSession(token, sessionUser, rememberMe);
     },
@@ -179,11 +178,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await loginWithGoogle(idToken);
       const token = response.accessToken || response.token;
       if (!token) throw new Error('No access token returned from Google login');
-      
+
       accessTokenRef.current = token;
       const currentUserDto = await fetchCurrentUserRequest();
       const sessionUser = mapAuthUserDtoToSessionUser(currentUserDto);
-      
+
       setSession(token, sessionUser);
       persistSession(token, sessionUser, rememberMe);
     },
@@ -195,11 +194,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await loginWithMicrosoft(idToken);
       const token = response.accessToken || response.token;
       if (!token) throw new Error('No access token returned from Microsoft login');
-      
+
       accessTokenRef.current = token;
       const currentUserDto = await fetchCurrentUserRequest();
       const sessionUser = mapAuthUserDtoToSessionUser(currentUserDto);
-      
+
       setSession(token, sessionUser);
       persistSession(token, sessionUser, rememberMe);
     },
