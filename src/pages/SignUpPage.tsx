@@ -103,8 +103,12 @@ const handleSubmit = async (e: React.FormEvent) => {
       hubspotUtk: "",
     });
 
-    if (response) {
-      localStorage.setItem("response", JSON.stringify(response));
+    if (response && (response.accessToken || response.token)) {
+      localStorage.setItem("noah_session_token", response.accessToken || response.token);
+      localStorage.removeItem("noah_session_user");
+      localStorage.removeItem("response");
+    } else {
+      localStorage.removeItem("response");
     }
     setRegisteredEmail(email);
     setIsRegistered(true);
@@ -163,7 +167,7 @@ const handleSubmit = async (e: React.FormEvent) => {
             return;
           }
           try {
-            await loginGoogle(tokenResponse.access_token);
+            await loginGoogle(tokenResponse.access_token, false, { mode: 'signup', isSignUp: true });
             navigate(redirectPath);
           } catch (submitError: any) {
             console.error(submitError);
@@ -189,7 +193,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               typeof location.state === 'object' && location.state !== null && 'from' in location.state
                 ? (location.state as any).from
                 : '/home';
-            return loginMicrosoft(response.idToken).then(() => navigate(redirectPath));
+            return loginMicrosoft(response.idToken, false, { mode: 'signup', isSignUp: true }).then(() => navigate(redirectPath));
           }
         })
         .catch((err: any) => {

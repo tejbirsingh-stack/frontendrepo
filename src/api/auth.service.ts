@@ -60,19 +60,19 @@ export const verifyEmailRequest = async (token: string) => {
 };
 
 
-export const loginWithGoogle = async (idToken: string) => {
+export const loginWithGoogle = async (idToken: string, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => {
   const response = await axios.post(
     `${API_BASE_URL}/auth/loging-google`,
-    { idToken }
+    { idToken, ...(options || {}) }
   );
 
   return response.data;
 };
 
-export const loginWithMicrosoft = async (idToken : string) => {
+export const loginWithMicrosoft = async (idToken: string, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => {
   const response = await axios.post(
     `${API_BASE_URL}/auth/login-microsoft`,
-    { idToken }
+    { idToken, ...(options || {}) }
   );
   return response.data;
 };

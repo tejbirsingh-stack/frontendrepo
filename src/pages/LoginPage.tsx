@@ -108,7 +108,7 @@ export default function LoginPage() {
             return;
           }
           try {
-            await loginGoogle(tokenResponse.access_token);
+            await loginGoogle(tokenResponse.access_token, false, { mode: 'login', isSignUp: false });
             navigate(redirectPath);
           } catch (submitError: any) {
             console.error(submitError);
@@ -140,7 +140,7 @@ export default function LoginPage() {
                 : '/home';
                 
             // Pass it to our backend
-            return loginMicrosoft(response.idToken).then(() => navigate(redirectPath));
+            return loginMicrosoft(response.idToken, false, { mode: 'login', isSignUp: false }).then(() => navigate(redirectPath));
           }
         })
         .catch((err: any) => {

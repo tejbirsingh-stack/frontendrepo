@@ -2,14 +2,12 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
-  Button,
   Chip,
   Typography,
 } from '@mui/material';
 import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import MovieOutlinedIcon from '@mui/icons-material/MovieOutlined';
-import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import type { MediaItem } from '../../data/mockMedia';
 import { formatFileSize } from '../../utils/formatFileSize';
 import { getMediaFileName } from '../../utils/mediaFileName';
