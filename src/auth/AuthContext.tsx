@@ -114,8 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(sessionUser);
           persistSession(persistedToken, sessionUser);
         }
-      } catch {
-        if (!cancelled && !persistedUser) {
+      } catch (error: any) {
+        if (!cancelled && (error?.status === 404 || error?.status === 401 || error?.code === 'UNAUTHORIZED' || error?.code === 'NOT_FOUND' || !persistedUser)) {
           clearSession();
         }
       } finally {
