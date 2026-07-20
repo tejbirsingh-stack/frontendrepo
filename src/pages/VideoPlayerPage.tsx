@@ -66,6 +66,7 @@ import VideoAnnotationSurface, {
 import VideoCommentLayer from '../components/media/VideoCommentLayer';
 import VideoPlayerControls from '../components/media/VideoPlayerControls';
 import { useDashboard } from '../context/DashboardContext';
+import { useAuth } from '../auth/AuthContext';
 import { SAMPLE_VIDEO_SRC } from '../constants/sampleVideos';
 import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, HEADER_LOGO_WIDTH, SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
 import { TOAST_Z_INDEX } from '../constants/dropdownMenu';
@@ -186,6 +187,8 @@ const mediaTypeLabels = {
 } as const;
 
 export default function VideoPlayerPage() {
+  const { user } = useAuth();
+  const isViewer = user?.role === 'Viewer';
   const { mediaId } = useParams<{ mediaId: string }>();
   const navigate = useNavigate();
   const theme = useTheme();
@@ -2455,8 +2458,8 @@ export default function VideoPlayerPage() {
                 ) : null}
 
                 <VideoAnnotationSurface
-                  activeTool={activeTool}
-                  enabled={surfaceEnabled}
+                  activeTool={isViewer ? 'select' : activeTool}
+                  enabled={surfaceEnabled && !isViewer}
                   annotationsVisible={annotationsVisible}
                   resolvedOverlayEntryIds={resolvedOverlayEntryIds}
                   currentVideoTime={currentVideoTime}
@@ -2482,7 +2485,7 @@ export default function VideoPlayerPage() {
                 />
 
                 <VideoCommentLayer
-                  active={activeTool === 'comment'}
+                  active={activeTool === 'comment' && !isViewer}
                   panActive={activeTool === 'pan'}
                   annotationsVisible={annotationsVisible}
                   currentVideoTime={currentVideoTime}
@@ -2566,6 +2569,7 @@ export default function VideoPlayerPage() {
                       <AnnotationUndoIsland
                         canClear={canClearAnnotations}
                         onClear={handleOpenClearAnnotationsModal}
+                        disabled={isViewer}
                       />
                     </Box>
                   ) : null}
@@ -2582,6 +2586,7 @@ export default function VideoPlayerPage() {
                     }}
                   >
                     <AnnotationToolbar
+                      disabled={isViewer}
                       activeTool={activeTool}
                       onToolChange={handleToolChange}
                       activeDrawTool={activeDrawTool}
@@ -2639,6 +2644,7 @@ export default function VideoPlayerPage() {
                   <Box sx={mergedMobileIslandSx}>
                     <AnnotationToolbar
                       compact
+                      disabled={isViewer}
                       mobilePlayerFooterRef={mobilePlayerFooterRef}
                       activeTool={activeTool}
                       onToolChange={handleToolChange}
@@ -2683,6 +2689,7 @@ export default function VideoPlayerPage() {
                         showClearIsland ? (
                           <AnnotationUndoIsland
                             compact
+                            disabled={isViewer}
                             canClear={canClearAnnotations}
                             onClear={handleOpenClearAnnotationsModal}
                           />

@@ -178,6 +178,7 @@ interface AnnotationToolbarProps {
   onRedo?: () => void;
   compact?: boolean;
   mobilePlayerFooterRef?: RefObject<HTMLElement | null>;
+  disabled?: boolean;
 }
 
 export default function AnnotationToolbar({
@@ -214,6 +215,7 @@ export default function AnnotationToolbar({
   onRedo,
   compact = false,
   mobilePlayerFooterRef,
+  disabled = false,
 }: AnnotationToolbarProps) {
   const [internalTool, setInternalTool] = useState<AnnotationTool>('select');
   const [internalShape, setInternalShape] = useState<ShapeTool>('circle');
@@ -453,7 +455,11 @@ export default function AnnotationToolbar({
                 <LabeledToolbarButton
                   label={tool.label}
                   active={isActive}
-                  onClick={() => handleSelect(tool.id)}
+                  disabled={disabled}
+                  onClick={() => {
+                    if (disabled) return;
+                    handleSelect(tool.id);
+                  }}
                   ariaLabel={shortcut ? `${tool.label} (${shortcut})` : tool.label}
                   ariaPressed={isActive}
                   ariaExpanded={isExpanded}
@@ -462,30 +468,36 @@ export default function AnnotationToolbar({
                 </LabeledToolbarButton>
               ) : (
                 <ShortcutTooltip label={tool.label} shortcut={shortcut}>
-                  <IconButton
-                    aria-label={shortcut ? `${tool.label} (${shortcut})` : tool.label}
-                    aria-keyshortcuts={shortcut}
-                    aria-pressed={isActive}
-                    aria-expanded={isExpanded}
-                    onClick={() => handleSelect(tool.id)}
-                    sx={{
-                      ...toolButtonSx,
-                      color: isActive ? cv.textPrimary : cv.textSecondary,
-                      background: isActive
-                        ? cv.stampGradient
-                        : 'transparent',
-                      border: isActive
-                        ? `1px solid ${cv.purpleSelectionBorder}`
-                        : '1px solid transparent',
-                      transition: 'all 0.2s ease',
-                      '&:hover': {
-                        backgroundColor: isActive ? undefined : cv.surfaceHover,
-                        color: cv.textPrimary,
-                      },
-                    }}
-                  >
-                    <Icon sx={{ fontSize: TOOL_ICON_SIZE }} />
-                  </IconButton>
+                  <span>
+                    <IconButton
+                      disabled={disabled}
+                      aria-label={shortcut ? `${tool.label} (${shortcut})` : tool.label}
+                      aria-keyshortcuts={shortcut}
+                      aria-pressed={isActive}
+                      aria-expanded={isExpanded}
+                      onClick={() => {
+                        if (disabled) return;
+                        handleSelect(tool.id);
+                      }}
+                      sx={{
+                        ...toolButtonSx,
+                        color: disabled ? cv.textMuted : (isActive ? cv.textPrimary : cv.textSecondary),
+                        background: isActive && !disabled
+                          ? cv.stampGradient
+                          : 'transparent',
+                        border: isActive && !disabled
+                          ? `1px solid ${cv.purpleSelectionBorder}`
+                          : '1px solid transparent',
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          backgroundColor: disabled ? 'transparent' : (isActive ? undefined : cv.surfaceHover),
+                          color: disabled ? cv.textMuted : cv.textPrimary,
+                        },
+                      }}
+                    >
+                      <Icon sx={{ fontSize: TOOL_ICON_SIZE }} />
+                    </IconButton>
+                  </span>
                 </ShortcutTooltip>
               )}
             </Box>
@@ -508,7 +520,11 @@ export default function AnnotationToolbar({
             <LabeledToolbarButton
               label="More"
               active={toolsDrawerOpen}
-              onClick={handleMoreToolsClick}
+              disabled={disabled}
+              onClick={() => {
+                if (disabled) return;
+                handleMoreToolsClick();
+              }}
               ariaLabel="More tools"
               ariaPressed={toolsDrawerOpen}
               ariaExpanded={toolsDrawerOpen}
@@ -520,26 +536,32 @@ export default function AnnotationToolbar({
         ) : (
           <Box ref={moreToolsAnchorRef} sx={{ display: 'inline-flex', flexShrink: 0 }}>
             <ShortcutTooltip label="More tools">
-              <IconButton
-                ref={moreToolsButtonRef}
-                type="button"
-                aria-label="More tools"
-                aria-expanded={toolsDrawerOpen}
-                aria-pressed={toolsDrawerOpen}
-                onClick={handleMoreToolsClick}
-                sx={{
-                  ...toolButtonSx,
-                  color: toolsDrawerOpen ? cv.textPrimary : cv.textSecondary,
-                  backgroundColor: toolsDrawerOpen ? cv.surfaceHover : 'transparent',
-                  border: toolsDrawerOpen ? '1px solid var(--noah-border)' : '1px solid transparent',
-                  '&:hover': {
-                    backgroundColor: cv.surfaceHover,
-                    color: cv.textPrimary,
-                  },
-                }}
-              >
-                <AddOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
-              </IconButton>
+              <span>
+                <IconButton
+                  ref={moreToolsButtonRef}
+                  type="button"
+                  disabled={disabled}
+                  aria-label="More tools"
+                  aria-expanded={toolsDrawerOpen}
+                  aria-pressed={toolsDrawerOpen}
+                  onClick={() => {
+                    if (disabled) return;
+                    handleMoreToolsClick();
+                  }}
+                  sx={{
+                    ...toolButtonSx,
+                    color: disabled ? cv.textMuted : (toolsDrawerOpen ? cv.textPrimary : cv.textSecondary),
+                    backgroundColor: toolsDrawerOpen && !disabled ? cv.surfaceHover : 'transparent',
+                    border: toolsDrawerOpen && !disabled ? '1px solid var(--noah-border)' : '1px solid transparent',
+                    '&:hover': {
+                      backgroundColor: disabled ? 'transparent' : cv.surfaceHover,
+                      color: disabled ? cv.textMuted : cv.textPrimary,
+                    },
+                  }}
+                >
+                  <AddOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
+                </IconButton>
+              </span>
             </ShortcutTooltip>
           </Box>
         )}
@@ -550,7 +572,7 @@ export default function AnnotationToolbar({
           <>
             <LabeledToolbarButton
               label="Undo"
-              disabled={!canUndo}
+              disabled={!canUndo || disabled}
               onClick={onUndo}
               ariaLabel="Undo"
             >
@@ -558,7 +580,7 @@ export default function AnnotationToolbar({
             </LabeledToolbarButton>
             <LabeledToolbarButton
               label="Redo"
-              disabled={!canRedo}
+              disabled={!canRedo || disabled}
               onClick={onRedo}
               ariaLabel="Redo"
             >

@@ -376,7 +376,7 @@ export default function ProfileMenuDropdown({
             icon={<PaymentOutlinedIcon sx={{ fontSize: 20 }} />}
             label="Bills & Payments"
             to={BILLING_PATH}
-            disabled={user?.role === 'Admin' || user?.role === 'Editor' || user?.role === 'Collaborator'}
+            disabled={user?.role === 'Admin' || user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer'}
             tooltipTitle="Manage by the Super Admin only"
             onClick={() => {
               onClose();

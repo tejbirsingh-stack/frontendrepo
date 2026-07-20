@@ -31,7 +31,8 @@ export default function SettingsSectionPage() {
 
   const isEditor = user?.role === 'Editor';
   const isCollaborator = user?.role === 'Collaborator';
-  const isRestricted = isEditor || isCollaborator;
+  const isViewer = user?.role === 'Viewer';
+  const isRestricted = isEditor || isCollaborator || isViewer;
   const isAdmin = user?.role === 'Admin';
 
   if (sectionKey === 'accounts/billing' && (isAdmin || isRestricted)) {
