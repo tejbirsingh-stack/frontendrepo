@@ -16,6 +16,7 @@ import {
   SignUpPage,
   SettingsSectionPage,
   TagsManagementPage,
+  UserActivitiesPage,
   TrashPage,
   VideoPlayerPage,
   MfaAuthPage,
@@ -76,6 +77,7 @@ function App() {
             <Route path="duplicates" element={<DashboardPage libraryView="duplicates" />} />
             <Route path="folder/:folderId" element={<FolderPage />} />
             <Route path="tags" element={<TagsManagementPage />} />
+            <Route path="user-activities" element={<UserActivitiesPage />} />
             <Route path="trash" element={<TrashPage />} />
             <Route path="settings" element={<SettingsLayout />}>
               <Route index element={<Navigate to="profile/personal" replace />} />
