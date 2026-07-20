@@ -373,7 +373,7 @@ export default function DashboardPage({
 
   const canInviteToFolder = useMemo(
     () => {
-      if (user?.role === 'Editor') return false;
+      if (user?.role === 'Editor' || user?.role === 'Collaborator') return false;
       return canInviteTeamMembersToFolderSelection(
         sidebarSelection,
         activeWorkspace.folders,
@@ -1044,40 +1044,44 @@ export default function DashboardPage({
         }}
       >
         <MenuItem
+          disabled={user?.role === 'Collaborator'}
           onClick={() => {
+            if (user?.role === 'Collaborator') return;
             closeNewMenu();
             newUploadInputRef.current?.click();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: cv.textSecondary,
-            '&:hover': { backgroundColor: cv.surfaceHover },
+            color: user?.role === 'Collaborator' ? cv.textMuted : cv.textSecondary,
+            opacity: user?.role === 'Collaborator' ? 0.6 : 1,
+            cursor: user?.role === 'Collaborator' ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.role === 'Collaborator' ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+            <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Collaborator' ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Upload files
         </MenuItem>
         <MenuItem
-          disabled={user?.role === 'Editor'}
+          disabled={user?.role === 'Editor' || user?.role === 'Collaborator'}
           onClick={() => {
-            if (user?.role === 'Editor') return;
+            if (user?.role === 'Editor' || user?.role === 'Collaborator') return;
             closeNewMenu();
             setNewFolderModalOpen(true);
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: user?.role === 'Editor' ? cv.textMuted : cv.textSecondary,
-            opacity: user?.role === 'Editor' ? 0.6 : 1,
-            cursor: user?.role === 'Editor' ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.role === 'Editor' ? 'transparent' : cv.surfaceHover },
+            color: user?.role === 'Editor' || user?.role === 'Collaborator' ? cv.textMuted : cv.textSecondary,
+            opacity: user?.role === 'Editor' || user?.role === 'Collaborator' ? 0.6 : 1,
+            cursor: user?.role === 'Editor' || user?.role === 'Collaborator' ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.role === 'Editor' || user?.role === 'Collaborator' ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Editor' ? cv.textMuted : cv.textSecondary }} />
+            <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Editor' || user?.role === 'Collaborator' ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           New folder
         </MenuItem>

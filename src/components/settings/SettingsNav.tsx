@@ -41,9 +41,10 @@ export default function SettingsNav({ onNavigate }: { onNavigate?: () => void })
           {group.items.map((item) => {
             const href = `${SETTINGS_BASE_PATH}/${item.path}`;
             const active = location.pathname === href;
-            const isBillingDisabled = item.id === 'billing' && (user?.role === 'Admin' || user?.role === 'Editor');
+            const isBillingDisabled = item.id === 'billing' && (user?.role === 'Admin' || user?.role === 'Editor' || user?.role === 'Collaborator');
             const editorDisabledItems = ['company', 'usage', 'plan', 'branding', 'user', 'projects', 'workspaces', 'fields', 'security', 'settings'];
-            const isEditorDisabled = editorDisabledItems.includes(item.id) && user?.role === 'Editor';
+            const isRestrictedRole = user?.role === 'Editor' || user?.role === 'Collaborator';
+            const isEditorDisabled = editorDisabledItems.includes(item.id) && isRestrictedRole;
             const isDisabled = isBillingDisabled || isEditorDisabled;
 
             const buttonContent = (

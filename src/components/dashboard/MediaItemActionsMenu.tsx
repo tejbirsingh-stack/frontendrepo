@@ -136,7 +136,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
       >
         {isFolder ? (
           <MenuItem
+            disabled={user?.role === 'Collaborator'}
             onClick={(event) => {
+              if (user?.role === 'Collaborator') return;
               consumeMenuPointerEvent(event);
               openColorPicker();
             }}
@@ -144,19 +146,23 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: cv.textSecondary,
-              '&:hover': { backgroundColor: cv.surfaceHover },
+              color: user?.role === 'Collaborator' ? cv.textMuted : cv.textSecondary,
+              opacity: user?.role === 'Collaborator' ? 0.6 : 1,
+              cursor: user?.role === 'Collaborator' ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: user?.role === 'Collaborator' ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <PaletteOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+              <PaletteOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Collaborator' ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Change color
           </MenuItem>
         ) : null}
         {isFolder ? (
           <MenuItem
+            disabled={user?.role === 'Collaborator'}
             onClick={(event) => {
+              if (user?.role === 'Collaborator') return;
               consumeMenuPointerEvent(event);
               openAssignProject();
             }}
@@ -164,18 +170,22 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: cv.textSecondary,
-              '&:hover': { backgroundColor: cv.surfaceHover },
+              color: user?.role === 'Collaborator' ? cv.textMuted : cv.textSecondary,
+              opacity: user?.role === 'Collaborator' ? 0.6 : 1,
+              cursor: user?.role === 'Collaborator' ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: user?.role === 'Collaborator' ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <WorkOutlineOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+              <WorkOutlineOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Collaborator' ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Assign to project
           </MenuItem>
         ) : null}
         <MenuItem
+          disabled={user?.role === 'Collaborator'}
           onClick={(event) => {
+            if (user?.role === 'Collaborator') return;
             consumeMenuPointerEvent(event);
             openRename();
           }}
@@ -183,12 +193,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: cv.textSecondary,
-            '&:hover': { backgroundColor: cv.surfaceHover },
+            color: user?.role === 'Collaborator' ? cv.textMuted : cv.textSecondary,
+            opacity: user?.role === 'Collaborator' ? 0.6 : 1,
+            cursor: user?.role === 'Collaborator' ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.role === 'Collaborator' ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: user?.role === 'Collaborator' ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Rename
         </MenuItem>
@@ -256,9 +268,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           </MenuItem>
         )}
         <MenuItem
-          disabled={user?.role === 'Editor' && isFolder}
+          disabled={(user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator'}
           onClick={(event) => {
-            if (user?.role === 'Editor' && isFolder) return;
+            if ((user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator') return;
             consumeMenuPointerEvent(event);
             openDelete();
           }}
@@ -266,14 +278,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: user?.role === 'Editor' && isFolder ? cv.textMuted : cv.destructive,
-            opacity: user?.role === 'Editor' && isFolder ? 0.6 : 1,
-            cursor: user?.role === 'Editor' && isFolder ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.role === 'Editor' && isFolder ? 'transparent' : cv.destructiveHover },
+            color: (user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator' ? cv.textMuted : cv.destructive,
+            opacity: (user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator' ? 0.6 : 1,
+            cursor: (user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator' ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: (user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator' ? 'transparent' : cv.destructiveHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DeleteOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Editor' && isFolder ? cv.textMuted : cv.destructive }} />
+            <DeleteOutlinedIcon sx={{ fontSize: 18, color: (user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator' ? cv.textMuted : cv.destructive }} />
           </ListItemIcon>
           Delete
         </MenuItem>

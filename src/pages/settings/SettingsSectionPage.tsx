@@ -30,14 +30,16 @@ export default function SettingsSectionPage() {
   }, [location.pathname]);
 
   const isEditor = user?.role === 'Editor';
+  const isCollaborator = user?.role === 'Collaborator';
+  const isRestricted = isEditor || isCollaborator;
   const isAdmin = user?.role === 'Admin';
 
-  if (sectionKey === 'accounts/billing' && (isAdmin || isEditor)) {
+  if (sectionKey === 'accounts/billing' && (isAdmin || isRestricted)) {
     return <Navigate to="/home" replace />;
   }
 
   if (
-    isEditor &&
+    isRestricted &&
     [
       'profile/company',
       'accounts/usage',
