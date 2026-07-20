@@ -19,8 +19,8 @@ import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
 import MoodOutlinedIcon from '@mui/icons-material/MoodOutlined';
 import AlternateEmailOutlinedIcon from '@mui/icons-material/AlternateEmailOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
-import { CURRENT_USER } from '../../constants/currentUser';
 import { floatingPanelMenuSlotProps } from '../../constants/floatingPanel';
+import { useActiveUser } from '../../hooks/useActiveUser';
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import type { CommentAuthor, CommentReply } from '../../types/videoComments';
 import type { AnnotationAccessGroup, AnnotationVisibility } from '../../types/annotationVisibility';
@@ -426,6 +426,7 @@ export default function CommentThreadPopover({
   onCreateAnnotationGroup,
   onAddCollaborator,
 }: CommentThreadPopoverProps) {
+  const activeUser = useActiveUser();
   const replyInputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const savedSelectionRef = useRef<TextSelection | null>(null);
@@ -440,7 +441,7 @@ export default function CommentThreadPopover({
   const emojiPickerOpen = Boolean(emojiPickerAnchor);
 
   const canEditComment =
-    !resolved && author.name === CURRENT_USER.name && Boolean(onEditComment);
+    !resolved && author.name === activeUser.name && Boolean(onEditComment);
 
   const beginEditing = useCallback((target: 'comment' | string) => {
     setEditingTarget(target);
@@ -803,7 +804,7 @@ export default function CommentThreadPopover({
           if (item.kind === 'reply') {
             const canEditReply =
               !resolved &&
-              item.reply.author.name === CURRENT_USER.name &&
+              item.reply.author.name === activeUser.name &&
               Boolean(onEditReply);
 
             return (
@@ -854,9 +855,9 @@ export default function CommentThreadPopover({
       >
         <AuthorAvatar
           author={{
-            name: CURRENT_USER.name,
-            avatarUrl: CURRENT_USER.avatarUrl,
-            initials: CURRENT_USER.initials,
+            name: activeUser.name,
+            avatarUrl: activeUser.avatarUrl,
+            initials: activeUser.initials,
           }}
           size={32}
         />

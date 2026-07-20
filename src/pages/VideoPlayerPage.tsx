@@ -64,12 +64,12 @@ import VideoAnnotationSurface, {
   type AnnotationSurfaceRecord,
 } from '../components/media/VideoAnnotationSurface';
 import VideoCommentLayer from '../components/media/VideoCommentLayer';
+import { useActiveUser } from '../hooks/useActiveUser';
 import VideoPlayerControls from '../components/media/VideoPlayerControls';
 import { useDashboard } from '../context/DashboardContext';
 import { SAMPLE_VIDEO_SRC } from '../constants/sampleVideos';
 import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, HEADER_LOGO_WIDTH, SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
 import { TOAST_Z_INDEX } from '../constants/dropdownMenu';
-import { CURRENT_USER } from '../constants/currentUser';
 import type { AnnotationHistoryEntry, AnnotationHistoryType } from '../types/annotationHistory';
 import type { AnnotationAccessGroup, AnnotationVisibility } from '../types/annotationVisibility';
 import { DEFAULT_ANNOTATION_VISIBILITY } from '../types/annotationVisibility';
@@ -85,23 +85,17 @@ import {
 } from '../utils/customStampStorage';
 import type { DraftVideoComment, VideoComment } from '../types/videoComments';
 import {
-  backfillHistoryFromComments,
-  dedupeHistoryEntries,
-  loadAnnotationHistory,
   mergeLinkedAnnotationHistory,
-  normalizeCommentHistory,
-  saveAnnotationHistory,
 } from '../utils/annotationHistoryStorage';
-import { loadVideoDrawings, saveVideoDrawings } from '../utils/videoDrawingStorage';
-import { loadVideoShapes, saveVideoShapes } from '../utils/videoShapeStorage';
+import { useAuth } from '../auth/AuthContext';
+
 import {
   getMediaAnnotationsRequest,
   saveMediaAnnotationRequest,
   updateMediaAnnotationRequest,
   deleteMediaAnnotationRequest,
 } from '../api/annotations.service';
-import { loadVideoStamps, saveVideoStamps } from '../utils/videoStampStorage';
-import { loadVideoComments, saveVideoComments } from '../utils/videoCommentStorage';
+
 import {
   createAnnotationGroup,
   loadAnnotationGroups,
@@ -121,7 +115,10 @@ import {
   buildResolvedOverlayEntryIds,
   getDrawingHistoryEntryId,
   getShapeHistoryEntryId,
+  getStampHistoryEntryId,
 } from '../utils/annotationOverlayVisibility';
+import { shapeSummary } from '../components/media/ShapeGraphic';
+import { getStampSummary } from '../constants/stamps';
 import type { AnnotationCommentPromptRequest } from '../utils/annotationCommentPrompt';
 import { hasAnnotationContent } from '../utils/annotationSnapshot';
 import { buildTimelineItems } from '../utils/buildTimelineItems';
@@ -193,6 +190,8 @@ const mediaTypeLabels = {
 
 export default function VideoPlayerPage() {
   const { mediaId } = useParams<{ mediaId: string }>();
+  const activeUser = useActiveUser();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const isDesktopAnnotationToolbar = useMediaQuery(
@@ -614,20 +613,48 @@ export default function VideoPlayerPage() {
           setDrawings((prev) =>
             prev.map((drawing) => (drawing.id === id ? { ...drawing, ...rangePatch } : drawing)),
           );
+          setComments((prev) =>
+            prev.map((comment) =>
+              comment.linkedDrawingId === id
+                ? { ...comment, ...rangePatch }
+                : comment
+            )
+          );
           break;
         case 'shape':
           setShapes((prev) =>
             prev.map((shape) => (shape.id === id ? { ...shape, ...rangePatch } : shape)),
+          );
+          setComments((prev) =>
+            prev.map((comment) =>
+              comment.linkedShapeId === id
+                ? { ...comment, ...rangePatch }
+                : comment
+            )
           );
           break;
         case 'stamp':
           setStamps((prev) =>
             prev.map((stamp) => (stamp.id === id ? { ...stamp, ...rangePatch } : stamp)),
           );
-          break;
-        default:
+          // Stamps don't currently have linked comments, but just in case we add it:
           break;
       }
+      
+      setHistory((prev) => 
+        prev.map((entry) => {
+          let matches = false;
+          if (type === 'comment' && entry.id === id) matches = true;
+          if (type === 'drawing' && entry.id.includes(id)) matches = true;
+          if (type === 'shape' && entry.id.includes(id)) matches = true;
+          if (type === 'stamp' && entry.id.includes(id)) matches = true;
+          
+          if (matches) {
+            return { ...entry, videoTimestamp: startTime };
+          }
+          return entry;
+        })
+      );
     },
     [handleAnnotationActionStart],
   );
@@ -804,9 +831,9 @@ export default function VideoPlayerPage() {
             index: nextIndex,
             type: entry.type,
             author: {
-              name: CURRENT_USER.name,
-              avatarUrl: CURRENT_USER.avatarUrl,
-              initials: CURRENT_USER.initials,
+              name: activeUser.name,
+              avatarUrl: activeUser.avatarUrl,
+              initials: activeUser.initials,
             },
             createdAt: Date.now(),
             videoTimestamp: entry.videoTimestamp,
@@ -845,6 +872,98 @@ export default function VideoPlayerPage() {
         prevDrawingsRef.current = drawingsData;
         prevStampsRef.current = stampsData;
         
+        const readIds = new Set<string>();
+        try {
+          const stored = localStorage.getItem(`read_annotations_${mediaId}`);
+          if (stored) JSON.parse(stored).forEach((id: string) => readIds.add(id));
+        } catch {}
+
+        const getAuthor = (ann: any) => ann.author || { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials };
+        const checkUnread = (ann: any, entryId: string) => {
+          if (!ann.userId || !user?.id) return false;
+          return ann.userId !== user.id && !readIds.has(entryId);
+        };
+
+        const newHistory: AnnotationHistoryEntry[] = [];
+        let index = 1;
+
+        annotations.forEach(ann => {
+          const createdAt = new Date(ann.createdAt).getTime();
+          
+          if (ann.type === 'comment') {
+            const c = ann.data as VideoComment;
+            const entryId = `comment-${c.id}`;
+            newHistory.push({
+              id: entryId,
+              index: index++,
+              type: 'comment',
+              author: getAuthor(ann),
+              createdAt,
+              videoTimestamp: c.videoTimestamp ?? 0,
+              summary: 'Comment added',
+              detail: c.text,
+              resolved: ann.resolved || c.resolved || false,
+              resolvedAt: c.resolvedAt,
+              resolvedBy: c.resolvedBy,
+              unread: checkUnread(ann, entryId),
+              sourceCommentId: c.id,
+              replyCount: c.replies?.length || 0,
+              visibility: c.visibility ?? DEFAULT_ANNOTATION_VISIBILITY,
+              groupId: c.groupId,
+              linkedDrawingId: c.linkedDrawingId,
+              linkedShapeId: c.linkedShapeId,
+            });
+          } else if (ann.type === 'shape') {
+            const s = ann.data as VideoShape;
+            const entryId = getShapeHistoryEntryId(s.id);
+            newHistory.push({
+              id: entryId,
+              index: index++,
+              type: 'shape',
+              author: getAuthor(ann),
+              createdAt,
+              videoTimestamp: s.videoTimestamp ?? 0,
+              summary: shapeSummary(s.type),
+              resolved: ann.resolved || false,
+              unread: checkUnread(ann, entryId),
+            });
+          } else if (ann.type === 'drawing') {
+            const d = ann.data as VideoDrawingStroke;
+            const entryId = getDrawingHistoryEntryId(d.id);
+            const summaryStr = d.tool === 'highlighter' ? 'Highlighter stroke added' : d.tool === 'grid' ? 'Grid line added' : d.tool === 'eraser' ? 'Drawing erased' : 'Drawing added';
+            newHistory.push({
+              id: entryId,
+              index: index++,
+              type: 'drawing',
+              author: getAuthor(ann),
+              createdAt,
+              videoTimestamp: d.videoTimestamp ?? 0,
+              summary: summaryStr,
+              resolved: ann.resolved || false,
+              unread: checkUnread(ann, entryId),
+            });
+          } else if (ann.type === 'stamp') {
+            const st = ann.data as VideoStamp;
+            const entryId = getStampHistoryEntryId(st.id);
+            newHistory.push({
+              id: entryId,
+              index: index++,
+              type: 'stamp',
+              author: getAuthor(ann),
+              createdAt,
+              videoTimestamp: st.videoTimestamp ?? 0,
+              summary: getStampSummary(st.stampId, customStamp, st.customEmoji),
+              resolved: ann.resolved || false,
+              unread: checkUnread(ann, entryId),
+            });
+          }
+        });
+
+        const mergedHistory = mergeLinkedAnnotationHistory(newHistory, commentsData);
+        mergedHistory.sort((a, b) => a.videoTimestamp - b.videoTimestamp);
+        mergedHistory.forEach((h, i) => h.index = i + 1);
+
+        setHistory(mergedHistory);
         setInitialLoadComplete(true);
       } catch (err) {
         console.error('Failed to load annotations from API', err);
@@ -853,9 +972,6 @@ export default function VideoPlayerPage() {
     };
 
     loadApiAnnotations();
-
-    const storedHistory = loadAnnotationHistory(mediaId);
-    setHistory(storedHistory);
     
     setDraftComment(null);
     setActiveTool('select');
@@ -871,7 +987,7 @@ export default function VideoPlayerPage() {
 
   useEffect(() => {
     if (!mediaId) return;
-    saveAnnotationHistory(mediaId, history);
+    // History is now built from API response directly, bypassing localStorage to support multi-device syncing.
   }, [mediaId, history]);
 
   useEffect(() => {
@@ -935,7 +1051,7 @@ export default function VideoPlayerPage() {
         frameRate: current.frameRate ?? stream.frameRate ?? item.frameRate,
         createdAt: item.createdAt,
         storageProvider: item.storageProvider,
-        uploadedBy: item.uploadedBy ?? CURRENT_USER.name,
+        uploadedBy: item.uploadedBy ?? activeUser.name,
         uploadedAt: item.createdAt,
         originallyCreatedAt: item.originallyCreatedAt,
         exif:
@@ -1093,9 +1209,9 @@ export default function VideoPlayerPage() {
         videoTimestamp,
         endTimestamp: createDefaultAnnotationEndTime(videoTimestamp),
         author: {
-          name: CURRENT_USER.name,
-          avatarUrl: CURRENT_USER.avatarUrl,
-          initials: CURRENT_USER.initials,
+          name: activeUser.name,
+          avatarUrl: activeUser.avatarUrl,
+          initials: activeUser.initials,
         },
         replies: [],
         linkedDrawingId: draftComment.linkedDrawingId,
@@ -1210,9 +1326,9 @@ export default function VideoPlayerPage() {
                 imageUrl,
                 createdAt: Date.now(),
                 author: {
-                  name: CURRENT_USER.name,
-                  avatarUrl: CURRENT_USER.avatarUrl,
-                  initials: CURRENT_USER.initials,
+                  name: activeUser.name,
+                  avatarUrl: activeUser.avatarUrl,
+                  initials: activeUser.initials,
                 },
               },
             ],
@@ -1305,9 +1421,9 @@ export default function VideoPlayerPage() {
       const timestampSecond = Math.floor(record.videoTimestamp);
       const drawingEntryId = `drawing-${timestampSecond}`;
       const actor = {
-        name: CURRENT_USER.name,
-        avatarUrl: CURRENT_USER.avatarUrl,
-        initials: CURRENT_USER.initials,
+        name: activeUser.name,
+        avatarUrl: activeUser.avatarUrl,
+        initials: activeUser.initials,
       };
 
       if (record.type === 'drawing' && record.markDrawingErased) {
@@ -1443,11 +1559,31 @@ export default function VideoPlayerPage() {
     [appendHistoryEntry],
   );
 
-  const handleSeekToTimestamp = useCallback((timestamp: number) => {
+  const handleSeekToTimestamp = useCallback((timestamp: number, entryId?: string) => {
     if (!videoRef.current) return;
-    videoRef.current.currentTime = timestamp;
+    // Add a tiny 50ms offset to guarantee we land inside the annotation's visibility window, 
+    // avoiding floating point rounding errors that put the playhead just before the annotation starts.
+    videoRef.current.currentTime = timestamp + 0.05;
     videoRef.current.pause();
-  }, []);
+    
+    if (entryId && mediaId) {
+      setHistory(prev => {
+        const changed = prev.some(h => h.id === entryId && h.unread);
+        if (!changed) return prev;
+        
+        const readIds = new Set<string>();
+        try {
+          const stored = localStorage.getItem(`read_annotations_${mediaId}`);
+          if (stored) JSON.parse(stored).forEach((id: string) => readIds.add(id));
+        } catch {}
+        
+        readIds.add(entryId);
+        localStorage.setItem(`read_annotations_${mediaId}`, JSON.stringify(Array.from(readIds)));
+        
+        return prev.map(h => h.id === entryId ? { ...h, unread: false } : h);
+      });
+    }
+  }, [mediaId]);
 
   const handleTagsChange = useCallback(
     (tags: string[]) => {
@@ -1562,9 +1698,9 @@ export default function VideoPlayerPage() {
   const updateCommentResolved = useCallback((commentId: string, nextResolved: boolean) => {
     const timestamp = Date.now();
     const actor = {
-      name: CURRENT_USER.name,
-      avatarUrl: CURRENT_USER.avatarUrl,
-      initials: CURRENT_USER.initials,
+      name: activeUser.name,
+      avatarUrl: activeUser.avatarUrl,
+      initials: activeUser.initials,
     };
 
     setComments((current) =>
@@ -1633,8 +1769,21 @@ export default function VideoPlayerPage() {
 
       if (entry.sourceCommentId) {
         updateCommentResolved(entry.sourceCommentId, !entry.resolved);
+        updateMediaAnnotationRequest(entry.sourceCommentId, { resolved: !entry.resolved }).catch(console.error);
+        
+        // Also update linked drawing/shape if it exists
+        const nextResolved = !entry.resolved;
+        if (entry.linkedDrawingId) {
+          setDrawings((prev) => prev.map(d => d.id === entry.linkedDrawingId ? { ...d, resolved: nextResolved } : d));
+          updateMediaAnnotationRequest(entry.linkedDrawingId, { resolved: nextResolved }).catch(console.error);
+        } else if (entry.linkedShapeId) {
+          setShapes((prev) => prev.map(s => s.id === entry.linkedShapeId ? { ...s, resolved: nextResolved } : s));
+          updateMediaAnnotationRequest(entry.linkedShapeId, { resolved: nextResolved }).catch(console.error);
+        }
         return;
       }
+
+      const nextResolved = !entry.resolved;
 
       setHistory((current) =>
         current.map((item) => {
@@ -1655,17 +1804,26 @@ export default function VideoPlayerPage() {
             resolved: true,
             resolvedAt,
             resolvedBy: {
-              name: CURRENT_USER.name,
-              avatarUrl: CURRENT_USER.avatarUrl,
-              initials: CURRENT_USER.initials,
+              name: activeUser.name,
+              avatarUrl: activeUser.avatarUrl,
+              initials: activeUser.initials,
             },
           };
         }),
       );
 
-      const nextResolved = !entry.resolved;
-      
-      const targetId = entry.shapeId || entry.drawingId || entry.videoStampId;
+      let targetId: string | undefined = undefined;
+      if (entry.id.startsWith('shape-')) {
+        targetId = entry.id.replace('shape-', '');
+        setShapes((prev) => prev.map(s => s.id === targetId ? { ...s, resolved: nextResolved } : s));
+      } else if (entry.id.startsWith('drawing-')) {
+        targetId = entry.id.replace('drawing-', '');
+        setDrawings((prev) => prev.map(d => d.id === targetId ? { ...d, resolved: nextResolved } : d));
+      } else if (entry.id.startsWith('stamp-')) {
+        targetId = entry.id.replace('stamp-', '');
+        setStamps((prev) => prev.map(s => s.id === targetId ? { ...s, resolved: nextResolved } : s));
+      }
+
       if (targetId) {
         updateMediaAnnotationRequest(targetId, { resolved: nextResolved }).catch(console.error);
       }
@@ -1683,7 +1841,17 @@ export default function VideoPlayerPage() {
     (commentId: string) => {
       const comment = comments.find((item) => item.id === commentId);
       if (!comment) return;
-      updateCommentResolved(commentId, !comment.resolved);
+      const nextResolved = !comment.resolved;
+      updateCommentResolved(commentId, nextResolved);
+      updateMediaAnnotationRequest(commentId, { resolved: nextResolved }).catch(console.error);
+      
+      if (comment.linkedDrawingId) {
+        setDrawings((prev) => prev.map(d => d.id === comment.linkedDrawingId ? { ...d, resolved: nextResolved } : d));
+        updateMediaAnnotationRequest(comment.linkedDrawingId, { resolved: nextResolved }).catch(console.error);
+      } else if (comment.linkedShapeId) {
+        setShapes((prev) => prev.map(s => s.id === comment.linkedShapeId ? { ...s, resolved: nextResolved } : s));
+        updateMediaAnnotationRequest(comment.linkedShapeId, { resolved: nextResolved }).catch(console.error);
+      }
     },
     [comments, updateCommentResolved],
   );

@@ -21,7 +21,7 @@ import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import FilterListOutlinedIcon from '@mui/icons-material/FilterListOutlined';
 import MoreHorizOutlinedIcon from '@mui/icons-material/MoreHorizOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
-import { CURRENT_USER } from '../../constants/currentUser';
+import { useActiveUser } from '../../hooks/useActiveUser';
 import type { MediaItem } from '../../data/mockMedia';
 import type { AnnotationHistoryEntry, AnnotationHistoryType } from '../../types/annotationHistory';
 import type { CommentReply, VideoComment } from '../../types/videoComments';
@@ -150,7 +150,7 @@ interface AnnotationHistoryDrawerProps {
   detailsSection?: MediaDetailsSection;
   onDetailsSectionChange?: (section: MediaDetailsSection) => void;
   onClose: () => void;
-  onSeekToTimestamp?: (timestamp: number) => void;
+  onSeekToTimestamp?: (timestamp: number, entryId?: string) => void;
   onToggleResolved: (entryId: string) => void;
   onMarkUnread: (entryId: string) => void;
   onCopyLink: (entry: AnnotationHistoryEntry) => void;
@@ -222,7 +222,7 @@ function HistoryEntryRow({
   onEditComment?: (commentId: string, text: string) => void;
   annotationGroups: AnnotationAccessGroup[];
   collaborators: MediaCollaborator[];
-  onSeekToTimestamp?: (timestamp: number) => void;
+  onSeekToTimestamp?: (timestamp: number, entryId?: string) => void;
   onToggleResolved: (entryId: string) => void;
   onMarkUnread: (entryId: string) => void;
   onCopyLink: (entry: AnnotationHistoryEntry) => void;
@@ -235,6 +235,7 @@ function HistoryEntryRow({
   onCreateAnnotationGroup: (name: string, memberIds: string[]) => AnnotationAccessGroup;
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
 }) {
+  const activeUser = useActiveUser();
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [repliesOpen, setRepliesOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -246,7 +247,7 @@ function HistoryEntryRow({
   const commentId = getCommentIdForEntry(entry);
   const canEdit =
     Boolean(commentId && onEditComment) &&
-    entry.author.name === CURRENT_USER.name &&
+    entry.author.name === activeUser.name &&
     !isResolved &&
     !isErased;
   const isMergedAnnotationThread = Boolean(
@@ -271,7 +272,7 @@ function HistoryEntryRow({
   };
 
   const handleSeek = () => {
-    onSeekToTimestamp?.(entry.videoTimestamp);
+    onSeekToTimestamp?.(entry.videoTimestamp, entry.id);
   };
 
   return (
@@ -279,12 +280,14 @@ function HistoryEntryRow({
       sx={{
         position: 'relative',
         py: 1.5,
-        px: 0.5,
-        mx: -0.5,
+        px: 1,
+        mx: -1,
         borderRadius: '10px',
         opacity: isResolved ? 0.62 : 1,
+        backgroundColor: entry.unread ? cv.purpleSelectionSoft : 'transparent',
+        transition: 'background-color 0.2s ease',
         '&:hover': {
-          backgroundColor: cv.surfaceHover,
+          backgroundColor: entry.unread ? cv.purpleSelectionHover : cv.surfaceHover,
         },
       }}
     >

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { cv } from '../../theme/cssVars';
 import { Avatar, Box } from '@mui/material';
 import type { VideoStamp } from '../../types/videoStamps';
-import { CURRENT_USER } from '../../constants/currentUser';
+import { useActiveUser } from '../../hooks/useActiveUser';
 import { getStampRotationDeg } from '../../utils/stampStickerStyle';
 import StampContent from './StampContent';
 
@@ -21,6 +21,7 @@ export default function StampMarker({
   onSelect,
   onPointerDown,
 }: StampMarkerProps) {
+  const activeUser = useActiveUser();
   const rotationDeg = useMemo(() => getStampRotationDeg(stamp.id), [stamp.id]);
 
   return (
@@ -89,7 +90,7 @@ export default function StampMarker({
         }}
       >
         <Avatar
-          src={CURRENT_USER.avatarUrl}
+          src={activeUser.avatarUrl}
           alt=""
           sx={{
             width: 20,
@@ -99,9 +100,9 @@ export default function StampMarker({
             background: cv.brandGradient,
           }}
         >
-          {!CURRENT_USER.avatarUrl ? CURRENT_USER.initials : null}
+          {!activeUser.avatarUrl ? activeUser.initials : null}
         </Avatar>
-        {CURRENT_USER.name}
+        {activeUser.name}
       </Box>
 
       <Box
