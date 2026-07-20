@@ -19,12 +19,40 @@ import {
 } from '../../components/settings/settingsPageSections';
 import { DEFAULT_SETTINGS_PATH, SETTINGS_BASE_PATH } from '../../constants/settingsNav';
 
+import { useAuth } from '../../auth/AuthContext';
+
 export default function SettingsSectionPage() {
   const location = useLocation();
+  const { user } = useAuth();
 
   const sectionKey = useMemo(() => {
     return location.pathname.replace('/home/settings/', '').replace(/\/$/, '');
   }, [location.pathname]);
+
+  const isEditor = user?.role === 'Editor';
+  const isAdmin = user?.role === 'Admin';
+
+  if (sectionKey === 'accounts/billing' && (isAdmin || isEditor)) {
+    return <Navigate to="/home" replace />;
+  }
+
+  if (
+    isEditor &&
+    [
+      'profile/company',
+      'accounts/usage',
+      'accounts/plan',
+      'accounts/branding',
+      'admin/user',
+      'admin/projects',
+      'admin/workspaces',
+      'admin/fields',
+      'admin/security',
+      'share/settings',
+    ].includes(sectionKey)
+  ) {
+    return <Navigate to="/home" replace />;
+  }
 
   switch (sectionKey) {
     case 'profile/personal':

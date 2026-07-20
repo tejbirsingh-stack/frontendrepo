@@ -1,7 +1,7 @@
 import { useEffect, type MouseEvent, type ReactNode } from 'react';
 import { cv } from '../../theme/cssVars';
 import { Link as RouterLink } from 'react-router-dom';
-import { Avatar, Box, Divider, Popover, Typography } from '@mui/material';
+import { Avatar, Box, Divider, Popover, Tooltip, Typography } from '@mui/material';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import KeyboardOutlinedIcon from '@mui/icons-material/KeyboardOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
@@ -65,33 +65,45 @@ function MenuRow({
   to,
   onClick,
   destructive = false,
+  disabled = false,
+  tooltipTitle,
 }: {
   icon?: ReactNode;
   label: string;
   to?: string;
   onClick?: (event: MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => void;
   destructive?: boolean;
+  disabled?: boolean;
+  tooltipTitle?: string;
 }) {
-  const labelColor = destructive ? cv.destructive : cv.textPrimary;
-  const iconColor = destructive ? cv.destructive : cv.textSecondary;
+  const labelColor = disabled ? cv.textMuted : destructive ? cv.destructive : cv.textPrimary;
+  const iconColor = disabled ? cv.textMuted : destructive ? cv.destructive : cv.textSecondary;
 
   const handleClick = (event: MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
+    if (disabled) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     event.stopPropagation();
     onClick?.(event);
   };
 
-  return (
+  const content = (
     <Box
-      component={to ? RouterLink : 'button'}
-      {...(to ? { to } : { type: 'button' as const })}
+      component={to && !disabled ? RouterLink : 'button'}
+      {...(to && !disabled ? { to } : { type: 'button' as const })}
       role="menuitem"
+      disabled={disabled}
       onClick={handleClick}
       sx={{
         ...menuItemSx,
         textDecoration: 'none',
         color: labelColor,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
         '&:hover': {
-          backgroundColor: destructive ? cv.destructiveHover : cv.surfaceHover,
+          backgroundColor: disabled ? 'transparent' : destructive ? cv.destructiveHover : cv.surfaceHover,
         },
         '& .MuiSvgIcon-root': {
           color: iconColor,
@@ -117,6 +129,16 @@ function MenuRow({
       </Typography>
     </Box>
   );
+
+  if (tooltipTitle && disabled) {
+    return (
+      <Tooltip title={tooltipTitle} placement="right" arrow>
+        <Box sx={{ display: 'block' }}>{content}</Box>
+      </Tooltip>
+    );
+  }
+
+  return content;
 }
 
 function ThemeAppearanceToggle() {
@@ -354,6 +376,8 @@ export default function ProfileMenuDropdown({
             icon={<PaymentOutlinedIcon sx={{ fontSize: 20 }} />}
             label="Bills & Payments"
             to={BILLING_PATH}
+            disabled={user?.role === 'Admin' || user?.role === 'Editor'}
+            tooltipTitle="Manage by the Super Admin only"
             onClick={() => {
               onClose();
               onBillsPayments?.();

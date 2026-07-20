@@ -470,6 +470,7 @@ function PeopleTab({
   users: SettingsUserRow[];
   setUsers: Dispatch<SetStateAction<SettingsUserRow[]>>;
 }) {
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
@@ -549,6 +550,8 @@ function PeopleTab({
           onExport={() => undefined}
           onAdd={() => setAddOpen(true)}
           addLabel="New user"
+          exportDisabled={user?.role === 'Editor'}
+          addDisabled={user?.role === 'Editor'}
         />
         <Collapse in={filterOpen}>
           <Box sx={{ px: 2, pb: 1.5 }}>
@@ -647,6 +650,7 @@ function UserGroupsTab({
   groups: SettingsUserGroup[];
   setGroups: Dispatch<SetStateAction<SettingsUserGroup[]>>;
 }) {
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGroupId, setEditGroupId] = useState<string | null>(null);
@@ -747,6 +751,8 @@ function UserGroupsTab({
           onExport={() => undefined}
           onAdd={() => setDialogOpen(true)}
           addLabel="New group"
+          exportDisabled={user?.role === 'Editor'}
+          addDisabled={user?.role === 'Editor'}
         />
         {selectedIds.size > 0 ? (
           <Box

@@ -1,4 +1,5 @@
 import { useState, type MouseEvent } from 'react';
+import { useAuth } from '../../auth/AuthContext';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
@@ -46,6 +47,7 @@ interface MediaItemActionsMenuProps {
 }
 
 export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemActionsMenuProps) {
+  const { user } = useAuth();
   const {
     renameMedia,
     moveMediaToTrash,
@@ -254,7 +256,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           </MenuItem>
         )}
         <MenuItem
+          disabled={user?.role === 'Editor' && isFolder}
           onClick={(event) => {
+            if (user?.role === 'Editor' && isFolder) return;
             consumeMenuPointerEvent(event);
             openDelete();
           }}
@@ -262,12 +266,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: cv.destructive,
-            '&:hover': { backgroundColor: cv.destructiveHover },
+            color: user?.role === 'Editor' && isFolder ? cv.textMuted : cv.destructive,
+            opacity: user?.role === 'Editor' && isFolder ? 0.6 : 1,
+            cursor: user?.role === 'Editor' && isFolder ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.role === 'Editor' && isFolder ? 'transparent' : cv.destructiveHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DeleteOutlinedIcon sx={{ fontSize: 18, color: cv.destructive }} />
+            <DeleteOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Editor' && isFolder ? cv.textMuted : cv.destructive }} />
           </ListItemIcon>
           Delete
         </MenuItem>

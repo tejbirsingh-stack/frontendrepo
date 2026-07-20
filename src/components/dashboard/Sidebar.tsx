@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useAuth } from '../../auth/AuthContext';
 import { cv } from '../../theme/cssVars';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -1048,6 +1049,7 @@ export interface SidebarProps {
 }
 
 export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = false }: SidebarProps) {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const isRecentView =
@@ -1629,17 +1631,23 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
           })}
           <Divider sx={{ my: 0.5, borderColor: cv.border }} />
           <MenuItem
-            onClick={openCreateModal}
+            disabled={user?.role === 'Editor'}
+            onClick={() => {
+              if (user?.role === 'Editor') return;
+              openCreateModal();
+            }}
             sx={{
               py: 1,
               px: 1.5,
               fontSize: '0.875rem',
-              color: cv.textSecondary,
-              '&:hover': { backgroundColor: cv.surfaceHover },
+              color: user?.role === 'Editor' ? cv.textMuted : cv.textSecondary,
+              opacity: user?.role === 'Editor' ? 0.6 : 1,
+              cursor: user?.role === 'Editor' ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: user?.role === 'Editor' ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 28 }}>
-              <WorkspacesOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+              <WorkspacesOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Editor' ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Create new workspace
           </MenuItem>
@@ -1876,16 +1884,22 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         }}
       >
         <MenuItem
-          onClick={() => openAddItemModal('folder')}
+          disabled={user?.role === 'Editor'}
+          onClick={() => {
+            if (user?.role === 'Editor') return;
+            openAddItemModal('folder');
+          }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: cv.textSecondary,
-            '&:hover': { backgroundColor: cv.surfaceHover },
+            color: user?.role === 'Editor' ? cv.textMuted : cv.textSecondary,
+            opacity: user?.role === 'Editor' ? 0.6 : 1,
+            cursor: user?.role === 'Editor' ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.role === 'Editor' ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <FolderOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+            <FolderOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Editor' ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           New folder
         </MenuItem>
@@ -1966,16 +1980,22 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
           Rename
         </MenuItem>
         <MenuItem
-          onClick={openDeleteFolder}
+          disabled={user?.role === 'Editor'}
+          onClick={() => {
+            if (user?.role === 'Editor') return;
+            openDeleteFolder();
+          }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: cv.destructive,
-            '&:hover': { backgroundColor: cv.destructiveHover },
+            color: user?.role === 'Editor' ? cv.textMuted : cv.destructive,
+            opacity: user?.role === 'Editor' ? 0.6 : 1,
+            cursor: user?.role === 'Editor' ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.role === 'Editor' ? 'transparent' : cv.destructiveHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DeleteOutlinedIcon sx={{ fontSize: 18, color: cv.destructive }} />
+            <DeleteOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Editor' ? cv.textMuted : cv.destructive }} />
           </ListItemIcon>
           Delete
         </MenuItem>

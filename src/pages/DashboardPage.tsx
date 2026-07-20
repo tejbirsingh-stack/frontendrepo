@@ -40,6 +40,7 @@ import NewFolderModal from '../components/dashboard/NewFolderModal';
 import TrashConfirmModal from '../components/dashboard/TrashConfirmModal';
 import DashboardKeyboardShortcutsDialog from '../components/dashboard/DashboardKeyboardShortcutsDialog';
 import HelpMenuDrawer, { getHelpMenuShortcutLabel } from '../components/media/HelpMenuDrawer';
+import { useAuth } from '../auth/AuthContext';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
 import { dropdownMenuPaperSx } from '../constants/dropdownMenu';
@@ -235,6 +236,7 @@ export default function DashboardPage({
   libraryView = 'recent',
   folderMedia,
 }: DashboardPageProps) {
+  const { user } = useAuth();
   const isFavoritesView = libraryView === 'favorites';
   const isDuplicatesView = libraryView === 'duplicates';
   const isFolderView = Boolean(folderMedia);
@@ -370,14 +372,16 @@ export default function DashboardPage({
   const selectedContainerId = sidebarSelection?.folderId ?? null;
 
   const canInviteToFolder = useMemo(
-    () =>
-      canInviteTeamMembersToFolderSelection(
+    () => {
+      if (user?.role === 'Editor') return false;
+      return canInviteTeamMembersToFolderSelection(
         sidebarSelection,
         activeWorkspace.folders,
         activeWorkspace.projectFolders,
         { isFavoritesView },
-      ),
-    [sidebarSelection, activeWorkspace.folders, activeWorkspace.projectFolders, isFavoritesView],
+      );
+    },
+    [sidebarSelection, activeWorkspace.folders, activeWorkspace.projectFolders, isFavoritesView, user?.role],
   );
 
   const displayedTeamMembers = useMemo(() => {
@@ -1057,19 +1061,23 @@ export default function DashboardPage({
           Upload files
         </MenuItem>
         <MenuItem
+          disabled={user?.role === 'Editor'}
           onClick={() => {
+            if (user?.role === 'Editor') return;
             closeNewMenu();
             setNewFolderModalOpen(true);
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: cv.textSecondary,
-            '&:hover': { backgroundColor: cv.surfaceHover },
+            color: user?.role === 'Editor' ? cv.textMuted : cv.textSecondary,
+            opacity: user?.role === 'Editor' ? 0.6 : 1,
+            cursor: user?.role === 'Editor' ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.role === 'Editor' ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+            <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Editor' ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           New folder
         </MenuItem>
