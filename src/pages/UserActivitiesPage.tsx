@@ -171,8 +171,8 @@ export default function UserActivitiesPage() {
 
   return (
     <Box component="main" sx={{ flex: 1, overflowY: 'auto', px: { xs: 2, md: 3 }, py: { xs: 2, md: 3 } }}>
-      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 2, mb: 3 }}>
-        <Box>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', lg: 'center' }, gap: 3, mb: 3 }}>
+        <Box sx={{ mb: { xs: 1, lg: 0 } }}>
           <Typography variant="h5" sx={{ fontWeight: 600, fontSize: '1.375rem', mb: 0.5 }}>
             User Activities
           </Typography>
@@ -180,7 +180,7 @@ export default function UserActivitiesPage() {
             View the complete audit log of activities in your organization.
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, width: { xs: '100%', lg: 'auto' } }}>
           <FormControl size="small" sx={{ minWidth: 140 }}>
             <Select
               value={roleFilter}
