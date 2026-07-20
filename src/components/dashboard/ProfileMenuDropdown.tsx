@@ -10,6 +10,7 @@ import PaymentOutlinedIcon from '@mui/icons-material/PaymentOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { useAuth } from '../../auth/AuthContext';
+import { ROLE_IDS } from '../../constants/userRoles';
 import {
   DEFAULT_SETTINGS_PATH,
   SETTINGS_BASE_PATH,
@@ -376,7 +377,7 @@ export default function ProfileMenuDropdown({
             icon={<PaymentOutlinedIcon sx={{ fontSize: 20 }} />}
             label="Bills & Payments"
             to={BILLING_PATH}
-            disabled={user?.role === 'Admin' || user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer'}
+            disabled={user?.roleId === ROLE_IDS.ADMIN || user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
             tooltipTitle="Manage by the Super Admin only"
             onClick={() => {
               onClose();

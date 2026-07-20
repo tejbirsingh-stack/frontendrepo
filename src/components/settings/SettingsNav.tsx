@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { SETTINGS_BASE_PATH, SETTINGS_NAV_GROUPS } from '../../constants/settingsNav';
 import { getSettingsNavIcon } from './settingsNavIcons';
 import { useAuth } from '../../auth/AuthContext';
+import { ROLE_IDS } from '../../constants/userRoles';
 
 export default function SettingsNav({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
@@ -41,11 +42,14 @@ export default function SettingsNav({ onNavigate }: { onNavigate?: () => void })
           {group.items.map((item) => {
             const href = `${SETTINGS_BASE_PATH}/${item.path}`;
             const active = location.pathname === href;
-            const isBillingDisabled = item.id === 'billing' && (user?.role === 'Admin' || user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer');
+            const isBillingDisabled = item.id === 'billing' && (user?.roleId === ROLE_IDS.ADMIN || user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER);
             const editorDisabledItems = ['company', 'usage', 'plan', 'branding', 'user', 'projects', 'workspaces', 'fields', 'security', 'settings'];
-            const isRestrictedRole = user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer';
+            const adminDisabledItems = ['plan', 'company', 'security'];
+            const isRestrictedRole = user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER;
+            const isAdminRole = user?.roleId === ROLE_IDS.ADMIN;
             const isEditorDisabled = editorDisabledItems.includes(item.id) && isRestrictedRole;
-            const isDisabled = isBillingDisabled || isEditorDisabled;
+            const isAdminDisabled = adminDisabledItems.includes(item.id) && isAdminRole;
+            const isDisabled = isBillingDisabled || isEditorDisabled || isAdminDisabled;
 
             const buttonContent = (
               <ListItemButton

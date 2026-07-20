@@ -1,5 +1,6 @@
 import { useState, type MouseEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import { ROLE_IDS } from '../../constants/userRoles';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
@@ -136,9 +137,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
       >
         {isFolder ? (
           <MenuItem
-            disabled={user?.role === 'Collaborator' || user?.role === 'Viewer'}
+            disabled={user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
             onClick={(event) => {
-              if (user?.role === 'Collaborator' || user?.role === 'Viewer') return;
+              if (user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
               consumeMenuPointerEvent(event);
               openColorPicker();
             }}
@@ -146,23 +147,23 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary,
-              opacity: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 0.6 : 1,
-              cursor: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'transparent' : cv.surfaceHover },
+              color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+              opacity: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+              cursor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <PaletteOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary }} />
+              <PaletteOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Change color
           </MenuItem>
         ) : null}
         {isFolder ? (
           <MenuItem
-            disabled={user?.role === 'Collaborator' || user?.role === 'Viewer'}
+            disabled={user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
             onClick={(event) => {
-              if (user?.role === 'Collaborator' || user?.role === 'Viewer') return;
+              if (user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
               consumeMenuPointerEvent(event);
               openAssignProject();
             }}
@@ -170,22 +171,22 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary,
-              opacity: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 0.6 : 1,
-              cursor: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'transparent' : cv.surfaceHover },
+              color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+              opacity: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+              cursor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <WorkOutlineOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary }} />
+              <WorkOutlineOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Assign to project
           </MenuItem>
         ) : null}
         <MenuItem
-          disabled={user?.role === 'Collaborator' || user?.role === 'Viewer'}
+          disabled={user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
           onClick={(event) => {
-            if (user?.role === 'Collaborator' || user?.role === 'Viewer') return;
+            if (user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
             consumeMenuPointerEvent(event);
             openRename();
           }}
@@ -193,14 +194,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary,
-            opacity: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 0.6 : 1,
-            cursor: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'transparent' : cv.surfaceHover },
+            color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+            opacity: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+            cursor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary }} />
+            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Rename
         </MenuItem>
@@ -208,9 +209,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
         {item.type === 'video' ? (
           <>
             <MenuItem
-              disabled={user?.role === 'Viewer'}
+              disabled={user?.roleId === ROLE_IDS.VIEWER}
               onClick={(event) => {
-                if (user?.role === 'Viewer') return;
+                if (user?.roleId === ROLE_IDS.VIEWER) return;
                 consumeMenuPointerEvent(event);
                 window.open(`/api/media/${encodeURIComponent(item.id)}/download`, '_blank');
               }}
@@ -218,23 +219,23 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
               sx={{
                 py: 1,
                 fontSize: '0.875rem',
-                color: user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary,
-                opacity: user?.role === 'Viewer' ? 0.6 : 1,
-                cursor: user?.role === 'Viewer' ? 'not-allowed' : 'pointer',
-                '&:hover': { backgroundColor: user?.role === 'Viewer' ? 'transparent' : cv.surfaceHover },
+                color: user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+                opacity: user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+                cursor: user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+                '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
               }}
             >
               <ListItemIcon sx={{ minWidth: 32 }}>
-                <DownloadOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Viewer' ? cv.textMuted : cv.textMuted }} />
+                <DownloadOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textMuted }} />
               </ListItemIcon>
               Download Proxy File
             </MenuItem>
 
             {item.customMetadata?.originalFilePath && (
               <MenuItem
-                disabled={user?.role === 'Viewer'}
+                disabled={user?.roleId === ROLE_IDS.VIEWER}
                 onClick={(event) => {
-                  if (user?.role === 'Viewer') return;
+                  if (user?.roleId === ROLE_IDS.VIEWER) return;
                   consumeMenuPointerEvent(event);
                   window.open(`/api/media/${encodeURIComponent(item.id)}/download?raw=true`, '_blank');
                 }}
@@ -242,14 +243,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
                 sx={{
                   py: 1,
                   fontSize: '0.875rem',
-                  color: user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary,
-                  opacity: user?.role === 'Viewer' ? 0.6 : 1,
-                  cursor: user?.role === 'Viewer' ? 'not-allowed' : 'pointer',
-                  '&:hover': { backgroundColor: user?.role === 'Viewer' ? 'transparent' : cv.surfaceHover },
+                  color: user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+                  opacity: user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+                  cursor: user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+                  '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
                 }}
               >
                 <ListItemIcon sx={{ minWidth: 32 }}>
-                  <DownloadOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Viewer' ? cv.textMuted : cv.textMuted }} />
+                  <DownloadOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textMuted }} />
                 </ListItemIcon>
                 Download Original Raw File
               </MenuItem>
@@ -257,9 +258,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           </>
         ) : (
           <MenuItem
-            disabled={user?.role === 'Viewer'}
+            disabled={user?.roleId === ROLE_IDS.VIEWER}
             onClick={(event) => {
-              if (user?.role === 'Viewer') return;
+              if (user?.roleId === ROLE_IDS.VIEWER) return;
               consumeMenuPointerEvent(event);
               window.open(`/api/media/${encodeURIComponent(item.id)}/download`, '_blank');
             }}
@@ -267,22 +268,22 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary,
-              opacity: user?.role === 'Viewer' ? 0.6 : 1,
-              cursor: user?.role === 'Viewer' ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: user?.role === 'Viewer' ? 'transparent' : cv.surfaceHover },
+              color: user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+              opacity: user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+              cursor: user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <DownloadOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Viewer' ? cv.textMuted : cv.textMuted }} />
+              <DownloadOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textMuted }} />
             </ListItemIcon>
             Download File
           </MenuItem>
         )}
         <MenuItem
-          disabled={(user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator' || user?.role === 'Viewer'}
+          disabled={(user?.roleId === ROLE_IDS.EDITOR && isFolder) || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
           onClick={(event) => {
-            if ((user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator' || user?.role === 'Viewer') return;
+            if ((user?.roleId === ROLE_IDS.EDITOR && isFolder) || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
             consumeMenuPointerEvent(event);
             openDelete();
           }}
@@ -290,14 +291,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: (user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.destructive,
-            opacity: (user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator' || user?.role === 'Viewer' ? 0.6 : 1,
-            cursor: (user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: (user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'transparent' : cv.destructiveHover },
+            color: (user?.roleId === ROLE_IDS.EDITOR && isFolder) || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.destructive,
+            opacity: (user?.roleId === ROLE_IDS.EDITOR && isFolder) || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+            cursor: (user?.roleId === ROLE_IDS.EDITOR && isFolder) || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: (user?.roleId === ROLE_IDS.EDITOR && isFolder) || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.destructiveHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DeleteOutlinedIcon sx={{ fontSize: 18, color: (user?.role === 'Editor' && isFolder) || user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.destructive }} />
+            <DeleteOutlinedIcon sx={{ fontSize: 18, color: (user?.roleId === ROLE_IDS.EDITOR && isFolder) || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.destructive }} />
           </ListItemIcon>
           Delete
         </MenuItem>

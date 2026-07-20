@@ -33,7 +33,7 @@ import SettingsTableFilterPanel from './SettingsTableFilterPanel';
 import { SettingsSectionCard } from './SettingsSectionCard';
 import { SettingsTableContainer } from './SettingsContentLayout';
 import TruncatedText from '../TruncatedText';
-import { USER_ROLES, type UserRole } from '../../constants/userRoles';
+import { ROLE_IDS, USER_ROLES, type UserRole } from '../../constants/userRoles';
 import { fetchRoles, registerRole, fetchOrganizationUsers,} from '../../api/auth.service';
 import { useAuth } from '../../auth/AuthContext';
 import type { RoleItem } from '../../api/types';
@@ -120,6 +120,21 @@ function AddUserDialog({
   const [rolesList, setRolesList] = useState<RoleItem[]>([]);
   const [roleId, setRoleId] = useState<string>('');
   const [emailError, setEmailError] = useState('');
+  const { user } = useAuth();
+  
+  const filteredRolesList = useMemo(() => {
+    if (user?.roleId === ROLE_IDS.ADMIN) {
+      return rolesList.filter((r) => r.name !== 'Super Admin' && r.name !== 'Admin' && r.name !== 'System Admin');
+    }
+    return rolesList;
+  }, [rolesList, user]);
+
+  const filteredUserRoles = useMemo(() => {
+    if (user?.roleId === ROLE_IDS.ADMIN) {
+      return USER_ROLES.filter((r) => r !== 'Super Admin' && r !== 'Admin');
+    }
+    return USER_ROLES;
+  }, [user]);
 
   useEffect(() => {
     if (open) {
@@ -261,8 +276,8 @@ function AddUserDialog({
             MenuProps={selectInDialogMenuProps}
             sx={dialogSelectSx}
           >
-            {rolesList.length > 0
-              ? rolesList.map((roleOption) => (
+            {filteredRolesList.length > 0
+              ? filteredRolesList.map((roleOption) => (
                   <MenuItem
                     key={roleOption.id}
                     value={roleOption.id}
@@ -271,7 +286,7 @@ function AddUserDialog({
                     {roleOption.name}
                   </MenuItem>
                 ))
-              : USER_ROLES.map((roleOption) => (
+              : filteredUserRoles.map((roleOption) => (
                   <MenuItem
                     key={roleOption}
                     value={roleOption}

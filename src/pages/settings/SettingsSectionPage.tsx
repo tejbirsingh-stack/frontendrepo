@@ -20,6 +20,7 @@ import {
 import { DEFAULT_SETTINGS_PATH, SETTINGS_BASE_PATH } from '../../constants/settingsNav';
 
 import { useAuth } from '../../auth/AuthContext';
+import { ROLE_IDS } from '../../constants/userRoles';
 
 export default function SettingsSectionPage() {
   const location = useLocation();
@@ -29,13 +30,24 @@ export default function SettingsSectionPage() {
     return location.pathname.replace('/home/settings/', '').replace(/\/$/, '');
   }, [location.pathname]);
 
-  const isEditor = user?.role === 'Editor';
-  const isCollaborator = user?.role === 'Collaborator';
-  const isViewer = user?.role === 'Viewer';
+  const isEditor = user?.roleId === ROLE_IDS.EDITOR;
+  const isCollaborator = user?.roleId === ROLE_IDS.COLLABORATOR;
+  const isViewer = user?.roleId === ROLE_IDS.VIEWER;
   const isRestricted = isEditor || isCollaborator || isViewer;
-  const isAdmin = user?.role === 'Admin';
+  const isAdmin = user?.roleId === ROLE_IDS.ADMIN;
 
   if (sectionKey === 'accounts/billing' && (isAdmin || isRestricted)) {
+    return <Navigate to="/home" replace />;
+  }
+
+  if (
+    isAdmin &&
+    [
+      'profile/company',
+      'accounts/plan',
+      'admin/security',
+    ].includes(sectionKey)
+  ) {
     return <Navigate to="/home" replace />;
   }
 

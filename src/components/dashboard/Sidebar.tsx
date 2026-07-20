@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import { ROLE_IDS } from '../../constants/userRoles';
 import { cv } from '../../theme/cssVars';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -1631,23 +1632,23 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
           })}
           <Divider sx={{ my: 0.5, borderColor: cv.border }} />
           <MenuItem
-            disabled={user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer'}
+            disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
             onClick={() => {
-              if (user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer') return;
+              if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
               openCreateModal();
             }}
             sx={{
               py: 1,
               px: 1.5,
               fontSize: '0.875rem',
-              color: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary,
-              opacity: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? 0.6 : 1,
-              cursor: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'transparent' : cv.surfaceHover },
+              color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+              opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+              cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 28 }}>
-              <WorkspacesOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary }} />
+              <WorkspacesOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Create new workspace
           </MenuItem>
@@ -1884,42 +1885,42 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         }}
       >
         <MenuItem
-          disabled={user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer'}
+          disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
           onClick={() => {
-            if (user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer') return;
+            if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
             openAddItemModal('folder');
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary,
-            opacity: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? 0.6 : 1,
-            cursor: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'transparent' : cv.surfaceHover },
+            color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+            opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+            cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <FolderOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary }} />
+            <FolderOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           New folder
         </MenuItem>
         <MenuItem
-          disabled={user?.role === 'Collaborator' || user?.role === 'Viewer'}
+          disabled={user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
           onClick={() => {
-            if (user?.role === 'Collaborator' || user?.role === 'Viewer') return;
+            if (user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
             openAddItemModal('file');
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary,
-            opacity: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 0.6 : 1,
-            cursor: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'transparent' : cv.surfaceHover },
+            color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+            opacity: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+            cursor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <InsertDriveFileOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary }} />
+            <InsertDriveFileOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           New file
         </MenuItem>
@@ -1972,42 +1973,42 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         }}
       >
         <MenuItem
-          disabled={user?.role === 'Collaborator' || user?.role === 'Viewer'}
+          disabled={user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
           onClick={() => {
-            if (user?.role === 'Collaborator' || user?.role === 'Viewer') return;
+            if (user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
             openRenameFolder();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary,
-            opacity: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 0.6 : 1,
-            cursor: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'transparent' : cv.surfaceHover },
+            color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+            opacity: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+            cursor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.textSecondary }} />
+            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Rename
         </MenuItem>
         <MenuItem
-          disabled={user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer'}
+          disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
           onClick={() => {
-            if (user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer') return;
+            if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
             openDeleteFolder();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.destructive,
-            opacity: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? 0.6 : 1,
-            cursor: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? 'transparent' : cv.destructiveHover },
+            color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.destructive,
+            opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+            cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.destructiveHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DeleteOutlinedIcon sx={{ fontSize: 18, color: user?.role === 'Editor' || user?.role === 'Collaborator' || user?.role === 'Viewer' ? cv.textMuted : cv.destructive }} />
+            <DeleteOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.destructive }} />
           </ListItemIcon>
           Delete
         </MenuItem>
