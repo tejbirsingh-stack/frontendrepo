@@ -21,6 +21,7 @@ export const SignUpPage = lazyPage(() => import('../pages/SignUpPage'));
 export const DashboardPage = lazyPage(() => import('../pages/DashboardPage'));
 export const FolderPage = lazyPage(() => import('../pages/FolderPage'));
 export const TagsManagementPage = lazyPage(() => import('../pages/TagsManagementPage'));
+export const UserActivitiesPage = lazyPage(() => import('../pages/UserActivitiesPage'));
 export const TrashPage = lazyPage(() => import('../pages/TrashPage'));
 export const SettingsSectionPage = lazyPage(() => import('../pages/settings/SettingsSectionPage'));
 export const VideoPlayerPage = lazyPage(() => import('../pages/VideoPlayerPage'));

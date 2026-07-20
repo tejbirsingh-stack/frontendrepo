@@ -35,6 +35,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import WorkspacesOutlinedIcon from '@mui/icons-material/WorkspacesOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import HistoryIcon from '@mui/icons-material/History';
 import NoahLogo from '../NoahLogo';
 import { dropdownMenuPaperSx } from '../../constants/dropdownMenu';
 import WorkspaceColorDot from './WorkspaceColorDot';
@@ -860,130 +861,130 @@ function FolderItem({
                 </Typography>
               )
             ) : (
-            filteredChildren.map((child) => {
-              const childTargetKey = `folder-${folder.id}-${child}`;
-              const isChildDropTarget = dropTargetKey === childTargetKey;
-              const isChildSelected =
-                sidebarSelection?.browseMode === browseMode &&
-                sidebarSelection.folderId === folder.id &&
-                sidebarSelection.childLabel === child;
-              const childKey = getSidebarChildKey(folder.id, child);
-              const isChildOpen = Boolean(openChildFolders[childKey]);
-              const showChildFiles = isChildOpen || Boolean(normalizedSearch);
-              const childMedia = childMediaByLabel.get(child) ?? [];
-              const bucketFilesOnly = folder.id === 'all-files' || folder.id === 'archive';
-              const visibleChildMedia = filterSidebarChildMediaBySearch(
-                bucketFilesOnly ? childMedia.filter((item) => item.type !== 'folder') : childMedia,
-                child,
-                searchQuery,
-              );
+              filteredChildren.map((child) => {
+                const childTargetKey = `folder-${folder.id}-${child}`;
+                const isChildDropTarget = dropTargetKey === childTargetKey;
+                const isChildSelected =
+                  sidebarSelection?.browseMode === browseMode &&
+                  sidebarSelection.folderId === folder.id &&
+                  sidebarSelection.childLabel === child;
+                const childKey = getSidebarChildKey(folder.id, child);
+                const isChildOpen = Boolean(openChildFolders[childKey]);
+                const showChildFiles = isChildOpen || Boolean(normalizedSearch);
+                const childMedia = childMediaByLabel.get(child) ?? [];
+                const bucketFilesOnly = folder.id === 'all-files' || folder.id === 'archive';
+                const visibleChildMedia = filterSidebarChildMediaBySearch(
+                  bucketFilesOnly ? childMedia.filter((item) => item.type !== 'folder') : childMedia,
+                  child,
+                  searchQuery,
+                );
 
-              return (
-                <Box key={child}>
-                  <ListItemButton
-                    onClick={() => handleChildClick(child)}
-                    onDragOver={(e) => onDragOverTarget(e, childTargetKey)}
-                    onDragLeave={onDragLeaveTarget}
-                    onDrop={(e) => onDropOnFolder(e, folder.id, child)}
-                    sx={{
-                      position: 'relative',
-                      py: 0.5,
-                      pl: 1,
-                      pr: 4.5,
-                      borderRadius: '8px',
-                      mb: 0.25,
-                      color: cv.textSecondary,
-                      backgroundColor: isChildDropTarget
-                        ? cv.blueSelectionSurface
-                        : isChildSelected
-                          ? selectedBackground
-                          : 'transparent',
-                      border: isChildDropTarget
-                        ? `1px dashed ${cv.borderFocus}`
-                        : isChildSelected
-                          ? `1px solid ${folderColor}66`
-                          : '1px solid transparent',
-                      '&:hover': {
-                        backgroundColor: isChildSelected ? selectedBackground : cv.surfaceHover,
-                        color: cv.textPrimary,
-                      },
-                      '&:hover .folder-child-actions-btn': { opacity: 1 },
-                    }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 20, mr: 0.5 }}>
-                      <IconButton
-                        size="small"
-                        aria-label={isChildOpen ? `Collapse ${child}` : `Expand ${child}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onToggleChildFolder(folder.id, child);
-                        }}
-                        sx={{
-                          p: 0,
-                          width: 16,
-                          height: 16,
-                          color: cv.textMuted,
-                          '&:hover': {
-                            backgroundColor: 'transparent',
-                            color: cv.textPrimary,
-                          },
-                        }}
-                      >
-                        <ChevronRightIcon
-                          sx={{
-                            fontSize: 16,
-                            transform: isChildOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-                            transition: 'transform 0.2s ease',
-                          }}
-                        />
-                      </IconButton>
-                    </ListItemIcon>
-                    <ListItemIcon sx={{ minWidth: 28 }}>
-                      <FolderOutlinedIcon
-                        sx={{ fontSize: 16, color: folderColor, opacity: 0.85 }}
-                      />
-                    </ListItemIcon>
-                    <ListItemText
-                      disableTypography
-                      primary={
-                        <TruncatedText
-                          text={child}
-                          sx={{
-                            fontSize: '0.8125rem',
-                            color: cv.textPrimary,
-                          }}
-                        />
-                      }
-                      sx={{ minWidth: 0, flex: 1, mr: 3 }}
-                    />
-                    <IconButton
-                      className="folder-child-actions-btn"
-                      size="small"
-                      aria-label={`More options for ${child}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onOpenActionsMenu(event, {
-                          type: 'child',
-                          folderId: folder.id,
-                          label: child,
-                        });
-                      }}
+                return (
+                  <Box key={child}>
+                    <ListItemButton
+                      onClick={() => handleChildClick(child)}
+                      onDragOver={(e) => onDragOverTarget(e, childTargetKey)}
+                      onDragLeave={onDragLeaveTarget}
+                      onDrop={(e) => onDropOnFolder(e, folder.id, child)}
                       sx={{
-                        ...folderActionsButtonSx,
-                        position: 'absolute',
-                        right: 4,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
+                        position: 'relative',
+                        py: 0.5,
+                        pl: 1,
+                        pr: 4.5,
+                        borderRadius: '8px',
+                        mb: 0.25,
+                        color: cv.textSecondary,
+                        backgroundColor: isChildDropTarget
+                          ? cv.blueSelectionSurface
+                          : isChildSelected
+                            ? selectedBackground
+                            : 'transparent',
+                        border: isChildDropTarget
+                          ? `1px dashed ${cv.borderFocus}`
+                          : isChildSelected
+                            ? `1px solid ${folderColor}66`
+                            : '1px solid transparent',
+                        '&:hover': {
+                          backgroundColor: isChildSelected ? selectedBackground : cv.surfaceHover,
+                          color: cv.textPrimary,
+                        },
+                        '&:hover .folder-child-actions-btn': { opacity: 1 },
                       }}
                     >
-                      <MoreVertIcon sx={{ fontSize: 16 }} />
-                    </IconButton>
-                  </ListItemButton>
+                      <ListItemIcon sx={{ minWidth: 20, mr: 0.5 }}>
+                        <IconButton
+                          size="small"
+                          aria-label={isChildOpen ? `Collapse ${child}` : `Expand ${child}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onToggleChildFolder(folder.id, child);
+                          }}
+                          sx={{
+                            p: 0,
+                            width: 16,
+                            height: 16,
+                            color: cv.textMuted,
+                            '&:hover': {
+                              backgroundColor: 'transparent',
+                              color: cv.textPrimary,
+                            },
+                          }}
+                        >
+                          <ChevronRightIcon
+                            sx={{
+                              fontSize: 16,
+                              transform: isChildOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                              transition: 'transform 0.2s ease',
+                            }}
+                          />
+                        </IconButton>
+                      </ListItemIcon>
+                      <ListItemIcon sx={{ minWidth: 28 }}>
+                        <FolderOutlinedIcon
+                          sx={{ fontSize: 16, color: folderColor, opacity: 0.85 }}
+                        />
+                      </ListItemIcon>
+                      <ListItemText
+                        disableTypography
+                        primary={
+                          <TruncatedText
+                            text={child}
+                            sx={{
+                              fontSize: '0.8125rem',
+                              color: cv.textPrimary,
+                            }}
+                          />
+                        }
+                        sx={{ minWidth: 0, flex: 1, mr: 3 }}
+                      />
+                      <IconButton
+                        className="folder-child-actions-btn"
+                        size="small"
+                        aria-label={`More options for ${child}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onOpenActionsMenu(event, {
+                            type: 'child',
+                            folderId: folder.id,
+                            label: child,
+                          });
+                        }}
+                        sx={{
+                          ...folderActionsButtonSx,
+                          position: 'absolute',
+                          right: 4,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                        }}
+                      >
+                        <MoreVertIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </ListItemButton>
 
-                  <Collapse in={showChildFiles} timeout="auto" unmountOnExit>
-                    <List disablePadding sx={{ pl: 3.5, pr: 0.5, pb: 0.25 }}>
-                      {visibleChildMedia.length > 0 ? (
-                        visibleChildMedia.map((file) => (
+                    <Collapse in={showChildFiles} timeout="auto" unmountOnExit>
+                      <List disablePadding sx={{ pl: 3.5, pr: 0.5, pb: 0.25 }}>
+                        {visibleChildMedia.length > 0 ? (
+                          visibleChildMedia.map((file) => (
                             <ListItemButton
                               key={file.id}
                               onClick={() => handleChildFileClick(file, child)}
@@ -1014,25 +1015,25 @@ function FolderItem({
                                 sx={{ minWidth: 0 }}
                               />
                             </ListItemButton>
-                        ))
-                      ) : (
-                        <Typography
-                          sx={{
-                            pl: 4.5,
-                            py: 0.5,
-                            fontSize: '0.6875rem',
-                            color: cv.textMuted,
-                            fontStyle: 'italic',
-                          }}
-                        >
-                          No files
-                        </Typography>
-                      )}
-                    </List>
-                  </Collapse>
-                </Box>
-              );
-            })
+                          ))
+                        ) : (
+                          <Typography
+                            sx={{
+                              pl: 4.5,
+                              py: 0.5,
+                              fontSize: '0.6875rem',
+                              color: cv.textMuted,
+                              fontStyle: 'italic',
+                            }}
+                          >
+                            No files
+                          </Typography>
+                        )}
+                      </List>
+                    </Collapse>
+                  </Box>
+                );
+              })
             )}
           </List>
         </Collapse>
@@ -1836,6 +1837,13 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
             label="Tags Management"
             active={isTagsView}
             onClick={() => navigateAndClose('/home/tags')}
+          />
+
+          <NavItem
+            icon={<HistoryIcon />}
+            label="User Activities"
+            active={isTagsView}
+            onClick={() => navigateAndClose('/home/user-activities')}
           />
         </Box>
       </Box>
