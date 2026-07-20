@@ -42,14 +42,19 @@ export default function SettingsNav({ onNavigate }: { onNavigate?: () => void })
           {group.items.map((item) => {
             const href = `${SETTINGS_BASE_PATH}/${item.path}`;
             const active = location.pathname === href;
-            const isBillingDisabled = item.id === 'billing' && (user?.roleId === ROLE_IDS.ADMIN || user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER);
-            const editorDisabledItems = ['company', 'usage', 'plan', 'branding', 'user', 'projects', 'workspaces', 'fields', 'security', 'settings'];
-            const adminDisabledItems = ['plan', 'company', 'security'];
-            const isRestrictedRole = user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER;
-            const isAdminRole = user?.roleId === ROLE_IDS.ADMIN;
-            const isEditorDisabled = editorDisabledItems.includes(item.id) && isRestrictedRole;
-            const isAdminDisabled = adminDisabledItems.includes(item.id) && isAdminRole;
-            const isDisabled = isBillingDisabled || isEditorDisabled || isAdminDisabled;
+            const hasManageSubscription = user?.permissions?.includes('manage_subscription_billing');
+            const hasManageCompany = user?.permissions?.includes('manage_users_permissions'); // Or a specific company permission, let's use manage_users_permissions as proxy for admin for now, or just check 'manage_subscription_billing'
+            
+            const isBillingDisabled = item.id === 'billing' && !hasManageSubscription;
+            const isPlanDisabled = item.id === 'plan' && !hasManageSubscription;
+            const isCompanyDisabled = item.id === 'company' && !hasManageSubscription; // Admin is blocked from overarching infrastructure
+            const isSecurityDisabled = item.id === 'security' && !hasManageSubscription;
+            const isUserDisabled = item.id === 'user' && !user?.permissions?.includes('manage_users_permissions');
+            const isUsageDisabled = item.id === 'usage' && !user?.permissions?.includes('view_audit_analytics');
+            const isProjectsWorkspacesDisabled = ['projects', 'workspaces', 'fields', 'settings'].includes(item.id) && !user?.permissions?.includes('manage_root_folders');
+            const isBrandingDisabled = item.id === 'branding' && !user?.permissions?.includes('manage_users_permissions');
+
+            const isDisabled = isBillingDisabled || isPlanDisabled || isCompanyDisabled || isSecurityDisabled || isUserDisabled || isUsageDisabled || isProjectsWorkspacesDisabled || isBrandingDisabled;
 
             const buttonContent = (
               <ListItemButton
@@ -110,9 +115,7 @@ export default function SettingsNav({ onNavigate }: { onNavigate?: () => void })
 
             if (isDisabled) {
               return (
-                <Tooltip key={item.id} title="Manage by the Super Admin only" placement="right" arrow>
-                  <Box sx={{ display: 'block' }}>{buttonContent}</Box>
-                </Tooltip>
+                <Box key={item.id} sx={{ display: 'block' }}>{buttonContent}</Box>
               );
             }
 

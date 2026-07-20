@@ -1632,23 +1632,23 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
           })}
           <Divider sx={{ my: 0.5, borderColor: cv.border }} />
           <MenuItem
-            disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+            disabled={!user?.permissions?.includes('manage_root_folders')}
             onClick={() => {
-              if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+              if (!user?.permissions?.includes('manage_root_folders')) return;
               openCreateModal();
             }}
             sx={{
               py: 1,
               px: 1.5,
               fontSize: '0.875rem',
-              color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
-              opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-              cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
+              color: !user?.permissions?.includes('manage_root_folders') ? cv.textMuted : cv.textSecondary,
+              opacity: !user?.permissions?.includes('manage_root_folders') ? 0.6 : 1,
+              cursor: !user?.permissions?.includes('manage_root_folders') ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !user?.permissions?.includes('manage_root_folders') ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 28 }}>
-              <WorkspacesOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+              <WorkspacesOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('manage_root_folders') ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Create new workspace
           </MenuItem>
@@ -1885,42 +1885,42 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         }}
       >
         <MenuItem
-          disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+          disabled={!user?.permissions?.includes('manage_root_folders')}
           onClick={() => {
-            if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+            if (!user?.permissions?.includes('manage_root_folders')) return;
             openAddItemModal('folder');
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
-            opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-            cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
+            color: !user?.permissions?.includes('manage_root_folders') ? cv.textMuted : cv.textSecondary,
+            opacity: !user?.permissions?.includes('manage_root_folders') ? 0.6 : 1,
+            cursor: !user?.permissions?.includes('manage_root_folders') ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: !user?.permissions?.includes('manage_root_folders') ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <FolderOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+            <FolderOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('manage_root_folders') ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           New folder
         </MenuItem>
         <MenuItem
-          disabled={user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+          disabled={!user?.permissions?.includes('upload_delete_media')}
           onClick={() => {
-            if (user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+            if (!user?.permissions?.includes('upload_delete_media')) return;
             openAddItemModal('file');
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
-            opacity: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-            cursor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
+            color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary,
+            opacity: !user?.permissions?.includes('upload_delete_media') ? 0.6 : 1,
+            cursor: !user?.permissions?.includes('upload_delete_media') ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: !user?.permissions?.includes('upload_delete_media') ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <InsertDriveFileOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+            <InsertDriveFileOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           New file
         </MenuItem>
@@ -1973,42 +1973,42 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         }}
       >
         <MenuItem
-          disabled={user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+          disabled={!user?.permissions?.includes('upload_delete_media')}
           onClick={() => {
-            if (user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+            if (!user?.permissions?.includes('upload_delete_media')) return;
             openRenameFolder();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
-            opacity: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-            cursor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
+            color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary,
+            opacity: !user?.permissions?.includes('upload_delete_media') ? 0.6 : 1,
+            cursor: !user?.permissions?.includes('upload_delete_media') ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: !user?.permissions?.includes('upload_delete_media') ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Rename
         </MenuItem>
         <MenuItem
-          disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+          disabled={!user?.permissions?.includes('manage_root_folders')}
           onClick={() => {
-            if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+            if (!user?.permissions?.includes('manage_root_folders')) return;
             openDeleteFolder();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.destructive,
-            opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-            cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.destructiveHover },
+            color: !user?.permissions?.includes('manage_root_folders') ? cv.textMuted : cv.destructive,
+            opacity: !user?.permissions?.includes('manage_root_folders') ? 0.6 : 1,
+            cursor: !user?.permissions?.includes('manage_root_folders') ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: !user?.permissions?.includes('manage_root_folders') ? 'transparent' : cv.destructiveHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DeleteOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.destructive }} />
+            <DeleteOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('manage_root_folders') ? cv.textMuted : cv.destructive }} />
           </ListItemIcon>
           Delete
         </MenuItem>

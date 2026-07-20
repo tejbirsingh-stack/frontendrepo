@@ -9,8 +9,8 @@ export const USER_ROLES = [
 export const ROLE_IDS = {
   SYSTEM_ADMIN: '350c047a-60a1-4a84-8bdb-79748e9a906e',
   ADMIN: '88a6b2a1-b2f6-40d5-8b04-4abf7eb45401',
-  EDITOR: '93cd195e-dd2a-45b7-965d-cab2d1423784',
-  SUPER_ADMIN: '996cc56f-8823-4b6f-bcb9-76b2c1f2dd15',
+  EDITOR: '93cdf95e-dd2a-45b7-965d-cab2d1423784',
+  SUPER_ADMIN: '996cc58f-8823-4b6f-bcb9-76b2c1f2dd15',
   VIEWER: 'c3c36ad8-dc0a-464b-998b-a0847087fcd0',
   COLLABORATOR: 'ffeec394-0e40-49e1-aed3-61962118d73e',
 } as const;

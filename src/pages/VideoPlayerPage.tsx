@@ -189,7 +189,7 @@ const mediaTypeLabels = {
 
 export default function VideoPlayerPage() {
   const { user } = useAuth();
-  const isViewer = user?.roleId === ROLE_IDS.VIEWER;
+  const isViewer = !user?.permissions?.includes('timeline_annotations');
   const { mediaId } = useParams<{ mediaId: string }>();
   const navigate = useNavigate();
   const theme = useTheme();

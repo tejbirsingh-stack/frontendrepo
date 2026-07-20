@@ -30,42 +30,24 @@ export default function SettingsSectionPage() {
     return location.pathname.replace('/home/settings/', '').replace(/\/$/, '');
   }, [location.pathname]);
 
-  const isEditor = user?.roleId === ROLE_IDS.EDITOR;
-  const isCollaborator = user?.roleId === ROLE_IDS.COLLABORATOR;
-  const isViewer = user?.roleId === ROLE_IDS.VIEWER;
-  const isRestricted = isEditor || isCollaborator || isViewer;
-  const isAdmin = user?.roleId === ROLE_IDS.ADMIN;
+  const hasManageSubscription = user?.permissions?.includes('manage_subscription_billing');
+  const hasManageUsers = user?.permissions?.includes('manage_users_permissions');
+  const hasViewAudit = user?.permissions?.includes('view_audit_analytics');
+  const hasManageRootFolders = user?.permissions?.includes('manage_root_folders');
 
-  if (sectionKey === 'accounts/billing' && (isAdmin || isRestricted)) {
+  if (['accounts/billing', 'accounts/plan', 'profile/company', 'admin/security'].includes(sectionKey) && !hasManageSubscription) {
     return <Navigate to="/home" replace />;
   }
 
-  if (
-    isAdmin &&
-    [
-      'profile/company',
-      'accounts/plan',
-      'admin/security',
-    ].includes(sectionKey)
-  ) {
+  if (['admin/user', 'accounts/branding'].includes(sectionKey) && !hasManageUsers) {
     return <Navigate to="/home" replace />;
   }
 
-  if (
-    isRestricted &&
-    [
-      'profile/company',
-      'accounts/usage',
-      'accounts/plan',
-      'accounts/branding',
-      'admin/user',
-      'admin/projects',
-      'admin/workspaces',
-      'admin/fields',
-      'admin/security',
-      'share/settings',
-    ].includes(sectionKey)
-  ) {
+  if (sectionKey === 'accounts/usage' && !hasViewAudit) {
+    return <Navigate to="/home" replace />;
+  }
+
+  if (['admin/projects', 'admin/workspaces', 'admin/fields', 'share/settings'].includes(sectionKey) && !hasManageRootFolders) {
     return <Navigate to="/home" replace />;
   }
 

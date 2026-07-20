@@ -377,8 +377,7 @@ export default function ProfileMenuDropdown({
             icon={<PaymentOutlinedIcon sx={{ fontSize: 20 }} />}
             label="Bills & Payments"
             to={BILLING_PATH}
-            disabled={user?.roleId === ROLE_IDS.ADMIN || user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
-            tooltipTitle="Manage by the Super Admin only"
+            disabled={!user?.permissions?.includes('manage_subscription_billing')}
             onClick={() => {
               onClose();
               onBillsPayments?.();

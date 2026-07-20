@@ -111,7 +111,7 @@ export default function SettingsAdminToolbar({
           </Button>
         ) : null}
         {onExport ? (
-          <Tooltip title={exportDisabled ? 'Manage by the Super Admin only' : ''} placement="top" disableHoverListener={!exportDisabled}>
+          <Tooltip title="" placement="top" disableHoverListener={true}>
             <span>
               <Button
                 size="small"
@@ -127,7 +127,7 @@ export default function SettingsAdminToolbar({
         ) : null}
         {extraActions}
         {onAdd ? (
-          <Tooltip title={addDisabled ? 'Manage by the Super Admin only' : ''} placement="top" disableHoverListener={!addDisabled}>
+          <Tooltip title="" placement="top" disableHoverListener={true}>
             <span>
               <Button
                 size="small"
