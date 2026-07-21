@@ -1018,12 +1018,15 @@ export default function VideoPlayerPage() {
     };
 
     loadApiAnnotations();
-    
+  }, [mediaId, syncTrigger]);
+
+  // Reset tools and UI state only when navigating to a new media asset
+  useEffect(() => {
     setDraftComment(null);
     setActiveTool('select');
     resetStacks();
     setWorkspaceZoom(WORKSPACE_ZOOM_DEFAULT);
-  }, [mediaId, resetStacks, syncTrigger]);
+  }, [mediaId, resetStacks]);
 
 
 

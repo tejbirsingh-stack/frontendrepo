@@ -16,11 +16,11 @@ export function useMediaWebSocket (
         if (!mediaId) return;
 
         // Convert http(s):// to ws(s):// for WebSockets
-        const baseUrl = env.apiBaseUrl || 'http://localhost:3000/api';
-        let wsBase = baseUrl.replace(/^http/, 'ws'); 
+        const defaultBase = typeof window !== 'undefined' ? `${window.location.origin}/api` : 'http://localhost:3000/api';
+        const baseUrl = env.apiBaseUrl || defaultBase;
+        const wsBase = baseUrl.replace(/^http/, 'ws'); 
 
         // Connect to backend realTime controller room for this specific media
-        if (wsBase.endsWith('/api')) wsBase = wsBase.slice(0, -4);
         const wsUrl = `${wsBase}/ws?mediaId=${mediaId}`;
 
         const ws = new WebSocket(wsUrl);
