@@ -29,19 +29,24 @@ interface AnnotationUndoIslandProps {
   canClear: boolean;
   onClear: () => void;
   compact?: boolean;
+  disabled?: boolean;
 }
 
 export default function AnnotationUndoIsland({
   canClear,
   onClear,
   compact = false,
+  disabled = false,
 }: AnnotationUndoIslandProps) {
   if (compact) {
     return (
       <LabeledToolbarButton
         label="Clear"
-        disabled={!canClear}
-        onClick={onClear}
+        disabled={!canClear || disabled}
+        onClick={() => {
+          if (disabled) return;
+          onClear();
+        }}
         ariaLabel="Clear all annotations"
       >
         <DeleteSweepOutlinedIcon sx={{ fontSize: ISLAND_ICON_SIZE }} />
@@ -56,8 +61,11 @@ export default function AnnotationUndoIsland({
           <IconButton
             type="button"
             aria-label="Clear all annotations"
-            disabled={!canClear}
-            onClick={onClear}
+            disabled={!canClear || disabled}
+            onClick={() => {
+              if (disabled) return;
+              onClear();
+            }}
             sx={{
               width: ISLAND_BUTTON_SIZE,
               height: ISLAND_BUTTON_SIZE,

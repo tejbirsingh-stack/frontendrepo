@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useAuth } from '../../auth/AuthContext';
+import { ROLE_IDS } from '../../constants/userRoles';
 import { cv } from '../../theme/cssVars';
 import {
   Button,
@@ -64,6 +66,7 @@ export default function InviteTeamMemberModal({
   title = 'Invite team member',
   description = 'Invited teammates receive an email to join your workspace.',
 }: InviteTeamMemberModalProps) {
+  const { user } = useAuth();
   const [emails, setEmails] = useState<string[]>([]);
   const [role, setRole] = useState<UserRole>('Collaborator');
   const [message, setMessage] = useState('');
@@ -163,7 +166,12 @@ export default function InviteTeamMemberModal({
             MenuProps={selectInDialogMenuProps}
             sx={dialogSelectSx}
           >
-            {USER_ROLES.map((roleOption) => (
+            {USER_ROLES.filter((roleOption) => {
+              if (user?.roleId === ROLE_IDS.ADMIN) {
+                return roleOption !== 'Super Admin' && roleOption !== 'Admin';
+              }
+              return true;
+            }).map((roleOption) => (
               <MenuItem
                 key={roleOption}
                 value={roleOption}

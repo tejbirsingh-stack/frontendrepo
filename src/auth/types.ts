@@ -10,6 +10,7 @@ export interface AuthSessionUser {
     id: string;
     name: string;
   };
+  permissions?: string[];
   initials: string;
   avatarUrl?: string;
   accountName?: string;
@@ -38,7 +39,7 @@ export interface AuthContextValue {
   login: (credentials: LoginCredentials) => Promise<void>;
   signup: (credentials: SignUpCredentials) => Promise<void>;
   logout: () => Promise<void>;
-  loginGoogle: (idToken: string, rememberMe?: boolean) => Promise<void>;
+  loginGoogle: (idToken: string, rememberMe?: boolean, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => Promise<void>;
   clearSession: () => void;
-  loginMicrosoft: (idToken: string, rememberMe?: boolean) => Promise<void>;
+  loginMicrosoft: (idToken: string, rememberMe?: boolean, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => Promise<void>;
 }

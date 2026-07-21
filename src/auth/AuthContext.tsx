@@ -13,7 +13,6 @@ import {
   loginUser,
   loginWithGoogle,
   loginWithMicrosoft,
-  logoutRequest,
   mapAuthUserDtoToSessionUser,
   signUpRequest,
 } from '../api/auth.service';
@@ -24,6 +23,7 @@ import {
 import {
   clearPersistedSession,
   persistSession,
+  persistSignupSessionToken,
   readPersistedSessionToken,
   readPersistedSessionUser,
 } from './authStorage';
@@ -57,13 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-      await logoutRequest();
-    } catch {
-      // ignore logout API failure
-    } finally {
-      clearSession();
-    }
+    clearSession();
   }, [clearSession]);
 
   useEffect(() => {
@@ -113,8 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(sessionUser);
           persistSession(persistedToken, sessionUser);
         }
-      } catch {
-        if (!cancelled && !persistedUser) {
+      } catch (error: any) {
+        if (!cancelled && (error?.status === 404 || error?.status === 401 || error?.code === 'UNAUTHORIZED' || error?.code === 'NOT_FOUND' || !persistedUser)) {
           clearSession();
         }
       } finally {
@@ -158,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signup = useCallback(
-    async ({ name, email, password, rememberMe = false }: SignUpCredentials) => {
+    async ({ name, email, password }: SignUpCredentials) => {
       const response = await signUpRequest({ name, email, password });
       const token = response.accessToken || response.token;
       if (!token) throw new Error('No access token returned from signup');
@@ -168,14 +162,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const sessionUser = mapAuthUserDtoToSessionUser(currentUserDto);
 
       setSession(token, sessionUser);
-      persistSession(token, sessionUser, rememberMe);
+      persistSignupSessionToken(token);
     },
     [setSession],
   );
 
   const loginGoogle = useCallback(
-    async (idToken: string, rememberMe = false) => {
-      const response = await loginWithGoogle(idToken);
+    async (idToken: string, rememberMe = false, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => {
+      const response = await loginWithGoogle(idToken, options);
       const token = response.accessToken || response.token;
       if (!token) throw new Error('No access token returned from Google login');
 
@@ -184,14 +178,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const sessionUser = mapAuthUserDtoToSessionUser(currentUserDto);
 
       setSession(token, sessionUser);
-      persistSession(token, sessionUser, rememberMe);
+      if (options?.mode === 'signup' || options?.isSignUp) {
+        persistSignupSessionToken(token);
+      } else {
+        persistSession(token, sessionUser, rememberMe);
+      }
     },
     [setSession],
   );
 
   const loginMicrosoft = useCallback(
-    async (idToken: string, rememberMe = false) => {
-      const response = await loginWithMicrosoft(idToken);
+    async (idToken: string, rememberMe = false, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => {
+      const response = await loginWithMicrosoft(idToken, options);
       const token = response.accessToken || response.token;
       if (!token) throw new Error('No access token returned from Microsoft login');
 
@@ -200,7 +198,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const sessionUser = mapAuthUserDtoToSessionUser(currentUserDto);
 
       setSession(token, sessionUser);
-      persistSession(token, sessionUser, rememberMe);
+      if (options?.mode === 'signup' || options?.isSignUp) {
+        persistSignupSessionToken(token);
+      } else {
+        persistSession(token, sessionUser, rememberMe);
+      }
     },
     [setSession],
   );

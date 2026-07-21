@@ -3,6 +3,7 @@ import {
   Button,
   InputAdornment,
   TextField,
+  Tooltip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { cv } from '../../theme/cssVars';
@@ -20,6 +21,8 @@ interface SettingsAdminToolbarProps {
   onExport?: () => void;
   onAdd?: () => void;
   addLabel?: string;
+  addDisabled?: boolean;
+  exportDisabled?: boolean;
   extraActions?: React.ReactNode;
 }
 
@@ -33,6 +36,8 @@ export default function SettingsAdminToolbar({
   onExport,
   onAdd,
   addLabel = 'Add new',
+  addDisabled = false,
+  exportDisabled = false,
   extraActions,
 }: SettingsAdminToolbarProps) {
   return (
@@ -106,26 +111,40 @@ export default function SettingsAdminToolbar({
           </Button>
         ) : null}
         {onExport ? (
-          <Button
-            size="small"
-            startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />}
-            onClick={onExport}
-            sx={{ color: cv.textSecondary, textTransform: 'none' }}
-          >
-            Export view
-          </Button>
+          <Tooltip title="" placement="top" disableHoverListener={true}>
+            <span>
+              <Button
+                size="small"
+                startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />}
+                onClick={exportDisabled ? undefined : onExport}
+                disabled={exportDisabled}
+                sx={{ color: exportDisabled ? cv.textMuted : cv.textSecondary, textTransform: 'none' }}
+              >
+                Export view
+              </Button>
+            </span>
+          </Tooltip>
         ) : null}
         {extraActions}
         {onAdd ? (
-          <Button
-            size="small"
-            variant="contained"
-            startIcon={<AddIcon sx={{ fontSize: 18 }} />}
-            onClick={onAdd}
-            sx={{ textTransform: 'none', borderRadius: '8px' }}
-          >
-            {addLabel}
-          </Button>
+          <Tooltip title="" placement="top" disableHoverListener={true}>
+            <span>
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<AddIcon sx={{ fontSize: 18 }} />}
+                onClick={addDisabled ? undefined : onAdd}
+                disabled={addDisabled}
+                sx={{ 
+                  textTransform: 'none', 
+                  borderRadius: '8px',
+                  opacity: addDisabled ? 0.6 : 1,
+                }}
+              >
+                {addLabel}
+              </Button>
+            </span>
+          </Tooltip>
         ) : null}
       </Box>
     </Box>

@@ -1,12 +1,15 @@
-import { List, ListItemButton, ListItemIcon, ListItemText, Typography } from '@mui/material';
+import { List, ListItemButton, ListItemIcon, ListItemText, Typography, Tooltip, Box } from '@mui/material';
 import { cv } from '../../theme/cssVars';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SETTINGS_BASE_PATH, SETTINGS_NAV_GROUPS } from '../../constants/settingsNav';
 import { getSettingsNavIcon } from './settingsNavIcons';
+import { useAuth } from '../../auth/AuthContext';
+import { ROLE_IDS } from '../../constants/userRoles';
 
 export default function SettingsNav({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   return (
     <List
@@ -39,12 +42,30 @@ export default function SettingsNav({ onNavigate }: { onNavigate?: () => void })
           {group.items.map((item) => {
             const href = `${SETTINGS_BASE_PATH}/${item.path}`;
             const active = location.pathname === href;
+            const hasManageSubscription = user?.permissions?.includes('manage_subscription_billing');
+            const hasManageCompany = user?.permissions?.includes('manage_users_permissions'); // Or a specific company permission, let's use manage_users_permissions as proxy for admin for now, or just check 'manage_subscription_billing'
+            
+            const isBillingDisabled = item.id === 'billing' && !hasManageSubscription;
+            const isPlanDisabled = item.id === 'plan' && !hasManageSubscription;
+            const isCompanyDisabled = item.id === 'company' && !hasManageSubscription; // Admin is blocked from overarching infrastructure
+            const isSecurityDisabled = item.id === 'security' && !hasManageSubscription;
+            const isUserDisabled = item.id === 'user' && !user?.permissions?.includes('manage_users_permissions');
+            const isUsageDisabled = item.id === 'usage' && !user?.permissions?.includes('view_audit_analytics');
+            const isProjectsWorkspacesDisabled = ['projects', 'workspaces', 'fields', 'settings'].includes(item.id) && !user?.permissions?.includes('manage_root_folders');
+            const isBrandingDisabled = item.id === 'branding' && !user?.permissions?.includes('manage_users_permissions');
 
-            return (
+            const isDisabled = isBillingDisabled || isPlanDisabled || isCompanyDisabled || isSecurityDisabled || isUserDisabled || isUsageDisabled || isProjectsWorkspacesDisabled || isBrandingDisabled;
+
+            const buttonContent = (
               <ListItemButton
-                key={item.id}
-                selected={active}
-                onClick={() => {
+                selected={active && !isDisabled}
+                disabled={isDisabled}
+                onClick={(e) => {
+                  if (isDisabled) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                  }
                   navigate(href);
                   onNavigate?.();
                 }}
@@ -54,8 +75,10 @@ export default function SettingsNav({ onNavigate }: { onNavigate?: () => void })
                   mx: 1,
                   mb: 0.25,
                   borderRadius: '10px',
-                  color: active ? cv.textPrimary : cv.textSecondary,
-                  backgroundColor: active ? cv.surfaceRaised : 'transparent',
+                  color: isDisabled ? cv.textMuted : active ? cv.textPrimary : cv.textSecondary,
+                  backgroundColor: active && !isDisabled ? cv.surfaceRaised : 'transparent',
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
+                  opacity: isDisabled ? 0.6 : 1,
                   '&.Mui-selected': {
                     backgroundColor: cv.surfaceRaised,
                     '&:hover': {
@@ -63,14 +86,14 @@ export default function SettingsNav({ onNavigate }: { onNavigate?: () => void })
                     },
                   },
                   '&:hover': {
-                    backgroundColor: active ? cv.surfaceActive : cv.surfaceHover,
+                    backgroundColor: isDisabled ? 'transparent' : active ? cv.surfaceActive : cv.surfaceHover,
                   },
                 }}
               >
                 <ListItemIcon
                   sx={{
                     minWidth: 32,
-                    color: 'inherit',
+                    color: isDisabled ? cv.textMuted : 'inherit',
                     '& .MuiSvgIcon-root': { fontSize: 20 },
                   }}
                 >
@@ -82,13 +105,21 @@ export default function SettingsNav({ onNavigate }: { onNavigate?: () => void })
                     primary: {
                       sx: {
                         fontSize: '0.875rem',
-                        fontWeight: active ? 500 : 400,
+                        fontWeight: active && !isDisabled ? 500 : 400,
                       },
                     },
                   }}
                 />
               </ListItemButton>
             );
+
+            if (isDisabled) {
+              return (
+                <Box key={item.id} sx={{ display: 'block' }}>{buttonContent}</Box>
+              );
+            }
+
+            return <Box key={item.id} sx={{ display: 'contents' }}>{buttonContent}</Box>;
           })}
         </List>
       ))}

@@ -59,6 +59,7 @@ interface DashboardContextValue {
   mediaItems: MediaItem[];
   rootMediaItems: MediaItem[];
   favoriteMediaItems: MediaItem[];
+  duplicateMediaItems: MediaItem[];
   favorites: Set<string>;
   toggleFavorite: (id: string) => void;
   moveMediaToFolder: (mediaId: string, folderId: string, childLabel?: string) => void;
@@ -228,6 +229,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                   location: null,
                   compressionStatus: a.transcodingStatus || 'completed',
                   customMetadata: a.customMetadata,
+                  status: a.status === 'duplicate' ? 'duplicate' : 'active',
                 };
               });
             return [...prev, ...newItems];
@@ -303,6 +305,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           !trashedIds.has(item.id),
       ),
     [mediaItems, activeWorkspaceId, trashedIds],
+  );
+
+  const duplicateMediaItems = useMemo(
+    () =>
+      mediaItems.filter(
+        (item) => item.workspaceId === activeWorkspaceId && item.status === 'duplicate',
+      ),
+    [mediaItems, activeWorkspaceId],
   );
 
   const favoriteMediaItems = useMemo(
@@ -1364,6 +1374,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       mediaItems,
       rootMediaItems,
       favoriteMediaItems,
+      duplicateMediaItems,
       favorites,
       toggleFavorite,
       moveMediaToFolder,
@@ -1430,6 +1441,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       mediaItems,
       rootMediaItems,
       favoriteMediaItems,
+      duplicateMediaItems,
       favorites,
       toggleFavorite,
       moveMediaToFolder,

@@ -60,19 +60,19 @@ export const verifyEmailRequest = async (token: string) => {
 };
 
 
-export const loginWithGoogle = async (idToken: string) => {
+export const loginWithGoogle = async (idToken: string, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => {
   const response = await axios.post(
     `${API_BASE_URL}/auth/loging-google`,
-    { idToken }
+    { idToken, ...(options || {}) }
   );
 
   return response.data;
 };
 
-export const loginWithMicrosoft = async (idToken : string) => {
+export const loginWithMicrosoft = async (idToken: string, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => {
   const response = await axios.post(
     `${API_BASE_URL}/auth/login-microsoft`,
-    { idToken }
+    { idToken, ...(options || {}) }
   );
   return response.data;
 };
@@ -272,6 +272,8 @@ export async function logoutRequest(): Promise<void> {
 }
 
 
+import { ROLE_IDS } from '../constants/userRoles';
+
 export function mapAuthUserDtoToSessionUser(input: any) {
   const user = input?.user || input || {};
   const rawRole = (user.roleRelation && user.roleRelation.name) || user.role || 'User';
@@ -281,13 +283,24 @@ export function mapAuthUserDtoToSessionUser(input: any) {
 
   const name = user.name || user.email?.split('@')[0] || 'User';
 
+  // Fallback map to ensure roleId is always populated even if backend omits it
+  const roleNameMap: Record<string, string> = {
+    'Super Admin': ROLE_IDS.SUPER_ADMIN,
+    'Admin': ROLE_IDS.ADMIN,
+    'Editor': ROLE_IDS.EDITOR,
+    'Collaborator': ROLE_IDS.COLLABORATOR,
+    'Viewer': ROLE_IDS.VIEWER,
+  };
+  const fallbackRoleId = roleNameMap[formattedRole] || '';
+
   return {
     id: user.id || 'user-id',
     name: name,
     email: user.email || '',
     role: formattedRole,
-    roleId: user.roleId || user.roleRelation?.id,
+    roleId: user.roleId || user.role_id || user.roleRelation?.id || fallbackRoleId,
     roleRelation: user.roleRelation,
+    permissions: user.permissions || [],
     initials: user.initials || getNameInitials(name),
     avatarUrl: user.avatarUrl,
     accountName: user.accountName || (user.organization && user.organization.name) || `${name}'s Account`,
@@ -318,14 +331,26 @@ export function extractUserFromTokenOrResponse(response: LoginResponseDto): Auth
     );
     const decoded = JSON.parse(jsonPayload);
     const rawRole = (decoded.roleRelation && decoded.roleRelation.name) || decoded.role || 'Member';
+    const formattedRole = rawRole.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
     const name = decoded.name || decoded.email?.split('@')[0] || 'User';
+
+    const roleNameMap: Record<string, string> = {
+      'Super Admin': ROLE_IDS.SUPER_ADMIN,
+      'Admin': ROLE_IDS.ADMIN,
+      'Editor': ROLE_IDS.EDITOR,
+      'Collaborator': ROLE_IDS.COLLABORATOR,
+      'Viewer': ROLE_IDS.VIEWER,
+    };
+    const fallbackRoleId = roleNameMap[formattedRole] || '';
+
     return {
       id: decoded.id || 'user-id',
       name: name,
       email: decoded.email || '',
-      role: rawRole,
-      roleId: decoded.roleId || decoded.roleRelation?.id,
+      role: formattedRole,
+      roleId: decoded.roleId || decoded.role_id || decoded.roleRelation?.id || fallbackRoleId,
       roleRelation: decoded.roleRelation,
+      permissions: decoded.permissions,
       initials: getNameInitials(name),
       avatarUrl: decoded.avatarUrl,
       accountName: decoded.organization?.name || decoded.accountName || `${name}'s Account`,

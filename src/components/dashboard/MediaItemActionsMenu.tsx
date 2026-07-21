@@ -1,4 +1,6 @@
 import { useState, type MouseEvent } from 'react';
+import { useAuth } from '../../auth/AuthContext';
+import { ROLE_IDS } from '../../constants/userRoles';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
@@ -46,6 +48,7 @@ interface MediaItemActionsMenuProps {
 }
 
 export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemActionsMenuProps) {
+  const { user } = useAuth();
   const {
     renameMedia,
     moveMediaToTrash,
@@ -134,7 +137,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
       >
         {isFolder ? (
           <MenuItem
+            disabled={!user?.permissions?.includes('upload_delete_media')}
             onClick={(event) => {
+              if (!user?.permissions?.includes('upload_delete_media')) return;
               consumeMenuPointerEvent(event);
               openColorPicker();
             }}
@@ -142,19 +147,23 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: cv.textSecondary,
-              '&:hover': { backgroundColor: cv.surfaceHover },
+              color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary,
+              opacity: !user?.permissions?.includes('upload_delete_media') ? 0.6 : 1,
+              cursor: !user?.permissions?.includes('upload_delete_media') ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !user?.permissions?.includes('upload_delete_media') ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <PaletteOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+              <PaletteOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Change color
           </MenuItem>
         ) : null}
         {isFolder ? (
           <MenuItem
+            disabled={!user?.permissions?.includes('upload_delete_media')}
             onClick={(event) => {
+              if (!user?.permissions?.includes('upload_delete_media')) return;
               consumeMenuPointerEvent(event);
               openAssignProject();
             }}
@@ -162,18 +171,22 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: cv.textSecondary,
-              '&:hover': { backgroundColor: cv.surfaceHover },
+              color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary,
+              opacity: !user?.permissions?.includes('upload_delete_media') ? 0.6 : 1,
+              cursor: !user?.permissions?.includes('upload_delete_media') ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !user?.permissions?.includes('upload_delete_media') ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <WorkOutlineOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+              <WorkOutlineOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Assign to project
           </MenuItem>
         ) : null}
         <MenuItem
+          disabled={!user?.permissions?.includes('upload_delete_media')}
           onClick={(event) => {
+            if (!user?.permissions?.includes('upload_delete_media')) return;
             consumeMenuPointerEvent(event);
             openRename();
           }}
@@ -181,12 +194,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: cv.textSecondary,
-            '&:hover': { backgroundColor: cv.surfaceHover },
+            color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary,
+            opacity: !user?.permissions?.includes('upload_delete_media') ? 0.6 : 1,
+            cursor: !user?.permissions?.includes('upload_delete_media') ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: !user?.permissions?.includes('upload_delete_media') ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Rename
         </MenuItem>
@@ -194,7 +209,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
         {item.type === 'video' ? (
           <>
             <MenuItem
+              disabled={!user?.permissions?.includes('timeline_annotations')}
               onClick={(event) => {
+                if (!user?.permissions?.includes('timeline_annotations')) return;
                 consumeMenuPointerEvent(event);
                 window.open(`/api/media/${encodeURIComponent(item.id)}/download`, '_blank');
               }}
@@ -202,33 +219,38 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
               sx={{
                 py: 1,
                 fontSize: '0.875rem',
-                color: cv.textSecondary,
-                '&:hover': { backgroundColor: cv.surfaceHover },
+                color: !user?.permissions?.includes('timeline_annotations') ? cv.textMuted : cv.textSecondary,
+                opacity: !user?.permissions?.includes('timeline_annotations') ? 0.6 : 1,
+                cursor: !user?.permissions?.includes('timeline_annotations') ? 'not-allowed' : 'pointer',
+                '&:hover': { backgroundColor: !user?.permissions?.includes('timeline_annotations') ? 'transparent' : cv.surfaceHover },
               }}
             >
               <ListItemIcon sx={{ minWidth: 32 }}>
-                <DownloadOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+                <DownloadOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('timeline_annotations') ? cv.textMuted : cv.textMuted }} />
               </ListItemIcon>
               Download Proxy File
             </MenuItem>
 
             {item.customMetadata?.originalFilePath && (
               <MenuItem
+                disabled={!user?.permissions?.includes('timeline_annotations')}
                 onClick={(event) => {
+                  if (!user?.permissions?.includes('timeline_annotations')) return;
                   consumeMenuPointerEvent(event);
-                  const encodedPath = encodeURIComponent(item.customMetadata?.originalFilePath as string);
-                  window.open(`/api/media/${encodedPath}/download`, '_blank');
+                  window.open(`/api/media/${encodeURIComponent(item.id)}/download?raw=true`, '_blank');
                 }}
                 onMouseDown={consumeMenuPointerEvent}
                 sx={{
                   py: 1,
                   fontSize: '0.875rem',
-                  color: cv.textSecondary,
-                  '&:hover': { backgroundColor: cv.surfaceHover },
+                  color: !user?.permissions?.includes('timeline_annotations') ? cv.textMuted : cv.textSecondary,
+                  opacity: !user?.permissions?.includes('timeline_annotations') ? 0.6 : 1,
+                  cursor: !user?.permissions?.includes('timeline_annotations') ? 'not-allowed' : 'pointer',
+                  '&:hover': { backgroundColor: !user?.permissions?.includes('timeline_annotations') ? 'transparent' : cv.surfaceHover },
                 }}
               >
                 <ListItemIcon sx={{ minWidth: 32 }}>
-                  <DownloadOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+                  <DownloadOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('timeline_annotations') ? cv.textMuted : cv.textMuted }} />
                 </ListItemIcon>
                 Download Original Raw File
               </MenuItem>
@@ -236,7 +258,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           </>
         ) : (
           <MenuItem
+            disabled={!user?.permissions?.includes('timeline_annotations')}
             onClick={(event) => {
+              if (!user?.permissions?.includes('timeline_annotations')) return;
               consumeMenuPointerEvent(event);
               window.open(`/api/media/${encodeURIComponent(item.id)}/download`, '_blank');
             }}
@@ -244,18 +268,22 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: cv.textSecondary,
-              '&:hover': { backgroundColor: cv.surfaceHover },
+              color: !user?.permissions?.includes('timeline_annotations') ? cv.textMuted : cv.textSecondary,
+              opacity: !user?.permissions?.includes('timeline_annotations') ? 0.6 : 1,
+              cursor: !user?.permissions?.includes('timeline_annotations') ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !user?.permissions?.includes('timeline_annotations') ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <DownloadOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+              <DownloadOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('timeline_annotations') ? cv.textMuted : cv.textMuted }} />
             </ListItemIcon>
             Download File
           </MenuItem>
         )}
         <MenuItem
+          disabled={(isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media'))}
           onClick={(event) => {
+            if ((isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media'))) return;
             consumeMenuPointerEvent(event);
             openDelete();
           }}
@@ -263,12 +291,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: cv.destructive,
-            '&:hover': { backgroundColor: cv.destructiveHover },
+            color: (isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media')) ? cv.textMuted : cv.destructive,
+            opacity: (isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media')) ? 0.6 : 1,
+            cursor: (isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media')) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: (isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media')) ? 'transparent' : cv.destructiveHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DeleteOutlinedIcon sx={{ fontSize: 18, color: cv.destructive }} />
+            <DeleteOutlinedIcon sx={{ fontSize: 18, color: (isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media')) ? cv.textMuted : cv.destructive }} />
           </ListItemIcon>
           Delete
         </MenuItem>

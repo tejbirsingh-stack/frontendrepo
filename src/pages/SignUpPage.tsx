@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -24,6 +24,9 @@ import NoahLogo from '../components/NoahLogo';
 import { cv } from '../theme/cssVars';
 import { validateBusinessEmail, validatePassword } from '../utils/authValidation';
 import { registerUser } from "../api/auth.service";
+import { useMsal } from "@azure/msal-react";
+import MicrosoftIcon from '@mui/icons-material/Window';
+import { useAuth } from '../auth/AuthContext';
 
 export default function SignUpPage() {
   const navigate = useNavigate();
@@ -40,6 +43,9 @@ export default function SignUpPage() {
   const [error, setError] = useState('');
   const [isRegistered, setIsRegistered] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState('');
+  
+  const { instance } = useMsal();
+  const { loginGoogle, loginMicrosoft } = useAuth();
 
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -97,8 +103,12 @@ const handleSubmit = async (e: React.FormEvent) => {
       hubspotUtk: "",
     });
 
-    if (response) {
-      localStorage.setItem("response", JSON.stringify(response));
+    if (response && (response.accessToken || response.token)) {
+      localStorage.setItem("noah_session_token", response.accessToken || response.token);
+      localStorage.removeItem("noah_session_user");
+      localStorage.removeItem("response");
+    } else {
+      localStorage.removeItem("response");
     }
     setRegisteredEmail(email);
     setIsRegistered(true);
@@ -117,6 +127,96 @@ const handleSubmit = async (e: React.FormEvent) => {
     }
   }
 };
+
+  const handleGoogleLogin = async () => {
+    setError('');
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "967923512322-0oullb620hh9se1ff0prs8stvbspi829.apps.googleusercontent.com";
+
+    const redirectPath =
+      typeof location.state === 'object' &&
+        location.state !== null &&
+        'from' in location.state &&
+        typeof (location.state as { from?: unknown }).from === 'string'
+        ? (location.state as { from: string }).from
+        : '/home';
+
+    const loadGoogleScript = (): Promise<any> => {
+      return new Promise((resolve) => {
+        if ((window as any).google?.accounts?.oauth2) {
+          resolve((window as any).google);
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve((window as any).google);
+        document.head.appendChild(script);
+      });
+    };
+
+    try {
+      const google = await loadGoogleScript();
+
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+        callback: async (tokenResponse: any) => {
+          if (!tokenResponse || !tokenResponse.access_token) {
+            setError('Google login cancelled or failed.');
+            return;
+          }
+          try {
+            await loginGoogle(tokenResponse.access_token, false, { mode: 'signup', isSignUp: true });
+            navigate(redirectPath);
+          } catch (submitError: any) {
+            console.error(submitError);
+            setError(submitError.response?.data?.message || submitError.message || 'Google Login Failed.');
+          }
+        },
+      });
+
+      client.requestAccessToken();
+    } catch (err: any) {
+      console.error('Failed to load Google SDK:', err);
+      setError('Could not initialize Google Login service.');
+    }
+  };
+
+  useEffect(() => {
+    if (sessionStorage.getItem('msal_redirecting') === 'true') {
+      instance.handleRedirectPromise()
+        .then((response) => {
+          sessionStorage.removeItem('msal_redirecting');
+          if (response && response.idToken) {
+            const redirectPath =
+              typeof location.state === 'object' && location.state !== null && 'from' in location.state
+                ? (location.state as any).from
+                : '/home';
+            return loginMicrosoft(response.idToken, false, { mode: 'signup', isSignUp: true }).then(() => navigate(redirectPath));
+          }
+        })
+        .catch((err: any) => {
+          sessionStorage.removeItem('msal_redirecting');
+          console.error(err);
+          setError(err.response?.data?.message || err.message || 'Microsoft Login Failed.');
+        });
+    }
+  }, [instance, loginMicrosoft, navigate, location.state]);
+
+  const handleMicrosoftLogin = async () => {
+    setError('');
+    try {
+      sessionStorage.setItem('msal_redirecting', 'true');
+      await instance.loginRedirect({
+        scopes: ["User.Read", "profile", "email", "openid"]
+      });
+    } catch (err: any) {
+      sessionStorage.removeItem('msal_redirecting');
+      console.error(err);
+      setError(err.response?.data?.message || err.message || 'Microsoft Login Failed.');
+    }
+  }
 
   return (
     <Box
@@ -391,23 +491,45 @@ const handleSubmit = async (e: React.FormEvent) => {
               or
             </Divider>
 
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<GoogleIcon />}
-              sx={{
-                py: 1.5,
-                borderColor: cv.border,
-                color: cv.textPrimary,
-                backgroundColor: 'var(--noah-footer-tint)',
-                '&:hover': {
-                  borderColor: cv.borderStrong,
-                  backgroundColor: cv.surfaceHover,
-                },
-              }}
-            >
-              Continue with Google
-            </Button>
+            <Box sx={{ display: 'flex', gap: 2, width: '100%' }}>
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={handleGoogleLogin}
+                startIcon={<GoogleIcon />}
+                sx={{
+                  py: 1.5,
+                  borderColor: cv.border,
+                  color: cv.textPrimary,
+                  backgroundColor: 'var(--noah-footer-tint)',
+                  '&:hover': {
+                    borderColor: cv.borderStrong,
+                    backgroundColor: cv.surfaceHover,
+                  },
+                }}
+              >
+                Google
+              </Button>
+
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={handleMicrosoftLogin}
+                startIcon={<MicrosoftIcon />}
+                sx={{
+                  py: 1.5,
+                  borderColor: cv.border,
+                  color: cv.textPrimary,
+                  backgroundColor: 'var(--noah-footer-tint)',
+                  '&:hover': {
+                    borderColor: cv.borderStrong,
+                    backgroundColor: cv.surfaceHover,
+                  },
+                }}
+              >
+                Microsoft
+              </Button>
+            </Box>
 
             <Typography
               variant="body2"

@@ -19,12 +19,37 @@ import {
 } from '../../components/settings/settingsPageSections';
 import { DEFAULT_SETTINGS_PATH, SETTINGS_BASE_PATH } from '../../constants/settingsNav';
 
+import { useAuth } from '../../auth/AuthContext';
+import { ROLE_IDS } from '../../constants/userRoles';
+
 export default function SettingsSectionPage() {
   const location = useLocation();
+  const { user } = useAuth();
 
   const sectionKey = useMemo(() => {
     return location.pathname.replace('/home/settings/', '').replace(/\/$/, '');
   }, [location.pathname]);
+
+  const hasManageSubscription = user?.permissions?.includes('manage_subscription_billing');
+  const hasManageUsers = user?.permissions?.includes('manage_users_permissions');
+  const hasViewAudit = user?.permissions?.includes('view_audit_analytics');
+  const hasManageRootFolders = user?.permissions?.includes('manage_root_folders');
+
+  if (['accounts/billing', 'accounts/plan', 'profile/company', 'admin/security'].includes(sectionKey) && !hasManageSubscription) {
+    return <Navigate to="/home" replace />;
+  }
+
+  if (['admin/user', 'accounts/branding'].includes(sectionKey) && !hasManageUsers) {
+    return <Navigate to="/home" replace />;
+  }
+
+  if (sectionKey === 'accounts/usage' && !hasViewAudit) {
+    return <Navigate to="/home" replace />;
+  }
+
+  if (['admin/projects', 'admin/workspaces', 'admin/fields', 'share/settings'].includes(sectionKey) && !hasManageRootFolders) {
+    return <Navigate to="/home" replace />;
+  }
 
   switch (sectionKey) {
     case 'profile/personal':

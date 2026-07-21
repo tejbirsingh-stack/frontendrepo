@@ -40,6 +40,8 @@ import NewFolderModal from '../components/dashboard/NewFolderModal';
 import TrashConfirmModal from '../components/dashboard/TrashConfirmModal';
 import DashboardKeyboardShortcutsDialog from '../components/dashboard/DashboardKeyboardShortcutsDialog';
 import HelpMenuDrawer, { getHelpMenuShortcutLabel } from '../components/media/HelpMenuDrawer';
+import { useAuth } from '../auth/AuthContext';
+import { ROLE_IDS } from '../constants/userRoles';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
 import { dropdownMenuPaperSx } from '../constants/dropdownMenu';
@@ -235,12 +237,15 @@ export default function DashboardPage({
   libraryView = 'recent',
   folderMedia,
 }: DashboardPageProps) {
+  const { user } = useAuth();
   const isFavoritesView = libraryView === 'favorites';
+  const isDuplicatesView = libraryView === 'duplicates';
   const isFolderView = Boolean(folderMedia);
 
   const {
     rootMediaItems,
     favoriteMediaItems,
+    duplicateMediaItems,
     mediaItems,
     activeWorkspaceId,
     globalSearchQuery,
@@ -270,7 +275,9 @@ export default function DashboardPage({
     ? folderMedia.title
     : isFavoritesView
       ? 'Favorites'
-      : selectionTitle ?? 'All media';
+      : isDuplicatesView
+        ? 'Duplicates'
+        : selectionTitle ?? 'All media';
   const folderAccent = folderMedia ? resolveFolderColor(folderMedia.folderColor) : null;
 
   const folderBreadcrumbs = useMemo(() => {
@@ -366,14 +373,16 @@ export default function DashboardPage({
   const selectedContainerId = sidebarSelection?.folderId ?? null;
 
   const canInviteToFolder = useMemo(
-    () =>
-      canInviteTeamMembersToFolderSelection(
+    () => {
+      if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return false;
+      return canInviteTeamMembersToFolderSelection(
         sidebarSelection,
         activeWorkspace.folders,
         activeWorkspace.projectFolders,
         { isFavoritesView },
-      ),
-    [sidebarSelection, activeWorkspace.folders, activeWorkspace.projectFolders, isFavoritesView],
+      );
+    },
+    [sidebarSelection, activeWorkspace.folders, activeWorkspace.projectFolders, isFavoritesView, user?.role],
   );
 
   const displayedTeamMembers = useMemo(() => {
@@ -439,6 +448,7 @@ export default function DashboardPage({
 
   const librarySourceItems = useMemo(() => {
     if (isFavoritesView) return favoriteMediaItems;
+    if (isDuplicatesView) return duplicateMediaItems;
 
     if (folderMedia) {
       return mediaItems.filter(
@@ -459,7 +469,9 @@ export default function DashboardPage({
     return filterMediaBySidebarSelection(workspaceItems, sidebarSelection, mediaItems);
   }, [
     isFavoritesView,
+    isDuplicatesView,
     favoriteMediaItems,
+    duplicateMediaItems,
     folderMedia,
     mediaItems,
     activeWorkspaceId,
@@ -472,7 +484,9 @@ export default function DashboardPage({
     const query = globalSearchQuery.trim().toLowerCase();
     const searchableItems = isFavoritesView
       ? favoriteMediaItems
-      : mediaItems.filter(
+      : isDuplicatesView
+        ? duplicateMediaItems
+        : mediaItems.filter(
           (item) =>
             item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
         );
@@ -520,7 +534,9 @@ export default function DashboardPage({
   }, [
     librarySourceItems,
     favoriteMediaItems,
+    duplicateMediaItems,
     isFavoritesView,
+    isDuplicatesView,
     mediaItems,
     activeWorkspaceId,
     globalSearchQuery,
@@ -534,6 +550,32 @@ export default function DashboardPage({
     refreshKey,
     sidebarSelection,
   ]);
+
+  const duplicateClusters = useMemo(() => {
+    if (!isDuplicatesView) return [];
+    
+    const clusters = new Map<string, typeof duplicateMediaItems>();
+    
+    duplicateMediaItems.forEach(item => {
+      const originalIds = item.customMetadata?.duplicates as string[] | undefined;
+      if (originalIds && originalIds.length > 0) {
+        const originalId = originalIds[0];
+        if (!clusters.has(originalId)) {
+          clusters.set(originalId, []);
+        }
+        clusters.get(originalId)!.push(item);
+      }
+    });
+
+    return Array.from(clusters.entries()).map(([originalId, duplicates]) => {
+      const originalItem = mediaItems.find(m => m.id === originalId);
+      return {
+        originalId,
+        originalItem,
+        duplicates
+      };
+    });
+  }, [isDuplicatesView, duplicateMediaItems, mediaItems]);
 
   const groupedItems = useMemo(() => {
     const groups: Record<MediaType, typeof displayedItems> = {
@@ -1003,36 +1045,44 @@ export default function DashboardPage({
         }}
       >
         <MenuItem
+          disabled={user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
           onClick={() => {
+            if (user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
             closeNewMenu();
             newUploadInputRef.current?.click();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: cv.textSecondary,
-            '&:hover': { backgroundColor: cv.surfaceHover },
+            color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+            opacity: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+            cursor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+            <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Upload files
         </MenuItem>
         <MenuItem
+          disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
           onClick={() => {
+            if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
             closeNewMenu();
             setNewFolderModalOpen(true);
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: cv.textSecondary,
-            '&:hover': { backgroundColor: cv.surfaceHover },
+            color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+            opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+            cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+            <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           New folder
         </MenuItem>
@@ -1159,6 +1209,10 @@ export default function DashboardPage({
               ? librarySourceItems.length === 0
                 ? 'No favorites yet'
                 : 'No favorites match your filters'
+              : isDuplicatesView
+              ? librarySourceItems.length === 0
+                ? 'No duplicates found'
+                : 'No duplicates match your filters'
               : librarySourceItems.length === 0
                 ? 'No media in this workspace'
                 : 'No items match your filters'}
@@ -1172,10 +1226,53 @@ export default function DashboardPage({
               ? librarySourceItems.length === 0
                 ? 'Star files and folders from All media to see them here.'
                 : 'Try adjusting your filter settings.'
+              : isDuplicatesView
+              ? librarySourceItems.length === 0
+                ? 'Upload videos to see if they match existing files in this workspace.'
+                : 'Try adjusting your filter settings.'
               : librarySourceItems.length === 0
                 ? 'Drag items into folders in the sidebar, or switch workspace to see more.'
                 : 'Try adjusting your filter settings.'}
           </Typography>
+        </Box>
+      ) : isDuplicatesView ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {duplicateClusters.length === 0 ? (
+            <Typography variant="body1" sx={{ color: cv.textSecondary }}>
+              No duplicates found.
+            </Typography>
+          ) : (
+            duplicateClusters.map((cluster) => (
+              <Box key={cluster.originalId}>
+                <Typography
+                  variant="subtitle2"
+                  sx={{
+                    mb: 1.5,
+                    fontWeight: 600,
+                    color: cv.textSecondary,
+                    fontSize: '0.8125rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  Original: {cluster.originalItem?.title || 'Unknown Video'} & its Duplicates
+                </Typography>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: '1fr',
+                      sm: 'repeat(auto-fill, minmax(280px, 1fr))',
+                    },
+                    gap: { xs: 2, sm: 2.5 },
+                  }}
+                >
+                  {cluster.originalItem && renderMediaItem(cluster.originalItem)}
+                  {cluster.duplicates.map((dup) => renderMediaItem(dup))}
+                </Box>
+              </Box>
+            ))
+          )}
         </Box>
       ) : viewMode === 'folder' ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>

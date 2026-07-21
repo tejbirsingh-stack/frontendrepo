@@ -38,6 +38,7 @@ export interface MediaItem {
   originallyCreatedAt?: string;
   compressionStatus?: string;
   customMetadata?: Record<string, unknown>;
+  status?: 'active' | 'duplicate' | 'archived';
 }
 
 export const initialMediaItems: MediaItem[] = [
@@ -89,6 +90,20 @@ export const initialMediaItems: MediaItem[] = [
     thumbnail: 'https://picsum.photos/seed/sunset/640/360',
     tags: ['important'],
     aiTags: ['person', 'outdoor'],
+    location: null,
+  },
+  {
+    id: 'vid-duplicate-001',
+    title: 'Duplicate_Promo_Final.mp4',
+    type: 'video',
+    workspaceId: 'ws-1',
+    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+    sizeBytes: 85900000,
+    storageProvider: 'b2',
+    duration: '0:35',
+    thumbnail: 'https://images.unsplash.com/photo-1579373903781-42136bfe4ae3?auto=format&fit=crop&q=80&w=300&h=200',
+    tags: ['promo'],
+    status: 'duplicate',
     location: null,
   },
   {
