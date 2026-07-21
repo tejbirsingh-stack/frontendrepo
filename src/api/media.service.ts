@@ -290,10 +290,15 @@ export async function uploadMediaFileRequest(
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     }
 
+    let maxLoaded = 0;
+
     // Real-time upload progress from browser
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && progressCallback) {
-        progressCallback({ loaded: event.loaded, total: event.total });
+        maxLoaded = Math.max(maxLoaded, event.loaded);
+        // Cap at 99% for upload phase, wait for backend completion for 100%
+        const displayLoaded = Math.min(maxLoaded, Math.floor(event.total * 0.99));
+        progressCallback({ loaded: displayLoaded, total: event.total });
       }
     };
 
@@ -310,7 +315,8 @@ export async function uploadMediaFileRequest(
         try {
           const data = JSON.parse(trimmed);
           if (data.type === 'progress' && progressCallback) {
-            progressCallback({ loaded: data.loaded, total: data.total });
+            maxLoaded = Math.max(maxLoaded, data.loaded);
+            progressCallback({ loaded: maxLoaded, total: data.total });
           } else if (data.type === 'complete' && data.asset) {
             completedAsset = data.asset;
           } else if (data.type === 'error') {

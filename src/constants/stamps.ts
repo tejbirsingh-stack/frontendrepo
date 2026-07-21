@@ -14,8 +14,8 @@ export type BuiltinStampId = OuterStampId | InnerStampId;
 
 export type StampId = BuiltinStampId | CustomStampId;
 
-export function isCustomStampId(stampId: StampId): stampId is CustomStampId {
-  return stampId.startsWith('custom-');
+export function isCustomStampId(stampId: StampId | undefined): stampId is CustomStampId {
+  return typeof stampId === 'string' && stampId.startsWith('custom-');
 }
 
 export const DEFAULT_STAMP_ID: StampId = 'thumbs-up';

@@ -89,7 +89,6 @@ import type { DraftVideoComment, VideoComment } from '../types/videoComments';
 import {
   mergeLinkedAnnotationHistory,
 } from '../utils/annotationHistoryStorage';
-import { useAuth } from '../auth/AuthContext';
 
 import {
   getMediaAnnotationsRequest,
@@ -195,7 +194,6 @@ export default function VideoPlayerPage() {
   const isViewer = !user?.permissions?.includes('timeline_annotations');
   const { mediaId } = useParams<{ mediaId: string }>();
   const activeUser = useActiveUser();
-  const { user } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const isDesktopAnnotationToolbar = useMediaQuery(
@@ -861,10 +859,23 @@ export default function VideoPlayerPage() {
       try {
         const { annotations } = await getMediaAnnotationsRequest(mediaId);
         
-        const commentsData = annotations.filter(a => a.type === 'comment').map(a => a.data as VideoComment);
-        const shapesData = annotations.filter(a => a.type === 'shape').map(a => a.data as VideoShape);
-        const drawingsData = annotations.filter(a => a.type === 'drawing').map(a => a.data as VideoDrawingStroke);
-        const stampsData = annotations.filter(a => a.type === 'stamp').map(a => a.data as VideoStamp);
+        const mapAnnotationData = <T extends any>(a: any): T => {
+          return {
+            ...a.data,
+            id: a.id,
+            videoTimestamp: a.videoTimestamp !== null ? a.videoTimestamp : a.data?.videoTimestamp,
+            resolved: a.resolved ?? a.data?.resolved,
+            author: a.author ?? a.data?.author,
+            createdAt: a.createdAt,
+            text: a.data?.text || '',
+            replies: a.data?.replies || []
+          } as T;
+        };
+
+        const commentsData = annotations.filter(a => a.type === 'comment').map(a => mapAnnotationData<VideoComment>(a));
+        const shapesData = annotations.filter(a => a.type === 'shape').map(a => mapAnnotationData<VideoShape>(a));
+        const drawingsData = annotations.filter(a => a.type === 'drawing').map(a => mapAnnotationData<VideoDrawingStroke>(a));
+        const stampsData = annotations.filter(a => a.type === 'stamp').map(a => mapAnnotationData<VideoStamp>(a));
         
         setComments(commentsData);
         setShapes(shapesData);

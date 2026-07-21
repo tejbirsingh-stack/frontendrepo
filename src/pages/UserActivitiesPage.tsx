@@ -234,9 +234,9 @@ export default function UserActivitiesPage() {
             }}
             slotProps={{
               inputLabel: { shrink: true },
-              htmlInput: { 
+              htmlInput: {
                 min: getOneYearAgo(),
-                max: endDate || getToday() 
+                max: endDate || getToday()
               }
             }}
             sx={{
@@ -265,7 +265,7 @@ export default function UserActivitiesPage() {
             }}
             slotProps={{
               inputLabel: { shrink: true },
-              htmlInput: { 
+              htmlInput: {
                 min: startDate || getOneYearAgo(),
                 max: getToday()
               }
