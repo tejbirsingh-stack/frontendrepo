@@ -421,15 +421,17 @@ function HistoryEntryRow({
         >
           Copy link
         </MenuItem>
-        <MenuItem
-          onClick={() => {
-            onDeleteEntry(entry.id);
-            setMenuAnchor(null);
-          }}
-          sx={{ fontSize: '0.875rem', color: cv.destructive }}
-        >
-          Delete thread...
-        </MenuItem>
+        {entry.author.name === activeUser.name ? (
+          <MenuItem
+            onClick={() => {
+              onDeleteEntry(entry.id);
+              setMenuAnchor(null);
+            }}
+            sx={{ fontSize: '0.875rem', color: cv.destructive }}
+          >
+            Delete thread...
+          </MenuItem>
+        ) : null}
       </Menu>
 
       <Tooltip

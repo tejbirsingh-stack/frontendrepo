@@ -20,7 +20,7 @@ import {
 import { DEFAULT_SETTINGS_PATH, SETTINGS_BASE_PATH } from '../../constants/settingsNav';
 
 import { useAuth } from '../../auth/AuthContext';
-import { ROLE_IDS } from '../../constants/userRoles';
+
 
 export default function SettingsSectionPage() {
   const location = useLocation();

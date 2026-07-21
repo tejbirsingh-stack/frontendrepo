@@ -56,6 +56,7 @@ import {
   translateStrokePath,
   findTopStrokeAtPoint,
 } from '../../utils/drawStrokeStyle';
+import { useActiveUser } from '../../hooks/useActiveUser';
 import SelectedShapeToolbar from './SelectedShapeToolbar';
 import StampMarker from './StampMarker';
 import SelectedStampToolbar from './SelectedStampToolbar';
@@ -283,6 +284,7 @@ export default function VideoAnnotationSurface({
   annotationCommentPending = false,
   onMoveLinkedComment,
 }: VideoAnnotationSurfaceProps) {
+  const activeUser = useActiveUser();
   const containerRef = useRef<HTMLDivElement>(null);
   const stampInteractionRef = useRef<StampPointerInteraction | null>(null);
   const drawingInteractionRef = useRef<DrawingPointerInteraction | null>(null);
@@ -482,6 +484,7 @@ export default function VideoAnnotationSurface({
           yPercent: point.yPercent,
           videoTimestamp,
           endTimestamp: createDefaultAnnotationEndTime(videoTimestamp),
+          author: { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials },
         },
       ]);
 
@@ -554,6 +557,10 @@ export default function VideoAnnotationSurface({
           return true;
         }
 
+        if (stroke.author?.name !== activeUser.name) {
+          return true;
+        }
+
         return !strokeHitsEraser(
           stroke.points,
           point,
@@ -574,7 +581,7 @@ export default function VideoAnnotationSurface({
         ).length;
       }
     },
-    [drawStroke, getVideoTimestamp, onStrokesChange],
+    [drawStroke, getVideoTimestamp, onStrokesChange, activeUser.name],
   );
 
   const finishStroke = useCallback(() => {
@@ -604,6 +611,7 @@ export default function VideoAnnotationSurface({
         rainbow: isDrawRainbow,
         videoTimestamp,
         endTimestamp: createDefaultAnnotationEndTime(videoTimestamp),
+        author: { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials },
       },
     ]);
 
@@ -671,6 +679,7 @@ export default function VideoAnnotationSurface({
         videoTimestamp,
         endTimestamp: createDefaultAnnotationEndTime(videoTimestamp),
         rainbow: isShapeRainbow,
+        author: { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials },
       },
     ]);
 
@@ -1305,7 +1314,7 @@ export default function VideoAnnotationSurface({
           activeStroke={selectedShapeStroke}
           onColorChange={handleSelectedShapeColorChange}
           onStrokeChange={handleSelectedShapeStrokeChange}
-          onDelete={handleDeleteSelectedShape}
+          onDelete={selectedShape.author?.name === activeUser.name ? handleDeleteSelectedShape : undefined}
         />
       ) : null}
 
@@ -1345,7 +1354,7 @@ export default function VideoAnnotationSurface({
         <SelectedStampToolbar
           xPercent={selectedStamp.xPercent}
           yPercent={selectedStamp.yPercent}
-          onDelete={handleDeleteSelectedStamp}
+          onDelete={selectedStamp.author?.name === activeUser.name ? handleDeleteSelectedStamp : undefined}
         />
       ) : null}
 
