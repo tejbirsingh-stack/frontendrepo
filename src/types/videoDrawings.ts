@@ -12,4 +12,6 @@ export interface VideoDrawingStroke {
   videoTimestamp: number;
   endTimestamp?: number;
   commentId?: string;
+  userId?: string;
+  author?: any;
 }

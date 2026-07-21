@@ -9,4 +9,6 @@ export interface VideoStamp {
   yPercent: number;
   videoTimestamp: number;
   endTimestamp?: number;
+  userId?: string;
+  author?: any;
 }

@@ -28,7 +28,7 @@ export function useMediaWebSocket (
 
         // Route incoming messages to the parent component
         ws.onmessage = (event) => {
-             try {
+            try {
                 const data = JSON.parse(event.data) as WebSocketMessage;
                 onMessage(data);
             } catch (err) {

@@ -721,15 +721,17 @@ export default function CommentThreadPopover({
             >
               Copy link
             </MenuItem>
-            <MenuItem
-              onClick={() => {
-                onDeleteThread();
-                setMenuAnchor(null);
-              }}
-              sx={{ fontSize: '0.875rem', color: palette.redLight }}
-            >
-              Delete thread...
-            </MenuItem>
+            {author.name === activeUser.name ? (
+              <MenuItem
+                onClick={() => {
+                  onDeleteThread();
+                  setMenuAnchor(null);
+                }}
+                sx={{ fontSize: '0.875rem', color: palette.redLight }}
+              >
+                Delete thread...
+              </MenuItem>
+            ) : null}
           </Menu>
           <Tooltip
             title={resolved ? 'Reopen' : 'Mark as Resolved'}

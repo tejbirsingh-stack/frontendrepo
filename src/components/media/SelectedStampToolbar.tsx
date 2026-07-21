@@ -5,7 +5,7 @@ import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined
 interface SelectedStampToolbarProps {
   xPercent: number;
   yPercent: number;
-  onDelete: () => void;
+  onDelete?: () => void;
 }
 
 export default function SelectedStampToolbar({
@@ -45,24 +45,26 @@ export default function SelectedStampToolbar({
         pointerEvents: 'auto',
       }}
     >
-      <Tooltip title="Delete stamp" placement="top">
-        <IconButton
-          aria-label="Delete stamp"
-          onClick={onDelete}
-          sx={{
-            width: 40,
-            height: 40,
-            borderRadius: '10px',
-            color: cv.textSecondary,
-            '&:hover': {
-              color: cv.destructive,
-              backgroundColor: cv.destructiveHover,
-            },
-          }}
-        >
-          <DeleteOutlineOutlinedIcon sx={{ fontSize: 22 }} />
-        </IconButton>
-      </Tooltip>
+      {onDelete && (
+        <Tooltip title="Delete stamp" placement="top">
+          <IconButton
+            aria-label="Delete stamp"
+            onClick={onDelete}
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: '10px',
+              color: cv.textSecondary,
+              '&:hover': {
+                color: cv.destructive,
+                backgroundColor: cv.destructiveHover,
+              },
+            }}
+          >
+            <DeleteOutlineOutlinedIcon sx={{ fontSize: 22 }} />
+          </IconButton>
+        </Tooltip>
+      )}
     </Box>
   );
 }

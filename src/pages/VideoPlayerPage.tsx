@@ -69,7 +69,7 @@ import { useActiveUser } from '../hooks/useActiveUser';
 import VideoPlayerControls from '../components/media/VideoPlayerControls';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../auth/AuthContext';
-import { ROLE_IDS } from '../constants/userRoles';
+
 import { SAMPLE_VIDEO_SRC } from '../constants/sampleVideos';
 import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, HEADER_LOGO_WIDTH, SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
 import { TOAST_Z_INDEX } from '../constants/dropdownMenu';
@@ -328,18 +328,28 @@ export default function VideoPlayerPage() {
         }
       });
 
-      updated.forEach(c => {
+      updated.forEach(async (c) => {
         const anyC = c as any;
         const vTime = anyC.videoTimestamp !== undefined ? anyC.videoTimestamp : (anyC.timestamp !== undefined ? anyC.timestamp : null);
-        updateMediaAnnotationRequest(c.id, { 
-          data: c,
-          videoTimestamp: vTime,
-          resolved: anyC.resolved
-        }).catch(console.error);
+        try {
+          await updateMediaAnnotationRequest(c.id, { 
+            data: c,
+            videoTimestamp: vTime,
+            resolved: anyC.resolved
+          });
+          broadcastMessage({ type: 'NEW_ANNOTATION', payload: c as any });
+        } catch (error) {
+          console.error(error);
+        }
       });
 
-      deleted.forEach(c => {
-        deleteMediaAnnotationRequest(c.id).catch(console.error);
+      deleted.forEach(async (c) => {
+        try {
+          await deleteMediaAnnotationRequest(c.id);
+          broadcastMessage({ type: 'NEW_ANNOTATION', payload: c as any });
+        } catch (error) {
+          console.error(error);
+        }
       });
 
       prevRef.current = current;
@@ -886,6 +896,7 @@ export default function VideoPlayerPage() {
             videoTimestamp: a.videoTimestamp !== null ? a.videoTimestamp : a.data?.videoTimestamp,
             resolved: a.resolved ?? a.data?.resolved,
             author: a.author ?? a.data?.author,
+            userId: a.userId,
             createdAt: a.createdAt,
             text: a.data?.text || '',
             replies: a.data?.replies || []
@@ -2072,6 +2083,8 @@ export default function VideoPlayerPage() {
       const linkedShapeId =
         entry.linkedShapeId ??
         (entry.id.startsWith('shape-') ? entry.id.slice('shape-'.length) : undefined);
+      const linkedStampId = 
+        entry.id.startsWith('stamp-') ? entry.id.slice('stamp-'.length) : undefined;
 
       if (linkedDrawingId) {
         setDrawings((prev) => prev.filter((stroke) => stroke.id !== linkedDrawingId));
@@ -2079,6 +2092,10 @@ export default function VideoPlayerPage() {
 
       if (linkedShapeId) {
         setShapes((prev) => prev.filter((shape) => shape.id !== linkedShapeId));
+      }
+
+      if (linkedStampId) {
+        setStamps((prev) => prev.filter((stamp) => stamp.id !== linkedStampId));
       }
 
       setHistory((current) => current.filter((item) => item.id !== entryId));

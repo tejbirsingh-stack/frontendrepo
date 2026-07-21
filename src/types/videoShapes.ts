@@ -14,4 +14,6 @@ export interface VideoShape {
   endTimestamp?: number;
   rainbow?: boolean;
   commentId?: string;
+  userId?: string;
+  author?: any;
 }

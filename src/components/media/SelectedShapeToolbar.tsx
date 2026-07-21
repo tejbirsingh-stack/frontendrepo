@@ -14,8 +14,10 @@ interface SelectedShapeToolbarProps {
   activeStroke: StrokeThickness;
   onColorChange: (color: AnnotationColor) => void;
   onStrokeChange: (stroke: StrokeThickness) => void;
-  onDelete: () => void;
+  onDelete?: () => void;
 }
+
+
 
 type ShapeToolbarDrawer = 'color' | 'thickness' | null;
 
@@ -124,30 +126,34 @@ export default function SelectedShapeToolbar({
           onOpenChange={(open) => setOpenDrawer(open ? 'thickness' : null)}
         />
 
-        <Divider
-          orientation="vertical"
-          flexItem
-          sx={{ mx: 0.25, borderColor: cv.whiteBorderSoft }}
-        />
+        {onDelete && (
+          <>
+            <Divider
+              orientation="vertical"
+              flexItem
+              sx={{ mx: 0.25, borderColor: cv.whiteBorderSoft }}
+            />
 
-        <Tooltip title="Delete shape" placement="top">
-          <IconButton
-            aria-label="Delete shape"
-            onClick={onDelete}
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: '10px',
-              color: cv.textSecondary,
-              '&:hover': {
-                color: cv.destructive,
-                backgroundColor: cv.destructiveHover,
-              },
-            }}
-          >
-            <DeleteOutlineOutlinedIcon sx={{ fontSize: 22 }} />
-          </IconButton>
-        </Tooltip>
+            <Tooltip title="Delete shape" placement="top">
+              <IconButton
+                aria-label="Delete shape"
+                onClick={onDelete}
+                sx={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: '10px',
+                  color: cv.textSecondary,
+                  '&:hover': {
+                    color: cv.destructive,
+                    backgroundColor: cv.destructiveHover,
+                  },
+                }}
+              >
+                <DeleteOutlineOutlinedIcon sx={{ fontSize: 22 }} />
+              </IconButton>
+            </Tooltip>
+          </>
+        )}
       </Box>
     </>
   );
