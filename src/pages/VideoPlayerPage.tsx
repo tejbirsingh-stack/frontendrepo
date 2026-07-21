@@ -67,6 +67,7 @@ import VideoCommentLayer from '../components/media/VideoCommentLayer';
 import { useActiveUser } from '../hooks/useActiveUser';
 import VideoPlayerControls from '../components/media/VideoPlayerControls';
 import { useDashboard } from '../context/DashboardContext';
+import { useAuth } from '../auth/AuthContext';
 import { ROLE_IDS } from '../constants/userRoles';
 import { SAMPLE_VIDEO_SRC } from '../constants/sampleVideos';
 import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, HEADER_LOGO_WIDTH, SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
