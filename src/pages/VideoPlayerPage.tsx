@@ -2204,7 +2204,13 @@ export default function VideoPlayerPage() {
           <Tooltip title="Back to dashboard" arrow placement="bottom">
             <IconButton
               aria-label="Back to dashboard"
-              onClick={() => navigate('/home')}
+              onClick={() => {
+                if (window.history.length > 1) {
+                  navigate(-1);
+                } else {
+                  navigate('/home');
+                }
+              }}
               sx={{
                 flexShrink: 0,
                 color: cv.textSecondary,

@@ -11,6 +11,7 @@ import {
   ToggleButtonGroup,
   Tooltip,
   Typography,
+  Button,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
@@ -21,6 +22,11 @@ import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNone
 import SearchIcon from '@mui/icons-material/Search';
 import { NOTIFICATION_DRAWER_WIDTH } from '../../constants/layout';
 import type { Notification } from '../../data/mockNotifications';
+import { markNotificationAsRead } from '../../api/notification.service';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutlined';
+import { useNavigate } from 'react-router-dom';
+import { apiClient } from '../../api/client';
+import { useAuth } from '../../auth/AuthContext';
 
 interface NotificationDrawerProps {
   open: boolean;
@@ -65,6 +71,8 @@ export default function NotificationDrawer({
   items,
   onItemsChange,
 }: NotificationDrawerProps) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [readFilter, setReadFilter] = useState<ReadFilter>('all');
 
@@ -87,6 +95,10 @@ export default function NotificationDrawer({
   }, [items, readFilter, searchQuery]);
 
   const toggleReadState = (id: string) => {
+    const target = items.find(n => n.id === id);
+    if (target && target.unread) {
+       markNotificationAsRead(id).catch(console.error);
+    }
     onItemsChange((current) =>
       current.map((notification) =>
         notification.id === id
@@ -101,6 +113,7 @@ export default function NotificationDrawer({
   };
 
   const markAllAsRead = () => {
+    markNotificationAsRead('all').catch(console.error);
     onItemsChange((current) =>
       current.map((notification) => ({ ...notification, unread: false })),
     );
@@ -112,6 +125,32 @@ export default function NotificationDrawer({
   ) => {
     if (value) {
       setReadFilter(value);
+    }
+  };
+
+  const handleApproveDelete = async (notification: Notification) => {
+    if (!notification.relatedEntityId) return;
+    try {
+      if (user?.role === 'Super Admin') {
+        await apiClient.delete(`/media/${notification.relatedEntityId}`);
+      } else {
+        await apiClient.post(`/media/${notification.relatedEntityId}/admin-approve`);
+      }
+      toggleReadState(notification.id);
+      deleteNotification(notification.id);
+    } catch (error) {
+      console.error("Failed to approve deletion", error);
+    }
+  };
+
+  const handleRejectDelete = async (notification: Notification) => {
+    if (!notification.relatedEntityId) return;
+    try {
+      await apiClient.post(`/media/${notification.relatedEntityId}/reject`);
+      toggleReadState(notification.id);
+      deleteNotification(notification.id);
+    } catch (error) {
+      console.error("Failed to reject deletion", error);
     }
   };
 
@@ -351,6 +390,31 @@ export default function NotificationDrawer({
                   <Typography variant="caption" sx={{ color: cv.textMuted, fontSize: '0.75rem' }}>
                     {notification.time}
                   </Typography>
+
+                  {notification.type === 'approval_request' && notification.relatedEntityId && (
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<PlayCircleOutlineIcon />}
+                        onClick={(e) => { e.stopPropagation(); navigate(`/home/deletion-requests`); onClose(); }}
+                        sx={{
+                          fontSize: '0.7rem',
+                          minWidth: 0,
+                          py: 0.25,
+                          px: 1.25,
+                          color: cv.brandBlue,
+                          borderColor: cv.brandBlue,
+                          '&:hover': {
+                            backgroundColor: cv.blueSurface,
+                            borderColor: cv.brandBlue,
+                          },
+                        }}
+                      >
+                        Review Request
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
 
                 <Box

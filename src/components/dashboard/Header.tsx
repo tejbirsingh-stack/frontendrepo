@@ -21,9 +21,10 @@ import PlanBadge from './PlanBadge';
 import NoahLogo from '../NoahLogo';
 import { HEADER_LOGO_WIDTH, DASHBOARD_TOP_BAR_HEIGHT, DASHBOARD_TOP_BAR_BORDER } from '../../constants/layout';
 import {
-  notifications as initialNotifications,
   type Notification,
 } from '../../data/mockNotifications';
+import { fetchNotifications } from '../../api/notification.service';
+import { useEffect } from 'react';
 import { useGlobalSearchKeyboard } from '../../hooks/useGlobalSearchKeyboard';
 import { useAuth } from '../../auth/AuthContext';
 
@@ -48,9 +49,23 @@ export default function Header({
   const [profileMenuAnchor, setProfileMenuAnchor] = useState<HTMLElement | null>(null);
   const profileMenuOpen = Boolean(profileMenuAnchor);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [notificationItems, setNotificationItems] = useState<Notification[]>(() =>
-    initialNotifications.map((notification) => ({ ...notification })),
-  );
+  const [notificationItems, setNotificationItems] = useState<Notification[]>([]);
+
+  useEffect(() => {
+    const loadNotifications = async () => {
+      const data = await fetchNotifications();
+      if (data) {
+        setNotificationItems(data);
+      }
+    };
+    
+    if (user) {
+      loadNotifications();
+      // Poll every 15 seconds
+      const interval = setInterval(loadNotifications, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
 
   useGlobalSearchKeyboard(searchInputRef, !showMenuButton);

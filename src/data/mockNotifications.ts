@@ -4,6 +4,8 @@ export interface Notification {
   message: string;
   time: string;
   unread?: boolean;
+  type?: string;
+  relatedEntityId?: string;
 }
 
 export const notifications: Notification[] = [

@@ -23,6 +23,7 @@ import {
 } from '../utils/tagScopeColorsStorage';
 import type { CreateManagedTagInput, ManagedTag } from '../types/managedTag';
 import type { TagScopeColors } from '../types/tagScopeColors';
+import { apiClient } from '../api/client';
 import type { TagScope } from '../types/managedTag';
 import { initialMediaItems, type MediaItem, type MediaLocation, type MediaType, type SidebarFolder } from '../data/mockMedia';
 import { getMediaTypeFromFile } from '../utils/fileMediaType';
@@ -170,14 +171,39 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    getMediaAssetsRequest()
-      .then((assets) => {
-        if (assets && assets.length > 0) {
+    const fetchAssets = async () => {
+      try {
+        const [activeAssets, trashRes] = await Promise.all([
+          getMediaAssetsRequest(),
+          apiClient.get<{ success: boolean; assets: any[] }>('/media/trash').catch(() => null)
+        ]);
+
+        const trashAssets = trashRes?.assets || [];
+        
+        // Populate trashedAtById from real backend data
+        if (trashAssets.length > 0) {
+          setTrashedAtById((prev) => {
+            const next = { ...prev };
+            let changed = false;
+            trashAssets.forEach((ta: any) => {
+              if (ta.deletedAt && next[ta.id] !== ta.deletedAt) {
+                next[ta.id] = ta.deletedAt;
+                changed = true;
+              }
+            });
+            if (changed) saveTrashedMedia(next);
+            return changed ? next : prev;
+          });
+        }
+
+        const allRawAssets = [...(activeAssets || []), ...trashAssets];
+
+        if (allRawAssets.length > 0) {
           setMediaItems((prev) => {
             const existingIds = new Set(prev.map((item) => item.id));
-            const newItems: MediaItem[] = assets
+            const newItems: MediaItem[] = allRawAssets
               .filter((a) => !existingIds.has(a.id))
-              .map((a) => {
+              .map((a: any) => {
                 const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.name);
                 const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.name);
                 const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.name);
@@ -187,7 +213,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                   id: a.id,
                   title: a.name,
                   type,
-                  workspaceId: activeWorkspaceId,
+                  workspaceId: activeWorkspaceId, // Defaulting to activeWorkspaceId for now
                   createdAt: a.uploadDate || new Date().toISOString(),
                   sizeBytes: a.size || 0,
                   storageProvider: 'b2',
@@ -197,7 +223,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                   duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
                   tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
                   location: null,
-                  compressionStatus: a.transcodingStatus || 'completed',
+                  compressionStatus: a.transcodingStatus || a.compressionStatus || 'completed',
                   customMetadata: a.customMetadata,
                   status: a.status === 'duplicate' ? 'duplicate' : 'active',
                 };
@@ -205,10 +231,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             return [...prev, ...newItems];
           });
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error('Failed to load media assets from backend:', err);
-      });
+      }
+    };
+    fetchAssets();
   }, [activeWorkspaceId]);
 
   useEffect(() => {
@@ -610,6 +637,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       });
 
       const deletedAt = new Date().toISOString();
+      
+      uniqueIds.forEach((id) => {
+        apiClient.delete(`/media/${id}`).catch(err => console.error("Failed to sync delete with backend", err));
+      });
+
       setTrashedAtById((prev) => {
         const next = { ...prev };
         uniqueIds.forEach((id) => {
@@ -669,6 +701,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const restoreFromTrashBulk = useCallback((mediaIds: string[]) => {
     const uniqueIds = [...new Set(mediaIds)].filter((id) => trashedAtById[id]);
     if (uniqueIds.length === 0) return;
+
+    uniqueIds.forEach((id) => {
+      apiClient.post(`/media/${id}/restore`).catch(err => console.error("Failed to sync restore with backend", err));
+    });
 
     setTrashedAtById((prev) => {
       const next = { ...prev };

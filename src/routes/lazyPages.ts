@@ -29,3 +29,4 @@ export const NotFoundPage = lazyPage(() => import('../pages/NotFoundPage'));
 export const MfaAuthPage = lazyPage(() => import('../pages/MfaAuthPage'));
 export const ResetPasswordPage = lazyPage(() => import('../pages/ResetPasswordPage'));
 export const VerifyEmailPage = lazyPage(() => import('../pages/VerifyEmailPage'));
+export const DeletionRequestsPage = lazyPage(() => import('../pages/DeletionRequestsPage'));

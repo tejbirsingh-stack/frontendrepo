@@ -1851,9 +1851,17 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
           <NavItem
             icon={<HistoryIcon />}
             label="User Activities"
-            active={isTagsView}
+            active={location.pathname === '/home/user-activities'}
             onClick={() => navigateAndClose('/home/user-activities')}
           />
+          {(user?.role?.id === ROLE_IDS.SUPER_ADMIN || user?.role?.id === ROLE_IDS.ADMIN) && (
+            <NavItem
+              icon={<HistoryIcon />} 
+              label="Deletion Requests"
+              active={location.pathname === '/home/deletion-requests'}
+              onClick={() => navigateAndClose('/home/deletion-requests')}
+            />
+          )}
         </Box>
       </Box>
 

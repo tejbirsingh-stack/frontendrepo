@@ -22,6 +22,7 @@ import {
   MfaAuthPage,
   ResetPasswordPage,
   VerifyEmailPage,
+  DeletionRequestsPage,
 } from './routes/lazyPages';
 
 function App() {
@@ -79,6 +80,7 @@ function App() {
             <Route path="tags" element={<TagsManagementPage />} />
             <Route path="user-activities" element={<UserActivitiesPage />} />
             <Route path="trash" element={<TrashPage />} />
+            <Route path="deletion-requests" element={<DeletionRequestsPage />} />
             <Route path="settings" element={<SettingsLayout />}>
               <Route index element={<Navigate to="profile/personal" replace />} />
               <Route path=":group/:section" element={<SettingsSectionPage />} />
