@@ -1,3 +1,4 @@
+import { useMediaWebSocket, type WebSocketMessage } from '../hooks/useMediaWebSocket';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cv } from '../theme/cssVars';
 import { Alert, Box, Button, Chip, CircularProgress, IconButton, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
@@ -218,6 +219,19 @@ export default function VideoPlayerPage() {
   const [isFetching, setIsFetching] = useState(!contextItem);
   const [fetchError, setFetchError] = useState(false);
 
+  const [syncTrigger, setSyncTrigger] = useState(0);
+
+  // Listen for incoming websocket messages from other users
+  const handleWebSocketMessage = useCallback((msg: WebSocketMessage) => {
+    if (msg.type === 'NEW_ANNOTATION'){
+      // Force a re-fetch of the API annotations so all state arrays (comments, shapes, etc) update correctly!
+      setSyncTrigger(prev => prev + 1);
+    }
+  }, []);
+
+  // Initialize the real-time connection using our DRY hook!
+  const { broadcastMessage } = useMediaWebSocket(mediaId, handleWebSocketMessage);
+
   useEffect(() => {
     if (!contextItem && mediaId) {
       setIsFetching(true);
@@ -296,16 +310,22 @@ export default function VideoPlayerPage() {
         return prev && JSON.stringify(prev) !== JSON.stringify(c);
       });
 
-      added.forEach(c => {
+
+      added.forEach(async (c) => {
         const anyC = c as any;
         const vTime = anyC.videoTimestamp !== undefined ? anyC.videoTimestamp : (anyC.timestamp !== undefined ? anyC.timestamp : null);
-        saveMediaAnnotationRequest(mediaId, { 
-          id: c.id, 
-          type, 
-          data: c,
-          videoTimestamp: vTime,
-          parentId: anyC.parentId || null
-        }).catch(console.error);
+        try {
+          await saveMediaAnnotationRequest(mediaId, { 
+            id: c.id, 
+            type, 
+            data: c,
+            videoTimestamp: vTime,
+            parentId: anyC.parentId || null
+          });
+          broadcastMessage({ type: 'NEW_ANNOTATION', payload: c as any }); 
+        } catch (error) {
+          console.error(error);
+        }
       });
 
       updated.forEach(c => {
@@ -992,7 +1012,7 @@ export default function VideoPlayerPage() {
     setActiveTool('select');
     resetStacks();
     setWorkspaceZoom(WORKSPACE_ZOOM_DEFAULT);
-  }, [mediaId, resetStacks]);
+  }, [mediaId, resetStacks, syncTrigger]);
 
 
 
