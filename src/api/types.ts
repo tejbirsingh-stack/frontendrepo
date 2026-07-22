@@ -47,6 +47,7 @@ export interface AuthUserDto {
     id: string;
     name: string;
   };
+  permissions?: string[];
   initials: string;
   avatarUrl?: string;
   accountName?: string;

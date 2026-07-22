@@ -97,6 +97,8 @@ import {
   updateMediaAnnotationRequest,
   deleteMediaAnnotationRequest,
 } from '../api/annotations.service';
+import { fetchOrganizationUsers } from '../api/auth.service';
+import { addInAppNotification } from '../data/mockNotifications';
 
 import {
   createAnnotationGroup,
@@ -216,6 +218,17 @@ export default function VideoPlayerPage() {
 
   const contextItem = mediaItems.find((media) => media.id === mediaId);
   const [fetchedItem, setFetchedItem] = useState<MediaItem | null>(null);
+  const item =
+    contextItem && fetchedItem?.id === contextItem.id
+      ? {
+          ...contextItem,
+          videoSrc: contextItem.videoSrc || fetchedItem.videoSrc,
+          thumbnail: contextItem.thumbnail || fetchedItem.thumbnail,
+          compressionStatus: fetchedItem.compressionStatus || contextItem.compressionStatus,
+          duration: contextItem.duration || fetchedItem.duration,
+          customMetadata: fetchedItem.customMetadata || contextItem.customMetadata,
+        }
+      : contextItem || fetchedItem;
   const [isFetching, setIsFetching] = useState(!contextItem);
   const [fetchError, setFetchError] = useState(false);
 
@@ -223,53 +236,103 @@ export default function VideoPlayerPage() {
 
   // Listen for incoming websocket messages from other users
   const handleWebSocketMessage = useCallback((msg: WebSocketMessage) => {
-    if (msg.type === 'NEW_ANNOTATION'){
+    if (msg.type === 'NEW_ANNOTATION') {
       // Force a re-fetch of the API annotations so all state arrays (comments, shapes, etc) update correctly!
       setSyncTrigger(prev => prev + 1);
+
+      try {
+        const payload = msg.payload as any;
+        if (payload) {
+          const author = payload.author || (payload.data && payload.data.author);
+          const authorEmail = author?.email;
+          const authorName = author?.name || 'Someone';
+
+          const commentText = payload.text || (payload.data && payload.data.text) || '';
+
+          if (commentText) {
+            const videoTitle = item?.title || 'a video';
+            
+            // Check if current user is mentioned in the comment
+            const userIdentifier = user?.name || user?.email?.split('@')[0] || '';
+            const isMentioned = userIdentifier && commentText.toLowerCase().includes(`@${userIdentifier.toLowerCase()}`);
+            
+            if (isMentioned) {
+              addInAppNotification(
+                'Mentioned in comment',
+                `${authorName} mentioned you in a comment on "${videoTitle}": "${commentText.substring(0, 40)}${commentText.length > 40 ? '...' : ''}"`,
+                user?.email
+              );
+            } else if (item?.uploadedByUserId === user?.id && authorEmail !== user?.email) {
+              // Notification for video owner
+              addInAppNotification(
+                `Comment on ${videoTitle}`,
+                `${authorName} commented on your video: "${commentText.substring(0, 40)}${commentText.length > 40 ? '...' : ''}"`,
+                user?.email
+              );
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to process web socket notification:', err);
+      }
     }
-  }, []);
+  }, [user, item]);
 
   // Initialize the real-time connection using our DRY hook!
   const { broadcastMessage } = useMediaWebSocket(mediaId, handleWebSocketMessage);
 
   useEffect(() => {
-    if (!contextItem && mediaId) {
-      setIsFetching(true);
-      getMediaAssetByIdRequest(mediaId)
-        .then((asset) => {
-          setFetchedItem({
-            id: asset.id,
-            title: asset.name,
-            type: (asset.type.split('/')[0] as MediaType) || 'document',
-            workspaceId: 'default',
-            createdAt: asset.uploadDate || new Date().toISOString(),
-            sizeBytes: asset.size,
-            storageProvider: 'b2',
-            uploadedBy: 'Unknown',
-            tags: Array.isArray(asset.customMetadata?.tags) ? asset.customMetadata.tags : [],
-            location: null,
-            thumbnail: asset.thumbnail || undefined,
-            videoSrc: asset.url,
-            compressionStatus: asset.compressionStatus || 'completed',
-            customMetadata: asset.customMetadata,
-            duration: asset.customMetadata?.duration as string | undefined,
-          });
-        })
-        .catch((err) => {
-          console.error(err);
-          setFetchError(true);
-        })
-        .finally(() => {
-          setIsFetching(false);
-        });
-    } else {
+    const needsStreamUrl =
+      Boolean(mediaId) &&
+      (!contextItem ||
+        ((contextItem.type === 'audio' || contextItem.type === 'video') && !contextItem.videoSrc));
+
+    if (!needsStreamUrl) {
       setIsFetching(false);
+      return;
     }
+
+    setIsFetching(true);
+    getMediaAssetByIdRequest(mediaId)
+      .then((asset) => {
+        const mapped: MediaItem = {
+          id: asset.id,
+          title: asset.name,
+          type: (asset.type.split('/')[0] as MediaType) || 'document',
+          workspaceId: contextItem?.workspaceId || 'default',
+          createdAt: asset.uploadDate || new Date().toISOString(),
+          sizeBytes: asset.size,
+          storageProvider: 'b2',
+          uploadedBy: contextItem?.uploadedBy || 'Unknown',
+          uploadedByUserId: asset.uploadedByUserId,
+          tags: Array.isArray(asset.customMetadata?.tags) ? asset.customMetadata.tags : [],
+          location: contextItem?.location ?? null,
+          thumbnail: asset.thumbnail || contextItem?.thumbnail || undefined,
+          videoSrc: asset.url,
+          compressionStatus: asset.compressionStatus || contextItem?.compressionStatus || 'completed',
+          customMetadata: asset.customMetadata,
+          duration: (asset.customMetadata?.duration as string | undefined) || contextItem?.duration,
+        };
+        setFetchedItem(contextItem ? { ...contextItem, ...mapped, videoSrc: asset.url } : mapped);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!contextItem) setFetchError(true);
+      })
+      .finally(() => {
+        setIsFetching(false);
+      });
   }, [contextItem, mediaId]);
 
-  const item = contextItem || fetchedItem;
-
   const [activeTool, setActiveTool] = useState<AnnotationTool>('select');
+
+  useEffect(() => {
+    if (item?.type === 'audio') {
+      setActiveTool('comment');
+    } else if (item?.type === 'image' || item?.type === 'video') {
+      setActiveTool('select');
+    }
+  }, [item?.type]);
   const [activeDrawTool, setActiveDrawTool] = useState<DrawTool>('pencil');
   const [activeDrawStroke, setActiveDrawStroke] = useState<DrawStrokeThickness>(
     DEFAULT_DRAW_STROKE_THICKNESS,
@@ -280,6 +343,7 @@ export default function VideoPlayerPage() {
   const [activeShapeStroke, setActiveShapeStroke] = useState<ShapeStrokeThickness>(
     DEFAULT_DRAW_STROKE_THICKNESS,
   );
+  const [collaborators, setCollaborators] = useState<MediaCollaborator[]>([]);
   const [comments, setComments] = useState<VideoComment[]>([]);
   const [drawings, setDrawings] = useState<VideoDrawingStroke[]>([]);
   const [shapes, setShapes] = useState<VideoShape[]>([]);
@@ -315,14 +379,55 @@ export default function VideoPlayerPage() {
         const anyC = c as any;
         const vTime = anyC.videoTimestamp !== undefined ? anyC.videoTimestamp : (anyC.timestamp !== undefined ? anyC.timestamp : null);
         try {
-          await saveMediaAnnotationRequest(mediaId, { 
-            id: c.id, 
-            type, 
+          await saveMediaAnnotationRequest(mediaId, {
+            id: c.id,
+            type,
             data: c,
             videoTimestamp: vTime,
             parentId: anyC.parentId || null
           });
-          broadcastMessage({ type: 'NEW_ANNOTATION', payload: c as any }); 
+          broadcastMessage({ type: 'NEW_ANNOTATION', payload: c as any });
+
+          // Generate client-side in-app notifications if text is present
+          const commentText = anyC.text || (anyC.data && anyC.data.text) || '';
+          if (commentText) {
+            const authorName = user?.name || 'Someone';
+            const videoTitle = item?.title || 'a video';
+
+            // 1. Scan for mentions in the collaborators list
+            collaborators.forEach((collab) => {
+              const namesToTry = [
+                collab.name,
+                collab.name?.split(' ')[0],
+                collab.email?.split('@')[0]
+              ].filter(Boolean) as string[];
+
+              const isCollabMentioned = namesToTry.some(n => {
+                const pattern = new RegExp(`@${n}\\b`, 'i');
+                return pattern.test(commentText);
+              });
+
+              if (isCollabMentioned) {
+                addInAppNotification(
+                  'Mentioned in comment',
+                  `${authorName} mentioned you in a comment on "${videoTitle}": "${commentText}"`,
+                  collab.email
+                );
+              }
+            });
+
+            // 2. Scan if owner/uploader needs comment notification
+            if (item?.uploadedByUserId && item?.uploadedByUserId !== user?.id) {
+              const uploaderCollab = collaborators.find(collab => collab.id === item.uploadedByUserId);
+              if (uploaderCollab) {
+                addInAppNotification(
+                  `Comment on ${videoTitle}`,
+                  `${authorName} commented on your video: "${commentText}"`,
+                  uploaderCollab.email
+                );
+              }
+            }
+          }
         } catch (error) {
           console.error(error);
         }
@@ -332,7 +437,7 @@ export default function VideoPlayerPage() {
         const anyC = c as any;
         const vTime = anyC.videoTimestamp !== undefined ? anyC.videoTimestamp : (anyC.timestamp !== undefined ? anyC.timestamp : null);
         try {
-          await updateMediaAnnotationRequest(c.id, { 
+          await updateMediaAnnotationRequest(c.id, {
             data: c,
             videoTimestamp: vTime,
             resolved: anyC.resolved
@@ -353,7 +458,7 @@ export default function VideoPlayerPage() {
       });
 
       prevRef.current = current;
-    }, [currentData, mediaId, initialLoadComplete, type, prevRef]);
+    }, [currentData, mediaId, initialLoadComplete, type, prevRef, user, item, collaborators]);
   };
 
   useGranularSync('comment', comments, prevCommentsRef);
@@ -374,7 +479,7 @@ export default function VideoPlayerPage() {
   const [drawerTab, setDrawerTab] = useState<'history' | 'details'>('history');
   const [detailsSection, setDetailsSection] = useState<MediaDetailsSection>('file');
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
-  const [collaborators, setCollaborators] = useState<MediaCollaborator[]>([]);
+
   const [annotationGroups, setAnnotationGroups] = useState<AnnotationAccessGroup[]>([]);
   const [toolsDrawerOpen, setToolsDrawerOpen] = useState(false);
 
@@ -672,15 +777,15 @@ export default function VideoPlayerPage() {
           // Stamps don't currently have linked comments, but just in case we add it:
           break;
       }
-      
-      setHistory((prev) => 
+
+      setHistory((prev) =>
         prev.map((entry) => {
           let matches = false;
           if (type === 'comment' && entry.id === id) matches = true;
           if (type === 'drawing' && entry.id.includes(id)) matches = true;
           if (type === 'shape' && entry.id.includes(id)) matches = true;
           if (type === 'stamp' && entry.id.includes(id)) matches = true;
-          
+
           if (matches) {
             return { ...entry, videoTimestamp: startTime };
           }
@@ -888,7 +993,7 @@ export default function VideoPlayerPage() {
     const loadApiAnnotations = async () => {
       try {
         const { annotations } = await getMediaAnnotationsRequest(mediaId);
-        
+
         const mapAnnotationData = <T extends any>(a: any): T => {
           return {
             ...a.data,
@@ -907,22 +1012,22 @@ export default function VideoPlayerPage() {
         const shapesData = annotations.filter(a => a.type === 'shape').map(a => mapAnnotationData<VideoShape>(a));
         const drawingsData = annotations.filter(a => a.type === 'drawing').map(a => mapAnnotationData<VideoDrawingStroke>(a));
         const stampsData = annotations.filter(a => a.type === 'stamp').map(a => mapAnnotationData<VideoStamp>(a));
-        
+
         setComments(commentsData);
         setShapes(shapesData);
         setDrawings(drawingsData);
         setStamps(stampsData);
-        
+
         prevCommentsRef.current = commentsData;
         prevShapesRef.current = shapesData;
         prevDrawingsRef.current = drawingsData;
         prevStampsRef.current = stampsData;
-        
+
         const readIds = new Set<string>();
         try {
           const stored = localStorage.getItem(`read_annotations_${mediaId}`);
           if (stored) JSON.parse(stored).forEach((id: string) => readIds.add(id));
-        } catch {}
+        } catch { }
 
         const getAuthor = (ann: any) => ann.author || { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials };
         const checkUnread = (ann: any, entryId: string) => {
@@ -935,7 +1040,7 @@ export default function VideoPlayerPage() {
 
         annotations.forEach(ann => {
           const createdAt = new Date(ann.createdAt).getTime();
-          
+
           if (ann.type === 'comment') {
             const c = ann.data as VideoComment;
             const entryId = `comment-${c.id}`;
@@ -1052,8 +1157,38 @@ export default function VideoPlayerPage() {
       setCollaborators([]);
       return;
     }
-    setCollaborators(loadMediaCollaborators(mediaId));
-  }, [mediaId]);
+    const fetchOrgUsers = async () => {
+      try {
+        const users = await fetchOrganizationUsers();
+        if (users && users.length > 0) {
+          const mapped: MediaCollaborator[] = users.map((u) => {
+            const displayName = u.name || u.email.split('@')[0] || 'User';
+            const initials = displayName
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((part) => part[0]?.toUpperCase() ?? '')
+              .join('') || u.email[0]?.toUpperCase() || 'U';
+
+            return {
+              id: u.id,
+              name: displayName,
+              email: u.email,
+              initials,
+              isCurrentUser: u.email === user?.email,
+            };
+          });
+          setCollaborators(mapped);
+        } else {
+          setCollaborators(loadMediaCollaborators(mediaId));
+        }
+      } catch (err) {
+        console.error('Failed to fetch organization users for collaborators:', err);
+        setCollaborators(loadMediaCollaborators(mediaId));
+      }
+    };
+    fetchOrgUsers();
+  }, [mediaId, user?.email]);
 
   useEffect(() => {
     if (!mediaId) return;
@@ -1614,21 +1749,21 @@ export default function VideoPlayerPage() {
     // avoiding floating point rounding errors that put the playhead just before the annotation starts.
     videoRef.current.currentTime = timestamp + 0.05;
     videoRef.current.pause();
-    
+
     if (entryId && mediaId) {
       setHistory(prev => {
         const changed = prev.some(h => h.id === entryId && h.unread);
         if (!changed) return prev;
-        
+
         const readIds = new Set<string>();
         try {
           const stored = localStorage.getItem(`read_annotations_${mediaId}`);
           if (stored) JSON.parse(stored).forEach((id: string) => readIds.add(id));
-        } catch {}
-        
+        } catch { }
+
         readIds.add(entryId);
         localStorage.setItem(`read_annotations_${mediaId}`, JSON.stringify(Array.from(readIds)));
-        
+
         return prev.map(h => h.id === entryId ? { ...h, unread: false } : h);
       });
     }
@@ -1819,7 +1954,7 @@ export default function VideoPlayerPage() {
       if (entry.sourceCommentId) {
         updateCommentResolved(entry.sourceCommentId, !entry.resolved);
         updateMediaAnnotationRequest(entry.sourceCommentId, { resolved: !entry.resolved }).catch(console.error);
-        
+
         // Also update linked drawing/shape if it exists
         const nextResolved = !entry.resolved;
         if (entry.linkedDrawingId) {
@@ -1893,7 +2028,7 @@ export default function VideoPlayerPage() {
       const nextResolved = !comment.resolved;
       updateCommentResolved(commentId, nextResolved);
       updateMediaAnnotationRequest(commentId, { resolved: nextResolved }).catch(console.error);
-      
+
       if (comment.linkedDrawingId) {
         setDrawings((prev) => prev.map(d => d.id === comment.linkedDrawingId ? { ...d, resolved: nextResolved } : d));
         updateMediaAnnotationRequest(comment.linkedDrawingId, { resolved: nextResolved }).catch(console.error);
@@ -2086,7 +2221,7 @@ export default function VideoPlayerPage() {
       const linkedShapeId =
         entry.linkedShapeId ??
         (entry.id.startsWith('shape-') ? entry.id.slice('shape-'.length) : undefined);
-      const linkedStampId = 
+      const linkedStampId =
         entry.id.startsWith('stamp-') ? entry.id.slice('stamp-'.length) : undefined;
 
       if (linkedDrawingId) {
@@ -2161,7 +2296,7 @@ export default function VideoPlayerPage() {
     return <Navigate to="/home" replace />;
   }
 
-  if (item.type !== 'video') {
+  if (item.type !== 'video' && item.type !== 'audio' && item.type !== 'image') {
     return <Navigate to="/home" replace />;
   }
 
@@ -2170,8 +2305,17 @@ export default function VideoPlayerPage() {
     liveAssetStatus === 'queued' ||
     liveAssetStatus === 'in_progress';
 
-  const baseSrc = item.videoSrc ?? SAMPLE_VIDEO_SRC;
-  const videoSrc = isProcessing ? '' : `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}`;
+  const baseSrc = item.type === 'image'
+    ? (item.thumbnail ?? '')
+    : item.type === 'audio'
+      ? (item.videoSrc ?? '')
+      : (item.videoSrc ?? SAMPLE_VIDEO_SRC);
+  // Audio/original is available immediately; only blank video while proxy is processing.
+  const shouldBlockMediaSrc = isProcessing && item.type === 'video';
+  const videoSrc = shouldBlockMediaSrc || !baseSrc
+    ? ''
+    : `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}`;
+  const mediaElementSrc = shouldBlockMediaSrc ? undefined : (videoSrc || undefined);
   const surfaceEnabled = SURFACE_TOOLS.includes(activeTool);
 
   return (
@@ -2622,34 +2766,98 @@ export default function VideoPlayerPage() {
                   transformOrigin: 'center center',
                 }}
               >
-                <Box
-                  component="video"
-                  ref={videoRef}
-                  key={videoSrc}
-                  src={isProcessing ? undefined : videoSrc}
-                  poster={item.thumbnail}
-                  playsInline
-                  preload="metadata"
-                  sx={{
-                    width: '100%',
-                    height: '100%',
-                    display: 'block',
-                    objectFit: playerActualMediaSize ? 'none' : 'contain',
-                    backgroundColor: 'transparent',
-                    transform: getVideoTransform(
-                      playerRotationSteps,
-                      playerFlipHorizontal,
-                      playerFlipVertical,
-                    ),
-                    transformOrigin: 'center center',
-                    pointerEvents:
-                      annotationsVisible && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
-                        ? 'none'
-                        : 'auto',
-                  }}
-                >
-                  <track kind="captions" />
-                </Box>
+                {item?.type === 'image' ? (
+                  <Box
+                    component="img"
+                    src={mediaElementSrc}
+                    alt={item?.title}
+                    sx={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'block',
+                      objectFit: playerActualMediaSize ? 'none' : 'contain',
+                      backgroundColor: 'transparent',
+                    }}
+                  />
+                ) : (
+                  <Box
+                    component="video"
+                    ref={videoRef}
+                    key={videoSrc || 'no-src'}
+                    src={mediaElementSrc}
+                    poster={item?.thumbnail}
+                    playsInline
+                    preload="metadata"
+                    sx={{
+                      width: '100%',
+                      height: '100%',
+                      display: item?.type === 'audio' ? 'none' : 'block',
+                      objectFit: playerActualMediaSize ? 'none' : 'contain',
+                      backgroundColor: 'transparent',
+                      transform: getVideoTransform(
+                        playerRotationSteps,
+                        playerFlipHorizontal,
+                        playerFlipVertical,
+                      ),
+                      transformOrigin: 'center center',
+                      pointerEvents:
+                        annotationsVisible && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
+                          ? 'none'
+                          : 'auto',
+                    }}
+                  >
+                    <track kind="captions" />
+                  </Box>
+                )}
+
+                {item?.type === 'audio' && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'radial-gradient(circle, rgba(30,30,42,1) 0%, rgba(12,12,18,1) 100%)',
+                      zIndex: 1,
+                    }}
+                  >
+                    {/* Pulsing Audio Waves/Icon */}
+                    <Box
+                      sx={{
+                        width: 120,
+                        height: 120,
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                        mb: 3,
+                        animation: 'pulse-audio 2.5s infinite ease-in-out',
+                        '@keyframes pulse-audio': {
+                          '0%': { transform: 'scale(1)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' },
+                          '50%': { transform: 'scale(1.06)', boxShadow: '0 8px 32px rgba(25,118,210,0.25)' },
+                          '100%': { transform: 'scale(1)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' },
+                        }
+                      }}
+                    >
+                      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#1976d2' }}>
+                        <path d="M12 2v20M17 5v14M22 9v6M7 8v8M2 10v4"/>
+                      </svg>
+                    </Box>
+
+                    {/* Audio Details */}
+                    <Typography variant="h6" sx={{ color: '#ffffff', fontWeight: 600, mb: 1 }}>
+                      {item?.title}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)' }}>
+                      Audio Asset • {item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : 'Unknown Size'}
+                    </Typography>
+                  </Box>
+                )}
 
                 {isProcessing ? (
                   <Box
@@ -2666,17 +2874,17 @@ export default function VideoPlayerPage() {
                     }}
                   >
                     {liveProgress && liveProgress !== 'processing' ? (
-                      <CircularProgress 
-                        variant="determinate" 
-                        value={parseInt(liveProgress.replace('%', '')) || 0} 
-                        size={48} 
-                        sx={{ 
-                          color: cv.brandBlue, 
+                      <CircularProgress
+                        variant="determinate"
+                        value={parseInt(liveProgress.replace('%', '')) || 0}
+                        size={48}
+                        sx={{
+                          color: cv.brandBlue,
                           mb: 3,
                           '& .MuiCircularProgress-circle': {
                             transition: 'stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
                           }
-                        }} 
+                        }}
                       />
                     ) : (
                       <CircularProgress size={48} sx={{ color: cv.brandBlue, mb: 3 }} />
@@ -2786,16 +2994,18 @@ export default function VideoPlayerPage() {
               </Box>
             </Box>
 
-            <VideoPlayerControls
-              videoRef={videoRef}
-              fullscreenTargetRef={videoStageRef}
-              annotationCount={history.length}
-              annotationsVisible={annotationsVisible}
-              onToggleAnnotationsVisible={() => setAnnotationsVisible((visible) => !visible)}
-              timelineItems={timelineItems}
-              timelineFallbackDuration={timelineFallbackDuration}
-              onAnnotationRangeChange={handleAnnotationRangeChange}
-            />
+            {item?.type !== 'image' && (
+              <VideoPlayerControls
+                videoRef={videoRef}
+                fullscreenTargetRef={videoStageRef}
+                annotationCount={history.length}
+                annotationsVisible={annotationsVisible}
+                onToggleAnnotationsVisible={() => setAnnotationsVisible((visible) => !visible)}
+                timelineItems={timelineItems}
+                timelineFallbackDuration={timelineFallbackDuration}
+                onAnnotationRangeChange={handleAnnotationRangeChange}
+              />
+            )}
 
             <Box
               component="footer"
@@ -2858,6 +3068,7 @@ export default function VideoPlayerPage() {
                   >
                     <AnnotationToolbar
                       disabled={isViewer}
+                      mediaType={item?.type}
                       activeTool={activeTool}
                       onToolChange={handleToolChange}
                       activeDrawTool={activeDrawTool}
@@ -2916,6 +3127,7 @@ export default function VideoPlayerPage() {
                     <AnnotationToolbar
                       compact
                       disabled={isViewer}
+                      mediaType={item?.type}
                       mobilePlayerFooterRef={mobilePlayerFooterRef}
                       activeTool={activeTool}
                       onToolChange={handleToolChange}

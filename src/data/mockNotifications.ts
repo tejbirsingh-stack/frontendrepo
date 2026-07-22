@@ -4,6 +4,7 @@ export interface Notification {
   message: string;
   time: string;
   unread?: boolean;
+  forUserEmail?: string;
 }
 
 export const notifications: Notification[] = [
@@ -43,3 +44,30 @@ export const notifications: Notification[] = [
     unread: false,
   },
 ];
+
+export function addInAppNotification(title: string, message: string, forUserEmail?: string) {
+  const stored = localStorage.getItem('noah-notifications');
+  let currentItems: Notification[] = [];
+  if (stored) {
+    try {
+      currentItems = JSON.parse(stored);
+    } catch (e) {}
+  } else {
+    currentItems = notifications.map((notification) => ({ ...notification }));
+  }
+
+  const newNotification: Notification = {
+    id: crypto.randomUUID(),
+    title,
+    message,
+    time: 'Just now',
+    unread: true,
+    forUserEmail,
+  };
+
+  currentItems = [newNotification, ...currentItems];
+  localStorage.setItem('noah-notifications', JSON.stringify(currentItems));
+  
+  // Dispatch custom event to update any active Header components in the page
+  window.dispatchEvent(new Event('noah-notifications-updated'));
+}

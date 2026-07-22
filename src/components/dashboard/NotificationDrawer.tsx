@@ -26,7 +26,7 @@ interface NotificationDrawerProps {
   open: boolean;
   onClose: () => void;
   items: Notification[];
-  onItemsChange: React.Dispatch<React.SetStateAction<Notification[]>>;
+  onItemsChange: (items: Notification[]) => void;
 }
 
 type ReadFilter = 'all' | 'unread' | 'read';
@@ -87,8 +87,8 @@ export default function NotificationDrawer({
   }, [items, readFilter, searchQuery]);
 
   const toggleReadState = (id: string) => {
-    onItemsChange((current) =>
-      current.map((notification) =>
+    onItemsChange(
+      items.map((notification) =>
         notification.id === id
           ? { ...notification, unread: !notification.unread }
           : notification,
@@ -97,12 +97,12 @@ export default function NotificationDrawer({
   };
 
   const deleteNotification = (id: string) => {
-    onItemsChange((current) => current.filter((notification) => notification.id !== id));
+    onItemsChange(items.filter((notification) => notification.id !== id));
   };
 
   const markAllAsRead = () => {
-    onItemsChange((current) =>
-      current.map((notification) => ({ ...notification, unread: false })),
+    onItemsChange(
+      items.map((notification) => ({ ...notification, unread: false })),
     );
   };
 

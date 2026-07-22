@@ -1,6 +1,5 @@
 import { useState, type MouseEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import { ROLE_IDS } from '../../constants/userRoles';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
@@ -208,28 +207,30 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
         
         {item.type === 'video' ? (
           <>
-            <MenuItem
-              disabled={!user?.permissions?.includes('timeline_annotations')}
-              onClick={(event) => {
-                if (!user?.permissions?.includes('timeline_annotations')) return;
-                consumeMenuPointerEvent(event);
-                window.open(`/api/media/${encodeURIComponent(item.id)}/download`, '_blank');
-              }}
-              onMouseDown={consumeMenuPointerEvent}
-              sx={{
-                py: 1,
-                fontSize: '0.875rem',
-                color: !user?.permissions?.includes('timeline_annotations') ? cv.textMuted : cv.textSecondary,
-                opacity: !user?.permissions?.includes('timeline_annotations') ? 0.6 : 1,
-                cursor: !user?.permissions?.includes('timeline_annotations') ? 'not-allowed' : 'pointer',
-                '&:hover': { backgroundColor: !user?.permissions?.includes('timeline_annotations') ? 'transparent' : cv.surfaceHover },
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 32 }}>
-                <DownloadOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('timeline_annotations') ? cv.textMuted : cv.textMuted }} />
-              </ListItemIcon>
-              Download Proxy File
-            </MenuItem>
+            {item.compressionStatus !== 'failed' && (
+              <MenuItem
+                disabled={!user?.permissions?.includes('timeline_annotations')}
+                onClick={(event) => {
+                  if (!user?.permissions?.includes('timeline_annotations')) return;
+                  consumeMenuPointerEvent(event);
+                  window.open(`/api/media/${encodeURIComponent(item.id)}/download`, '_blank');
+                }}
+                onMouseDown={consumeMenuPointerEvent}
+                sx={{
+                  py: 1,
+                  fontSize: '0.875rem',
+                  color: !user?.permissions?.includes('timeline_annotations') ? cv.textMuted : cv.textSecondary,
+                  opacity: !user?.permissions?.includes('timeline_annotations') ? 0.6 : 1,
+                  cursor: !user?.permissions?.includes('timeline_annotations') ? 'not-allowed' : 'pointer',
+                  '&:hover': { backgroundColor: !user?.permissions?.includes('timeline_annotations') ? 'transparent' : cv.surfaceHover },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 32 }}>
+                  <DownloadOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('timeline_annotations') ? cv.textMuted : cv.textMuted }} />
+                </ListItemIcon>
+                Download Proxy File
+              </MenuItem>
+            )}
 
             {item.customMetadata?.originalFilePath && (
               <MenuItem

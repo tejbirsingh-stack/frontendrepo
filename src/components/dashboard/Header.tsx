@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cv } from '../../theme/cssVars';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -47,17 +47,70 @@ export default function Header({
   const profileButtonRef = useRef<HTMLDivElement>(null);
   const [profileMenuAnchor, setProfileMenuAnchor] = useState<HTMLElement | null>(null);
   const profileMenuOpen = Boolean(profileMenuAnchor);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [notificationItems, setNotificationItems] = useState<Notification[]>(() =>
-    initialNotifications.map((notification) => ({ ...notification })),
-  );
+   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationItems, setNotificationItems] = useState<Notification[]>(() => {
+    const stored = localStorage.getItem('noah-notifications');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {}
+    }
+    return initialNotifications.map((notification) => ({ ...notification }));
+  });
+
+  useEffect(() => {
+    localStorage.setItem('noah-notifications', JSON.stringify(notificationItems));
+  }, [notificationItems]);
+
+  useEffect(() => {
+    const handleStorageUpdate = (e: StorageEvent) => {
+      if (e.key === 'noah-notifications' && e.newValue) {
+        try {
+          setNotificationItems(JSON.parse(e.newValue));
+        } catch (err) {}
+      }
+    };
+    const handleCustomUpdate = () => {
+      const stored = localStorage.getItem('noah-notifications');
+      if (stored) {
+        try {
+          setNotificationItems(JSON.parse(stored));
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', handleStorageUpdate);
+    window.addEventListener('noah-notifications-updated', handleCustomUpdate);
+    return () => {
+      window.removeEventListener('storage', handleStorageUpdate);
+      window.removeEventListener('noah-notifications-updated', handleCustomUpdate);
+    };
+  }, []);
+
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
 
   useGlobalSearchKeyboard(searchInputRef, !showMenuButton);
 
-  const unreadNotificationCount = notificationItems.filter(
+  const userNotifications = notificationItems.filter(
+    (item) => !item.forUserEmail || item.forUserEmail.toLowerCase() === user?.email?.toLowerCase(),
+  );
+
+  const unreadNotificationCount = userNotifications.filter(
     (notification) => notification.unread,
   ).length;
+
+  const handleNotificationsChange = (updatedUserItems: Notification[]) => {
+    const merged = notificationItems.map((item) => {
+      const updated = updatedUserItems.find((ui) => ui.id === item.id);
+      return updated ? updated : item;
+    }).filter((item) => {
+      const wasUserItem = !item.forUserEmail || item.forUserEmail.toLowerCase() === user?.email?.toLowerCase();
+      if (wasUserItem) {
+        return updatedUserItems.some((ui) => ui.id === item.id);
+      }
+      return true;
+    });
+    setNotificationItems(merged);
+  };
 
   const handleLogoutRequest = () => {
     setLogoutModalOpen(true);
@@ -304,8 +357,8 @@ export default function Header({
       <NotificationDrawer
         open={notificationsOpen}
         onClose={() => setNotificationsOpen(false)}
-        items={notificationItems}
-        onItemsChange={setNotificationItems}
+        items={userNotifications}
+        onItemsChange={handleNotificationsChange}
       />
     </Box>
   );

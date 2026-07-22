@@ -1,10 +1,9 @@
-import { List, ListItemButton, ListItemIcon, ListItemText, Typography, Tooltip, Box } from '@mui/material';
+import { List, ListItemButton, ListItemIcon, ListItemText, Typography, Box } from '@mui/material';
 import { cv } from '../../theme/cssVars';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SETTINGS_BASE_PATH, SETTINGS_NAV_GROUPS } from '../../constants/settingsNav';
 import { getSettingsNavIcon } from './settingsNavIcons';
 import { useAuth } from '../../auth/AuthContext';
-import { ROLE_IDS } from '../../constants/userRoles';
 
 export default function SettingsNav({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
@@ -43,7 +42,6 @@ export default function SettingsNav({ onNavigate }: { onNavigate?: () => void })
             const href = `${SETTINGS_BASE_PATH}/${item.path}`;
             const active = location.pathname === href;
             const hasManageSubscription = user?.permissions?.includes('manage_subscription_billing');
-            const hasManageCompany = user?.permissions?.includes('manage_users_permissions'); // Or a specific company permission, let's use manage_users_permissions as proxy for admin for now, or just check 'manage_subscription_billing'
             
             const isBillingDisabled = item.id === 'billing' && !hasManageSubscription;
             const isPlanDisabled = item.id === 'plan' && !hasManageSubscription;

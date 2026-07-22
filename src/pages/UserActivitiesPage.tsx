@@ -25,10 +25,10 @@ export default function UserActivitiesPage() {
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [startDate, setStartDate] = useState(getOneYearAgo());
   const [endDate, setEndDate] = useState(getToday());
-  const ACTIVITY_TYPE = {
+  const ACTIVITY_TYPE: Record<string, string> = {
     INFO: 'INFO',
     ERROR: 'ERROR'
-  }
+  };
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -57,7 +57,7 @@ export default function UserActivitiesPage() {
     fetchRoles();
   }, []);
 
-  const handleChangePage = (event: unknown, newPage: number) => {
+  const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
@@ -399,7 +399,7 @@ export default function UserActivitiesPage() {
                             height: 24,
                             fontWeight: 500,
                             backgroundColor: activity.activityType === 'ERROR' ? '#fdeded' : cv.blueGlow18,
-                            color: activity.activityType === 'ERROR' ? '#5f2120' : cv.blueSolid,
+                            color: activity.activityType === 'ERROR' ? '#5f2120' : cv.brandBlue,
                           }}
                         />
                       </TableCell>
