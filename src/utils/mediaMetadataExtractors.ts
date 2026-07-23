@@ -3,6 +3,19 @@ import * as mmb from 'music-metadata-browser';
 import { formatVideoTimestamp } from './formatVideoTimestamp';
 import { estimateBitrate } from './videoTechnicalMetadata';
 
+export interface TechnicalExifDetails {
+  make?: string;
+  model?: string;
+  lens?: string;
+  exposureTime?: string;
+  fNumber?: string;
+  iso?: string;
+  focalLength?: string;
+  dateTimeOriginal?: string;
+  resolution?: string;
+  orientation?: string;
+}
+
 export interface ImageMetadataResult {
   width?: number;
   height?: number;
@@ -12,18 +25,7 @@ export interface ImageMetadataResult {
   aspectRatio?: string;
   orientation?: string;
   containerFormat?: string;
-  exif?: {
-    make?: string;
-    model?: string;
-    lens?: string;
-    iso?: string;
-    exposureTime?: string;
-    fNumber?: string;
-    focalLength?: string;
-    dateTimeOriginal?: string;
-    resolution?: string;
-    orientation?: string;
-  };
+  exif?: TechnicalExifDetails;
 }
 
 export interface AudioMetadataResult {
@@ -184,6 +186,111 @@ export async function extractImageMetadata(file: File): Promise<ImageMetadataRes
   }
 
   return result;
+}
+
+export async function extractExifFromFile(file: File): Promise<TechnicalExifDetails | undefined> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    let rawTags: any = {};
+    try {
+      rawTags = await (ExifReader as any).load(arrayBuffer, { async: true, expanded: true });
+    } catch {
+      try {
+        rawTags = ExifReader.load(arrayBuffer);
+      } catch {
+        rawTags = {};
+      }
+    }
+
+    const tags: Record<string, any> = {};
+    if (rawTags) {
+      if (rawTags.file) Object.assign(tags, rawTags.file);
+      if (rawTags.exif) Object.assign(tags, rawTags.exif);
+      if (rawTags.gps) Object.assign(tags, rawTags.gps);
+      if (rawTags.iptc) Object.assign(tags, rawTags.iptc);
+      if (rawTags.xmp) Object.assign(tags, rawTags.xmp);
+      Object.assign(tags, rawTags);
+    }
+
+    const allKeys = Object.keys(tags);
+    const getValue = (...tagKeys: string[]): string | undefined => {
+      for (const k of tagKeys) {
+        if (tags[k]?.description != null && String(tags[k].description).trim() !== '') {
+          return String(tags[k].description).trim();
+        }
+        if (tags[k]?.value != null) {
+          const val = tags[k].value;
+          if (Array.isArray(val) && val.length > 0 && val[0] != null && String(val[0]).trim() !== '') {
+            return String(val[0]).trim();
+          }
+          if (String(val).trim() !== '') return String(val).trim();
+        }
+
+        const lowerK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const matchedKey = allKeys.find((key) => {
+          const lowerKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return lowerKey === lowerK || lowerKey.endsWith(lowerK);
+        });
+
+        if (matchedKey && tags[matchedKey]) {
+          const tagObj = tags[matchedKey];
+          if (tagObj?.description != null && String(tagObj.description).trim() !== '') {
+            return String(tagObj.description).trim();
+          }
+          if (tagObj?.value != null) {
+            const val = tagObj.value;
+            if (Array.isArray(val) && val.length > 0 && val[0] != null && String(val[0]).trim() !== '') {
+              return String(val[0]).trim();
+            }
+            if (String(val).trim() !== '') return String(val).trim();
+          }
+        }
+      }
+      return undefined;
+    };
+
+    const exifData: TechnicalExifDetails = {};
+
+    const exifWidth = getValue('Image Width', 'PixelXDimension', 'Width', 'SourceImageWidth', 'Imagewidth');
+    const exifHeight = getValue('Image Height', 'PixelYDimension', 'Height', 'SourceImageHeight', 'Imageheight');
+    if (exifWidth && exifHeight && !isNaN(Number(exifWidth)) && !isNaN(Number(exifHeight))) {
+      const w = Number(exifWidth);
+      const h = Number(exifHeight);
+      exifData.resolution = `${w} × ${h} px`;
+      exifData.orientation = w >= h ? 'Landscape' : 'Portrait';
+    }
+
+    const make = getValue('Make', 'com.apple.quicktime.make', 'Manufacturer', 'hardware');
+    if (make) exifData.make = make;
+
+    const model = getValue('Model', 'com.apple.quicktime.model', 'DeviceModel', 'Device');
+    if (model) exifData.model = model;
+
+    const lens = getValue('LensModel', 'Lens Model', 'Lens', 'LensMake', 'com.apple.quicktime.lens-model', 'lens-model');
+    if (lens) exifData.lens = lens;
+
+    const iso = getValue('ISOSpeedRatings', 'PhotographicSensitivity', 'ISO', 'ISOSpeed', 'iso-speed');
+    if (iso) exifData.iso = iso.startsWith('ISO') ? iso : `ISO ${iso}`;
+
+    const exp = getValue('ExposureTime', 'Exposure Time', 'ShutterSpeedValue', 'ShutterSpeed', 'exposure-time');
+    if (exp) exifData.exposureTime = exp.includes('sec') || exp.includes('s') ? exp : `${exp} sec`;
+
+    const fNum = getValue('FNumber', 'ApertureValue', 'Aperture', 'f-number');
+    if (fNum) exifData.fNumber = fNum.startsWith('f/') ? fNum : `f/${fNum}`;
+
+    const focal = getValue('FocalLength', 'Focal Length', 'FocalLengthIn35mmFormat', 'focal-length');
+    if (focal) exifData.focalLength = focal.includes('mm') ? focal : `${focal} mm`;
+
+    const dateVal = getValue('DateTimeOriginal', 'DateTime', 'Creation Date', 'com.apple.quicktime.creationdate', 'CreateDate');
+    if (dateVal) exifData.dateTimeOriginal = dateVal;
+
+    if (Object.keys(exifData).length > 0) {
+      return exifData;
+    }
+  } catch (err) {
+    console.warn('[ExifReader] Could not extract EXIF dynamically from file:', err);
+  }
+  return undefined;
 }
 
 export async function extractAudioMetadata(file: File): Promise<AudioMetadataResult> {

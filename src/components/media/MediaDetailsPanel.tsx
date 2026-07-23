@@ -47,6 +47,13 @@ export interface MediaTechnicalDetails {
   uploadedAt?: string;
   originallyCreatedAt?: string;
   exif?: TechnicalExifDetails;
+  make?: string;
+  model?: string;
+  lens?: string;
+  exposureTime?: string;
+  fNumber?: string;
+  iso?: string;
+  focalLength?: string;
   sampleRate?: string;
   channels?: string;
   artist?: string;
@@ -283,13 +290,11 @@ export default function MediaDetailsPanel({
           <DetailRow label="Name:" value={mediaItem.title || getMediaFileName(mediaItem)} />
           <DetailRow label="Size:" value={formatFileSize(mediaItem.sizeBytes)} />
           <DetailRow label="Type:" value={mediaItem.type} />
-          {(mediaItem.type === 'video' || mediaItem.type === 'image') ? (
-            <DetailRow
-              label="Summary:"
-              value={mediaItem.summary?.trim() || (mediaItem.customMetadata as any)?.summary || (technicalDetails as any)?.summary || '—'}
-              multiline
-            />
-          ) : null}
+          <DetailRow
+            label="Summary:"
+            value={mediaItem.summary?.trim() || (mediaItem.customMetadata as any)?.summary || (technicalDetails as any)?.summary || '—'}
+            multiline
+          />
         </DetailsSection>
       )}
 
@@ -305,79 +310,234 @@ export default function MediaDetailsPanel({
             originallyCreatedAt={originDetails.originallyCreatedAt}
             exif={exifDetails}
           />
-          <DetailRow
-            label="Duration:"
-            value={technicalDetails?.duration || mediaItem.duration || '—'}
-          />
-          <DetailRow label="Resolution:" value={technicalDetails?.resolution || '—'} />
-          <DetailRow
-            label="Display size:"
-            value={technicalDetails?.displayResolution || (technicalDetails as any)?.displaySize || '—'}
-          />
-          <DetailRow label="Aspect ratio:" value={technicalDetails?.aspectRatio || '—'} />
-          <DetailRow label="Orientation:" value={technicalDetails?.orientation || '—'} />
-          <DetailRow label="Megapixels:" value={technicalDetails?.megapixels || '—'} />
-          <DetailRow
-            label="Frame rate:"
-            value={
-              technicalDetails?.frameRate ||
-              ((technicalDetails as any)?.fps !== undefined
-                ? typeof (technicalDetails as any).fps === 'number'
-                  ? `${(technicalDetails as any).fps} fps`
-                  : String((technicalDetails as any).fps)
-                : '—')
-            }
-          />
-          <DetailRow label="Scan type:" value={technicalDetails?.scanType || '—'} />
-          <DetailRow
-            label="Container:"
-            value={technicalDetails?.containerFormat || (technicalDetails as any)?.container || '—'}
-          />
-          <DetailRow
-            label="Video codec:"
-            value={technicalDetails?.videoCodec || (technicalDetails as any)?.codec || (technicalDetails as any)?.videoCodec || '—'}
-          />
-          <DetailRow
-            label="Est. bitrate:"
-            value={technicalDetails?.estimatedBitrate || (technicalDetails as any)?.bitrate || '—'}
-          />
-          <DetailRow
-            label="Audio:"
-            value={
-              technicalDetails?.hasAudio ||
-              ((technicalDetails as any)?.audio !== undefined
-                ? (technicalDetails as any).audio
-                  ? 'Yes (assumed)'
-                  : 'No'
-                : '—')
-            }
-          />
-          {technicalDetails?.sampleRate || (technicalDetails as any)?.sampleRate ? (
-            <DetailRow
-              label="Sample rate:"
-              value={technicalDetails?.sampleRate || (technicalDetails as any)?.sampleRate}
-            />
-          ) : null}
-          {technicalDetails?.channels || (technicalDetails as any)?.channels ? (
-            <DetailRow
-              label="Channels:"
-              value={technicalDetails?.channels || (technicalDetails as any)?.channels}
-            />
-          ) : null}
-          {technicalDetails?.artist || (technicalDetails as any)?.artist ? (
-            <DetailRow
-              label="Artist:"
-              value={technicalDetails?.artist || (technicalDetails as any)?.artist}
-            />
-          ) : null}
-          {technicalDetails?.album || (technicalDetails as any)?.album ? (
-            <DetailRow
-              label="Album:"
-              value={technicalDetails?.album || (technicalDetails as any)?.album}
-            />
-          ) : null}
-          <DetailRow label="Decoded frames:" value={technicalDetails?.decodedFrames || '0'} />
-          <DetailRow label="Dropped frames:" value={technicalDetails?.droppedFrames || '0'} />
+          {mediaItem.type === 'image' && (
+            <>
+              {Boolean(
+                [exifDetails?.make, exifDetails?.model].filter(Boolean).join(' ') ||
+                [technicalDetails?.make, technicalDetails?.model].filter(Boolean).join(' ') ||
+                (technicalDetails as any)?.make ||
+                (technicalDetails as any)?.model
+              ) ? (
+                <DetailRow
+                  label="Camera:"
+                  value={
+                    [exifDetails?.make, exifDetails?.model].filter(Boolean).join(' ') ||
+                    [technicalDetails?.make, technicalDetails?.model].filter(Boolean).join(' ') ||
+                    (technicalDetails as any)?.make ||
+                    (technicalDetails as any)?.model ||
+                    ''
+                  }
+                />
+              ) : null}
+              {Boolean(exifDetails?.lens || technicalDetails?.lens || (technicalDetails as any)?.lens) ? (
+                <DetailRow
+                  label="Lens:"
+                  value={exifDetails?.lens || technicalDetails?.lens || (technicalDetails as any)?.lens || ''}
+                />
+              ) : null}
+              <DetailRow
+                label="Resolution:"
+                value={technicalDetails?.resolution || exifDetails?.resolution || '—'}
+              />
+              <DetailRow
+                label="Display size:"
+                value={technicalDetails?.displayResolution || (technicalDetails as any)?.displaySize || technicalDetails?.resolution || '—'}
+              />
+              {technicalDetails?.aspectRatio ? (
+                <DetailRow label="Aspect ratio:" value={technicalDetails.aspectRatio} />
+              ) : null}
+              {technicalDetails?.megapixels ? (
+                <DetailRow label="Megapixels:" value={technicalDetails.megapixels} />
+              ) : null}
+              <DetailRow
+                label="Orientation:"
+                value={technicalDetails?.orientation || exifDetails?.orientation || '—'}
+              />
+              {Boolean(exifDetails?.exposureTime || technicalDetails?.exposureTime || (technicalDetails as any)?.exposureTime) ? (
+                <DetailRow
+                  label="Exposure:"
+                  value={exifDetails?.exposureTime || technicalDetails?.exposureTime || (technicalDetails as any)?.exposureTime || ''}
+                />
+              ) : null}
+              {Boolean(exifDetails?.fNumber || technicalDetails?.fNumber || (technicalDetails as any)?.fNumber) ? (
+                <DetailRow
+                  label="Aperture:"
+                  value={exifDetails?.fNumber || technicalDetails?.fNumber || (technicalDetails as any)?.fNumber || ''}
+                />
+              ) : null}
+              {Boolean(exifDetails?.iso || technicalDetails?.iso || (technicalDetails as any)?.iso) ? (
+                <DetailRow
+                  label="ISO:"
+                  value={exifDetails?.iso || technicalDetails?.iso || (technicalDetails as any)?.iso || ''}
+                />
+              ) : null}
+              {Boolean(exifDetails?.focalLength || technicalDetails?.focalLength || (technicalDetails as any)?.focalLength) ? (
+                <DetailRow
+                  label="Focal length:"
+                  value={exifDetails?.focalLength || technicalDetails?.focalLength || (technicalDetails as any)?.focalLength || ''}
+                />
+              ) : null}
+              <DetailRow
+                label="Container:"
+                value={technicalDetails?.containerFormat || (technicalDetails as any)?.container || (technicalDetails as any)?.format || 'JPEG'}
+              />
+            </>
+          )}
+
+          {mediaItem.type === 'audio' && (
+            <>
+              {(technicalDetails as any)?.title ? (
+                <DetailRow label="Title:" value={(technicalDetails as any).title} />
+              ) : null}
+              {technicalDetails?.artist || (technicalDetails as any)?.artist ? (
+                <DetailRow
+                  label="Artist:"
+                  value={technicalDetails?.artist || (technicalDetails as any)?.artist}
+                />
+              ) : null}
+              {technicalDetails?.album || (technicalDetails as any)?.album ? (
+                <DetailRow
+                  label="Album:"
+                  value={technicalDetails?.album || (technicalDetails as any)?.album}
+                />
+              ) : null}
+              {(technicalDetails as any)?.year ? (
+                <DetailRow label="Year:" value={String((technicalDetails as any).year)} />
+              ) : null}
+              {(technicalDetails as any)?.genre ? (
+                <DetailRow label="Genre:" value={(technicalDetails as any).genre} />
+              ) : null}
+              <DetailRow
+                label="Duration:"
+                value={technicalDetails?.duration || mediaItem.duration || '—'}
+              />
+              <DetailRow
+                label="Sample rate:"
+                value={technicalDetails?.sampleRate || (technicalDetails as any)?.sampleRate || '44.1 kHz'}
+              />
+              <DetailRow
+                label="Channels:"
+                value={technicalDetails?.channels || (technicalDetails as any)?.channels || 'Stereo'}
+              />
+              <DetailRow
+                label="Est. bitrate:"
+                value={technicalDetails?.estimatedBitrate || (technicalDetails as any)?.bitrate || '—'}
+              />
+              {(technicalDetails as any)?.audioCodec ? (
+                <DetailRow label="Audio codec:" value={(technicalDetails as any).audioCodec} />
+              ) : null}
+              <DetailRow
+                label="Container:"
+                value={technicalDetails?.containerFormat || (technicalDetails as any)?.container || 'MP3'}
+              />
+            </>
+          )}
+
+          {mediaItem.type !== 'image' && mediaItem.type !== 'audio' && (
+            <>
+              {Boolean(
+                [exifDetails?.make, exifDetails?.model].filter(Boolean).join(' ') ||
+                [technicalDetails?.make, technicalDetails?.model].filter(Boolean).join(' ') ||
+                (technicalDetails as any)?.make ||
+                (technicalDetails as any)?.model
+              ) ? (
+                <DetailRow
+                  label="Camera:"
+                  value={
+                    [exifDetails?.make, exifDetails?.model].filter(Boolean).join(' ') ||
+                    [technicalDetails?.make, technicalDetails?.model].filter(Boolean).join(' ') ||
+                    (technicalDetails as any)?.make ||
+                    (technicalDetails as any)?.model ||
+                    ''
+                  }
+                />
+              ) : null}
+              {Boolean(exifDetails?.lens || technicalDetails?.lens || (technicalDetails as any)?.lens) ? (
+                <DetailRow
+                  label="Lens:"
+                  value={exifDetails?.lens || technicalDetails?.lens || (technicalDetails as any)?.lens || ''}
+                />
+              ) : null}
+              <DetailRow
+                label="Resolution:"
+                value={technicalDetails?.resolution || exifDetails?.resolution || '—'}
+              />
+              <DetailRow
+                label="Orientation:"
+                value={technicalDetails?.orientation || exifDetails?.orientation || '—'}
+              />
+              {Boolean(exifDetails?.exposureTime || technicalDetails?.exposureTime || (technicalDetails as any)?.exposureTime) ? (
+                <DetailRow
+                  label="Exposure:"
+                  value={exifDetails?.exposureTime || technicalDetails?.exposureTime || (technicalDetails as any)?.exposureTime || ''}
+                />
+              ) : null}
+              {Boolean(exifDetails?.fNumber || technicalDetails?.fNumber || (technicalDetails as any)?.fNumber) ? (
+                <DetailRow
+                  label="Aperture:"
+                  value={exifDetails?.fNumber || technicalDetails?.fNumber || (technicalDetails as any)?.fNumber || ''}
+                />
+              ) : null}
+              {Boolean(exifDetails?.iso || technicalDetails?.iso || (technicalDetails as any)?.iso) ? (
+                <DetailRow
+                  label="ISO:"
+                  value={exifDetails?.iso || technicalDetails?.iso || (technicalDetails as any)?.iso || ''}
+                />
+              ) : null}
+              {Boolean(exifDetails?.focalLength || technicalDetails?.focalLength || (technicalDetails as any)?.focalLength) ? (
+                <DetailRow
+                  label="Focal length:"
+                  value={exifDetails?.focalLength || technicalDetails?.focalLength || (technicalDetails as any)?.focalLength || ''}
+                />
+              ) : null}
+              <DetailRow
+                label="Duration:"
+                value={technicalDetails?.duration || mediaItem.duration || '—'}
+              />
+              <DetailRow
+                label="Display size:"
+                value={technicalDetails?.displayResolution || (technicalDetails as any)?.displaySize || '—'}
+              />
+              <DetailRow label="Aspect ratio:" value={technicalDetails?.aspectRatio || '—'} />
+              <DetailRow label="Megapixels:" value={technicalDetails?.megapixels || '—'} />
+              <DetailRow
+                label="Frame rate:"
+                value={
+                  technicalDetails?.frameRate ||
+                  ((technicalDetails as any)?.fps !== undefined
+                    ? typeof (technicalDetails as any).fps === 'number'
+                      ? `${(technicalDetails as any).fps} fps`
+                      : String((technicalDetails as any).fps)
+                    : '—')
+                }
+              />
+              <DetailRow label="Scan type:" value={technicalDetails?.scanType || 'Progressive'} />
+              <DetailRow
+                label="Container:"
+                value={technicalDetails?.containerFormat || (technicalDetails as any)?.container || 'MP4'}
+              />
+              <DetailRow
+                label="Video codec:"
+                value={technicalDetails?.videoCodec || (technicalDetails as any)?.codec || (technicalDetails as any)?.videoCodec || 'H.264 / AAC'}
+              />
+              <DetailRow
+                label="Est. bitrate:"
+                value={technicalDetails?.estimatedBitrate || (technicalDetails as any)?.bitrate || '—'}
+              />
+              <DetailRow
+                label="Audio:"
+                value={
+                  technicalDetails?.hasAudio ||
+                  ((technicalDetails as any)?.audio !== undefined
+                    ? (technicalDetails as any).audio
+                      ? 'Yes (assumed)'
+                      : 'No'
+                    : 'Yes')
+                }
+              />
+            </>
+          )}
+
           <DetailRow
             label="Uploaded:"
             value={formatCreatedAt(originDetails.uploadedAt)}

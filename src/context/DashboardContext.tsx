@@ -43,7 +43,7 @@ import type {
   MediaUploadOptions,
 } from '../types/mediaUpload';
 import type { SidebarSelection } from '../types/sidebarSelection';
-import { extractImageMetadata, extractAudioMetadata } from '../utils/mediaMetadataExtractors';
+import { extractImageMetadata, extractAudioMetadata, extractExifFromFile, type TechnicalExifDetails } from '../utils/mediaMetadataExtractors';
 import {
   uploadMediaFileRequest,
   getMediaAssetsRequest,
@@ -201,35 +201,46 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
         if (allRawAssets.length > 0) {
           setMediaItems((prev) => {
-            const existingIds = new Set(prev.map((item) => item.id));
-            const newItems: MediaItem[] = allRawAssets
-              .filter((a) => !existingIds.has(a.id))
-              .map((a: any) => {
-                const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.name);
-                const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.name);
-                const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.name);
-                const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
+            const backendMap = new Map<string, MediaItem>();
 
-                return {
-                  id: a.id,
-                  title: a.name,
-                  type,
-                  workspaceId: activeWorkspaceId, // Defaulting to activeWorkspaceId for now
-                  createdAt: a.uploadDate || new Date().toISOString(),
-                  sizeBytes: a.size || 0,
-                  storageProvider: 'b2',
-                  uploadedBy: a.uploadedBy?.name || (typeof a.uploadedBy === 'string' ? a.uploadedBy : CURRENT_USER.name),
-                  thumbnail: a.thumbnail || undefined,
-                  videoSrc: isVideo || isAudio ? a.url : undefined,
-                  duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
-                  tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
-                  location: null,
-                  compressionStatus: a.transcodingStatus || a.compressionStatus || 'completed',
-                  customMetadata: a.customMetadata,
-                  status: a.status === 'duplicate' ? 'duplicate' : 'active',
-                };
-              });
-            return [...prev, ...newItems];
+            // Map all backend assets first
+            allRawAssets.forEach((a: any) => {
+              const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.name);
+              const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.name);
+              const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.name);
+              const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
+
+              // Tags: prefer top-level a.tags, then metadata.tags
+              const resolvedTags: string[] = Array.isArray(a.tags) && a.tags.length > 0
+                ? a.tags
+                : (Array.isArray(a.metadata?.tags) ? a.metadata.tags : []);
+
+              backendMap.set(a.id, {
+                id: a.id,
+                title: a.name,
+                type,
+                workspaceId: activeWorkspaceId,
+                createdAt: a.uploadDate || new Date().toISOString(),
+                sizeBytes: a.size || 0,
+                storageProvider: 'b2',
+                uploadedBy: a.uploadedBy?.name || (typeof a.uploadedBy === 'string' ? a.uploadedBy : CURRENT_USER.name),
+                thumbnail: a.thumbnail || undefined,
+                videoSrc: isVideo || isAudio ? a.url : undefined,
+                duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration
+                  : typeof a.metadata?.technicalSpecs?.duration === 'string' ? a.metadata.technicalSpecs.duration
+                  : undefined,
+                tags: resolvedTags,
+                location: null,
+                compressionStatus: a.transcodingStatus || a.compressionStatus || 'completed',
+                customMetadata: a.customMetadata,
+                status: a.status === 'duplicate' ? 'duplicate' : 'active',
+              } as MediaItem);
+            });
+
+            // Merge: backend assets replace existing, keep local-only items
+            const prevMap = new Map(prev.map((item) => [item.id, item]));
+            backendMap.forEach((item, id) => prevMap.set(id, item));
+            return Array.from(prevMap.values());
           });
         }
       } catch (err) {
@@ -1155,7 +1166,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const cancelVideoUpload = cancelMediaUpload;
 
-  function extractFullBrowserVideoSpecs(file: File): Promise<Record<string, any>> {
+  async function extractFullBrowserVideoSpecs(file: File): Promise<Record<string, any>> {
+    const rawExif = await extractExifFromFile(file);
+
     return new Promise((resolve) => {
       if (!file.type.startsWith('video/')) {
         resolve({});
@@ -1168,8 +1181,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       video.onloadedmetadata = () => {
         URL.revokeObjectURL(objectUrl);
-        const width = video.videoWidth || 960;
-        const height = video.videoHeight || 540;
+        const width = video.videoWidth || 1920;
+        const height = video.videoHeight || 1080;
         const duration = video.duration || 0;
         const megapixels = ((width * height) / 1000000).toFixed(2) + ' MP';
 
@@ -1181,37 +1194,87 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         const aspectRatio = `${ratioWidth}:${ratioHeight} (${ratioCalc}:1)`;
 
         const containerExt = file.name.split('.').pop()?.toUpperCase() || 'MP4';
-        const bitrateMbps = duration > 0 ? ((file.size * 8) / (duration * 1000000)).toFixed(2) + ' Mbps' : '247.52 Mbps';
+        const bitrateMbps = duration > 0 ? ((file.size * 8) / (duration * 1000000)).toFixed(2) + ' Mbps' : undefined;
 
         const durationMin = Math.floor(duration / 60);
         const durationSec = String(Math.floor(duration % 60)).padStart(2, '0');
 
+        const finalRes = rawExif?.resolution || `${width} × ${height} px`;
+        const finalOrient = rawExif?.orientation || (width >= height ? 'Landscape' : 'Portrait');
+
+        const exif: TechnicalExifDetails = {
+          make: rawExif?.make,
+          model: rawExif?.model,
+          lens: rawExif?.lens,
+          exposureTime: rawExif?.exposureTime,
+          fNumber: rawExif?.fNumber,
+          iso: rawExif?.iso,
+          focalLength: rawExif?.focalLength,
+          resolution: finalRes,
+          orientation: finalOrient,
+          dateTimeOriginal: rawExif?.dateTimeOriginal || new Date(file.lastModified).toISOString(),
+        };
+
         resolve({
           durationSeconds: Math.round(duration),
           duration: `${durationMin}:${durationSec}`,
-          resolution: `${width} × ${height} px`,
+          resolution: finalRes,
           displaySize: `${width} × ${height} px`,
           aspectRatio,
-          orientation: width >= height ? 'Landscape' : 'Portrait',
+          orientation: finalOrient,
           megapixels,
           fps: 24,
           scanType: 'Progressive',
           container: containerExt,
           videoCodec: 'H.264 / AAC',
-          bitrate: bitrateMbps,
+          ...(bitrateMbps ? { bitrate: bitrateMbps } : {}),
           audio: true,
           fileSize: file.size,
           sizeBytes: file.size,
           storage: 'B2 Cloud',
           originallyCreated: new Date(file.lastModified).toISOString(),
+          exif,
+          ...(rawExif?.make ? { make: rawExif.make } : {}),
+          ...(rawExif?.model ? { model: rawExif.model } : {}),
+          ...(rawExif?.lens ? { lens: rawExif.lens } : {}),
+          ...(rawExif?.exposureTime ? { exposureTime: rawExif.exposureTime } : {}),
+          ...(rawExif?.fNumber ? { fNumber: rawExif.fNumber } : {}),
+          ...(rawExif?.iso ? { iso: rawExif.iso } : {}),
+          ...(rawExif?.focalLength ? { focalLength: rawExif.focalLength } : {}),
         });
       };
 
       video.onerror = () => {
         URL.revokeObjectURL(objectUrl);
+        const containerExt = file.name.split('.').pop()?.toUpperCase() || 'MP4';
+        const exif: TechnicalExifDetails = {
+          make: rawExif?.make,
+          model: rawExif?.model,
+          lens: rawExif?.lens,
+          exposureTime: rawExif?.exposureTime,
+          fNumber: rawExif?.fNumber,
+          iso: rawExif?.iso,
+          focalLength: rawExif?.focalLength,
+          resolution: rawExif?.resolution,
+          orientation: rawExif?.orientation,
+          dateTimeOriginal: rawExif?.dateTimeOriginal || new Date(file.lastModified).toISOString(),
+        };
+
         resolve({
-          container: file.name.split('.').pop()?.toUpperCase() || 'MP4',
-          originallyCreated: new Date(file.lastModified).toISOString()
+          container: containerExt,
+          fileSize: file.size,
+          sizeBytes: file.size,
+          originallyCreated: new Date(file.lastModified).toISOString(),
+          exif,
+          ...(rawExif?.resolution ? { resolution: rawExif.resolution } : {}),
+          ...(rawExif?.orientation ? { orientation: rawExif.orientation } : {}),
+          ...(rawExif?.make ? { make: rawExif.make } : {}),
+          ...(rawExif?.model ? { model: rawExif.model } : {}),
+          ...(rawExif?.lens ? { lens: rawExif.lens } : {}),
+          ...(rawExif?.exposureTime ? { exposureTime: rawExif.exposureTime } : {}),
+          ...(rawExif?.fNumber ? { fNumber: rawExif.fNumber } : {}),
+          ...(rawExif?.iso ? { iso: rawExif.iso } : {}),
+          ...(rawExif?.focalLength ? { focalLength: rawExif.focalLength } : {}),
         });
       };
     });
