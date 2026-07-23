@@ -12,7 +12,7 @@ interface VideoCommentLayerProps {
   active: boolean;
   panActive?: boolean;
   annotationsVisible?: boolean;
-  currentVideoTime: number;
+  videoRef?: React.RefObject<HTMLVideoElement>;
   comments: VideoComment[];
   draftComment: DraftVideoComment | null;
   onPlaceDraft: (position: { xPercent: number; yPercent: number }) => void;
@@ -50,7 +50,7 @@ export default function VideoCommentLayer({
   active,
   panActive = false,
   annotationsVisible = true,
-  currentVideoTime,
+  videoRef,
   comments,
   draftComment,
   onPlaceDraft,
@@ -76,6 +76,25 @@ export default function VideoCommentLayer({
 }: VideoCommentLayerProps) {
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
+
+  useEffect(() => {
+    const video = videoRef?.current;
+    if (!video) return;
+
+    const handleTimeUpdate = () => {
+      setCurrentVideoTime(video.currentTime);
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('seeked', handleTimeUpdate);
+    handleTimeUpdate();
+
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('seeked', handleTimeUpdate);
+    };
+  }, [videoRef]);
 
   useEffect(() => {
     onThreadOpenChange?.(Boolean(openCommentId));

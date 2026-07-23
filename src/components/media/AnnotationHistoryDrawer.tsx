@@ -205,6 +205,7 @@ const rowActionSx = {
 function HistoryEntryRow({
   entry,
   replies = [],
+  isTimeBasedMedia = true,
   annotationGroups,
   onSeekToTimestamp,
   onToggleResolved,
@@ -219,6 +220,7 @@ function HistoryEntryRow({
 }: {
   entry: AnnotationHistoryEntry;
   replies?: CommentReply[];
+  isTimeBasedMedia?: boolean;
   onEditComment?: (commentId: string, text: string) => void;
   annotationGroups: AnnotationAccessGroup[];
   collaborators: MediaCollaborator[];
@@ -435,10 +437,10 @@ function HistoryEntryRow({
       </Menu>
 
       <Tooltip
-        title={onSeekToTimestamp ? `Jump to ${formatVideoTimestamp(entry.videoTimestamp)}` : ''}
+        title={onSeekToTimestamp && isTimeBasedMedia ? `Jump to ${formatVideoTimestamp(entry.videoTimestamp)}` : ''}
         arrow
         placement="top"
-        disableHoverListener={!onSeekToTimestamp}
+        disableHoverListener={!onSeekToTimestamp || !isTimeBasedMedia}
       >
         <Box
           component="button"
@@ -480,7 +482,7 @@ function HistoryEntryRow({
               mb: 0.5,
             }}
           >
-            #{entry.index} · {formatVideoTimestamp(entry.videoTimestamp)}
+            #{entry.index}{isTimeBasedMedia ? ` · ${formatVideoTimestamp(entry.videoTimestamp)}` : ''}
           </Typography>
 
           <Box sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 0.75, mb: 0.5 }}>
@@ -718,6 +720,8 @@ export default function AnnotationHistoryDrawer({
   const isDesktopPanel = useMediaQuery(theme.breakpoints.up(SIDEBAR_DESKTOP_BREAKPOINT));
   const [internalTab, setInternalTab] = useState<DrawerTab>('history');
   const activeTab = controlledTab ?? internalTab;
+  
+  const isTimeBasedMedia = mediaItem?.type === 'video' || mediaItem?.type === 'audio';
 
   const handleTabChange = (tab: DrawerTab) => {
     if (onTabChange) {
@@ -967,6 +971,7 @@ export default function AnnotationHistoryDrawer({
               <Box key={entry.id}>
                 <HistoryEntryRow
                   entry={entry}
+                  isTimeBasedMedia={isTimeBasedMedia}
                   replies={
                     (() => {
                       const commentId = getCommentIdForEntry(entry);

@@ -386,6 +386,31 @@ export default function NotificationDrawer({
                       </Button>
                     </Box>
                   )}
+
+                  {(notification.type === 'annotation_added' || notification.type === 'mention') && notification.relatedEntityId && (
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<PlayCircleOutlineIcon />}
+                        onClick={(e) => { e.stopPropagation(); navigate(`/media/${notification.relatedEntityId}`); onClose(); }}
+                        sx={{
+                          fontSize: '0.7rem',
+                          minWidth: 0,
+                          py: 0.25,
+                          px: 1.25,
+                          color: cv.brandBlue,
+                          borderColor: cv.brandBlue,
+                          '&:hover': {
+                            backgroundColor: cv.blueGlow18,
+                            borderColor: cv.brandBlue,
+                          },
+                        }}
+                      >
+                        View Media
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
 
                 <Box

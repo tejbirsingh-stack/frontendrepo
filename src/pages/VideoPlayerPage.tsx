@@ -262,10 +262,11 @@ export default function VideoPlayerPage() {
                 user?.email
               );
             } else if (fetchedItem?.uploadedByUserId === user?.id && authorEmail !== user?.email) {
-              // Notification for video owner
+              const currentItem = fetchedItem || contextItem;
+              // Notification for media owner
               addInAppNotification(
                 `Comment on ${videoTitle}`,
-                `${authorName} commented on your video: "${commentText.substring(0, 40)}${commentText.length > 40 ? '...' : ''}"`,
+                `${authorName} commented on your ${currentItem?.type || 'media'}: "${commentText.substring(0, 40)}${commentText.length > 40 ? '...' : ''}"`,
                 user?.email
               );
             }
@@ -506,7 +507,6 @@ export default function VideoPlayerPage() {
   const [playerShowAudioMeter, setPlayerShowAudioMeter] = useState(false);
   const [annotationsVisible, setAnnotationsVisible] = useState(true);
   const [commentThreadOpen, setCommentThreadOpen] = useState(false);
-  const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoTechnicalDetails, setVideoTechnicalDetails] = useState<MediaTechnicalDetails>({});
   const [statusToast, setStatusToast] = useState<{
     open: boolean;
@@ -1225,8 +1225,6 @@ export default function VideoPlayerPage() {
     const video = videoRef.current;
     if (!video) return;
 
-    const syncTime = () => setCurrentVideoTime(video.currentTime);
-
     const syncMetadata = () => {
       const stream = extractVideoStreamMetadata(video, item);
       const quality = extractPlaybackQualityMetadata(video);
@@ -1258,7 +1256,6 @@ export default function VideoPlayerPage() {
     };
 
     const handleLoadedMetadata = () => {
-      syncTime();
       syncMetadata();
     };
 
@@ -1270,13 +1267,10 @@ export default function VideoPlayerPage() {
       }));
     };
 
-    video.addEventListener('timeupdate', syncTime);
-    video.addEventListener('seeked', syncTime);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('resize', handleResize);
     video.addEventListener('timeupdate', syncPlaybackQuality);
 
-    syncTime();
     if (video.readyState >= 1) {
       syncMetadata();
     }
@@ -1289,8 +1283,6 @@ export default function VideoPlayerPage() {
     });
 
     return () => {
-      video.removeEventListener('timeupdate', syncTime);
-      video.removeEventListener('seeked', syncTime);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('resize', handleResize);
       video.removeEventListener('timeupdate', syncPlaybackQuality);
@@ -1735,11 +1727,12 @@ export default function VideoPlayerPage() {
   );
 
   const handleSeekToTimestamp = useCallback((timestamp: number, entryId?: string) => {
-    if (!videoRef.current) return;
-    // Add a tiny 50ms offset to guarantee we land inside the annotation's visibility window, 
-    // avoiding floating point rounding errors that put the playhead just before the annotation starts.
-    videoRef.current.currentTime = timestamp + 0.05;
-    videoRef.current.pause();
+    if (videoRef.current) {
+      // Add a tiny 50ms offset to guarantee we land inside the annotation's visibility window, 
+      // avoiding floating point rounding errors that put the playhead just before the annotation starts.
+      videoRef.current.currentTime = timestamp + 0.05;
+      videoRef.current.pause();
+    }
 
     if (entryId && mediaId) {
       setHistory(prev => {
@@ -2946,7 +2939,7 @@ export default function VideoPlayerPage() {
                   enabled={surfaceEnabled && !isViewer}
                   annotationsVisible={annotationsVisible}
                   resolvedOverlayEntryIds={resolvedOverlayEntryIds}
-                  currentVideoTime={currentVideoTime}
+                  videoRef={videoRef}
                   strokes={drawings}
                   onStrokesChange={setDrawings}
                   shapes={shapes}
@@ -2972,7 +2965,7 @@ export default function VideoPlayerPage() {
                   active={activeTool === 'comment' && !isViewer}
                   panActive={activeTool === 'pan'}
                   annotationsVisible={annotationsVisible}
-                  currentVideoTime={currentVideoTime}
+                  videoRef={videoRef}
                   comments={comments}
                   draftComment={draftComment}
                   onPlaceDraft={handlePlaceDraft}

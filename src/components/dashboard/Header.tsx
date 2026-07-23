@@ -26,6 +26,7 @@ import {
 import { fetchNotifications } from '../../api/notification.service';
 import { useGlobalSearchKeyboard } from '../../hooks/useGlobalSearchKeyboard';
 import { useAuth } from '../../auth/AuthContext';
+import { env } from '../../config/env';
 
 export default function Header({
   onMenuClick,
@@ -65,6 +66,49 @@ export default function Header({
       return () => clearInterval(interval);
     }
   }, [user]);
+
+  // Real-time WebSocket Notifications Listener
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const defaultBase = typeof window !== 'undefined' ? `${window.location.origin}/api` : 'http://localhost:3000/api';
+    const baseUrl = env.apiBaseUrl || defaultBase;
+    
+    let wsBase = baseUrl.replace(/^http/, 'ws');
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+      wsBase = wsBase.replace(/^ws:\/\//, 'wss://');
+    }
+
+    const wsUrl = `${wsBase}/ws?userId=${user.id}`;
+    let socket: WebSocket | null = null;
+
+    try {
+      socket = new WebSocket(wsUrl);
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && data.type === 'NEW_NOTIFICATION' && data.notification) {
+            const newNotif = data.notification;
+            setNotificationItems((prev) => {
+              if (prev.some((n) => n.id === newNotif.id)) return prev;
+              return [newNotif, ...prev];
+            });
+          }
+        } catch (err) {
+          console.error('Failed to parse notification WS message:', err);
+        }
+      };
+    } catch (err) {
+      console.error('Failed to open notification WebSocket:', err);
+    }
+
+    return () => {
+      if (socket) {
+        socket.close();
+      }
+    };
+  }, [user?.id]);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
 
   useGlobalSearchKeyboard(searchInputRef, !showMenuButton);

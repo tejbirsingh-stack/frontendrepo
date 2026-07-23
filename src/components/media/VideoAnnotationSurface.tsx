@@ -129,7 +129,7 @@ interface VideoAnnotationSurfaceProps {
   enabled: boolean;
   annotationsVisible?: boolean;
   resolvedOverlayEntryIds?: ReadonlySet<string>;
-  currentVideoTime: number;
+  videoRef?: React.RefObject<HTMLVideoElement>;
   strokes: VideoDrawingStroke[];
   onStrokesChange: (strokes: VideoDrawingStroke[]) => void;
   shapes: VideoShape[];
@@ -263,7 +263,7 @@ export default function VideoAnnotationSurface({
   enabled,
   annotationsVisible = true,
   resolvedOverlayEntryIds = new Set<string>(),
-  currentVideoTime,
+  videoRef,
   strokes,
   onStrokesChange,
   shapes,
@@ -295,6 +295,7 @@ export default function VideoAnnotationSurface({
   const currentPointsRef = useRef<PercentPoint[]>([]);
   const erasedThisGestureRef = useRef(false);
   const erasedRemainingAtTimestampRef = useRef<number | null>(null);
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [livePath, setLivePath] = useState('');
   const [liveStrokeStyle, setLiveStrokeStyle] = useState<{
     color: string;
@@ -357,6 +358,24 @@ export default function VideoAnnotationSurface({
       ),
     [stamps, currentVideoTime, resolvedOverlayEntryIds],
   );
+
+  useEffect(() => {
+    const video = videoRef?.current;
+    if (!video) return;
+
+    const handleTimeUpdate = () => {
+      setCurrentVideoTime(video.currentTime);
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('seeked', handleTimeUpdate);
+    handleTimeUpdate();
+
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('seeked', handleTimeUpdate);
+    };
+  }, [videoRef]);
 
   useEffect(() => {
     strokesRef.current = strokes;
