@@ -9,8 +9,8 @@ import {
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import { cv } from '../../theme/cssVars';
 import { useDashboard } from '../../context/DashboardContext';
-import type { ManagedTag, TagScope } from '../../types/managedTag';
-import { findManagedTagByName, getManagedTagOptionSx } from '../../utils/managedTagStyles';
+import type { TagScope } from '../../types/managedTag';
+import { getManagedTagOptionSx } from '../../utils/managedTagStyles';
 import { getTagScopeColor } from '../../utils/tagScopeColorsStorage';
 import { normalizeTagName } from '../../utils/tagRegistryStorage';
 
@@ -33,7 +33,7 @@ export default function TagTypeaheadInput({
   appliedTags,
   onAddTag,
 }: TagTypeaheadInputProps) {
-  const { getAssignableTags, createManagedTag, managedTags, tagScopeColors } = useDashboard();
+  const { getAssignableTags, tagScopeColors } = useDashboard();
   const anchorRef = useRef<HTMLDivElement>(null);
   const [value, setValue] = useState('');
   const [open, setOpen] = useState(false);
@@ -95,36 +95,6 @@ export default function TagTypeaheadInput({
 
     onAddTag(normalized);
     clearInput();
-  };
-
-  const resolveTagOnCommit = (preferredTag?: ManagedTag) => {
-    if (preferredTag) {
-      commitTagName(preferredTag.name);
-      return;
-    }
-
-    const normalized = normalizeTagName(value);
-    if (!normalized) return;
-
-    const assignableMatch = assignableTags.find((tag) => tag.name === normalized);
-    if (assignableMatch) {
-      commitTagName(assignableMatch.name);
-      return;
-    }
-
-    const existingTag = findManagedTagByName(normalized, managedTags);
-    if (existingTag) {
-      commitTagName(existingTag.name);
-      return;
-    }
-
-    const created = createManagedTag({
-      name: normalized,
-      scope: 'personal',
-      workspaceId: null,
-    });
-
-    commitTagName(created?.name ?? normalized);
   };
 
   const handleCommit = (event?: React.SyntheticEvent) => {

@@ -10,7 +10,6 @@ import PaymentOutlinedIcon from '@mui/icons-material/PaymentOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { useAuth } from '../../auth/AuthContext';
-import { ROLE_IDS } from '../../constants/userRoles';
 import {
   DEFAULT_SETTINGS_PATH,
   SETTINGS_BASE_PATH,

@@ -1,6 +1,5 @@
 import type { MediaTechnicalDetails } from '../components/media/MediaDetailsPanel';
 import type { TechnicalExifDetails } from '../components/media/TechnicalFileOriginSummary';
-import { CURRENT_USER } from '../constants/currentUser';
 import type { MediaItem } from '../data/mockMedia';
 
 export interface ResolvedMediaOriginDetails {
@@ -28,7 +27,7 @@ export function resolveMediaOriginDetails(
 }
 
 export function resolveMediaExifDetails(
-  mediaItem: MediaItem,
+  _mediaItem: MediaItem,
   technicalDetails?: MediaTechnicalDetails,
 ): TechnicalExifDetails | undefined {
   if (technicalDetails?.exif && Object.keys(technicalDetails.exif).length > 0) {

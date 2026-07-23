@@ -25,8 +25,6 @@ import type { Notification } from '../../data/mockNotifications';
 import { markNotificationAsRead } from '../../api/notification.service';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutlined';
 import { useNavigate } from 'react-router-dom';
-import { apiClient } from '../../api/client';
-import { useAuth } from '../../auth/AuthContext';
 
 interface NotificationDrawerProps {
   open: boolean;
@@ -71,7 +69,6 @@ export default function NotificationDrawer({
   items,
   onItemsChange,
 }: NotificationDrawerProps) {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [readFilter, setReadFilter] = useState<ReadFilter>('all');
@@ -125,32 +122,6 @@ export default function NotificationDrawer({
   ) => {
     if (value) {
       setReadFilter(value);
-    }
-  };
-
-  const handleApproveDelete = async (notification: Notification) => {
-    if (!notification.relatedEntityId) return;
-    try {
-      if (user?.role === 'Super Admin') {
-        await apiClient.delete(`/media/${notification.relatedEntityId}`);
-      } else {
-        await apiClient.post(`/media/${notification.relatedEntityId}/admin-approve`);
-      }
-      toggleReadState(notification.id);
-      deleteNotification(notification.id);
-    } catch (error) {
-      console.error("Failed to approve deletion", error);
-    }
-  };
-
-  const handleRejectDelete = async (notification: Notification) => {
-    if (!notification.relatedEntityId) return;
-    try {
-      await apiClient.post(`/media/${notification.relatedEntityId}/reject`);
-      toggleReadState(notification.id);
-      deleteNotification(notification.id);
-    } catch (error) {
-      console.error("Failed to reject deletion", error);
     }
   };
 
@@ -406,7 +377,7 @@ export default function NotificationDrawer({
                           color: cv.brandBlue,
                           borderColor: cv.brandBlue,
                           '&:hover': {
-                            backgroundColor: cv.blueSurface,
+                            backgroundColor: cv.blueGlow18,
                             borderColor: cv.brandBlue,
                           },
                         }}

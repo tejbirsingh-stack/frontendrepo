@@ -1,6 +1,5 @@
 import { useState, type MouseEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import { ROLE_IDS } from '../../constants/userRoles';
 import { cv } from '../../theme/cssVars';
 import {
   Box,

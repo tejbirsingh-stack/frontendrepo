@@ -240,8 +240,8 @@ export default function VideoPlayerPage() {
           const techSpecs = (asset.metadata as any)?.technicalSpecs || asset.customMetadata?.technicalSpecs || {};
           setVideoTechnicalDetails(techSpecs);
 
-          const tagList = Array.isArray(asset.tags) && asset.tags.length > 0
-            ? asset.tags
+          const tagList = Array.isArray((asset as any).tags) && (asset as any).tags.length > 0
+            ? (asset as any).tags
             : (Array.isArray((asset.metadata as any)?.tags)
                 ? (asset.metadata as any).tags
                 : (Array.isArray((asset.customMetadata as any)?.tags)

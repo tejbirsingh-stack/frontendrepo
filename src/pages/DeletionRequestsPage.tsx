@@ -107,7 +107,7 @@ export default function DeletionRequestsPage() {
                           size="small" 
                           variant="contained" 
                           onClick={() => handleApprove(req.id)} 
-                          sx={{ backgroundColor: cv.brandBlue, '&:hover': { backgroundColor: cv.brandBlueHover } }}
+                          sx={{ backgroundColor: cv.brandBlue, '&:hover': { backgroundColor: cv.brandBlueDark } }}
                         >
                           Accept
                         </Button>

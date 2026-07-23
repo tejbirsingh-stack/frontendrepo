@@ -1854,7 +1854,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
             active={location.pathname === '/home/user-activities'}
             onClick={() => navigateAndClose('/home/user-activities')}
           />
-          {(user?.role?.id === ROLE_IDS.SUPER_ADMIN || user?.role?.id === ROLE_IDS.ADMIN) && (
+          {(user?.role === 'Super Admin' || user?.role === 'Admin' || user?.roleId === ROLE_IDS.SUPER_ADMIN || user?.roleId === ROLE_IDS.ADMIN) && (
             <NavItem
               icon={<HistoryIcon />} 
               label="Deletion Requests"

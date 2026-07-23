@@ -57,7 +57,7 @@ export default function UserActivitiesPage() {
     fetchRoles();
   }, []);
 
-  const handleChangePage = (event: unknown, newPage: number) => {
+  const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
@@ -217,7 +217,7 @@ export default function UserActivitiesPage() {
               }}
             >
               <MenuItem value="ALL">All Types</MenuItem>
-              {Object.keys(ACTIVITY_TYPE).map((key) => (
+              {(Object.keys(ACTIVITY_TYPE) as Array<keyof typeof ACTIVITY_TYPE>).map((key) => (
                 <MenuItem key={key} value={ACTIVITY_TYPE[key]}>{ACTIVITY_TYPE[key]}</MenuItem>
               ))}
             </Select>
@@ -399,7 +399,7 @@ export default function UserActivitiesPage() {
                             height: 24,
                             fontWeight: 500,
                             backgroundColor: activity.activityType === 'ERROR' ? '#fdeded' : cv.blueGlow18,
-                            color: activity.activityType === 'ERROR' ? '#5f2120' : cv.blueSolid,
+                            color: activity.activityType === 'ERROR' ? '#5f2120' : cv.brandBlue,
                           }}
                         />
                       </TableCell>
