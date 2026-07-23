@@ -47,6 +47,10 @@ export interface MediaTechnicalDetails {
   uploadedAt?: string;
   originallyCreatedAt?: string;
   exif?: TechnicalExifDetails;
+  sampleRate?: string;
+  channels?: string;
+  artist?: string;
+  album?: string;
 }
 
 const DETAILS_SECTIONS: { value: MediaDetailsSection; label: string }[] = [
@@ -276,13 +280,13 @@ export default function MediaDetailsPanel({
           icon={<MovieOutlinedIcon sx={{ fontSize: 18 }} />}
           title="File Information"
         >
-          <DetailRow label="Name:" value={getMediaFileName(mediaItem)} />
+          <DetailRow label="Name:" value={mediaItem.title || getMediaFileName(mediaItem)} />
           <DetailRow label="Size:" value={formatFileSize(mediaItem.sizeBytes)} />
           <DetailRow label="Type:" value={mediaItem.type} />
           {(mediaItem.type === 'video' || mediaItem.type === 'image') ? (
             <DetailRow
               label="Summary:"
-              value={mediaItem.summary?.trim() || '—'}
+              value={mediaItem.summary?.trim() || (mediaItem.customMetadata as any)?.summary || (technicalDetails as any)?.summary || '—'}
               multiline
             />
           ) : null}
@@ -308,26 +312,79 @@ export default function MediaDetailsPanel({
           <DetailRow label="Resolution:" value={technicalDetails?.resolution || '—'} />
           <DetailRow
             label="Display size:"
-            value={technicalDetails?.displayResolution || '—'}
+            value={technicalDetails?.displayResolution || (technicalDetails as any)?.displaySize || '—'}
           />
           <DetailRow label="Aspect ratio:" value={technicalDetails?.aspectRatio || '—'} />
           <DetailRow label="Orientation:" value={technicalDetails?.orientation || '—'} />
           <DetailRow label="Megapixels:" value={technicalDetails?.megapixels || '—'} />
-          <DetailRow label="Frame rate:" value={technicalDetails?.frameRate || '—'} />
+          <DetailRow
+            label="Frame rate:"
+            value={
+              technicalDetails?.frameRate ||
+              ((technicalDetails as any)?.fps !== undefined
+                ? typeof (technicalDetails as any).fps === 'number'
+                  ? `${(technicalDetails as any).fps} fps`
+                  : String((technicalDetails as any).fps)
+                : '—')
+            }
+          />
           <DetailRow label="Scan type:" value={technicalDetails?.scanType || '—'} />
-          <DetailRow label="Container:" value={technicalDetails?.containerFormat || '—'} />
-          <DetailRow label="Video codec:" value={technicalDetails?.videoCodec || '—'} />
-          <DetailRow label="Est. bitrate:" value={technicalDetails?.estimatedBitrate || '—'} />
-          <DetailRow label="Audio:" value={technicalDetails?.hasAudio || '—'} />
-          <DetailRow label="Decoded frames:" value={technicalDetails?.decodedFrames || '—'} />
-          <DetailRow label="Dropped frames:" value={technicalDetails?.droppedFrames || '—'} />
+          <DetailRow
+            label="Container:"
+            value={technicalDetails?.containerFormat || (technicalDetails as any)?.container || '—'}
+          />
+          <DetailRow
+            label="Video codec:"
+            value={technicalDetails?.videoCodec || (technicalDetails as any)?.codec || (technicalDetails as any)?.videoCodec || '—'}
+          />
+          <DetailRow
+            label="Est. bitrate:"
+            value={technicalDetails?.estimatedBitrate || (technicalDetails as any)?.bitrate || '—'}
+          />
+          <DetailRow
+            label="Audio:"
+            value={
+              technicalDetails?.hasAudio ||
+              ((technicalDetails as any)?.audio !== undefined
+                ? (technicalDetails as any).audio
+                  ? 'Yes (assumed)'
+                  : 'No'
+                : '—')
+            }
+          />
+          {technicalDetails?.sampleRate || (technicalDetails as any)?.sampleRate ? (
+            <DetailRow
+              label="Sample rate:"
+              value={technicalDetails?.sampleRate || (technicalDetails as any)?.sampleRate}
+            />
+          ) : null}
+          {technicalDetails?.channels || (technicalDetails as any)?.channels ? (
+            <DetailRow
+              label="Channels:"
+              value={technicalDetails?.channels || (technicalDetails as any)?.channels}
+            />
+          ) : null}
+          {technicalDetails?.artist || (technicalDetails as any)?.artist ? (
+            <DetailRow
+              label="Artist:"
+              value={technicalDetails?.artist || (technicalDetails as any)?.artist}
+            />
+          ) : null}
+          {technicalDetails?.album || (technicalDetails as any)?.album ? (
+            <DetailRow
+              label="Album:"
+              value={technicalDetails?.album || (technicalDetails as any)?.album}
+            />
+          ) : null}
+          <DetailRow label="Decoded frames:" value={technicalDetails?.decodedFrames || '0'} />
+          <DetailRow label="Dropped frames:" value={technicalDetails?.droppedFrames || '0'} />
           <DetailRow
             label="Uploaded:"
             value={formatCreatedAt(originDetails.uploadedAt)}
           />
           <DetailRow
             label="Originally created:"
-            value={formatCreatedAt(originDetails.originallyCreatedAt)}
+            value={formatCreatedAt(technicalDetails?.originallyCreatedAt || (technicalDetails as any)?.originallyCreated || originDetails.originallyCreatedAt)}
           />
           <DetailRow
             label="Uploaded by:"
@@ -335,7 +392,7 @@ export default function MediaDetailsPanel({
           />
           <DetailRow
             label="Storage:"
-            value={formatStorageProvider(technicalDetails?.storageProvider ?? mediaItem.storageProvider)}
+            value={formatStorageProvider(technicalDetails?.storageProvider ?? (technicalDetails as any)?.storage ?? mediaItem.storageProvider)}
           />
         </DetailsSection>
       )}

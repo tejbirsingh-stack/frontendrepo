@@ -144,9 +144,19 @@ async function uploadSingleChunkWithFallback(
   return await uploadChunkViaServer(sessionId, partNumber, chunkBlob, onProgress);
 }
 
+export interface UploadMediaMetadataOptions {
+  durationSeconds?: number;
+  title?: string;
+  summary?: string;
+  folderId?: string;
+  tagIds?: string[];
+  technicalSpecs?: Record<string, any>;
+  onProgress?: (progress: UploadMediaProgress) => void;
+}
+
 async function uploadResumableChunkedFile(
   file: File,
-  options?: { durationSeconds?: number },
+  options?: UploadMediaMetadataOptions,
   progressCallback?: (progress: UploadMediaProgress) => void,
 ): Promise<MediaAssetResponseDto> {
   const initRes = await apiClient.post<{ sessionId: string; uploadId: string; key: string }>(
@@ -156,6 +166,11 @@ async function uploadResumableChunkedFile(
       fileSize: file.size,
       mimeType: file.type || 'application/octet-stream',
       durationSeconds: options?.durationSeconds || null,
+      title: options?.title || null,
+      summary: options?.summary || null,
+      folderId: options?.folderId || null,
+      tagIds: options?.tagIds || [],
+      technicalSpecs: options?.technicalSpecs || null,
     },
   );
 
@@ -223,6 +238,11 @@ async function uploadResumableChunkedFile(
       {
         sessionId,
         parts,
+        title: options?.title,
+        summary: options?.summary,
+        folderId: options?.folderId,
+        tagIds: options?.tagIds,
+        technicalSpecs: options?.technicalSpecs,
       },
     );
 
@@ -250,126 +270,11 @@ async function uploadResumableChunkedFile(
  */
 export async function uploadMediaFileRequest(
   file: File,
-  options?: {
-    durationSeconds?: number;
-    onProgress?: (progress: UploadMediaProgress) => void;
-  },
+  options?: UploadMediaMetadataOptions,
   onProgress?: (progress: UploadMediaProgress) => void,
 ): Promise<MediaAssetResponseDto> {
   const progressCallback = onProgress || options?.onProgress;
-
-  // Use chunked resumable B2 upload for video assets or large files (> 5MB)
-  if (file.type.startsWith('video/') || file.size > CHUNK_SIZE) {
-    return uploadResumableChunkedFile(file, options, progressCallback);
-  }
-
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const queryParams = new URLSearchParams();
-  queryParams.set('fileSize', file.size.toString());
-  if (options?.durationSeconds !== undefined && options?.durationSeconds !== null) {
-    queryParams.set('durationSeconds', options.durationSeconds.toString());
-  }
-
-  const token = getAccessToken();
-  const headers = new Headers();
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-
-  const base = (env.apiBaseUrl || '/api').replace(/\/$/, '');
-  const url = `${base}/media/upload?${queryParams.toString()}`;
-
-  return new Promise<MediaAssetResponseDto>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', url, true);
-    xhr.withCredentials = true;
-
-    if (token) {
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    }
-
-    let maxLoaded = 0;
-
-    // Real-time upload progress from browser
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && progressCallback) {
-        maxLoaded = Math.max(maxLoaded, event.loaded);
-        // Cap at 99% for upload phase, wait for backend completion for 100%
-        const displayLoaded = Math.min(maxLoaded, Math.floor(event.total * 0.99));
-        progressCallback({ loaded: displayLoaded, total: event.total });
-      }
-    };
-
-    let completedAsset: MediaAssetResponseDto | null = null;
-    let errorMessage: string | null = null;
-
-    const processResponseText = () => {
-      if (!xhr.responseText) return;
-      const normalized = xhr.responseText.replace(/}\s*{/g, '}\n{');
-      const lines = normalized.split('\n');
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          const data = JSON.parse(trimmed);
-          if (data.type === 'progress' && progressCallback) {
-            maxLoaded = Math.max(maxLoaded, data.loaded);
-            progressCallback({ loaded: maxLoaded, total: data.total });
-          } else if (data.type === 'complete' && data.asset) {
-            completedAsset = data.asset;
-          } else if (data.type === 'error') {
-            errorMessage = data.message || data.error || 'Upload failed on server';
-          }
-        } catch {
-          // Ignore incomplete lines during streaming until the chunk completes
-        }
-      }
-    };
-
-    xhr.onprogress = () => {
-      processResponseText();
-    };
-
-    xhr.onload = () => {
-      if (xhr.status === 401) {
-        handleUnauthorized();
-        reject(new Error('Unauthorized'));
-        return;
-      }
-      if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new Error(`Upload failed with status ${xhr.status}`));
-        return;
-      }
-
-      processResponseText();
-
-      if (errorMessage) {
-        reject(new Error(errorMessage));
-      } else if (completedAsset) {
-        if (progressCallback) progressCallback({ loaded: file.size, total: file.size });
-        resolve(completedAsset);
-      } else {
-        if (progressCallback) progressCallback({ loaded: file.size, total: file.size });
-        // Fallback asset if backend didn't return NDJSON complete object
-        resolve({
-          id: `media-${Date.now()}`,
-          name: file.name,
-          type: file.type.split('/')[0] || 'document',
-          size: file.size,
-          uploadDate: new Date().toISOString(),
-          url: '',
-        });
-      }
-    };
-
-    xhr.onerror = () => {
-      reject(new Error('Network error during upload'));
-    };
-
-    xhr.send(formData);
-  });
+  return uploadResumableChunkedFile(file, options, progressCallback);
 }
 
 /**
@@ -397,4 +302,11 @@ export async function getMediaAssetByIdRequest(id: string): Promise<MediaAssetRe
     `/media/${encodeURIComponent(id)}?meta=true`,
   );
   return res.asset;
+}
+
+/**
+ * Update tags for a media asset in database.
+ */
+export async function updateAssetTagsRequest(id: string, tags: string[]): Promise<void> {
+  await apiClient.post(`/media/${encodeURIComponent(id)}/tags`, { tags });
 }

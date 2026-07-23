@@ -11,6 +11,7 @@ export {
   uploadMediaFileRequest,
   getMediaAssetsRequest,
   getMediaAssetByIdRequest,
+  updateAssetTagsRequest,
   deleteMediaFileRequest,
 } from './media.service';
 export type { MediaAssetResponseDto, UploadMediaProgress } from './media.service';

@@ -545,7 +545,6 @@ export default function MediaUploadDetailsModal({
 
   const canUpload =
     Boolean(title.trim()) &&
-    selectedTags.length > 0 &&
     !isGeneratingThumbnail &&
     !isUploading &&
     (isAudio || Boolean(thumbnail));
@@ -670,48 +669,22 @@ export default function MediaUploadDetailsModal({
             </Box>
 
             {isVideo ? (
-            <Box>
-              <Typography sx={fieldLabelSx}>Thumbnails</Typography>
-              <Typography sx={{ mb: 1.25, fontSize: '0.8125rem', color: cv.textMuted }}>
-                Auto Create captures a frame from your uploaded video.
-              </Typography>
-              <input
-                ref={thumbnailInputRef}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={handleThumbnailUpload}
-              />
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                <Button
-                  type="button"
-                  onClick={() => thumbnailInputRef.current?.click()}
-                  sx={{
-                    minHeight: 112,
-                    flexDirection: 'column',
-                    gap: 1,
-                    borderRadius: '12px',
-                    border: `1px dashed ${cv.border}`,
-                    backgroundColor: cv.surface,
-                    color: cv.textSecondary,
-                    textTransform: 'none',
-                    '&:hover': {
-                      borderColor: cv.borderFocus,
-                      backgroundColor: cv.surfaceHover,
-                    },
-                  }}
-                >
-                  <CloudUploadOutlinedIcon sx={{ fontSize: 28, color: cv.textMuted }} />
-                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
-                    Click to upload
-                  </Typography>
-                </Button>
-
-                <Tooltip title="Capture a random frame from your video" arrow>
+              <Box>
+                <Typography sx={fieldLabelSx}>Thumbnails</Typography>
+                <Typography sx={{ mb: 1.25, fontSize: '0.8125rem', color: cv.textMuted }}>
+                  Auto Create captures a frame from your uploaded video.
+                </Typography>
+                <input
+                  ref={thumbnailInputRef}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={handleThumbnailUpload}
+                />
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
                   <Button
                     type="button"
-                    onClick={handleAutoCreateThumbnail}
-                    disabled={isGeneratingThumbnail || !pendingUpload}
+                    onClick={() => thumbnailInputRef.current?.click()}
                     sx={{
                       minHeight: 112,
                       flexDirection: 'column',
@@ -721,44 +694,70 @@ export default function MediaUploadDetailsModal({
                       backgroundColor: cv.surface,
                       color: cv.textSecondary,
                       textTransform: 'none',
-                      overflow: 'hidden',
-                      position: 'relative',
                       '&:hover': {
                         borderColor: cv.borderFocus,
                         backgroundColor: cv.surfaceHover,
                       },
                     }}
                   >
-                    {thumbnail && !isGeneratingThumbnail ? (
-                      <Box
-                        component="img"
-                        src={thumbnail}
-                        alt=""
-                        sx={{
-                          position: 'absolute',
-                          inset: 0,
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                          opacity: 0.35,
-                        }}
-                      />
-                    ) : null}
-                    <AutoFixHighOutlinedIcon sx={{ fontSize: 28, color: palette.orange, zIndex: 1 }} />
-                    <Typography
-                      sx={{
-                        fontSize: '0.875rem',
-                        fontWeight: 600,
-                        color: cv.textPrimary,
-                        zIndex: 1,
-                      }}
-                    >
-                      {isGeneratingThumbnail ? 'Capturing frame…' : 'Auto Create'}
+                    <CloudUploadOutlinedIcon sx={{ fontSize: 28, color: cv.textMuted }} />
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
+                      Click to upload
                     </Typography>
                   </Button>
-                </Tooltip>
+
+                  <Tooltip title="Capture a random frame from your video" arrow>
+                    <Button
+                      type="button"
+                      onClick={handleAutoCreateThumbnail}
+                      disabled={isGeneratingThumbnail || !pendingUpload}
+                      sx={{
+                        minHeight: 112,
+                        flexDirection: 'column',
+                        gap: 1,
+                        borderRadius: '12px',
+                        border: `1px dashed ${cv.border}`,
+                        backgroundColor: cv.surface,
+                        color: cv.textSecondary,
+                        textTransform: 'none',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        '&:hover': {
+                          borderColor: cv.borderFocus,
+                          backgroundColor: cv.surfaceHover,
+                        },
+                      }}
+                    >
+                      {thumbnail && !isGeneratingThumbnail ? (
+                        <Box
+                          component="img"
+                          src={thumbnail}
+                          alt=""
+                          sx={{
+                            position: 'absolute',
+                            inset: 0,
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            opacity: 0.35,
+                          }}
+                        />
+                      ) : null}
+                      <AutoFixHighOutlinedIcon sx={{ fontSize: 28, color: palette.orange, zIndex: 1 }} />
+                      <Typography
+                        sx={{
+                          fontSize: '0.875rem',
+                          fontWeight: 600,
+                          color: cv.textPrimary,
+                          zIndex: 1,
+                        }}
+                      >
+                        {isGeneratingThumbnail ? 'Capturing frame…' : 'Auto Create'}
+                      </Typography>
+                    </Button>
+                  </Tooltip>
+                </Box>
               </Box>
-            </Box>
             ) : null}
 
             <Box>

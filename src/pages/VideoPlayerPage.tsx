@@ -149,7 +149,7 @@ import {
 } from '../utils/playerToolUtils';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
-import { getMediaAssetByIdRequest } from '../api';
+import { getMediaAssetByIdRequest, updateAssetTagsRequest } from '../api';
 import type { MediaItem, MediaType } from '../data/mockMedia';
 
 function collaboratorsToTeamMembers(collaborators: MediaCollaborator[]): WorkspaceTeamMember[] {
@@ -223,7 +223,7 @@ export default function VideoPlayerPage() {
 
   // Listen for incoming websocket messages from other users
   const handleWebSocketMessage = useCallback((msg: WebSocketMessage) => {
-    if (msg.type === 'NEW_ANNOTATION'){
+    if (msg.type === 'NEW_ANNOTATION') {
       // Force a re-fetch of the API annotations so all state arrays (comments, shapes, etc) update correctly!
       setSyncTrigger(prev => prev + 1);
     }
@@ -233,26 +233,38 @@ export default function VideoPlayerPage() {
   const { broadcastMessage } = useMediaWebSocket(mediaId, handleWebSocketMessage);
 
   useEffect(() => {
-    if (!contextItem && mediaId) {
+    if (mediaId) {
       setIsFetching(true);
       getMediaAssetByIdRequest(mediaId)
         .then((asset) => {
+          const techSpecs = (asset.metadata as any)?.technicalSpecs || asset.customMetadata?.technicalSpecs || {};
+          setVideoTechnicalDetails(techSpecs);
+
+          const tagList = Array.isArray(asset.tags) && asset.tags.length > 0
+            ? asset.tags
+            : (Array.isArray((asset.metadata as any)?.tags)
+                ? (asset.metadata as any).tags
+                : (Array.isArray((asset.customMetadata as any)?.tags)
+                    ? (asset.customMetadata as any).tags
+                    : []));
+
           setFetchedItem({
             id: asset.id,
             title: asset.name,
+            summary: asset.customMetadata?.summary || (asset.metadata as any)?.customProperties?.summary || undefined,
             type: (asset.type.split('/')[0] as MediaType) || 'document',
             workspaceId: 'default',
             createdAt: asset.uploadDate || new Date().toISOString(),
             sizeBytes: asset.size,
             storageProvider: 'b2',
-            uploadedBy: 'Unknown',
-            tags: Array.isArray(asset.customMetadata?.tags) ? asset.customMetadata.tags : [],
+            uploadedBy: (asset as any).uploadedBy?.name || user?.name || (user?.email ? user.email.split('@')[0] : 'Uploader'),
+            tags: tagList,
             location: null,
             thumbnail: asset.thumbnail || undefined,
             videoSrc: asset.url,
             compressionStatus: asset.compressionStatus || 'completed',
             customMetadata: asset.customMetadata,
-            duration: asset.customMetadata?.duration as string | undefined,
+            duration: (techSpecs.duration as string) || (asset.customMetadata?.duration as string) || undefined,
           });
         })
         .catch((err) => {
@@ -265,9 +277,9 @@ export default function VideoPlayerPage() {
     } else {
       setIsFetching(false);
     }
-  }, [contextItem, mediaId]);
+  }, [mediaId]);
 
-  const item = contextItem || fetchedItem;
+  const item = fetchedItem || contextItem;
 
   const [activeTool, setActiveTool] = useState<AnnotationTool>('select');
   const [activeDrawTool, setActiveDrawTool] = useState<DrawTool>('pencil');
@@ -315,14 +327,14 @@ export default function VideoPlayerPage() {
         const anyC = c as any;
         const vTime = anyC.videoTimestamp !== undefined ? anyC.videoTimestamp : (anyC.timestamp !== undefined ? anyC.timestamp : null);
         try {
-          await saveMediaAnnotationRequest(mediaId, { 
-            id: c.id, 
-            type, 
+          await saveMediaAnnotationRequest(mediaId, {
+            id: c.id,
+            type,
             data: c,
             videoTimestamp: vTime,
             parentId: anyC.parentId || null
           });
-          broadcastMessage({ type: 'NEW_ANNOTATION', payload: c as any }); 
+          broadcastMessage({ type: 'NEW_ANNOTATION', payload: c as any });
         } catch (error) {
           console.error(error);
         }
@@ -332,7 +344,7 @@ export default function VideoPlayerPage() {
         const anyC = c as any;
         const vTime = anyC.videoTimestamp !== undefined ? anyC.videoTimestamp : (anyC.timestamp !== undefined ? anyC.timestamp : null);
         try {
-          await updateMediaAnnotationRequest(c.id, { 
+          await updateMediaAnnotationRequest(c.id, {
             data: c,
             videoTimestamp: vTime,
             resolved: anyC.resolved
@@ -672,15 +684,15 @@ export default function VideoPlayerPage() {
           // Stamps don't currently have linked comments, but just in case we add it:
           break;
       }
-      
-      setHistory((prev) => 
+
+      setHistory((prev) =>
         prev.map((entry) => {
           let matches = false;
           if (type === 'comment' && entry.id === id) matches = true;
           if (type === 'drawing' && entry.id.includes(id)) matches = true;
           if (type === 'shape' && entry.id.includes(id)) matches = true;
           if (type === 'stamp' && entry.id.includes(id)) matches = true;
-          
+
           if (matches) {
             return { ...entry, videoTimestamp: startTime };
           }
@@ -888,7 +900,7 @@ export default function VideoPlayerPage() {
     const loadApiAnnotations = async () => {
       try {
         const { annotations } = await getMediaAnnotationsRequest(mediaId);
-        
+
         const mapAnnotationData = <T extends any>(a: any): T => {
           return {
             ...a.data,
@@ -907,22 +919,22 @@ export default function VideoPlayerPage() {
         const shapesData = annotations.filter(a => a.type === 'shape').map(a => mapAnnotationData<VideoShape>(a));
         const drawingsData = annotations.filter(a => a.type === 'drawing').map(a => mapAnnotationData<VideoDrawingStroke>(a));
         const stampsData = annotations.filter(a => a.type === 'stamp').map(a => mapAnnotationData<VideoStamp>(a));
-        
+
         setComments(commentsData);
         setShapes(shapesData);
         setDrawings(drawingsData);
         setStamps(stampsData);
-        
+
         prevCommentsRef.current = commentsData;
         prevShapesRef.current = shapesData;
         prevDrawingsRef.current = drawingsData;
         prevStampsRef.current = stampsData;
-        
+
         const readIds = new Set<string>();
         try {
           const stored = localStorage.getItem(`read_annotations_${mediaId}`);
           if (stored) JSON.parse(stored).forEach((id: string) => readIds.add(id));
-        } catch {}
+        } catch { }
 
         const getAuthor = (ann: any) => ann.author || { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials };
         const checkUnread = (ann: any, entryId: string) => {
@@ -935,7 +947,7 @@ export default function VideoPlayerPage() {
 
         annotations.forEach(ann => {
           const createdAt = new Date(ann.createdAt).getTime();
-          
+
           if (ann.type === 'comment') {
             const c = ann.data as VideoComment;
             const entryId = `comment-${c.id}`;
@@ -1094,30 +1106,19 @@ export default function VideoPlayerPage() {
       const stream = extractVideoStreamMetadata(video, item);
       const quality = extractPlaybackQualityMetadata(video);
 
-      setVideoTechnicalDetails((current) => ({
+      setVideoTechnicalDetails((current: any) => ({
+        ...current,
         ...stream,
         ...quality,
-        frameRate: current.frameRate ?? stream.frameRate ?? item.frameRate,
+        frameRate: current.frameRate || (current.fps ? `${current.fps} fps` : undefined) || stream.frameRate,
+        videoCodec: current.videoCodec || current.codec || stream.videoCodec,
+        containerFormat: current.containerFormat || current.container || stream.containerFormat,
         createdAt: item.createdAt,
-        storageProvider: item.storageProvider,
+        storageProvider: current.storageProvider || current.storage || item.storageProvider,
         uploadedBy: item.uploadedBy ?? activeUser.name,
         uploadedAt: item.createdAt,
-        originallyCreatedAt: item.originallyCreatedAt,
-        exif:
-          item.originallyCreatedAt || stream.resolution
-            ? {
-              dateTimeOriginal: item.originallyCreatedAt,
-              resolution: stream.resolution,
-              orientation: stream.orientation,
-              make: 'Apple',
-              model: item.type === 'video' ? 'iPhone 15 Pro' : 'iPhone 15 Pro',
-              lens: item.type === 'video' ? 'Wide Camera' : 'Wide Camera',
-              exposureTime: '1/120',
-              fNumber: 'f/1.8',
-              iso: 'ISO 64',
-              focalLength: '24mm',
-            }
-            : undefined,
+        originallyCreatedAt: current.originallyCreatedAt || current.originallyCreated || item.originallyCreatedAt,
+        exif: current.exif || undefined,
       }));
     };
 
@@ -1614,32 +1615,40 @@ export default function VideoPlayerPage() {
     // avoiding floating point rounding errors that put the playhead just before the annotation starts.
     videoRef.current.currentTime = timestamp + 0.05;
     videoRef.current.pause();
-    
+
     if (entryId && mediaId) {
       setHistory(prev => {
         const changed = prev.some(h => h.id === entryId && h.unread);
         if (!changed) return prev;
-        
+
         const readIds = new Set<string>();
         try {
           const stored = localStorage.getItem(`read_annotations_${mediaId}`);
           if (stored) JSON.parse(stored).forEach((id: string) => readIds.add(id));
-        } catch {}
-        
+        } catch { }
+
         readIds.add(entryId);
         localStorage.setItem(`read_annotations_${mediaId}`, JSON.stringify(Array.from(readIds)));
-        
+
         return prev.map(h => h.id === entryId ? { ...h, unread: false } : h);
       });
     }
   }, [mediaId]);
 
   const handleTagsChange = useCallback(
-    (tags: string[]) => {
+    async (tags: string[]) => {
       if (!item) return;
       updateMediaTags(item.id, tags);
+      if (fetchedItem) {
+        setFetchedItem((prev) => (prev ? { ...prev, tags } : prev));
+      }
+      try {
+        await updateAssetTagsRequest(item.id, tags);
+      } catch (err) {
+        console.error("Failed to update asset tags in backend database:", err);
+      }
     },
-    [item, updateMediaTags],
+    [item, updateMediaTags, fetchedItem],
   );
 
   const applyActiveShareLink = useCallback((link: ShareLink) => {
@@ -1819,7 +1828,7 @@ export default function VideoPlayerPage() {
       if (entry.sourceCommentId) {
         updateCommentResolved(entry.sourceCommentId, !entry.resolved);
         updateMediaAnnotationRequest(entry.sourceCommentId, { resolved: !entry.resolved }).catch(console.error);
-        
+
         // Also update linked drawing/shape if it exists
         const nextResolved = !entry.resolved;
         if (entry.linkedDrawingId) {
@@ -1893,7 +1902,7 @@ export default function VideoPlayerPage() {
       const nextResolved = !comment.resolved;
       updateCommentResolved(commentId, nextResolved);
       updateMediaAnnotationRequest(commentId, { resolved: nextResolved }).catch(console.error);
-      
+
       if (comment.linkedDrawingId) {
         setDrawings((prev) => prev.map(d => d.id === comment.linkedDrawingId ? { ...d, resolved: nextResolved } : d));
         updateMediaAnnotationRequest(comment.linkedDrawingId, { resolved: nextResolved }).catch(console.error);
@@ -2086,7 +2095,7 @@ export default function VideoPlayerPage() {
       const linkedShapeId =
         entry.linkedShapeId ??
         (entry.id.startsWith('shape-') ? entry.id.slice('shape-'.length) : undefined);
-      const linkedStampId = 
+      const linkedStampId =
         entry.id.startsWith('stamp-') ? entry.id.slice('stamp-'.length) : undefined;
 
       if (linkedDrawingId) {
@@ -2672,17 +2681,17 @@ export default function VideoPlayerPage() {
                     }}
                   >
                     {liveProgress && liveProgress !== 'processing' ? (
-                      <CircularProgress 
-                        variant="determinate" 
-                        value={parseInt(liveProgress.replace('%', '')) || 0} 
-                        size={48} 
-                        sx={{ 
-                          color: cv.brandBlue, 
+                      <CircularProgress
+                        variant="determinate"
+                        value={parseInt(liveProgress.replace('%', '')) || 0}
+                        size={48}
+                        sx={{
+                          color: cv.brandBlue,
                           mb: 3,
                           '& .MuiCircularProgress-circle': {
                             transition: 'stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
                           }
-                        }} 
+                        }}
                       />
                     ) : (
                       <CircularProgress size={48} sx={{ color: cv.brandBlue, mb: 3 }} />

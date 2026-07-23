@@ -13,11 +13,17 @@ export function resolveMediaOriginDetails(
   mediaItem: MediaItem,
   technicalDetails?: MediaTechnicalDetails,
 ): ResolvedMediaOriginDetails {
+  const uploader =
+    (technicalDetails as any)?.uploadedBy?.name ||
+    (technicalDetails as any)?.uploadedBy ||
+    mediaItem.uploadedBy ||
+    'Uploader';
+
   return {
-    uploadedBy: technicalDetails?.uploadedBy ?? mediaItem.uploadedBy ?? CURRENT_USER.name,
-    uploadedAt: technicalDetails?.uploadedAt ?? mediaItem.createdAt,
+    uploadedBy: (typeof uploader === 'string' && uploader !== 'User') ? uploader : (mediaItem.uploadedBy || 'Uploader'),
+    uploadedAt: (technicalDetails as any)?.uploadedAt || mediaItem.createdAt,
     originallyCreatedAt:
-      technicalDetails?.originallyCreatedAt ?? mediaItem.originallyCreatedAt,
+      technicalDetails?.originallyCreatedAt || (technicalDetails as any)?.originallyCreated || mediaItem.originallyCreatedAt,
   };
 }
 
@@ -25,29 +31,8 @@ export function resolveMediaExifDetails(
   mediaItem: MediaItem,
   technicalDetails?: MediaTechnicalDetails,
 ): TechnicalExifDetails | undefined {
-  if (technicalDetails?.exif) {
+  if (technicalDetails?.exif && Object.keys(technicalDetails.exif).length > 0) {
     return technicalDetails.exif;
   }
-
-  const originallyCreatedAt =
-    technicalDetails?.originallyCreatedAt ?? mediaItem.originallyCreatedAt;
-  const resolution = technicalDetails?.resolution;
-  const orientation = technicalDetails?.orientation;
-
-  if (!originallyCreatedAt && !resolution) {
-    return undefined;
-  }
-
-  return {
-    dateTimeOriginal: originallyCreatedAt,
-    resolution,
-    orientation,
-    make: 'Apple',
-    model: mediaItem.type === 'video' ? 'iPhone 15 Pro' : 'iPhone 15 Pro',
-    lens: 'Wide Camera',
-    exposureTime: '1/120',
-    fNumber: 'f/1.8',
-    iso: 'ISO 64',
-    focalLength: '24mm',
-  };
+  return undefined;
 }

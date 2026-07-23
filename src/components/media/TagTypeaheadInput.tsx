@@ -127,13 +127,23 @@ export default function TagTypeaheadInput({
     commitTagName(created?.name ?? normalized);
   };
 
-  const handleCommit = () => {
-    if (flatSuggestions.length > 0) {
-      resolveTagOnCommit(flatSuggestions[Math.min(activeIndex, flatSuggestions.length - 1)]);
-      return;
+  const handleCommit = (event?: React.SyntheticEvent) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    const trimmed = value.trim();
+    if (!trimmed) return;
+
+    if (flatSuggestions.length > 0 && activeIndex < flatSuggestions.length) {
+      const selected = flatSuggestions[activeIndex];
+      if (selected?.name) {
+        commitTagName(selected.name);
+        return;
+      }
     }
 
-    resolveTagOnCommit();
+    commitTagName(trimmed);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -157,7 +167,7 @@ export default function TagTypeaheadInput({
 
     if (event.key === 'Enter') {
       event.preventDefault();
-      handleCommit();
+      handleCommit(event);
     }
   };
 
@@ -175,7 +185,7 @@ export default function TagTypeaheadInput({
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => {
-            window.setTimeout(() => setOpen(false), 120);
+            window.setTimeout(() => setOpen(false), 150);
           }}
           onKeyDown={handleKeyDown}
           aria-label="Add tag"
@@ -202,6 +212,7 @@ export default function TagTypeaheadInput({
         <IconButton
           type="button"
           aria-label="Add tag"
+          onMouseDown={(event) => event.preventDefault()}
           onClick={handleCommit}
           disabled={!value.trim()}
           sx={{

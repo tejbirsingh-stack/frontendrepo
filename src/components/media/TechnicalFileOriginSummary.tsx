@@ -58,8 +58,9 @@ export default function TechnicalFileOriginSummary({
 }: TechnicalFileOriginSummaryProps) {
   const hasUploadLine = Boolean(uploadedAt);
   const hasOriginLine = Boolean(originallyCreatedAt);
-  const exifTooltip = exif ? buildExifTooltip(exif) : 'No EXIF metadata available';
-  const showExif = Boolean(exif && exifTooltip !== 'No EXIF metadata available');
+  const hasCameraExif = Boolean(exif && (exif.make || exif.model || exif.lens || exif.exposureTime || exif.fNumber || exif.iso));
+  const exifTooltip = hasCameraExif ? buildExifTooltip(exif!) : 'There is no EXIF metadata for this file';
+  const showExif = true;
 
   if (!hasUploadLine && !hasOriginLine) {
     return null;
@@ -128,21 +129,6 @@ export default function TechnicalFileOriginSummary({
               </Tooltip>
             </>
           ) : null}
-        </Typography>
-      ) : null}
-
-      {hasOriginLine ? (
-        <Typography
-          component="p"
-          sx={{
-            m: 0,
-            mt: hasUploadLine ? 0.35 : 0,
-            fontSize: '0.8125rem',
-            lineHeight: 1.55,
-            color: cv.textMuted,
-          }}
-        >
-          Originally created on {formatTechnicalDate(originallyCreatedAt)}
         </Typography>
       ) : null}
     </Box>

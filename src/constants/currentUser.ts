@@ -2,13 +2,13 @@ import type { UserRole } from './userRoles';
 
 export const CURRENT_USER = {
   id: 'u1',
-  name: 'Aviral Kataria',
-  initials: 'AK',
-  email: 'aviral.kataria@mtxb2b.com',
+  name: 'User',
+  initials: 'U',
+  email: 'user@noah.com',
   role: 'Super Admin' as UserRole,
-  accountName: "Aviral's Account",
-  accountInitials: 'AK',
-  avatarUrl: '/aviral-kataria.png',
+  accountName: "User's Account",
+  accountInitials: 'U',
+  avatarUrl: undefined,
 };
 
 export function isCurrentUserIdentity(name?: string, email?: string, isCurrentUser?: boolean) {
