@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { cv } from '../../theme/cssVars';
 import { createPortal } from 'react-dom';
 import {
@@ -7,6 +7,8 @@ import {
   IconButton,
   InputBase,
   Tooltip,
+  Popover,
+  Typography,
 } from '@mui/material';
 import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
 import MoodOutlinedIcon from '@mui/icons-material/MoodOutlined';
@@ -95,7 +97,7 @@ export default function CommentMarker({
   xPercent,
   yPercent,
   mode,
-  text,
+  text = '',
   imageUrl,
   author,
   createdAt,
@@ -148,6 +150,61 @@ export default function CommentMarker({
   const [emojiPickerAnchor, setEmojiPickerAnchor] = useState<HTMLElement | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const emojiPickerOpen = Boolean(emojiPickerAnchor);
+
+  const [mentionSearchText, setMentionSearchText] = useState<string | null>(null);
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
+
+  const mentionSuggestions = useMemo(() => {
+    if (mentionSearchText === null) return [];
+    const query = mentionSearchText.toLowerCase();
+    return collaborators.filter(
+      (c) =>
+        (c.name.toLowerCase().includes(query) || c.email.toLowerCase().includes(query)) &&
+        !c.isCurrentUser
+    );
+  }, [mentionSearchText, collaborators]);
+
+  useEffect(() => {
+    setMentionActiveIndex(0);
+  }, [mentionSearchText]);
+
+  const selectMention = (collaborator: MediaCollaborator) => {
+    if (!inputRef.current) return;
+    const cursor = inputRef.current.selectionStart || text.length;
+    const textBeforeCursor = text.slice(0, cursor);
+    const lastAtSymbolIndex = textBeforeCursor.lastIndexOf('@');
+    if (lastAtSymbolIndex !== -1) {
+      const nextValue =
+        text.slice(0, lastAtSymbolIndex) +
+        `@${collaborator.name} ` +
+        text.slice(cursor);
+      onTextChange?.(nextValue);
+      setMentionSearchText(null);
+      
+      const newCursorPos = lastAtSymbolIndex + collaborator.name.length + 2; // +2 for '@' and space
+      requestAnimationFrame(() => {
+        focusInputAtCursor(inputRef.current, newCursorPos);
+      });
+    }
+  };
+
+  const handleTextChange = (value: string) => {
+    onTextChange?.(value);
+    
+    requestAnimationFrame(() => {
+      if (!inputRef.current) return;
+      const cursor = inputRef.current.selectionStart || 0;
+      const textBeforeCursor = value.slice(0, cursor);
+      const lastAtSymbolIndex = textBeforeCursor.lastIndexOf('@');
+      
+      if (lastAtSymbolIndex !== -1 && !textBeforeCursor.slice(lastAtSymbolIndex).includes(' ')) {
+        const query = textBeforeCursor.slice(lastAtSymbolIndex + 1);
+        setMentionSearchText(query);
+      } else {
+        setMentionSearchText(null);
+      }
+    });
+  };
 
   const canSubmit = requireText ? Boolean(text.trim()) : Boolean(text.trim() || imageUrl);
   const showExpandedEditor = isExpanded || text.length > 0 || Boolean(imageUrl);
@@ -258,6 +315,35 @@ export default function CommentMarker({
     }
   };
 
+  const handleEditorKeyDown = (event: React.KeyboardEvent) => {
+    const isPopoverOpen = mentionSearchText !== null && mentionSuggestions.length > 0;
+    
+    if (isPopoverOpen) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setMentionActiveIndex((prev) => (prev + 1) % mentionSuggestions.length);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setMentionActiveIndex((prev) => (prev - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        selectMention(mentionSuggestions[mentionActiveIndex]);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMentionSearchText(null);
+        return;
+      }
+    }
+    
+    handleKeyDown(event);
+  };
+
   const insertAtCursor = (value: string, selection = readInputSelection(inputRef.current, text.length)) => {
     const { nextValue, cursor } = insertAtSelection(text, value, selection);
     onTextChange?.(nextValue);
@@ -273,6 +359,7 @@ export default function CommentMarker({
   const handleMention = () => {
     setIsExpanded(true);
     insertAtCursor('@');
+    setMentionSearchText('');
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -518,9 +605,9 @@ export default function CommentMarker({
           inputRef={inputRef}
           autoFocus
           value={text}
-          onChange={(event) => onTextChange?.(event.target.value)}
+          onChange={(event) => handleTextChange(event.target.value)}
           onFocus={() => setIsExpanded(true)}
-          onKeyDown={handleKeyDown}
+          onKeyDown={handleEditorKeyDown}
           placeholder={placeholder}
           aria-label="Comment text"
           multiline={showExpandedEditor}
@@ -674,6 +761,87 @@ export default function CommentMarker({
           }}
           onEmojiSelect={handleEmojiSelect}
         />
+
+        <Popover
+          open={mentionSearchText !== null && mentionSuggestions.length > 0}
+          anchorEl={inputRef.current}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+          disableAutoFocus
+          disableEnforceFocus
+          disableRestoreFocus
+          slotProps={{
+            root: {
+              sx: {
+                zIndex: 1600,
+              },
+            },
+            paper: {
+              sx: {
+                mt: 0.5,
+                width: 240,
+                borderRadius: '12px',
+                border: '1px solid var(--noah-border)',
+                backgroundColor: cv.elevatedSurface,
+                boxShadow: cv.dropdownShadow,
+                overflow: 'hidden',
+              },
+            },
+          }}
+        >
+          <Box sx={{ maxHeight: 200, overflowY: 'auto', p: 1 }}>
+            {mentionSuggestions.map((c, index) => {
+              const highlighted = index === mentionActiveIndex;
+              return (
+                <Box
+                  key={c.id}
+                  role="option"
+                  aria-selected={highlighted}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => selectMention(c)}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.25,
+                    px: 1.25,
+                    py: 1,
+                    cursor: 'pointer',
+                    borderRadius: '8px',
+                    backgroundColor: highlighted ? cv.surfaceHover : 'transparent',
+                    '&:hover': {
+                      backgroundColor: cv.surfaceHover,
+                    },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: '50%',
+                      backgroundColor: c.avatarColor || cv.brandPurple,
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {c.initials}
+                  </Box>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography noWrap sx={{ fontSize: '0.8125rem', fontWeight: 600, color: cv.textPrimary }}>
+                      {c.name}
+                    </Typography>
+                    <Typography noWrap sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                      {c.email}
+                    </Typography>
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        </Popover>
       </Box>
     </>
   );

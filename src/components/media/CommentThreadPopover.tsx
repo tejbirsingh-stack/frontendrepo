@@ -10,6 +10,7 @@ import {
   MenuItem,
   Tooltip,
   Typography,
+  Popover,
 } from '@mui/material';
 import MoreHorizOutlinedIcon from '@mui/icons-material/MoreHorizOutlined';
 import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
@@ -402,7 +403,7 @@ function CommentMessage({
 export default function CommentThreadPopover({
   author,
   createdAt,
-  text,
+  text = '',
   imageUrl,
   replies,
   resolved = false,
@@ -439,6 +440,61 @@ export default function CommentThreadPopover({
   const [editingTarget, setEditingTarget] = useState<'comment' | string | null>(null);
   const [emojiPickerAnchor, setEmojiPickerAnchor] = useState<HTMLElement | null>(null);
   const emojiPickerOpen = Boolean(emojiPickerAnchor);
+
+  const [mentionSearchText, setMentionSearchText] = useState<string | null>(null);
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
+
+  const mentionSuggestions = useMemo(() => {
+    if (mentionSearchText === null) return [];
+    const query = mentionSearchText.toLowerCase();
+    return (collaborators || []).filter(
+      (c) =>
+        (c.name.toLowerCase().includes(query) || c.email.toLowerCase().includes(query)) &&
+        !c.isCurrentUser
+    );
+  }, [mentionSearchText, collaborators]);
+
+  useEffect(() => {
+    setMentionActiveIndex(0);
+  }, [mentionSearchText]);
+
+  const selectMention = (collaborator: MediaCollaborator) => {
+    if (!replyInputRef.current) return;
+    const cursor = replyInputRef.current.selectionStart || replyText.length;
+    const textBeforeCursor = replyText.slice(0, cursor);
+    const lastAtSymbolIndex = textBeforeCursor.lastIndexOf('@');
+    if (lastAtSymbolIndex !== -1) {
+      const nextValue =
+        replyText.slice(0, lastAtSymbolIndex) +
+        `@${collaborator.name} ` +
+        replyText.slice(cursor);
+      setReplyText(nextValue);
+      setMentionSearchText(null);
+      
+      const newCursorPos = lastAtSymbolIndex + collaborator.name.length + 2;
+      requestAnimationFrame(() => {
+        focusInputAtCursor(replyInputRef.current, newCursorPos);
+      });
+    }
+  };
+
+  const handleReplyTextChange = (value: string) => {
+    setReplyText(value);
+    
+    requestAnimationFrame(() => {
+      if (!replyInputRef.current) return;
+      const cursor = replyInputRef.current.selectionStart || 0;
+      const textBeforeCursor = value.slice(0, cursor);
+      const lastAtSymbolIndex = textBeforeCursor.lastIndexOf('@');
+      
+      if (lastAtSymbolIndex !== -1 && !textBeforeCursor.slice(lastAtSymbolIndex).includes(' ')) {
+        const query = textBeforeCursor.slice(lastAtSymbolIndex + 1);
+        setMentionSearchText(query);
+      } else {
+        setMentionSearchText(null);
+      }
+    });
+  };
 
   const canEditComment =
     !resolved && author.name === activeUser.name && Boolean(onEditComment);
@@ -528,6 +584,7 @@ export default function CommentThreadPopover({
   const handleMention = () => {
     setIsReplyFocused(true);
     insertAtCursor('@');
+    setMentionSearchText('');
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -592,6 +649,35 @@ export default function CommentThreadPopover({
       event.preventDefault();
       handleSubmitReply();
     }
+  };
+
+  const handleReplyKeyDownNav = (event: React.KeyboardEvent) => {
+    const isPopoverOpen = mentionSearchText !== null && mentionSuggestions.length > 0;
+    
+    if (isPopoverOpen) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setMentionActiveIndex((prev) => (prev + 1) % mentionSuggestions.length);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setMentionActiveIndex((prev) => (prev - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        selectMention(mentionSuggestions[mentionActiveIndex]);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMentionSearchText(null);
+        return;
+      }
+    }
+    
+    handleReplyKeyDown(event);
   };
 
   return (
@@ -895,14 +981,14 @@ export default function CommentThreadPopover({
             inputRef={replyInputRef}
             autoFocus
             value={replyText}
-            onChange={(event) => setReplyText(event.target.value)}
+            onChange={(event) => handleReplyTextChange(event.target.value)}
             onFocus={() => setIsReplyFocused(true)}
             onBlur={() => {
               if (!replyText.trim()) {
                 setIsReplyFocused(false);
               }
             }}
-            onKeyDown={handleReplyKeyDown}
+            onKeyDown={handleReplyKeyDownNav}
             placeholder="Reply"
             aria-label="Reply to comment"
             multiline={showExpandedReplyEditor}
@@ -1067,6 +1153,87 @@ export default function CommentThreadPopover({
         }}
         onEmojiSelect={handleEmojiSelect}
       />
+
+      <Popover
+        open={mentionSearchText !== null && mentionSuggestions.length > 0}
+        anchorEl={replyInputRef.current}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        disableAutoFocus
+        disableEnforceFocus
+        disableRestoreFocus
+        slotProps={{
+          root: {
+            sx: {
+              zIndex: 1600,
+            },
+          },
+          paper: {
+            sx: {
+              mt: 0.5,
+              width: 240,
+              borderRadius: '12px',
+              border: '1px solid var(--noah-border)',
+              backgroundColor: cv.elevatedSurface,
+              boxShadow: cv.dropdownShadow,
+              overflow: 'hidden',
+            },
+          },
+        }}
+      >
+        <Box sx={{ maxHeight: 200, overflowY: 'auto', p: 1 }}>
+          {mentionSuggestions.map((c, index) => {
+            const highlighted = index === mentionActiveIndex;
+            return (
+              <Box
+                key={c.id}
+                role="option"
+                aria-selected={highlighted}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectMention(c)}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.25,
+                  px: 1.25,
+                  py: 1,
+                  cursor: 'pointer',
+                  borderRadius: '8px',
+                  backgroundColor: highlighted ? cv.surfaceHover : 'transparent',
+                  '&:hover': {
+                    backgroundColor: cv.surfaceHover,
+                  },
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    backgroundColor: c.avatarColor || cv.brandPurple,
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {c.initials}
+                </Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography noWrap sx={{ fontSize: '0.8125rem', fontWeight: 600, color: cv.textPrimary }}>
+                    {c.name}
+                  </Typography>
+                  <Typography noWrap sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                    {c.email}
+                  </Typography>
+                </Box>
+              </Box>
+            );
+          })}
+        </Box>
+      </Popover>
     </Box>
   );
 }

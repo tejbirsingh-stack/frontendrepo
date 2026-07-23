@@ -220,7 +220,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                   storageProvider: 'b2',
                   uploadedBy: a.uploadedBy?.name || (typeof a.uploadedBy === 'string' ? a.uploadedBy : CURRENT_USER.name),
                   thumbnail: a.thumbnail || undefined,
-                  videoSrc: isVideo ? a.url : undefined,
+                  videoSrc: isVideo || isAudio ? a.url : undefined,
                   duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
                   tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
                   location: null,
@@ -1306,7 +1306,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           }
           : {}),
         ...(current.type === 'image' ? { thumbnail: details.thumbnail || uploadedAssetDto?.thumbnail || undefined } : {}),
-        ...(current.type === 'audio' && details.duration ? { duration: details.duration } : {}),
+        ...(current.type === 'audio'
+          ? {
+              videoSrc: uploadedAssetDto?.url || current.previewSrc,
+              ...(details.duration ? { duration: details.duration } : {}),
+            }
+          : {}),
       };
 
       setMediaItems((items) => {

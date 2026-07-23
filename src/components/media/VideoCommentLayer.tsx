@@ -262,6 +262,7 @@ export default function VideoCommentLayer({
           onImageChange={onDraftImageChange}
           onSubmit={onSubmitDraft}
           onCancel={onCancelDraft}
+          collaborators={collaborators}
         />
       )}
 

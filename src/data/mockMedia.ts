@@ -34,6 +34,7 @@ export interface MediaItem {
   folderColor?: string;
   /** User who uploaded the file to NOAH */
   uploadedBy?: string;
+  uploadedByUserId?: string;
   /** Original capture/creation time from file metadata (e.g. EXIF) */
   originallyCreatedAt?: string;
   compressionStatus?: string;

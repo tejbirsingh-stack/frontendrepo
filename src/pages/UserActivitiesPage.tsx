@@ -25,10 +25,10 @@ export default function UserActivitiesPage() {
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [startDate, setStartDate] = useState(getOneYearAgo());
   const [endDate, setEndDate] = useState(getToday());
-  const ACTIVITY_TYPE = {
+  const ACTIVITY_TYPE: Record<string, string> = {
     INFO: 'INFO',
     ERROR: 'ERROR'
-  }
+  };
 
   useEffect(() => {
     const fetchActivities = async () => {

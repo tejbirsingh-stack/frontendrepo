@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cv } from '../../theme/cssVars';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -24,7 +24,6 @@ import {
   type Notification,
 } from '../../data/mockNotifications';
 import { fetchNotifications } from '../../api/notification.service';
-import { useEffect } from 'react';
 import { useGlobalSearchKeyboard } from '../../hooks/useGlobalSearchKeyboard';
 import { useAuth } from '../../auth/AuthContext';
 
@@ -70,9 +69,27 @@ export default function Header({
 
   useGlobalSearchKeyboard(searchInputRef, !showMenuButton);
 
-  const unreadNotificationCount = notificationItems.filter(
+  const userNotifications = notificationItems.filter(
+    (item) => !item.forUserEmail || item.forUserEmail.toLowerCase() === user?.email?.toLowerCase(),
+  );
+
+  const unreadNotificationCount = userNotifications.filter(
     (notification) => notification.unread,
   ).length;
+
+  const handleNotificationsChange = (updatedUserItems: Notification[]) => {
+    const merged = notificationItems.map((item) => {
+      const updated = updatedUserItems.find((ui) => ui.id === item.id);
+      return updated ? updated : item;
+    }).filter((item) => {
+      const wasUserItem = !item.forUserEmail || item.forUserEmail.toLowerCase() === user?.email?.toLowerCase();
+      if (wasUserItem) {
+        return updatedUserItems.some((ui) => ui.id === item.id);
+      }
+      return true;
+    });
+    setNotificationItems(merged);
+  };
 
   const handleLogoutRequest = () => {
     setLogoutModalOpen(true);
@@ -319,8 +336,8 @@ export default function Header({
       <NotificationDrawer
         open={notificationsOpen}
         onClose={() => setNotificationsOpen(false)}
-        items={notificationItems}
-        onItemsChange={setNotificationItems}
+        items={userNotifications}
+        onItemsChange={handleNotificationsChange}
       />
     </Box>
   );

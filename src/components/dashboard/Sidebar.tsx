@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import { ROLE_IDS } from '../../constants/userRoles';
 import { cv } from '../../theme/cssVars';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -43,6 +42,7 @@ import { dropdownMenuPaperSx } from '../../constants/dropdownMenu';
 import WorkspaceColorDot from './WorkspaceColorDot';
 import WorkspaceColorPicker from './WorkspaceColorPicker';
 import { FOLDER_COLORS } from '../../constants/folderColors';
+import { ROLE_IDS } from '../../constants/userRoles';
 import { resolveFolderColor, folderAccentTint } from '../../utils/folderColorStyle';
 import AddSidebarItemModal, { type SidebarItemMode } from './AddSidebarItemModal';
 import CreateWorkspaceModal, { type CreateWorkspaceFormData } from './CreateWorkspaceModal';
