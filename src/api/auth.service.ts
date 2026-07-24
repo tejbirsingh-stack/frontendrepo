@@ -134,7 +134,7 @@ export const logoutUser = async (userId: string) => {
   const token = getAccessToken();
   const response = await axios.post(
     `${API_BASE_URL}/auth/logout`,
-    {userId},
+    { userId },
     token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
   );
   return response.data;

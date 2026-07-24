@@ -8,6 +8,7 @@ import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import StarIcon from '@mui/icons-material/Star';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
+
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
@@ -28,6 +29,7 @@ import type {
 } from '../components/media/MediaDetailsPanel';
 import AnnotationHelpDialog from '../components/media/AnnotationHelpDialog';
 import AnnotationUndoIsland from '../components/media/AnnotationUndoIsland';
+import { decodeClientImageToDataUrl } from '../utils/clientImageDecoder';
 import {
   mergedMobileIslandSx,
   mobileIslandScrollSx,
@@ -231,6 +233,9 @@ export default function VideoPlayerPage() {
       : contextItem || fetchedItem;
   const [isFetching, setIsFetching] = useState(!contextItem);
   const [fetchError, setFetchError] = useState(false);
+
+  const [clientDecodedUrl, setClientDecodedUrl] = useState<string | null>(null);
+  const [isDecodingImage, setIsDecodingImage] = useState(false);
 
   const [syncTrigger, setSyncTrigger] = useState(0);
 
@@ -2283,6 +2288,42 @@ export default function VideoPlayerPage() {
     return () => clearInterval(interval);
   }, [mediaId, liveAssetStatus]);
 
+  const clientTargetSrc = item?.type === 'image'
+    ? (item.url || item.thumbnail || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
+    : '';
+
+  useEffect(() => {
+    setClientDecodedUrl(null);
+    setIsDecodingImage(false);
+
+    if (!item || item.type !== 'image' || !clientTargetSrc) return;
+
+    const ext = (item.title || item.name || '').split('.').pop()?.toLowerCase() || '';
+    const nonWeb = ['psd', 'psb', 'bmp', 'tiff', 'tif', 'exr', 'openexr', 'dpx', 'cin', 'pcx', 'ai', 'eps'].includes(ext);
+
+    if (!nonWeb) return;
+
+    let isMounted = true;
+    setIsDecodingImage(true);
+
+    decodeClientImageToDataUrl(clientTargetSrc, ext)
+      .then((decodedDataUrl) => {
+        if (isMounted) {
+          setIsDecodingImage(false);
+          if (decodedDataUrl) {
+            setClientDecodedUrl(decodedDataUrl);
+          }
+        }
+      })
+      .catch(() => {
+        if (isMounted) setIsDecodingImage(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [item?.id, item?.title, item?.type, clientTargetSrc]);
+
   if (isFetching) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', width: '100%', backgroundColor: cv.videoStage }}>
@@ -2305,10 +2346,10 @@ export default function VideoPlayerPage() {
     liveAssetStatus === 'in_progress';
 
   const baseSrc = item.type === 'image'
-    ? (item.thumbnail ?? '')
+    ? (item.url || item.thumbnail || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
     : item.type === 'audio'
-      ? (item.videoSrc ?? '')
-      : (item.videoSrc ?? SAMPLE_VIDEO_SRC);
+      ? (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
+      : (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : SAMPLE_VIDEO_SRC));
   // Audio/original is available immediately; only blank video while proxy is processing.
   const shouldBlockMediaSrc = isProcessing && item.type === 'video';
   const videoSrc = shouldBlockMediaSrc || !baseSrc
@@ -2772,18 +2813,30 @@ export default function VideoPlayerPage() {
                 }}
               >
                 {item?.type === 'image' ? (
-                  <Box
-                    component="img"
-                    src={mediaElementSrc}
-                    alt={item?.title}
-                    sx={{
-                      width: '100%',
-                      height: '100%',
-                      display: 'block',
-                      objectFit: playerActualMediaSize ? 'none' : 'contain',
-                      backgroundColor: 'transparent',
-                    }}
-                  />
+                  <Box sx={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {isDecodingImage && (
+                      <Box sx={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, zIndex: 2 }}>
+                        <CircularProgress size={36} sx={{ color: '#6366F1' }} />
+                        <Typography variant="body2" sx={{ color: '#94A3B8', fontWeight: 500 }}>
+                          Loading preview...
+                        </Typography>
+                      </Box>
+                    )}
+                    <Box
+                      component="img"
+                      src={clientDecodedUrl || mediaElementSrc}
+                      alt={item?.title}
+                      sx={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'block',
+                        objectFit: playerActualMediaSize ? 'none' : 'contain',
+                        backgroundColor: 'transparent',
+                        opacity: isDecodingImage ? 0.3 : 1,
+                        transition: 'opacity 0.2s ease',
+                      }}
+                    />
+                  </Box>
                 ) : (
                   <Box
                     component="video"
