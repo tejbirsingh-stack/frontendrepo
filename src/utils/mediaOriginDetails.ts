@@ -27,11 +27,37 @@ export function resolveMediaOriginDetails(
 }
 
 export function resolveMediaExifDetails(
-  _mediaItem: MediaItem,
+  mediaItem: MediaItem,
   technicalDetails?: MediaTechnicalDetails,
 ): TechnicalExifDetails | undefined {
-  if (technicalDetails?.exif && Object.keys(technicalDetails.exif).length > 0) {
-    return technicalDetails.exif;
+  const itemAny = mediaItem as any;
+  const exif = technicalDetails?.exif || itemAny?.exif || itemAny?.customMetadata?.exif || itemAny?.metadata?.exif;
+  const t = (technicalDetails as any) || itemAny?.customMetadata || itemAny?.metadata || {};
+
+  const make = exif?.make || t?.make || itemAny?.make;
+  const model = exif?.model || t?.model || itemAny?.model;
+  const lens = exif?.lens || t?.lens || itemAny?.lens;
+  const exposureTime = exif?.exposureTime || t?.exposureTime;
+  const fNumber = exif?.fNumber || t?.fNumber;
+  const iso = exif?.iso || t?.iso;
+  const focalLength = exif?.focalLength || t?.focalLength;
+  const resolution = exif?.resolution || t?.resolution || itemAny?.resolution;
+  const orientation = exif?.orientation || t?.orientation || itemAny?.orientation;
+  const dateTimeOriginal = exif?.dateTimeOriginal || t?.dateTimeOriginal || t?.originallyCreated || mediaItem.originallyCreatedAt;
+
+  if (make || model || lens || exposureTime || fNumber || iso || focalLength || resolution || orientation || dateTimeOriginal) {
+    return {
+      make,
+      model,
+      lens,
+      exposureTime,
+      fNumber,
+      iso,
+      focalLength,
+      resolution,
+      orientation,
+      dateTimeOriginal,
+    };
   }
   return undefined;
 }

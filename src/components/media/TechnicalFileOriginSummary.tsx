@@ -131,6 +131,25 @@ export default function TechnicalFileOriginSummary({
           ) : null}
         </Typography>
       ) : null}
+
+      {hasOriginLine ? (
+        <Typography
+          component="p"
+          sx={{
+            m: 0,
+            mt: hasUploadLine ? 0.25 : 0,
+            fontSize: '0.8125rem',
+            lineHeight: 1.55,
+            color: cv.textSecondary,
+          }}
+        >
+          Originally created on{' '}
+          <Box component="span" sx={accentSx}>
+            {formatTechnicalDate(originallyCreatedAt)}
+          </Box>
+        </Typography>
+      ) : null}
     </Box>
   );
 }
+

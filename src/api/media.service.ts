@@ -283,7 +283,7 @@ export async function uploadMediaFileRequest(
  */
 export async function getMediaAssetsRequest(): Promise<MediaAssetResponseDto[]> {
   const res = await apiClient.get<{ success: boolean; assets: MediaAssetResponseDto[] }>(
-    '/media/getmediaassets',
+    '/media/getmediaassets?limit=500',
   );
   return res.assets || [];
 }
