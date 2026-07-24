@@ -79,6 +79,12 @@ const mediaTypeCopy: Record<
     summaryPlaceholder: 'Introduce your audio to listeners.',
     previewTitleFallback: 'Audio title',
   },
+  document: {
+    dialogTitle: 'File details',
+    titleHelp: 'Choose a clear title that describes your file.',
+    summaryPlaceholder: 'Introduce your file to viewers.',
+    previewTitleFallback: 'File title',
+  },
 };
 
 const dialogPaperSx = {
@@ -423,6 +429,7 @@ export default function MediaUploadDetailsModal({
   const isVideo = mediaType === 'video';
   const isImage = mediaType === 'image';
   const isAudio = mediaType === 'audio';
+  const isDocument = mediaType === 'document';
 
   useEffect(() => {
     if (!open || !pendingUpload) return;
@@ -467,7 +474,7 @@ export default function MediaUploadDetailsModal({
         .finally(() => {
           if (!cancelled) setIsGeneratingThumbnail(false);
         });
-    } else {
+    } else if (pendingUpload.type === 'audio') {
       setIsGeneratingThumbnail(true);
       getAudioDuration(pendingUpload.previewSrc)
         .then((audioDuration) => {
@@ -481,6 +488,8 @@ export default function MediaUploadDetailsModal({
         .finally(() => {
           if (!cancelled) setIsGeneratingThumbnail(false);
         });
+    } else {
+      setIsGeneratingThumbnail(false);
     }
 
     return () => {
@@ -546,8 +555,7 @@ export default function MediaUploadDetailsModal({
   const canUpload =
     Boolean(title.trim()) &&
     !isGeneratingThumbnail &&
-    !isUploading &&
-    (isAudio || Boolean(thumbnail));
+    !isUploading;
 
   const handleSubmit = async () => {
     if (!canUpload || isUploading) return;
@@ -668,11 +676,11 @@ export default function MediaUploadDetailsModal({
               />
             </Box>
 
-            {isVideo ? (
+            {isVideo || isDocument ? (
               <Box>
                 <Typography sx={fieldLabelSx}>Thumbnails</Typography>
                 <Typography sx={{ mb: 1.25, fontSize: '0.8125rem', color: cv.textMuted }}>
-                  Auto Create captures a frame from your uploaded video.
+                  {isVideo ? 'Auto Create captures a frame from your uploaded video.' : 'Upload a custom thumbnail for your file.'}
                 </Typography>
                 <input
                   ref={thumbnailInputRef}
@@ -706,9 +714,10 @@ export default function MediaUploadDetailsModal({
                     </Typography>
                   </Button>
 
-                  <Tooltip title="Capture a random frame from your video" arrow>
-                    <Button
-                      type="button"
+                  {isVideo ? (
+                    <Tooltip title="Capture a random frame from your video" arrow>
+                      <Button
+                        type="button"
                       onClick={handleAutoCreateThumbnail}
                       disabled={isGeneratingThumbnail || !pendingUpload}
                       sx={{
@@ -756,6 +765,7 @@ export default function MediaUploadDetailsModal({
                       </Typography>
                     </Button>
                   </Tooltip>
+                  ) : null}
                 </Box>
               </Box>
             ) : null}

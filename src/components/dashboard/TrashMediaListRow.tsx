@@ -23,6 +23,7 @@ const typeIcons: Record<MediaType, typeof FolderOutlinedIcon> = {
   video: VideocamOutlinedIcon,
   image: ImageOutlinedIcon,
   audio: AudioFileOutlinedIcon,
+  document: FolderOutlinedIcon,
 };
 
 const typeLabels: Record<MediaType, string> = {
@@ -30,6 +31,7 @@ const typeLabels: Record<MediaType, string> = {
   video: 'Video',
   image: 'Image',
   audio: 'Audio',
+  document: 'File',
 };
 
 export default function TrashMediaListRow({

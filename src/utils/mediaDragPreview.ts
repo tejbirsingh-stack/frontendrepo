@@ -5,6 +5,7 @@ const typeLabels: Record<MediaType, string> = {
   video: 'Video',
   image: 'Image',
   audio: 'Audio',
+  document: 'File',
 };
 
 let activeDragGhost: HTMLElement | null = null;

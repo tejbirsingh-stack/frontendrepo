@@ -136,6 +136,7 @@ const typeSortOrder: Record<MediaType, number> = {
   video: 1,
   image: 2,
   audio: 3,
+  document: 4,
 };
 
 const toolbarControlHoverSx = {
@@ -210,9 +211,10 @@ const typeGroupLabels: Record<MediaType, string> = {
   video: 'Videos',
   image: 'Images',
   audio: 'Audio',
+  document: 'Files',
 };
 
-const allTypes: MediaType[] = ['folder', 'video', 'image', 'audio'];
+const allTypes: MediaType[] = ['folder', 'video', 'image', 'audio', 'document'];
 
 function ToolbarTooltip({
   title,
@@ -583,6 +585,7 @@ export default function DashboardPage({
       video: [],
       image: [],
       audio: [],
+      document: [],
     };
     displayedItems.forEach((item) => {
       groups[item.type].push(item);

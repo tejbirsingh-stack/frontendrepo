@@ -8,6 +8,7 @@ import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import StarIcon from '@mui/icons-material/Star';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
+import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
@@ -151,7 +152,7 @@ import {
 } from '../utils/playerToolUtils';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
-import { getMediaAssetByIdRequest, updateAssetTagsRequest } from '../api';
+import { getMediaAssetByIdRequest, updateAssetTagsRequest, retryTranscodeRequest } from '../api';
 import type { MediaItem, MediaType } from '../data/mockMedia';
 
 function collaboratorsToTeamMembers(collaborators: MediaCollaborator[]): WorkspaceTeamMember[] {
@@ -2243,6 +2244,39 @@ export default function VideoPlayerPage() {
   const [liveAssetStatus, setLiveAssetStatus] = useState<string | null>(null);
   const [liveProgress, setLiveProgress] = useState<string | null>(null);
   const [videoSrcVersion, setVideoSrcVersion] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const handleRetryTranscode = async () => {
+    if (!mediaId || isRetrying) return;
+    setIsRetrying(true);
+    try {
+      await retryTranscodeRequest(mediaId);
+      setStatusToast({
+        open: true,
+        message: 'Processing retried successfully. Check back shortly.',
+        variant: 'resolved',
+      });
+      setLiveAssetStatus('queued');
+    } catch (err: any) {
+      console.error('Failed to retry transcode:', err);
+      // ApiError (fetch) uses `details`, Axios uses `response.data`. 
+      // Also ignore generic 'Request failed with status 400' if a better error exists.
+      const backendError = 
+        err?.details?.error || 
+        err?.details?.message || 
+        err?.response?.data?.error || 
+        err?.response?.data?.message || 
+        (err?.message && !err.message.includes('status 400') ? err.message : null);
+        
+      setStatusToast({
+        open: true,
+        message: backendError || 'Failed to retry processing. Please try again.',
+        variant: 'error',
+      });
+    } finally {
+      setIsRetrying(false);
+    }
+  };
 
   useEffect(() => {
     setLiveAssetStatus(item?.compressionStatus ?? null);
@@ -2900,6 +2934,43 @@ export default function VideoPlayerPage() {
                       </Typography>
                     )}
                   </Box>
+                ) : liveAssetStatus === 'failed' ? (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                      backdropFilter: 'blur(8px)',
+                      zIndex: 10,
+                    }}
+                  >
+                    <ErrorOutlineOutlinedIcon sx={{ fontSize: 48, color: cv.destructiveBorder, mb: 2 }} />
+                    <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
+                      Processing Failed
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, mb: 3, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 320 }}>
+                      An error occurred while preparing this asset for playback. You can try processing it again.
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      color="error"
+                      onClick={handleRetryTranscode}
+                      disabled={isRetrying}
+                      sx={{
+                        borderRadius: '999px',
+                        px: 3,
+                        py: 1,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {isRetrying ? 'Retrying...' : 'Retry Processing'}
+                    </Button>
+                  </Box>
                 ) : null}
 
                 {playerShowAudioMeter ? (
@@ -3116,6 +3187,7 @@ export default function VideoPlayerPage() {
                       onZoomOut={handleWorkspaceZoomOut}
                       onZoomIn={handleWorkspaceZoomIn}
                       onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
+                      hideZoomControls={item?.type === 'audio'}
                     />
                   </Box>
                 </Box>
@@ -3166,6 +3238,7 @@ export default function VideoPlayerPage() {
                       onZoomOut={handleWorkspaceZoomOut}
                       onZoomIn={handleWorkspaceZoomIn}
                       onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
+                      hideZoomControls={item?.type === 'audio'}
                       insertBeforeHelp={
                         showClearIsland ? (
                           <AnnotationUndoIsland

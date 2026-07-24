@@ -1,6 +1,6 @@
 import { BRAND_REEL_VIDEO_SRC } from '../constants/mediaAssets';
 
-export type MediaType = 'folder' | 'video' | 'image' | 'audio';
+export type MediaType = 'folder' | 'video' | 'image' | 'audio' | 'document';
 
 export type StorageProvider = 'local' | 'b2';
 

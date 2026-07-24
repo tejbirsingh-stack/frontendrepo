@@ -34,6 +34,7 @@ const typeConfig: Record<
   video: { label: 'Video', accent: cv.blueAccentSurface, icon: VideocamOutlinedIcon },
   image: { label: 'Image', accent: cv.greenAccentSurface, icon: ImageOutlinedIcon },
   audio: { label: 'Audio', accent: cv.purpleAccentSurface, icon: AudioFileOutlinedIcon },
+  document: { label: 'File', accent: cv.grayAccentSurface || '#f5f5f5', icon: FolderOutlinedIcon },
 };
 
 function MediaPreview({ item, childCount }: { item: MediaItem; childCount?: number }) {

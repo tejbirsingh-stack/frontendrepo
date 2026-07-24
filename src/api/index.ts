@@ -13,6 +13,7 @@ export {
   getMediaAssetByIdRequest,
   updateAssetTagsRequest,
   deleteMediaFileRequest,
+  retryTranscodeRequest
 } from './media.service';
 export type { MediaAssetResponseDto, UploadMediaProgress } from './media.service';
 export type {

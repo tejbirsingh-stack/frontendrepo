@@ -6,6 +6,7 @@ import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
+import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
 import { useNavigate } from 'react-router-dom';
@@ -40,6 +41,7 @@ const typeIcons: Record<MediaType, typeof FolderOutlinedIcon> = {
   video: VideocamOutlinedIcon,
   image: ImageOutlinedIcon,
   audio: AudioFileOutlinedIcon,
+  document: InsertDriveFileOutlinedIcon,
 };
 
 const typeLabels: Record<MediaType, string> = {
@@ -47,6 +49,7 @@ const typeLabels: Record<MediaType, string> = {
   video: 'Video',
   image: 'Image',
   audio: 'Audio',
+  document: 'File',
 };
 
 export default function MediaListRow({
@@ -77,9 +80,14 @@ export default function MediaListRow({
   const selectionActive = selectedMediaIds.size > 0;
 
   const openPath = getMediaViewerPath(item);
+  const documentUrl = item.videoSrc;
+  const isClickable = (openPath || (item.type === 'document' && documentUrl)) && !selectionActive;
 
   const handleOpen = () => {
-    if (openPath && !selectionActive) {
+    if (!isClickable) return;
+    if (item.type === 'document' && documentUrl) {
+      window.open(documentUrl, '_blank', 'noopener,noreferrer');
+    } else if (openPath) {
       navigate(openPath);
     }
   };
@@ -148,7 +156,7 @@ export default function MediaListRow({
         border: `1px solid ${borderColor}`,
         background: isDropTarget ? cv.purpleSelectionSoft : 'var(--noah-footer-tint)',
         opacity: isDragging ? 0.45 : 1,
-        cursor: openPath && !selectionActive ? 'pointer' : 'default',
+        cursor: isClickable ? 'pointer' : 'default',
         transition: 'all 0.2s ease',
         '&:hover': {
           backgroundColor: cv.surfaceHover,

@@ -52,6 +52,7 @@ interface WorkspaceControlsIslandProps {
   compact?: boolean;
   /** Rendered after zoom controls and before Help in compact (mobile) layout. */
   insertBeforeHelp?: ReactNode;
+  hideZoomControls?: boolean;
 }
 
 export default function WorkspaceControlsIsland({
@@ -62,6 +63,7 @@ export default function WorkspaceControlsIsland({
   onKeyboardShortcuts,
   compact = false,
   insertBeforeHelp,
+  hideZoomControls = false,
 }: WorkspaceControlsIslandProps) {
   const helpButtonRef = useRef<HTMLButtonElement>(null);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
@@ -97,22 +99,26 @@ export default function WorkspaceControlsIsland({
   if (compact) {
     return (
       <>
-        <LabeledToolbarButton
-          label="Zoom out"
-          disabled={!canZoomOut}
-          onClick={onZoomOut}
-          ariaLabel="Zoom out"
-        >
-          <RemoveOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
-        </LabeledToolbarButton>
-        <LabeledToolbarButton
-          label="Zoom in"
-          disabled={!canZoomIn}
-          onClick={onZoomIn}
-          ariaLabel="Zoom in"
-        >
-          <AddOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
-        </LabeledToolbarButton>
+        {!hideZoomControls && (
+          <>
+            <LabeledToolbarButton
+              label="Zoom out"
+              disabled={!canZoomOut}
+              onClick={onZoomOut}
+              ariaLabel="Zoom out"
+            >
+              <RemoveOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
+            </LabeledToolbarButton>
+            <LabeledToolbarButton
+              label="Zoom in"
+              disabled={!canZoomIn}
+              onClick={onZoomIn}
+              ariaLabel="Zoom in"
+            >
+              <AddOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
+            </LabeledToolbarButton>
+          </>
+        )}
         {insertBeforeHelp}
         <LabeledToolbarButton
           label="Help"
@@ -141,53 +147,55 @@ export default function WorkspaceControlsIsland({
       aria-label="Workspace controls"
       sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, lg: 1 } }}
     >
-      <Box
-        sx={{
-          ...surfaceSx,
-          display: 'flex',
-          alignItems: 'center',
-          borderRadius: '999px',
-          overflow: 'hidden',
-        }}
-      >
-        <ShortcutTooltip label="Zoom out" shortcut={zoomOutShortcut}>
-          <span>
-            <IconButton
-              type="button"
-              aria-label="Zoom out"
-              disabled={!canZoomOut}
-              onClick={onZoomOut}
-              sx={controlButtonSx}
-            >
-              <RemoveOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
-            </IconButton>
-          </span>
-        </ShortcutTooltip>
-
-        <Divider
-          orientation="vertical"
-          flexItem
+      {!hideZoomControls && (
+        <Box
           sx={{
-            borderColor: cv.surfaceActive,
-            height: { xs: 16, lg: 20 },
-            alignSelf: 'center',
+            ...surfaceSx,
+            display: 'flex',
+            alignItems: 'center',
+            borderRadius: '999px',
+            overflow: 'hidden',
           }}
-        />
+        >
+          <ShortcutTooltip label="Zoom out" shortcut={zoomOutShortcut}>
+            <span>
+              <IconButton
+                type="button"
+                aria-label="Zoom out"
+                disabled={!canZoomOut}
+                onClick={onZoomOut}
+                sx={controlButtonSx}
+              >
+                <RemoveOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
+              </IconButton>
+            </span>
+          </ShortcutTooltip>
 
-        <ShortcutTooltip label="Zoom in" shortcut={zoomInShortcut}>
-          <span>
-            <IconButton
-              type="button"
-              aria-label="Zoom in"
-              disabled={!canZoomIn}
-              onClick={onZoomIn}
-              sx={controlButtonSx}
-            >
-              <AddOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
-            </IconButton>
-          </span>
-        </ShortcutTooltip>
-      </Box>
+          <Divider
+            orientation="vertical"
+            flexItem
+            sx={{
+              borderColor: cv.surfaceActive,
+              height: { xs: 16, lg: 20 },
+              alignSelf: 'center',
+            }}
+          />
+
+          <ShortcutTooltip label="Zoom in" shortcut={zoomInShortcut}>
+            <span>
+              <IconButton
+                type="button"
+                aria-label="Zoom in"
+                disabled={!canZoomIn}
+                onClick={onZoomIn}
+                sx={controlButtonSx}
+              >
+                <AddOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
+              </IconButton>
+            </span>
+          </ShortcutTooltip>
+        </Box>
+      )}
 
       <ShortcutTooltip label="Help" shortcut={getHelpMenuShortcutLabel()}>
         <IconButton

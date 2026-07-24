@@ -311,3 +311,10 @@ export async function getMediaAssetByIdRequest(id: string): Promise<MediaAssetRe
 export async function updateAssetTagsRequest(id: string, tags: string[]): Promise<void> {
   await apiClient.post(`/media/${encodeURIComponent(id)}/tags`, { tags });
 }
+
+/**
+ * Retry transcode for a failed media asset.
+ */
+export async function retryTranscodeRequest(id: string): Promise<void> {
+  await apiClient.post(`/media/${encodeURIComponent(id)}/retry-transcode`);
+}

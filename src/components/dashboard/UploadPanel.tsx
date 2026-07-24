@@ -107,7 +107,7 @@ export default function UploadPanel({ onUpload }: UploadPanelProps) {
           variant="caption"
           sx={{ display: 'block', color: cv.textMuted, mb: 1.25, fontSize: '0.75rem' }}
         >
-          Images, video, and audio
+          Images, video, audio, and documents
         </Typography>
         <Button
           size="small"

@@ -192,9 +192,12 @@ export async function extractAudioMetadata(file: File): Promise<AudioMetadataRes
   result.containerFormat = containerExt;
   result.hasAudio = 'Yes';
 
-  // 1. Try music-metadata-browser
+  // 1. Try music-metadata-browser with a timeout
   try {
-    const metadata = await mmb.parseBlob(file);
+    const metadata = await Promise.race([
+      mmb.parseBlob(file),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+    ]);
     const format = metadata.format;
     const common = metadata.common;
 
@@ -224,17 +227,26 @@ export async function extractAudioMetadata(file: File): Promise<AudioMetadataRes
     if (common.year) result.year = String(common.year);
     if (common.genre && common.genre.length > 0) result.genre = common.genre.join(', ');
   } catch (err) {
-    console.warn('[AudioMetadata] music-metadata-browser failed, using Web Audio fallback:', err);
+    console.warn('[AudioMetadata] music-metadata-browser failed or timed out, using Web Audio fallback:', err);
   }
 
   // 2. Web Audio API / Audio Element Fallback if duration not found
   if (!result.durationSeconds || result.durationSeconds <= 0) {
     try {
       const objectUrl = URL.createObjectURL(file);
-      await new Promise<void>((resolve) => {
+      await new Promise<void>((resolve, reject) => {
         const audio = new Audio();
+        
+        // Timeout to prevent hanging forever
+        const timeoutId = setTimeout(() => {
+          URL.revokeObjectURL(objectUrl);
+          audio.src = '';
+          reject(new Error('Web Audio fallback timeout'));
+        }, 3000);
+
         audio.preload = 'metadata';
         audio.onloadedmetadata = () => {
+          clearTimeout(timeoutId);
           if (Number.isFinite(audio.duration) && audio.duration > 0) {
             result.durationSeconds = Math.round(audio.duration);
             result.duration = formatVideoTimestamp(audio.duration);
@@ -244,8 +256,9 @@ export async function extractAudioMetadata(file: File): Promise<AudioMetadataRes
           resolve();
         };
         audio.onerror = () => {
+          clearTimeout(timeoutId);
           URL.revokeObjectURL(objectUrl);
-          resolve();
+          resolve(); // Resolve anyway so it doesn't break the flow
         };
         audio.src = objectUrl;
       });

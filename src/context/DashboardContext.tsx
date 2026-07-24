@@ -208,7 +208,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                 const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.name);
                 const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.name);
                 const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.name);
-                const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
+                const isDocument = a.type === 'document' || /\.(pdf|doc|docx|txt|rtf|pproj|drp|aep|fcp|fcpxmld)$/i.test(a.name);
+                const type: MediaType = isDocument ? 'document' : isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
 
                 return {
                   id: a.id,
@@ -220,7 +221,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                   storageProvider: 'b2',
                   uploadedBy: a.uploadedBy?.name || (typeof a.uploadedBy === 'string' ? a.uploadedBy : CURRENT_USER.name),
                   thumbnail: a.thumbnail || undefined,
-                  videoSrc: isVideo || isAudio ? a.url : undefined,
+                  videoSrc: isVideo || isAudio || isDocument ? a.url : undefined,
                   duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
                   tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
                   location: null,
@@ -1229,7 +1230,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const trimmedSummary = details.summary?.trim() ?? '';
       if (!trimmedTitle) return;
 
-      if (current.type !== 'audio' && !details.thumbnail) return;
+      if (current.type !== 'audio' && current.type !== 'document' && !details.thumbnail) return;
 
       const parentFolderId = current.parentFolderId ?? null;
 
@@ -1310,6 +1311,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           ? {
               videoSrc: uploadedAssetDto?.url || current.previewSrc,
               ...(details.duration ? { duration: details.duration } : {}),
+            }
+          : {}),
+        ...(current.type === 'document'
+          ? {
+              thumbnail: details.thumbnail || uploadedAssetDto?.thumbnail || undefined,
+              videoSrc: uploadedAssetDto?.url || current.previewSrc,
             }
           : {}),
       };

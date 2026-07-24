@@ -7,6 +7,7 @@ import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
+import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
 import TruncatedText from '../TruncatedText';
@@ -67,6 +68,11 @@ const typeConfig: Record<
     label: 'Audio',
     accent: cv.purpleAccentSurface,
     icon: AudioFileOutlinedIcon,
+  },
+  document: {
+    label: 'File',
+    accent: cv.surfaceHover,
+    icon: InsertDriveFileOutlinedIcon,
   },
 };
 
@@ -220,6 +226,25 @@ function AudioPreview({ item }: { item: MediaItem }) {
   );
 }
 
+function DocumentPreview({ item }: { item: MediaItem }) {
+  return (
+    <Box
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: `linear-gradient(160deg, ${typeConfig.document.accent} 0%, ${cv.mediaTypeGradientEnd} 100%)`,
+        gap: 1.5,
+        px: 2,
+      }}
+    >
+      <InsertDriveFileOutlinedIcon sx={{ fontSize: 52, color: cv.textMuted, opacity: 0.85 }} />
+    </Box>
+  );
+}
+
 function MediaPreview({ item, folderChildCount }: { item: MediaItem; folderChildCount?: number }) {
   switch (item.type) {
     case 'folder':
@@ -230,6 +255,8 @@ function MediaPreview({ item, folderChildCount }: { item: MediaItem; folderChild
       return <ImagePreview item={item} />;
     case 'audio':
       return <AudioPreview item={item} />;
+    case 'document':
+      return <DocumentPreview item={item} />;
     default:
       return null;
   }
@@ -265,8 +292,21 @@ export default function MediaItemCard({
 
   const openPath = getMediaViewerPath(item);
 
+  // Allow clicking if it's a navigatable path OR if it's a document (which opens in a new tab)
+  // But wait, the url is needed. Where is the url stored? Assuming `item.videoSrc` or similar for now?
+  // Let's assume the component consuming this has `item.videoSrc` or `item.thumbnail` or similar as the URL for the document.
+  // We'll use `item.videoSrc` as the generic raw asset URL fallback, or perhaps `item.customMetadata?.url`.
+  // Wait, the API sends `filePath`, we might need to rely on the backend signing logic.
+  // The frontend `MediaItem` has `videoSrc` mapped to the raw asset if it's not a video? Yes, it's mapped in `apiToFrontendMedia`.
+  // I will use `item.videoSrc` as the generic URL for documents.
+  const documentUrl = item.videoSrc;
+  const isClickable = (openPath || (item.type === 'document' && documentUrl)) && !selectionActive;
+
   const handleOpen = () => {
-    if (openPath && !selectionActive) {
+    if (!isClickable) return;
+    if (item.type === 'document' && documentUrl) {
+      window.open(documentUrl, '_blank', 'noopener,noreferrer');
+    } else if (openPath) {
       navigate(openPath);
     }
   };
@@ -321,7 +361,7 @@ export default function MediaItemCard({
 
   return (
     <Box
-      onClick={openPath && !selectionActive ? handleOpen : undefined}
+      onClick={isClickable ? handleOpen : undefined}
       onDragOver={handleFolderDragOver}
       onDragLeave={isFolder ? onFolderDragLeave : undefined}
       onDrop={handleFolderDrop}
@@ -329,7 +369,7 @@ export default function MediaItemCard({
         borderRadius: '14px',
         border: `1px solid ${borderColor}`,
         overflow: 'hidden',
-        cursor: openPath && !selectionActive ? 'pointer' : 'default',
+        cursor: isClickable ? 'pointer' : 'default',
         background: isDropTarget ? cv.purpleSelectionSoft : 'var(--noah-footer-tint)',
         opacity: isDragging ? 0.45 : 1,
         boxShadow: isDropTarget ? cv.purpleSelectionStrong : 'none',

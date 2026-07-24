@@ -16,6 +16,16 @@ const extensionMap: Record<string, MediaType> = {
   m4a: 'audio',
   aac: 'audio',
   ogg: 'audio',
+  pdf: 'document',
+  doc: 'document',
+  docx: 'document',
+  rtf: 'document',
+  txt: 'document',
+  pproj: 'document',
+  drp: 'document',
+  aep: 'document',
+  fcp: 'document',
+  fcpxmld: 'document',
 };
 
 export function getMediaTypeFromFile(file: File): MediaType | null {
@@ -33,4 +43,4 @@ export function getUploadableFiles(files: FileList | File[]): File[] {
   return Array.from(files).filter((file) => getMediaTypeFromFile(file) !== null);
 }
 
-export const UPLOAD_ACCEPT = 'image/*,video/*,audio/*';
+export const UPLOAD_ACCEPT = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.rtf,.txt,.pproj,.drp,.aep,.fcp,.fcpxmld';
