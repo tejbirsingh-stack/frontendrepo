@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Box, Checkbox, IconButton, Tooltip, Typography } from '@mui/material';
 import { cv } from '../../theme/cssVars';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
@@ -68,6 +69,7 @@ export default function MediaListRow({
   onFolderDragLeave,
 }: MediaListRowProps) {
   const navigate = useNavigate();
+  const [rowImageError, setRowImageError] = useState(false);
   const { mediaItems, trashedIds } = useDashboard();
   const TypeIcon = typeIcons[item.type];
   const isFolder = item.type === 'folder';
@@ -229,11 +231,12 @@ export default function MediaListRow({
             duration={item.duration}
             showPlayOverlay={false}
           />
-        ) : item.thumbnail ? (
+        ) : item.thumbnail && !rowImageError ? (
           <Box
             component="img"
             src={item.thumbnail}
             alt=""
+            onError={() => setRowImageError(true)}
             sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         ) : (

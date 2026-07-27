@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Box, Button, Checkbox, Tooltip, Typography } from '@mui/material';
 import { cv } from '../../theme/cssVars';
 import {
@@ -37,6 +38,35 @@ const typeConfig: Record<
   document: { label: 'File', accent: cv.surfaceHover || '#f5f5f5', icon: FolderOutlinedIcon },
 };
 
+function TrashImagePreview({ item }: { item: MediaItem }) {
+  const [imageError, setImageError] = useState(false);
+  if (imageError || !item.thumbnail) {
+    return (
+      <Box
+        sx={{
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(160deg, rgba(30,30,42,1) 0%, rgba(12,12,18,1) 100%)',
+        }}
+      >
+        <ImageOutlinedIcon sx={{ fontSize: 48, color: cv.brandPurple, opacity: 0.85 }} />
+      </Box>
+    );
+  }
+  return (
+    <Box
+      component="img"
+      src={item.thumbnail}
+      alt={item.title}
+      loading="lazy"
+      onError={() => setImageError(true)}
+      sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+    />
+  );
+}
+
 function MediaPreview({ item, childCount }: { item: MediaItem; childCount?: number }) {
   const config = typeConfig[item.type];
 
@@ -75,15 +105,7 @@ function MediaPreview({ item, childCount }: { item: MediaItem; childCount?: numb
   }
 
   if (item.type === 'image' && item.thumbnail) {
-    return (
-      <Box
-        component="img"
-        src={item.thumbnail}
-        alt={item.title}
-        loading="lazy"
-        sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-      />
-    );
+    return <TrashImagePreview item={item} />;
   }
 
   if (item.type === 'audio') {
