@@ -12,7 +12,7 @@ interface VideoCommentLayerProps {
   active: boolean;
   panActive?: boolean;
   annotationsVisible?: boolean;
-  videoRef?: React.RefObject<HTMLVideoElement>;
+  videoRef?: React.RefObject<HTMLVideoElement | null>;
   comments: VideoComment[];
   draftComment: DraftVideoComment | null;
   onPlaceDraft: (position: { xPercent: number; yPercent: number }) => void;

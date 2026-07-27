@@ -129,7 +129,7 @@ interface VideoAnnotationSurfaceProps {
   enabled: boolean;
   annotationsVisible?: boolean;
   resolvedOverlayEntryIds?: ReadonlySet<string>;
-  videoRef?: React.RefObject<HTMLVideoElement>;
+  videoRef?: React.RefObject<HTMLVideoElement | null>;
   strokes: VideoDrawingStroke[];
   onStrokesChange: (strokes: VideoDrawingStroke[]) => void;
   shapes: VideoShape[];

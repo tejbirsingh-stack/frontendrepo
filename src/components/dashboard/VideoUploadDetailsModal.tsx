@@ -75,6 +75,12 @@ const mediaTypeCopy: Record<
     summaryPlaceholder: 'Introduce your audio to listeners.',
     previewTitleFallback: 'Audio title',
   },
+  document: {
+    dialogTitle: 'File details',
+    titleHelp: 'Choose a clear title that describes your file.',
+    summaryPlaceholder: 'Introduce your file.',
+    previewTitleFallback: 'File title',
+  },
 };
 
 const dialogPaperSx = {

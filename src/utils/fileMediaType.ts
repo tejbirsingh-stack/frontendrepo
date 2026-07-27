@@ -89,4 +89,4 @@ export function getUploadableFiles(files: FileList | File[]): File[] {
 }
 
 export const UPLOAD_ACCEPT =
-  'image/*,video/*,audio/*,.pdf,.doc,.docx,.rtf,.txt,.pproj,.drp,.aep,.fcp,.fcpxmld,.psd,.psb,.ai,.eps,.exr,.openexr,.tiff,.tif,.dpx,.cin,.jpf,.pcx,.mpo,.avif,.m4b,.flac,.aiff,.aif,.aifc,.3g2,.ape,.au,.mp2';
+  'image/*,video/*,audio/*,.jpg,.jpeg,.bmp,.pdf,.doc,.docx,.rtf,.txt,.pproj,.drp,.aep,.fcp,.fcpxmld,.psd,.psb,.ai,.eps,.exr,.openexr,.tiff,.tif,.dpx,.cin,.jpf,.pcx,.mpo,.avif,.m4b,.flac,.aiff,.aif,.aifc,.3g2,.ape,.au,.mp2';

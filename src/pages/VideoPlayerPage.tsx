@@ -9,6 +9,8 @@ import StarIcon from '@mui/icons-material/Star';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
+import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
@@ -192,6 +194,7 @@ const mediaTypeLabels = {
   video: 'Video',
   image: 'Image',
   audio: 'Audio',
+  document: 'File',
 } as const;
 
 export default function VideoPlayerPage() {
@@ -516,7 +519,7 @@ export default function VideoPlayerPage() {
   const [statusToast, setStatusToast] = useState<{
     open: boolean;
     message: string;
-    variant: 'resolved' | 'reopen';
+    variant: 'resolved' | 'reopen' | 'error';
   }>({ open: false, message: '', variant: 'resolved' });
 
   const { getShortcut } = useResolvedKeyboardShortcuts();
@@ -2362,7 +2365,7 @@ export default function VideoPlayerPage() {
     return <Navigate to="/home" replace />;
   }
 
-  if (item.type !== 'video' && item.type !== 'audio' && item.type !== 'image') {
+  if (item.type !== 'video' && item.type !== 'audio' && item.type !== 'image' && item.type !== 'document') {
     return <Navigate to="/home" replace />;
   }
 
@@ -2940,6 +2943,64 @@ export default function VideoPlayerPage() {
                     <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)' }}>
                       Audio Asset • {item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : 'Unknown Size'}
                     </Typography>
+                  </Box>
+                )}
+
+                {item?.type === 'document' && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'radial-gradient(circle, rgba(30,30,42,1) 0%, rgba(12,12,18,1) 100%)',
+                      zIndex: 1,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 100,
+                        height: 100,
+                        borderRadius: '24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                        mb: 3,
+                      }}
+                    >
+                      <InsertDriveFileOutlinedIcon sx={{ fontSize: 52, color: '#38BDF8' }} />
+                    </Box>
+
+                    <Typography variant="h6" sx={{ color: '#ffffff', fontWeight: 600, mb: 1 }}>
+                      {item?.title}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)', mb: 3 }}>
+                      Document Asset • {item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : 'File'}
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      component="a"
+                      href={`/api/media/${encodeURIComponent(item.id)}/download`}
+                      download
+                      startIcon={<FileDownloadOutlinedIcon />}
+                      sx={{
+                        backgroundColor: '#38BDF8',
+                        color: '#0F172A',
+                        fontWeight: 600,
+                        borderRadius: '12px',
+                        textTransform: 'none',
+                        px: 3,
+                        py: 1,
+                        '&:hover': { backgroundColor: '#0284C7' },
+                      }}
+                    >
+                      Download File
+                    </Button>
                   </Box>
                 )}
 

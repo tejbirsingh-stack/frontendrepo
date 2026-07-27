@@ -18,6 +18,8 @@ export interface MediaItem {
   sizeBytes: number;
   storageProvider: StorageProvider;
   thumbnail?: string;
+  url?: string;
+  name?: string;
   videoSrc?: string;
   duration?: string;
   /** Known or measured frame rate label, e.g. "24 fps" */

@@ -85,10 +85,10 @@ export default function MediaListRow({
 
   const handleOpen = () => {
     if (!isClickable) return;
-    if (item.type === 'document' && documentUrl) {
-      window.open(documentUrl, '_blank', 'noopener,noreferrer');
-    } else if (openPath) {
+    if (openPath) {
       navigate(openPath);
+    } else if (item.type === 'document' && documentUrl) {
+      window.open(documentUrl, '_blank', 'noopener,noreferrer');
     }
   };
 

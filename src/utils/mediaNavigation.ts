@@ -34,7 +34,7 @@ export function getMediaViewerPath(item: MediaItem): string | null {
     return getMediaFolderPath(item.id);
   }
 
-  if (item.type === 'video' || item.type === 'audio' || item.type === 'image') {
+  if (item.type === 'video' || item.type === 'audio' || item.type === 'image' || item.type === 'document') {
     return `/media/${item.id}`;
   }
 

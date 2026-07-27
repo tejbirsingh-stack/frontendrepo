@@ -226,7 +226,7 @@ function AudioPreview({ item }: { item: MediaItem }) {
   );
 }
 
-function DocumentPreview({ item }: { item: MediaItem }) {
+function DocumentPreview() {
   return (
     <Box
       sx={{
@@ -256,7 +256,7 @@ function MediaPreview({ item, folderChildCount }: { item: MediaItem; folderChild
     case 'audio':
       return <AudioPreview item={item} />;
     case 'document':
-      return <DocumentPreview item={item} />;
+      return <DocumentPreview />;
     default:
       return null;
   }
@@ -304,10 +304,10 @@ export default function MediaItemCard({
 
   const handleOpen = () => {
     if (!isClickable) return;
-    if (item.type === 'document' && documentUrl) {
-      window.open(documentUrl, '_blank', 'noopener,noreferrer');
-    } else if (openPath) {
+    if (openPath) {
       navigate(openPath);
+    } else if (item.type === 'document' && documentUrl) {
+      window.open(documentUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
