@@ -1563,10 +1563,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         location: details.folderId
           ? { folderId: details.folderId, childLabel: trimmedTitle }
           : null,
+        thumbnail: details.thumbnail || uploadedAssetDto?.thumbnail || (current.type === 'image' ? (uploadedAssetDto?.url || current.previewSrc) : undefined),
+        videoSrc: uploadedAssetDto?.url || current.previewSrc,
+        url: uploadedAssetDto?.url || current.previewSrc,
         ...(current.type === 'video'
           ? {
-            thumbnail: details.thumbnail || uploadedAssetDto?.thumbnail || undefined,
-            videoSrc: uploadedAssetDto?.url || current.previewSrc,
             duration: details.duration,
           }
           : {}),
