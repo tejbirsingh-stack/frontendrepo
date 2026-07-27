@@ -5,6 +5,8 @@ export type UploadableMediaType = Exclude<MediaType, 'folder'>;
 export interface MediaUploadOptions {
   /** Media library folder to nest uploaded files under (dashboard folder view). */
   parentFolderId?: string | null;
+  /** Project to nest uploaded files under */
+  linkedProjectId?: string | null;
 }
 
 export interface PendingMediaUpload {
@@ -14,6 +16,7 @@ export interface PendingMediaUpload {
   previewSrc: string;
   defaultTitle: string;
   parentFolderId?: string | null;
+  linkedProjectId?: string | null;
 }
 
 export interface MediaUploadDetails {

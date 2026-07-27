@@ -25,122 +25,17 @@ function projectFolder(
   };
 }
 
-const noahFolders: SidebarFolder[] = [
-  {
-    id: 'all-files',
-    label: 'All Files',
-    children: ['Documents', 'Images', 'Videos', 'Audio'],
-  },
-  {
-    id: 'personal',
-    label: 'Personal',
-  },
-  {
-    id: 'archive',
-    label: 'Archive',
-    children: ['2026', '2025', '2024', '2023', '2022'],
-  },
-];
+const noahFolders: SidebarFolder[] = [];
+const noahProjectFolders: SidebarFolder[] = [];
+const clientMediaFolders: SidebarFolder[] = [];
+const clientProjectFolders: SidebarFolder[] = [];
+const personalArchiveFolders: SidebarFolder[] = [];
+const personalProjectFolders: SidebarFolder[] = [];
 
-const noahProjectFolders: SidebarFolder[] = [
-  projectFolder('project-brand-reel', 'Brand Reel Q1', CURRENT_USER.email, CURRENT_USER.name),
-  projectFolder('project-product-launch', 'Product Launch', undefined, 'Priya Sharma'),
-  projectFolder('project-noah-rebrand', 'NOAH Rebrand', CURRENT_USER.email, CURRENT_USER.name),
-  projectFolder('project-client-work', 'Client Work', CURRENT_USER.email, CURRENT_USER.name),
-];
+export const initialWorkspaces: Workspace[] = [];
 
-const clientMediaFolders: SidebarFolder[] = [
-  {
-    id: 'all-files',
-    label: 'All Files',
-    children: ['Documents', 'Images', 'Videos', 'Audio'],
-  },
-  {
-    id: 'personal',
-    label: 'Personal',
-  },
-  {
-    id: 'archive',
-    label: 'Archive',
-    children: ['2026', '2025', '2024'],
-  },
-];
-
-const clientProjectFolders: SidebarFolder[] = [
-  projectFolder('project-acme-campaign', 'Acme Corp Campaign'),
-  projectFolder('project-northwind-launch', 'Northwind Launch'),
-  projectFolder('project-globex-rebrand', 'Globex Rebrand'),
-];
-
-const personalArchiveFolders: SidebarFolder[] = [
-  {
-    id: 'all-files',
-    label: 'All Files',
-    children: ['Documents', 'Images', 'Videos', 'Audio'],
-  },
-  {
-    id: 'personal',
-    label: 'Personal',
-  },
-  {
-    id: 'archive',
-    label: 'Archive',
-    children: ['2026', '2025', '2024', '2023'],
-  },
-];
-
-const personalProjectFolders: SidebarFolder[] = [
-  projectFolder('project-travel-2024', 'Travel 2024', CURRENT_USER.email, CURRENT_USER.name),
-  projectFolder('project-family-album', 'Family Album', CURRENT_USER.email, CURRENT_USER.name),
-];
-
-export const initialWorkspaces: Workspace[] = [
-  {
-    id: 'noah',
-    name: 'Noah Workspace',
-    description: 'Primary media workspace for NOAH production assets.',
-    color: palette.green,
-    folders: noahFolders,
-    projectFolders: noahProjectFolders,
-  },
-  {
-    id: 'client-media',
-    name: 'Client Media',
-    description: 'Client deliverables, campaigns, and shared brand assets.',
-    color: palette.red,
-    folders: clientMediaFolders,
-    projectFolders: clientProjectFolders,
-  },
-  {
-    id: 'personal',
-    name: 'Personal Archive',
-    description: 'Personal photos, notes, and archived side projects.',
-    color: cv.brandBlue,
-    folders: personalArchiveFolders,
-    projectFolders: personalProjectFolders,
-  },
-];
-
-export const defaultWorkspaceFolders: SidebarFolder[] = [
-  {
-    id: 'all-files',
-    label: 'All Files',
-    children: ['Documents', 'Images', 'Videos', 'Audio'],
-  },
-  {
-    id: 'personal',
-    label: 'Personal',
-  },
-  {
-    id: 'archive',
-    label: 'Archive',
-    children: ['2026', '2025', '2024'],
-  },
-];
-
-export const defaultWorkspaceProjectFolders: SidebarFolder[] = [
-  projectFolder('project-new', 'New Project'),
-];
+export const defaultWorkspaceFolders: SidebarFolder[] = [];
+export const defaultWorkspaceProjectFolders: SidebarFolder[] = [];
 
 function mergeFolderMetadata(folder: SidebarFolder, seed?: SidebarFolder): SidebarFolder {
   if (!seed) return folder;

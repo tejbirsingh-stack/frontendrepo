@@ -4,8 +4,10 @@ import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Button,
+  Checkbox,
   Collapse,
   FormControl,
+  FormControlLabel,
   IconButton,
   ListItemIcon,
   Menu,
@@ -37,6 +39,7 @@ import MediaSelectionBar, {
   getDashboardFolderDropTargetKey,
 } from '../components/dashboard/MediaSelectionBar';
 import NewFolderModal from '../components/dashboard/NewFolderModal';
+import NewProjectModal from '../components/dashboard/NewProjectModal';
 import TrashConfirmModal from '../components/dashboard/TrashConfirmModal';
 import DashboardKeyboardShortcutsDialog from '../components/dashboard/DashboardKeyboardShortcutsDialog';
 import HelpMenuDrawer, { getHelpMenuShortcutLabel } from '../components/media/HelpMenuDrawer';
@@ -240,6 +243,7 @@ export default function DashboardPage({
   const { user } = useAuth();
   const isFavoritesView = libraryView === 'favorites';
   const isDuplicatesView = libraryView === 'duplicates';
+  const isProjectsView = libraryView === 'projects';
   const isFolderView = Boolean(folderMedia);
 
   const {
@@ -266,6 +270,7 @@ export default function DashboardPage({
     moveMediaToTrashBulk,
     uploadMediaFiles,
     createRootMediaFolder,
+    createProject,
     sidebarSelection,
     activeWorkspace,
   } = useDashboard();
@@ -277,7 +282,9 @@ export default function DashboardPage({
       ? 'Favorites'
       : isDuplicatesView
         ? 'Duplicates'
-        : selectionTitle ?? 'All media';
+        : isProjectsView
+          ? 'Projects'
+          : selectionTitle ?? 'All media';
   const folderAccent = folderMedia ? resolveFolderColor(folderMedia.folderColor) : null;
 
   const folderBreadcrumbs = useMemo(() => {
@@ -289,9 +296,9 @@ export default function DashboardPage({
     if (!folderMedia?.projectLocation) return null;
     return formatProjectLocationLabel(
       folderMedia.projectLocation,
-      activeWorkspace.projectFolders,
+      activeWorkspace?.projectFolders || [],
     );
-  }, [folderMedia, activeWorkspace.projectFolders]);
+  }, [folderMedia, activeWorkspace?.projectFolders]);
 
   const contentRef = useRef<HTMLElement>(null);
   const newUploadInputRef = useRef<HTMLInputElement>(null);
@@ -308,9 +315,11 @@ export default function DashboardPage({
   const [selectedAiTags, setSelectedAiTags] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [linkNewItemsToProject, setLinkNewItemsToProject] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [newMenuAnchor, setNewMenuAnchor] = useState<null | HTMLElement>(null);
   const [newFolderModalOpen, setNewFolderModalOpen] = useState(false);
+  const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
   const [bulkTrashOpen, setBulkTrashOpen] = useState(false);
   const [inviteTeamMemberOpen, setInviteTeamMemberOpen] = useState(false);
   const [folderTeamMembers, setFolderTeamMembers] = useState<
@@ -377,12 +386,12 @@ export default function DashboardPage({
       if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return false;
       return canInviteTeamMembersToFolderSelection(
         sidebarSelection,
-        activeWorkspace.folders,
-        activeWorkspace.projectFolders,
+        activeWorkspace?.folders || [],
+        activeWorkspace?.projectFolders || [],
         { isFavoritesView },
       );
     },
-    [sidebarSelection, activeWorkspace.folders, activeWorkspace.projectFolders, isFavoritesView, user?.role],
+    [sidebarSelection, activeWorkspace?.folders, activeWorkspace?.projectFolders, isFavoritesView, user?.role],
   );
 
   const displayedTeamMembers = useMemo(() => {
@@ -449,8 +458,21 @@ export default function DashboardPage({
   const librarySourceItems = useMemo(() => {
     if (isFavoritesView) return favoriteMediaItems;
     if (isDuplicatesView) return duplicateMediaItems;
+    if (isProjectsView) {
+      return mediaItems.filter(
+        (item) => item.workspaceId === activeWorkspaceId && item.isProject && !trashedIds.has(item.id)
+      );
+    }
 
     if (folderMedia) {
+      if (folderMedia.isProject) {
+        return mediaItems.filter(
+          (item) =>
+            item.workspaceId === activeWorkspaceId &&
+            (item.linkedProjectIds || []).includes(folderMedia.id) &&
+            !trashedIds.has(item.id),
+        );
+      }
       return mediaItems.filter(
         (item) =>
           item.workspaceId === activeWorkspaceId &&
@@ -478,6 +500,7 @@ export default function DashboardPage({
     trashedIds,
     sidebarSelection,
     rootMediaItems,
+    isProjectsView,
   ]);
 
   const displayedItems = useMemo(() => {
@@ -486,10 +509,12 @@ export default function DashboardPage({
       ? favoriteMediaItems
       : isDuplicatesView
         ? duplicateMediaItems
-        : mediaItems.filter(
-          (item) =>
-            item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
-        );
+        : isProjectsView
+          ? librarySourceItems
+          : mediaItems.filter(
+            (item) =>
+              item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
+          );
     const sourceItems = query ? searchableItems : librarySourceItems;
 
     const filtered = sourceItems.filter((item) => {
@@ -549,13 +574,14 @@ export default function DashboardPage({
     trashedIds,
     refreshKey,
     sidebarSelection,
+    isProjectsView,
   ]);
 
   const duplicateClusters = useMemo(() => {
     if (!isDuplicatesView) return [];
-    
+
     const clusters = new Map<string, typeof duplicateMediaItems>();
-    
+
     duplicateMediaItems.forEach(item => {
       const originalIds = item.customMetadata?.duplicates as string[] | undefined;
       if (originalIds && originalIds.length > 0) {
@@ -623,8 +649,10 @@ export default function DashboardPage({
   const handleNewUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadable = getUploadableFiles(event.target.files ?? []);
     if (uploadable.length > 0) {
+      const isProject = folderMedia?.isProject;
       uploadMediaFiles(uploadable, {
-        parentFolderId: folderMedia?.id ?? null,
+        parentFolderId: isProject ? (folderMedia?.parentFolderId ?? null) : (folderMedia?.id ?? null),
+        linkedProjectId: isProject && linkNewItemsToProject ? folderMedia?.id : null,
       });
     }
     event.target.value = '';
@@ -635,7 +663,15 @@ export default function DashboardPage({
     color: string,
     projectLocation?: MediaLocation | null,
   ) => {
-    createRootMediaFolder(name, color, folderMedia?.id ?? null, projectLocation);
+    const isProject = folderMedia?.isProject;
+    const parentId = isProject ? (folderMedia?.parentFolderId ?? null) : (folderMedia?.id ?? null);
+    const location = isProject && linkNewItemsToProject ? { folderId: folderMedia.id } : projectLocation;
+    
+    createRootMediaFolder(name, color, parentId, location);
+  };
+
+  const handleCreateProject = (name: string) => {
+    createProject(name, folderMedia?.id ?? null);
   };
 
   const clearPanelFilters = () => {
@@ -748,370 +784,430 @@ export default function DashboardPage({
       }}
     >
       <Box sx={{ mb: 3 }}>
-      {isFolderView ? (
+        {isFolderView ? (
+          <Box
+            component="nav"
+            aria-label="Folder breadcrumb"
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75,
+              mb: 1,
+              flexWrap: 'wrap',
+            }}
+          >
+            <Box
+              component={RouterLink}
+              to="/home"
+              sx={{
+                fontSize: '0.875rem',
+                color: cv.textSecondary,
+                textDecoration: 'none',
+                '&:hover': { color: cv.textPrimary },
+              }}
+            >
+              All media
+            </Box>
+            {folderBreadcrumbs.map((crumb, index) => {
+              const isLast = index === folderBreadcrumbs.length - 1;
+              return (
+                <Fragment key={crumb.id}>
+                  <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted }} aria-hidden>
+                    /
+                  </Typography>
+                  {isLast ? (
+                    <Typography
+                      sx={{ fontSize: '0.875rem', color: cv.textPrimary, fontWeight: 500 }}
+                      aria-current="page"
+                    >
+                      {crumb.title}
+                    </Typography>
+                  ) : (
+                    <Box
+                      component={RouterLink}
+                      to={getMediaFolderPath(crumb.id)}
+                      sx={{
+                        fontSize: '0.875rem',
+                        color: cv.textSecondary,
+                        textDecoration: 'none',
+                        '&:hover': { color: cv.textPrimary },
+                      }}
+                    >
+                      {crumb.title}
+                    </Box>
+                  )}
+                </Fragment>
+              );
+            })}
+          </Box>
+        ) : null}
         <Box
-          component="nav"
-          aria-label="Folder breadcrumb"
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 0.75,
-            mb: 1,
+            justifyContent: 'space-between',
             flexWrap: 'wrap',
+            gap: 2,
           }}
         >
-          <Box
-            component={RouterLink}
-            to="/home"
-            sx={{
-              fontSize: '0.875rem',
-              color: cv.textSecondary,
-              textDecoration: 'none',
-              '&:hover': { color: cv.textPrimary },
-            }}
-          >
-            All media
-          </Box>
-          {folderBreadcrumbs.map((crumb, index) => {
-            const isLast = index === folderBreadcrumbs.length - 1;
-            return (
-              <Fragment key={crumb.id}>
-                <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted }} aria-hidden>
-                  /
-                </Typography>
-                {isLast ? (
-                  <Typography
-                    sx={{ fontSize: '0.875rem', color: cv.textPrimary, fontWeight: 500 }}
-                    aria-current="page"
-                  >
-                    {crumb.title}
-                  </Typography>
-                ) : (
-                  <Box
-                    component={RouterLink}
-                    to={getMediaFolderPath(crumb.id)}
-                    sx={{
-                      fontSize: '0.875rem',
-                      color: cv.textSecondary,
-                      textDecoration: 'none',
-                      '&:hover': { color: cv.textPrimary },
-                    }}
-                  >
-                    {crumb.title}
-                  </Box>
-                )}
-              </Fragment>
-            );
-          })}
-        </Box>
-      ) : null}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 2,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-          {folderAccent ? (
-            <Box
-              aria-hidden
-              sx={{
-                width: 12,
-                height: 12,
-                borderRadius: '4px',
-                backgroundColor: folderAccent,
-                flexShrink: 0,
-              }}
-            />
-          ) : null}
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 600, fontSize: { xs: '1.125rem', sm: '1.375rem' } }}>
-              {pageTitle}
-            </Typography>
-            {isFolderView ? (
-              <>
-                <Typography sx={{ mt: 0.35, fontSize: '0.875rem', color: cv.textSecondary }}>
-                  {librarySourceItems.length}{' '}
-                  {librarySourceItems.length === 1 ? 'item' : 'items'}
-                </Typography>
-                {folderProjectLabel ? (
-                  <Typography sx={{ mt: 0.25, fontSize: '0.8125rem', color: cv.textMuted }}>
-                    Project: {folderProjectLabel}
-                  </Typography>
-                ) : null}
-              </>
-            ) : null}
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-            <ToolbarTooltip title="More options">
-              <IconButton
-                size="small"
-                sx={toolbarIconSx}
-                onClick={(e) => setMoreMenuAnchor(e.currentTarget)}
-                aria-label="More options"
-              >
-                <MoreHorizIcon sx={{ fontSize: 20 }} />
-              </IconButton>
-            </ToolbarTooltip>
-
-            <ToolbarTooltip title="Group by type">
-              <IconButton
-                size="small"
-                sx={viewMode === 'folder' ? activeToolbarSx : toolbarIconSx}
-                onClick={() => setViewMode('folder')}
-                aria-label="Group by type"
-                aria-pressed={viewMode === 'folder'}
-              >
-                <FolderOutlinedIcon sx={{ fontSize: 20 }} />
-              </IconButton>
-            </ToolbarTooltip>
-
-            <ToolbarTooltip title="List view">
-              <IconButton
-                size="small"
-                sx={viewMode === 'list' ? activeToolbarSx : toolbarIconSx}
-                onClick={() => setViewMode('list')}
-                aria-label="List view"
-                aria-pressed={viewMode === 'list'}
-              >
-                <ViewListIcon sx={{ fontSize: 20 }} />
-              </IconButton>
-            </ToolbarTooltip>
-
-            <ToolbarTooltip title="Grid view">
-              <IconButton
-                size="small"
-                sx={viewMode === 'grid' ? activeToolbarSx : toolbarIconSx}
-                onClick={() => setViewMode('grid')}
-                aria-label="Grid view"
-                aria-pressed={viewMode === 'grid'}
-              >
-                <GridViewIcon sx={{ fontSize: 20 }} />
-              </IconButton>
-            </ToolbarTooltip>
-
-            <ToolbarTooltip title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
-              <IconButton
-                size="small"
-                sx={isFullscreen ? activeToolbarSx : toolbarIconSx}
-                onClick={toggleFullscreen}
-                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              >
-                {isFullscreen ? (
-                  <CloseFullscreenIcon sx={{ fontSize: 20 }} />
-                ) : (
-                  <OpenInFullIcon sx={{ fontSize: 20 }} />
-                )}
-              </IconButton>
-            </ToolbarTooltip>
-          </Box>
-
-          <Tooltip title="Filter media" arrow>
-            <Button
-              startIcon={<SearchIcon sx={{ fontSize: 18 }} />}
-              size="small"
-              onClick={() => setFilterPanelOpen((open) => !open)}
-              aria-expanded={filterPanelOpen}
-              sx={{
-                color:
-                  hasActiveFilters || filterPanelOpen
-                    ? cv.textPrimary
-                    : cv.textSecondary,
-                borderRadius: '10px',
-                px: 1.5,
-                py: 0.75,
-                fontSize: '0.8125rem',
-                border: `1px solid ${
-                  hasActiveFilters || filterPanelOpen ? cv.borderFocus : cv.border
-                }`,
-                backgroundColor:
-                  hasActiveFilters || filterPanelOpen
-                    ? cv.insetHighlight
-                    : 'transparent',
-                '&:hover': {
-                  backgroundColor: cv.surfaceHover,
-                  borderColor: cv.surfaceActive,
-                },
-              }}
-            >
-              Filter
-            </Button>
-          </Tooltip>
-
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <FormControl size="small" sx={{ minWidth: { xs: 130, sm: 148 } }}>
-              <Select
-                value={sortBy}
-                onChange={handleSortByChange}
-                displayEmpty
-                IconComponent={KeyboardArrowDownIcon}
-                renderValue={(value) => `Sort by ${sortFieldLabels[value as SortField]}`}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+            {folderAccent ? (
+              <Box
+                aria-hidden
                 sx={{
-                  ...getToolbarControlSx(hasNonDefaultSort),
-                  minWidth: { xs: 130, sm: 148 },
+                  width: 12,
+                  height: 12,
+                  borderRadius: '4px',
+                  backgroundColor: folderAccent,
+                  flexShrink: 0,
                 }}
-                MenuProps={{
-                  slotProps: {
-                    paper: { sx: { ...menuPaperSx, minWidth: 160 } },
+              />
+            ) : null}
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 600, fontSize: { xs: '1.125rem', sm: '1.375rem' } }}>
+                {pageTitle}
+              </Typography>
+              {isFolderView ? (
+                <>
+                  <Typography sx={{ mt: 0.35, fontSize: '0.875rem', color: cv.textSecondary }}>
+                    {librarySourceItems.length}{' '}
+                    {librarySourceItems.length === 1 ? 'item' : 'items'}
+                  </Typography>
+                  {folderProjectLabel ? (
+                    <Typography sx={{ mt: 0.25, fontSize: '0.8125rem', color: cv.textMuted }}>
+                      Project: {folderProjectLabel}
+                    </Typography>
+                  ) : null}
+                </>
+              ) : null}
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+              <ToolbarTooltip title="More options">
+                <IconButton
+                  size="small"
+                  sx={toolbarIconSx}
+                  onClick={(e) => setMoreMenuAnchor(e.currentTarget)}
+                  aria-label="More options"
+                >
+                  <MoreHorizIcon sx={{ fontSize: 20 }} />
+                </IconButton>
+              </ToolbarTooltip>
+
+              <ToolbarTooltip title="Group by type">
+                <IconButton
+                  size="small"
+                  sx={viewMode === 'folder' ? activeToolbarSx : toolbarIconSx}
+                  onClick={() => setViewMode('folder')}
+                  aria-label="Group by type"
+                  aria-pressed={viewMode === 'folder'}
+                >
+                  <FolderOutlinedIcon sx={{ fontSize: 20 }} />
+                </IconButton>
+              </ToolbarTooltip>
+
+              <ToolbarTooltip title="List view">
+                <IconButton
+                  size="small"
+                  sx={viewMode === 'list' ? activeToolbarSx : toolbarIconSx}
+                  onClick={() => setViewMode('list')}
+                  aria-label="List view"
+                  aria-pressed={viewMode === 'list'}
+                >
+                  <ViewListIcon sx={{ fontSize: 20 }} />
+                </IconButton>
+              </ToolbarTooltip>
+
+              <ToolbarTooltip title="Grid view">
+                <IconButton
+                  size="small"
+                  sx={viewMode === 'grid' ? activeToolbarSx : toolbarIconSx}
+                  onClick={() => setViewMode('grid')}
+                  aria-label="Grid view"
+                  aria-pressed={viewMode === 'grid'}
+                >
+                  <GridViewIcon sx={{ fontSize: 20 }} />
+                </IconButton>
+              </ToolbarTooltip>
+
+              <ToolbarTooltip title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
+                <IconButton
+                  size="small"
+                  sx={isFullscreen ? activeToolbarSx : toolbarIconSx}
+                  onClick={toggleFullscreen}
+                  aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                >
+                  {isFullscreen ? (
+                    <CloseFullscreenIcon sx={{ fontSize: 20 }} />
+                  ) : (
+                    <OpenInFullIcon sx={{ fontSize: 20 }} />
+                  )}
+                </IconButton>
+              </ToolbarTooltip>
+            </Box>
+
+            <Tooltip title="Filter media" arrow>
+              <Button
+                startIcon={<SearchIcon sx={{ fontSize: 18 }} />}
+                size="small"
+                onClick={() => setFilterPanelOpen((open) => !open)}
+                aria-expanded={filterPanelOpen}
+                sx={{
+                  color:
+                    hasActiveFilters || filterPanelOpen
+                      ? cv.textPrimary
+                      : cv.textSecondary,
+                  borderRadius: '10px',
+                  px: 1.5,
+                  py: 0.75,
+                  fontSize: '0.8125rem',
+                  border: `1px solid ${hasActiveFilters || filterPanelOpen ? cv.borderFocus : cv.border
+                    }`,
+                  backgroundColor:
+                    hasActiveFilters || filterPanelOpen
+                      ? cv.insetHighlight
+                      : 'transparent',
+                  '&:hover': {
+                    backgroundColor: cv.surfaceHover,
+                    borderColor: cv.surfaceActive,
                   },
                 }}
               >
-                {(Object.keys(sortFieldLabels) as SortField[]).map((field) => (
-                  <MenuItem
-                    key={field}
-                    value={field}
-                    sx={{ fontSize: '0.875rem', color: cv.textSecondary }}
-                  >
-                    {sortFieldLabels[field]}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                Filter
+              </Button>
+            </Tooltip>
 
-            <ToolbarTooltip
-              title={sortDirection === 'desc' ? 'Sort descending' : 'Sort ascending'}
-            >
-              <IconButton
-                size="small"
-                aria-label={sortDirection === 'desc' ? 'Sort descending' : 'Sort ascending'}
-                onClick={() =>
-                  setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))
-                }
-                sx={getToolbarIconButtonSx(hasNonDefaultSort)}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <FormControl size="small" sx={{ minWidth: { xs: 130, sm: 148 } }}>
+                <Select
+                  value={sortBy}
+                  onChange={handleSortByChange}
+                  displayEmpty
+                  IconComponent={KeyboardArrowDownIcon}
+                  renderValue={(value) => `Sort by ${sortFieldLabels[value as SortField]}`}
+                  sx={{
+                    ...getToolbarControlSx(hasNonDefaultSort),
+                    minWidth: { xs: 130, sm: 148 },
+                  }}
+                  MenuProps={{
+                    slotProps: {
+                      paper: { sx: { ...menuPaperSx, minWidth: 160 } },
+                    },
+                  }}
+                >
+                  {(Object.keys(sortFieldLabels) as SortField[]).map((field) => (
+                    <MenuItem
+                      key={field}
+                      value={field}
+                      sx={{ fontSize: '0.875rem', color: cv.textSecondary }}
+                    >
+                      {sortFieldLabels[field]}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <ToolbarTooltip
+                title={sortDirection === 'desc' ? 'Sort descending' : 'Sort ascending'}
               >
-                {sortDirection === 'desc' ? (
-                  <ArrowDownwardIcon sx={{ fontSize: 18 }} />
-                ) : (
-                  <ArrowUpwardIcon sx={{ fontSize: 18 }} />
-                )}
-              </IconButton>
-            </ToolbarTooltip>
+                <IconButton
+                  size="small"
+                  aria-label={sortDirection === 'desc' ? 'Sort descending' : 'Sort ascending'}
+                  onClick={() =>
+                    setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+                  }
+                  sx={getToolbarIconButtonSx(hasNonDefaultSort)}
+                >
+                  {sortDirection === 'desc' ? (
+                    <ArrowDownwardIcon sx={{ fontSize: 18 }} />
+                  ) : (
+                    <ArrowUpwardIcon sx={{ fontSize: 18 }} />
+                  )}
+                </IconButton>
+              </ToolbarTooltip>
+            </Box>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', width: { xs: '100%', lg: 'auto' } }}>
+            {displayedTeamMembers.length > 0 ? (
+              <TeamMemberAvatarStack members={displayedTeamMembers} />
+            ) : null}
+            {canInviteToFolder ? (
+              <InviteTeamMemberButton onClick={() => setInviteTeamMemberOpen(true)} />
+            ) : null}
+            <input
+              ref={newUploadInputRef}
+              type="file"
+              multiple
+              accept={UPLOAD_ACCEPT}
+              hidden
+              onChange={handleNewUpload}
+            />
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={openNewMenu}
+              sx={{
+                background: cv.brandGradient,
+                boxShadow: cv.brandShadow,
+                borderRadius: '10px',
+                px: 2,
+                py: 0.75,
+                fontSize: '0.875rem',
+                '&:hover': {
+                  background: cv.brandGradientHover,
+                },
+              }}
+            >
+              New
+            </Button>
           </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', width: { xs: '100%', lg: 'auto' } }}>
-          {displayedTeamMembers.length > 0 ? (
-            <TeamMemberAvatarStack members={displayedTeamMembers} />
-          ) : null}
-          {canInviteToFolder ? (
-            <InviteTeamMemberButton onClick={() => setInviteTeamMemberOpen(true)} />
-          ) : null}
-          <input
-            ref={newUploadInputRef}
-            type="file"
-            multiple
-            accept={UPLOAD_ACCEPT}
-            hidden
-            onChange={handleNewUpload}
-          />
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={openNewMenu}
-            sx={{
-              background: cv.brandGradient,
-              boxShadow: cv.brandShadow,
-              borderRadius: '10px',
-              px: 2,
-              py: 0.75,
-              fontSize: '0.875rem',
-              '&:hover': {
-                background: cv.brandGradientHover,
+        <Menu
+          anchorEl={newMenuAnchor}
+          open={Boolean(newMenuAnchor)}
+          onClose={closeNewMenu}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          slotProps={{
+            paper: {
+              sx: {
+                ...menuPaperSx,
+                minWidth: 200,
+                boxShadow: cv.dropdownShadow,
               },
+            },
+          }}
+        >
+          {folderMedia?.isProject && (
+            <MenuItem
+              disableRipple
+              onClick={(e) => {
+                e.stopPropagation();
+                setLinkNewItemsToProject((prev) => !prev);
+              }}
+              sx={{
+                py: 1,
+                fontSize: '0.875rem',
+                color: cv.textSecondary,
+                cursor: 'default',
+                '&:hover': { backgroundColor: 'transparent' },
+                borderBottom: `1px solid ${cv.border}`,
+                mb: 1
+              }}
+            >
+              <FormControlLabel
+                control={
+                  <Checkbox 
+                    checked={linkNewItemsToProject} 
+                    onChange={(e) => setLinkNewItemsToProject(e.target.checked)}
+                    size="small"
+                    sx={{ p: 0.5, ml: 1, color: cv.textMuted, '&.Mui-checked': { color: cv.brandMain } }}
+                  />
+                }
+                label="Link to project"
+                sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: '0.875rem', ml: 1 } }}
+              />
+            </MenuItem>
+          )}
+          <MenuItem
+            disabled={user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+            onClick={() => {
+              if (user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+              closeNewMenu();
+              newUploadInputRef.current?.click();
+            }}
+            sx={{
+              py: 1,
+              fontSize: '0.875rem',
+              color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+              opacity: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+              cursor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
             }}
           >
-            New
-          </Button>
-        </Box>
-      </Box>
+            <ListItemIcon sx={{ minWidth: 32 }}>
+              <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+            </ListItemIcon>
+            Upload files
+          </MenuItem>
+          <MenuItem
+            disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+            onClick={() => {
+              if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+              closeNewMenu();
+              setNewFolderModalOpen(true);
+            }}
+            sx={{
+              py: 1,
+              fontSize: '0.875rem',
+              color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+              opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+              cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 32 }}>
+              <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+            </ListItemIcon>
+            New folder
+          </MenuItem>
+          {!folderMedia?.isProject && (
+            <MenuItem
+              disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+              onClick={() => {
+                if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+                closeNewMenu();
+                setNewProjectModalOpen(true);
+              }}
+              sx={{
+                py: 1,
+                fontSize: '0.875rem',
+                color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
+                opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
+                cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
+                '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 32 }}>
+                <AddIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+              </ListItemIcon>
+              New project
+            </MenuItem>
+          )}
+        </Menu>
 
-      <Menu
-        anchorEl={newMenuAnchor}
-        open={Boolean(newMenuAnchor)}
-        onClose={closeNewMenu}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{
-          paper: {
-            sx: {
-              ...menuPaperSx,
-              minWidth: 200,
-              boxShadow: cv.dropdownShadow,
-            },
-          },
-        }}
-      >
-        <MenuItem
-          disabled={user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
-          onClick={() => {
-            if (user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
-            closeNewMenu();
-            newUploadInputRef.current?.click();
-          }}
-          sx={{
-            py: 1,
-            fontSize: '0.875rem',
-            color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
-            opacity: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-            cursor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
-          }}
-        >
-          <ListItemIcon sx={{ minWidth: 32 }}>
-            <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
-          </ListItemIcon>
-          Upload files
-        </MenuItem>
-        <MenuItem
-          disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
-          onClick={() => {
-            if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
-            closeNewMenu();
-            setNewFolderModalOpen(true);
-          }}
-          sx={{
-            py: 1,
-            fontSize: '0.875rem',
-            color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
-            opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-            cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
-          }}
-        >
-          <ListItemIcon sx={{ minWidth: 32 }}>
-            <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
-          </ListItemIcon>
-          New folder
-        </MenuItem>
-      </Menu>
+        <NewFolderModal
+          open={newFolderModalOpen}
+          onClose={() => setNewFolderModalOpen(false)}
+          onCreate={handleCreateFolder}
+          parentFolderTitle={folderMedia?.title}
+          defaultProjectLocation={folderMedia?.projectLocation}
+          projectFolders={folderMedia?.isProject ? [] : (activeWorkspace?.projectFolders || [])}
+        />
 
-      <NewFolderModal
-        open={newFolderModalOpen}
-        onClose={() => setNewFolderModalOpen(false)}
-        onCreate={handleCreateFolder}
-        parentFolderTitle={folderMedia?.title}
-        defaultProjectLocation={folderMedia?.projectLocation}
-        projectFolders={activeWorkspace.projectFolders}
-      />
+        <NewProjectModal
+          open={newProjectModalOpen}
+          onClose={() => setNewProjectModalOpen(false)}
+          onCreate={handleCreateProject}
+          parentFolderTitle={folderMedia?.title}
+        />
 
-      <Collapse in={filterPanelOpen}>
-        <Box sx={{ mt: 2 }}>
-          <MediaFilterPanel
-            mediaTypeFilter={mediaTypeFilter}
-            dateRangeFilter={dateRangeFilter}
-            selectedTags={selectedTags}
-            selectedAiTags={selectedAiTags}
-            onMediaTypeChange={setMediaTypeFilter}
-            onDateRangeChange={setDateRangeFilter}
-            onToggleTag={toggleTag}
-            onToggleAiTag={toggleAiTag}
-            onClearAll={clearPanelFilters}
-          />
-        </Box>
-      </Collapse>
+        <Collapse in={filterPanelOpen}>
+          <Box sx={{ mt: 2 }}>
+            <MediaFilterPanel
+              mediaTypeFilter={mediaTypeFilter}
+              dateRangeFilter={dateRangeFilter}
+              selectedTags={selectedTags}
+              selectedAiTags={selectedAiTags}
+              onMediaTypeChange={setMediaTypeFilter}
+              onDateRangeChange={setDateRangeFilter}
+              onToggleTag={toggleTag}
+              onToggleAiTag={toggleAiTag}
+              onClearAll={clearPanelFilters}
+            />
+          </Box>
+        </Collapse>
       </Box>
 
       <Menu
@@ -1206,16 +1302,20 @@ export default function DashboardPage({
                 ? 'This folder is empty'
                 : 'No items match your filters'
               : isFavoritesView
-              ? librarySourceItems.length === 0
-                ? 'No favorites yet'
-                : 'No favorites match your filters'
-              : isDuplicatesView
-              ? librarySourceItems.length === 0
-                ? 'No duplicates found'
-                : 'No duplicates match your filters'
-              : librarySourceItems.length === 0
-                ? 'No media in this workspace'
-                : 'No items match your filters'}
+                ? librarySourceItems.length === 0
+                  ? 'No favorites yet'
+                  : 'No favorites match your filters'
+                : isDuplicatesView
+                  ? librarySourceItems.length === 0
+                    ? 'No duplicates found'
+                    : 'No duplicates match your filters'
+                  : isProjectsView
+                    ? librarySourceItems.length === 0
+                      ? 'No projects in this workspace'
+                      : 'No projects match your filters'
+                    : librarySourceItems.length === 0
+                      ? 'No media in this workspace'
+                      : 'No items match your filters'}
           </Typography>
           <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
             {isFolderView
@@ -1223,16 +1323,20 @@ export default function DashboardPage({
                 ? 'Upload files or drag items into this folder to get started.'
                 : 'Try adjusting your filter settings.'
               : isFavoritesView
-              ? librarySourceItems.length === 0
-                ? 'Star files and folders from All media to see them here.'
-                : 'Try adjusting your filter settings.'
-              : isDuplicatesView
-              ? librarySourceItems.length === 0
-                ? 'Upload videos to see if they match existing files in this workspace.'
-                : 'Try adjusting your filter settings.'
-              : librarySourceItems.length === 0
-                ? 'Drag items into folders in the sidebar, or switch workspace to see more.'
-                : 'Try adjusting your filter settings.'}
+                ? librarySourceItems.length === 0
+                  ? 'Star files and folders from All media to see them here.'
+                  : 'Try adjusting your filter settings.'
+                : isDuplicatesView
+                  ? librarySourceItems.length === 0
+                    ? 'Upload videos to see if they match existing files in this workspace.'
+                    : 'Try adjusting your filter settings.'
+                  : isProjectsView
+                    ? librarySourceItems.length === 0
+                      ? 'Create a new project to get started.'
+                      : 'Try adjusting your filter settings.'
+                    : librarySourceItems.length === 0
+                      ? 'Drag items into folders in the sidebar, or switch workspace to see more.'
+                      : 'Try adjusting your filter settings.'}
           </Typography>
         </Box>
       ) : isDuplicatesView ? (
@@ -1292,7 +1396,7 @@ export default function DashboardPage({
                     letterSpacing: '0.06em',
                   }}
                 >
-                  {typeGroupLabels[type]} ({items.length})
+                  {isProjectsView && type === 'folder' ? 'Projects' : typeGroupLabels[type]} ({items.length})
                 </Typography>
                 <Box
                   sx={{

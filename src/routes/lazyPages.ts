@@ -20,6 +20,7 @@ export const LoginPage = lazyPage(() => import('../pages/LoginPage'));
 export const SignUpPage = lazyPage(() => import('../pages/SignUpPage'));
 export const DashboardPage = lazyPage(() => import('../pages/DashboardPage'));
 export const FolderPage = lazyPage(() => import('../pages/FolderPage'));
+export const ProjectPage = lazyPage(() => import('../pages/ProjectPage'));
 export const TagsManagementPage = lazyPage(() => import('../pages/TagsManagementPage'));
 export const UserActivitiesPage = lazyPage(() => import('../pages/UserActivitiesPage'));
 export const TrashPage = lazyPage(() => import('../pages/TrashPage'));

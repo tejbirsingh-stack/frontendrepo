@@ -1,1 +1,1 @@
-export type LibraryView = 'recent' | 'favorites' | 'duplicates';
+export type LibraryView = 'recent' | 'favorites' | 'duplicates' | 'projects';

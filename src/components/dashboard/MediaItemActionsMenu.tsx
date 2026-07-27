@@ -159,7 +159,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             Change color
           </MenuItem>
         ) : null}
-        {isFolder ? (
+        {!item.isProject ? (
           <MenuItem
             disabled={!user?.permissions?.includes('upload_delete_media')}
             onClick={(event) => {
@@ -316,11 +316,13 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
 
       <AssignProjectModal
         open={assignProjectOpen}
-        folderTitle={item.title}
-        projectFolders={activeWorkspace.projectFolders}
-        initialProjectLocation={item.projectLocation}
+        itemTitle={item.title}
+        projectFolders={activeWorkspace.projectFolders.filter(
+          p => !(item.projectLocations?.some(l => l.folderId === p.id)) && !(item.linkedProjectIds || []).includes(p.id)
+        )}
+        initialProjectLocation={null}
         onClose={() => setAssignProjectOpen(false)}
-        onSave={(projectLocation) => updateMediaProjectLocation(item.id, projectLocation)}
+        onSave={(projectLocation) => updateMediaProjectLocation(item.id, projectLocation, item.type)}
       />
 
       <RenameMediaModal

@@ -41,9 +41,14 @@ function DashboardLayoutContent() {
     onProgress?: (progress: { loaded: number; total: number }) => void,
   ) => {
     const parentFolderId = pendingMediaUpload?.parentFolderId ?? null;
+    const linkedProjectId = pendingMediaUpload?.linkedProjectId ?? null;
     await completeMediaUpload(details, onProgress);
     if (pendingMediaUploadCount <= 1) {
-      navigate(parentFolderId ? getMediaFolderPath(parentFolderId) : '/home');
+      if (linkedProjectId) {
+        navigate(`/home/project/${linkedProjectId}`);
+      } else {
+        navigate(parentFolderId ? getMediaFolderPath(parentFolderId) : '/home');
+      }
     }
   };
 

@@ -3,6 +3,7 @@ import { cv } from '../../theme/cssVars';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import StarIcon from '@mui/icons-material/Star';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
@@ -112,12 +113,13 @@ function FavoriteButton({
   );
 }
 
-function TypeBadge({ type }: { type: MediaType }) {
+function TypeBadge({ type, isProject }: { type: MediaType; isProject?: boolean }) {
   const config = typeConfig[type];
   const Icon = config.icon;
+  const label = type === 'folder' && isProject ? 'Project' : config.label;
 
   return (
-    <Tooltip title={config.label} arrow placement="top">
+    <Tooltip title={label} arrow placement="top">
       <Box
         sx={{
           display: 'inline-flex',
@@ -134,7 +136,7 @@ function TypeBadge({ type }: { type: MediaType }) {
           variant="caption"
           sx={{ fontSize: '0.6875rem', fontWeight: 500, color: cv.textInverse }}
         >
-          {config.label}
+          {label}
         </Typography>
       </Box>
     </Tooltip>
@@ -156,7 +158,11 @@ function FolderPreview({ item, childCount }: { item: MediaItem; childCount: numb
         gap: 1,
       }}
     >
-      <FolderOutlinedIcon sx={{ fontSize: 48, color: folderColor }} />
+      {item.isProject ? (
+        <WorkOutlineOutlinedIcon sx={{ fontSize: 48, color: folderColor }} />
+      ) : (
+        <FolderOutlinedIcon sx={{ fontSize: 48, color: folderColor }} />
+      )}
       <Typography variant="caption" sx={{ color: cv.textMuted }}>
         {formatFolderItemCount(childCount)}
       </Typography>
@@ -256,9 +262,9 @@ export default function MediaItemCard({
   const isFolder = item.type === 'folder';
   const folderChildCount = isFolder
     ? getFolderChildCount(item.id, mediaItems, {
-        workspaceId: item.workspaceId,
-        trashedIds,
-      })
+      workspaceId: item.workspaceId,
+      trashedIds,
+    })
     : 0;
   const folderFooterAccent = isFolder ? folderAccentTint(item.folderColor) : config.accent;
   const selectionActive = selectedMediaIds.size > 0;
@@ -401,7 +407,7 @@ export default function MediaItemCard({
             isFavorite={isFavorite}
             onToggle={() => onToggleFavorite(item.id)}
           />
-          <TypeBadge type={item.type} />
+          <TypeBadge type={item.type} isProject={item.isProject} />
         </Box>
 
         <Box

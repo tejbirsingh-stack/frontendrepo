@@ -3,6 +3,7 @@ import { cv } from '../../theme/cssVars';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import StarIcon from '@mui/icons-material/Star';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
@@ -66,13 +67,13 @@ export default function MediaListRow({
 }: MediaListRowProps) {
   const navigate = useNavigate();
   const { mediaItems, trashedIds } = useDashboard();
-  const TypeIcon = typeIcons[item.type];
+  const TypeIcon = item.isProject ? WorkOutlineOutlinedIcon : typeIcons[item.type];
   const isFolder = item.type === 'folder';
   const folderChildCount = isFolder
     ? getFolderChildCount(item.id, mediaItems, {
-        workspaceId: item.workspaceId,
-        trashedIds,
-      })
+      workspaceId: item.workspaceId,
+      trashedIds,
+    })
     : null;
   const selectionActive = selectedMediaIds.size > 0;
 
@@ -251,7 +252,7 @@ export default function MediaListRow({
           {isDropTarget ? ' — Drop to add' : ''}
         </TruncatedText>
         <Typography variant="caption" sx={{ color: cv.textMuted }}>
-          {typeLabels[item.type]}
+          {item.type === 'folder' && item.isProject ? 'Project' : typeLabels[item.type]}
           {item.duration ? ` · ${item.duration}` : ''}
           {isFolder && folderChildCount != null
             ? ` · ${formatFolderItemCount(folderChildCount)}`

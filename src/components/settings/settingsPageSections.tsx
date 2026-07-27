@@ -945,44 +945,110 @@ function ProjectWorkspaceTable({
 
 export function ProjectsAdminSettingsSection() {
   const { workspaces } = useDashboard();
-  const [projects, setProjects] = useState<SettingsProjectRow[]>(MOCK_SETTINGS_PROJECTS);
+  const [projects, setProjects] = useState<SettingsProjectRow[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const response = await apiClient.get<any>('/workspaces/project/find-all', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = Array.isArray(response) ? response : response.data;
+        if (data && Array.isArray(data)) {
+          const formatted = data.map((p: any) => {
+            const today = new Date(p.createdAt || Date.now()).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            });
+            return {
+              id: p.id,
+              project: p.name,
+              workspace: p.workspace?.name || 'Unknown',
+              status: 'Active',
+              lastUpdated: today,
+              creationDate: today,
+              storage: '0 MB', // mock for now
+              projectAdmin: CURRENT_USER.name,
+              visibility: 'public',
+              isRestricted: false,
+              teamMembers: [
+                {
+                  id: `pm-admin-${p.id}`,
+                  name: CURRENT_USER.name,
+                  initials: CURRENT_USER.initials,
+                  access: 'Full Access',
+                  memberType: 'Member',
+                  isCurrentUser: true,
+                }
+              ]
+            } as SettingsProjectRow;
+          });
+          setProjects(formatted);
+        }
+      } catch (err) {
+        console.error("Failed to load projects", err);
+      }
+    };
+    fetchProjects();
+  }, []);
 
   const inviteProject = projects.find((project) => project.id === inviteProjectId);
   const editProject = projects.find((project) => project.id === editProjectId);
 
   const workspaceOptions = useMemo(() => workspaces.map((workspace) => workspace.name), [workspaces]);
 
-  const handleAddProject = (
+  const handleAddProject = async (
     name: string,
     workspace: string,
     inviteEmails: string[],
     inviteGroupIds: string[],
     visibility: ProjectVisibility,
   ) => {
-    setProjects((current) => [
-      ...current,
-      createProject(
+    try {
+      const workspaceObj = workspaces.find((w) => w.name === workspace);
+      if (!workspaceObj) {
+        console.error("Workspace not found:", workspace);
+        return;
+      }
+
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      await apiClient.post(`/workspaces/project/add/${workspaceObj.id}`, {
         name,
-        workspace,
-        CURRENT_USER.name,
-        inviteEmails,
-        visibility,
-        {
-          id: `pm-admin-${Date.now()}`,
-          name: CURRENT_USER.name,
-          initials: CURRENT_USER.initials,
-          email: CURRENT_USER.email,
-          avatarUrl: CURRENT_USER.avatarUrl,
-          access: 'Full Access',
-          memberType: 'Member',
-          isCurrentUser: true,
-        },
-        inviteGroupIds,
-      ),
-    ]);
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setProjects((current) => [
+        ...current,
+        createProject(
+          name,
+          workspace,
+          CURRENT_USER.name,
+          inviteEmails,
+          visibility,
+          {
+            id: `pm-admin-${Date.now()}`,
+            name: CURRENT_USER.name,
+            initials: CURRENT_USER.initials,
+            email: CURRENT_USER.email,
+            avatarUrl: CURRENT_USER.avatarUrl,
+            access: 'Full Access',
+            memberType: 'Member',
+            isCurrentUser: true,
+          },
+          inviteGroupIds,
+        ),
+      ]);
+    } catch (err) {
+      console.error("Failed to add project to backend:", err);
+    }
   };
 
   const handleSaveProject = (name: string, workspace: string, visibility: ProjectVisibility) => {

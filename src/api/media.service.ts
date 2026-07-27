@@ -21,6 +21,8 @@ export interface MediaAssetResponseDto {
   customMetadata?: Record<string, unknown>;
   transcodingStatus?: string | null;
   compressionStatus?: string | null;
+  folderId?: string | null;
+  folderName?: string | null;
 }
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB chunks for Backblaze B2 / AWS S3 multipart upload
@@ -146,7 +148,7 @@ async function uploadSingleChunkWithFallback(
 
 async function uploadResumableChunkedFile(
   file: File,
-  options?: { durationSeconds?: number },
+  options?: { durationSeconds?: number; ownerType?: string; ownerId?: string; linkedProjectId?: string },
   progressCallback?: (progress: UploadMediaProgress) => void,
 ): Promise<MediaAssetResponseDto> {
   const initRes = await apiClient.post<{ sessionId: string; uploadId: string; key: string }>(
@@ -156,6 +158,9 @@ async function uploadResumableChunkedFile(
       fileSize: file.size,
       mimeType: file.type || 'application/octet-stream',
       durationSeconds: options?.durationSeconds || null,
+      ownerType: options?.ownerType,
+      ownerId: options?.ownerId,
+      linkedProjectId: options?.linkedProjectId,
     },
   );
 
@@ -252,6 +257,9 @@ export async function uploadMediaFileRequest(
   file: File,
   options?: {
     durationSeconds?: number;
+    ownerType?: string;
+    ownerId?: string;
+    linkedProjectId?: string;
     onProgress?: (progress: UploadMediaProgress) => void;
   },
   onProgress?: (progress: UploadMediaProgress) => void,
@@ -271,6 +279,9 @@ export async function uploadMediaFileRequest(
   if (options?.durationSeconds !== undefined && options?.durationSeconds !== null) {
     queryParams.set('durationSeconds', options.durationSeconds.toString());
   }
+  if (options?.ownerType) queryParams.set('ownerType', options.ownerType);
+  if (options?.ownerId) queryParams.set('ownerId', options.ownerId);
+  if (options?.linkedProjectId) queryParams.set('linkedProjectId', options.linkedProjectId);
 
   const token = getAccessToken();
   const headers = new Headers();
