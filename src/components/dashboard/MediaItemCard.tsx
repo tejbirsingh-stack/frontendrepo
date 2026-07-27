@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Box, Checkbox, IconButton, Tooltip, Typography } from '@mui/material';
 import { cv } from '../../theme/cssVars';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
@@ -29,6 +30,7 @@ import {
 } from '../../utils/thumbnailOverlayStyles';
 import { formatFolderItemCount, getFolderChildCount } from '../../utils/folderItemCount';
 import { useDashboard } from '../../context/DashboardContext';
+import { decodeClientImageToDataUrl } from '../../utils/clientImageDecoder';
 
 interface MediaItemCardProps {
   item: MediaItem;
@@ -197,12 +199,73 @@ function VideoPreview({ item }: { item: MediaItem }) {
 }
 
 function ImagePreview({ item }: { item: MediaItem }) {
+  const [imageError, setImageError] = useState(false);
+  const [clientDecodedUrl, setClientDecodedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const ext = item.title?.split('.').pop()?.toLowerCase() || '';
+    const nonWebExts = ['exr', 'openexr', 'dpx', 'cin', 'tiff', 'tif', 'psd', 'psb', 'ai', 'eps', 'pcx', 'jpf', 'bmp', 'mpo'];
+
+    if (nonWebExts.includes(ext) && item.videoSrc) {
+      decodeClientImageToDataUrl(item.videoSrc, ext)
+        .then((dataUrl) => {
+          if (active && dataUrl) {
+            setClientDecodedUrl(dataUrl);
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      active = false;
+    };
+  }, [item.title, item.videoSrc]);
+
+  const displaySrc = clientDecodedUrl || item.thumbnail;
+
+  if (imageError && !clientDecodedUrl) {
+    const ext = item.title?.split('.').pop()?.toUpperCase() || 'IMG';
+    return (
+      <Box
+        sx={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(160deg, rgba(30,30,42,1) 0%, rgba(12,12,18,1) 100%)',
+          gap: 1.5,
+          px: 2,
+        }}
+      >
+        <Box
+          sx={{
+            width: 56,
+            height: 56,
+            borderRadius: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+            border: '1px solid rgba(56, 189, 248, 0.25)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#38BDF8', fontSize: '0.85rem' }}>
+            {ext}
+          </Typography>
+        </Box>
+      </Box>
+    );
+  }
+
   return (
     <Box
       component="img"
-      src={item.thumbnail}
+      src={displaySrc}
       alt={item.title}
       loading="lazy"
+      onError={() => setImageError(true)}
       sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
     />
   );
