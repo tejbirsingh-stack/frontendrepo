@@ -22,6 +22,8 @@ export interface MediaAssetResponseDto {
   transcodingStatus?: string | null;
   compressionStatus?: string | null;
   uploadedByUserId?: string;
+  folderId?: string | null;
+  folderName?: string | null;
 }
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB chunks for Backblaze B2 / AWS S3 multipart upload
@@ -157,7 +159,7 @@ export interface UploadMediaMetadataOptions {
 
 async function uploadResumableChunkedFile(
   file: File,
-  options?: UploadMediaMetadataOptions,
+  options?: { durationSeconds?: number; ownerType?: string; ownerId?: string; linkedProjectId?: string },
   progressCallback?: (progress: UploadMediaProgress) => void,
 ): Promise<MediaAssetResponseDto> {
   const initRes = await apiClient.post<{ sessionId: string; uploadId: string; key: string }>(
@@ -172,6 +174,9 @@ async function uploadResumableChunkedFile(
       folderId: options?.folderId || null,
       tagIds: options?.tagIds || [],
       technicalSpecs: options?.technicalSpecs || null,
+      ownerType: options?.ownerType,
+      ownerId: options?.ownerId,
+      linkedProjectId: options?.linkedProjectId,
     },
   );
 
@@ -271,19 +276,134 @@ async function uploadResumableChunkedFile(
  */
 export async function uploadMediaFileRequest(
   file: File,
-  options?: UploadMediaMetadataOptions,
+  options?: {
+    durationSeconds?: number;
+    ownerType?: string;
+    ownerId?: string;
+    linkedProjectId?: string;
+    onProgress?: (progress: UploadMediaProgress) => void;
+  },
   onProgress?: (progress: UploadMediaProgress) => void,
 ): Promise<MediaAssetResponseDto> {
   const progressCallback = onProgress || options?.onProgress;
-  return uploadResumableChunkedFile(file, options, progressCallback);
+
+  // Use chunked resumable B2 upload for video assets or large files (> 5MB)
+  if (file.type.startsWith('video/') || file.size > CHUNK_SIZE) {
+    return uploadResumableChunkedFile(file, options, progressCallback);
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const queryParams = new URLSearchParams();
+  queryParams.set('fileSize', file.size.toString());
+  if (options?.durationSeconds !== undefined && options?.durationSeconds !== null) {
+    queryParams.set('durationSeconds', options.durationSeconds.toString());
+  }
+  if (options?.ownerType) queryParams.set('ownerType', options.ownerType);
+  if (options?.ownerId) queryParams.set('ownerId', options.ownerId);
+  if (options?.linkedProjectId) queryParams.set('linkedProjectId', options.linkedProjectId);
+
+  const token = getAccessToken();
+  const headers = new Headers();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const base = (env.apiBaseUrl || '/api').replace(/\/$/, '');
+  const url = `${base}/media/upload?${queryParams.toString()}`;
+
+  return new Promise<MediaAssetResponseDto>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.withCredentials = true;
+
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    // Real-time upload progress from browser
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && progressCallback) {
+        progressCallback({ loaded: event.loaded, total: event.total });
+      }
+    };
+
+    let completedAsset: MediaAssetResponseDto | null = null;
+    let errorMessage: string | null = null;
+
+    const processResponseText = () => {
+      if (!xhr.responseText) return;
+      const normalized = xhr.responseText.replace(/}\s*{/g, '}\n{');
+      const lines = normalized.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const data = JSON.parse(trimmed);
+          if (data.type === 'progress' && progressCallback) {
+            progressCallback({ loaded: data.loaded, total: data.total });
+          } else if (data.type === 'complete' && data.asset) {
+            completedAsset = data.asset;
+          } else if (data.type === 'error') {
+            errorMessage = data.message || data.error || 'Upload failed on server';
+          }
+        } catch {
+          // Ignore incomplete lines during streaming until the chunk completes
+        }
+      }
+    };
+
+    xhr.onprogress = () => {
+      processResponseText();
+    };
+
+    xhr.onload = () => {
+      if (xhr.status === 401) {
+        handleUnauthorized();
+        reject(new Error('Unauthorized'));
+        return;
+      }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`Upload failed with status ${xhr.status}`));
+        return;
+      }
+
+      processResponseText();
+
+      if (errorMessage) {
+        reject(new Error(errorMessage));
+      } else if (completedAsset) {
+        if (progressCallback) progressCallback({ loaded: file.size, total: file.size });
+        resolve(completedAsset);
+      } else {
+        if (progressCallback) progressCallback({ loaded: file.size, total: file.size });
+        // Fallback asset if backend didn't return NDJSON complete object
+        resolve({
+          id: `media-${Date.now()}`,
+          name: file.name,
+          type: file.type.split('/')[0] || 'document',
+          size: file.size,
+          uploadDate: new Date().toISOString(),
+          url: '',
+        });
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during upload'));
+    };
+
+    xhr.send(formData);
+  });
 }
 
 /**
  * Fetch all media assets stored in backend database.
  */
-export async function getMediaAssetsRequest(): Promise<MediaAssetResponseDto[]> {
+export async function getMediaAssetsRequest(workspaceId: string): Promise<MediaAssetResponseDto[]> {
   const res = await apiClient.get<{ success: boolean; assets: MediaAssetResponseDto[] }>(
-    '/media/getmediaassets?limit=500',
+    `/media/getmediaassets?ownerId=${workspaceId}&ownerType=WORKSPACE`,
   );
   return res.assets || [];
 }

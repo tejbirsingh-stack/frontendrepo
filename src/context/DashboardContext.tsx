@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { loadFavoriteMediaIds, saveFavoriteMediaIds } from '../utils/favoritesStorage';
 import { loadTrashedMedia, saveTrashedMedia, type TrashedMediaRecord } from '../utils/trashStorage';
 import { getExpiredTrashIds, isTrashExpired } from '../utils/trashRetention';
@@ -49,11 +50,13 @@ import {
   getMediaAssetsRequest,
   type MediaAssetResponseDto,
 } from '../api';
+const token = (await import('../auth/authTokenBridge')).getAccessToken();
 
 interface DashboardContextValue {
   workspaces: Workspace[];
   activeWorkspaceId: string;
   activeWorkspace: Workspace;
+  systemTimezone: string;
   setActiveWorkspaceId: (id: string) => void;
   updateWorkspaceColor: (workspaceId: string, color: string) => void;
   createWorkspace: (data: CreateWorkspaceFormData) => void;
@@ -86,8 +89,8 @@ interface DashboardContextValue {
   deleteManagedTag: (id: string) => void;
   getTagUsageCount: (tagName: string) => number;
   getAssignableTags: (workspaceId: string) => ManagedTag[];
-  addWorkspaceFolder: (name: string, color?: string) => string;
-  renameWorkspaceFolder: (folderId: string, newLabel: string) => void;
+  addWorkspaceFolder: (name: string, color?: string) => Promise<string>;
+  renameWorkspaceFolder: (folderId: string, newLabel: string) => Promise<void>;
   deleteWorkspaceFolder: (folderId: string) => void;
   renameWorkspaceFolderChild: (folderId: string, oldLabel: string, newLabel: string) => void;
   deleteWorkspaceFolderChild: (folderId: string, childLabel: string) => void;
@@ -118,8 +121,12 @@ interface DashboardContextValue {
     color?: string,
     parentFolderId?: string | null,
     projectLocation?: MediaLocation | null,
-  ) => void;
-  updateMediaProjectLocation: (mediaId: string, projectLocation: MediaLocation | null) => void;
+  ) => Promise<void>;
+  createProject: (
+    name: string,
+    parentFolderId?: string | null,
+  ) => Promise<void>;
+  updateMediaProjectLocation: (mediaId: string, projectLocation: MediaLocation | null, itemType?: string) => void;
   trashedIds: Set<string>;
   draggingMediaId: string | null;
   draggingMediaIds: Set<string>;
@@ -132,6 +139,9 @@ interface DashboardContextValue {
   sidebarSelection: SidebarSelection | null;
   setSidebarSelection: (selection: SidebarSelection) => void;
   clearSidebarSelection: () => void;
+  fetchWorkspaceData: () => Promise<void>;
+  fetchFolderData: (folderId: string) => Promise<void>;
+  fetchProjectData: (projectId: string) => Promise<void>;
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -151,8 +161,10 @@ function getInitialTrashState(): { trashedAtById: TrashedMediaRecord; expiredIds
 const initialTrashState = getInitialTrashState();
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const [workspaces, setWorkspaces] = useState<Workspace[]>(initialWorkspaces);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaces[0].id);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaces[0]?.id || '');
+  const [systemTimezone, setSystemTimezone] = useState<string>('Europe/London');
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(() =>
     initialMediaItems.filter((item) => !initialTrashState.expiredIds.includes(item.id)),
   );
@@ -168,87 +180,327 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const trashedIds = useMemo(() => new Set(Object.keys(trashedAtById)), [trashedAtById]);
 
   useEffect(() => {
-    setWorkspaces((current) => mergeWorkspaceFolderMetadata(current));
+    async function fetchTimezone() {
+      try {
+        const { apiClient } = await import('../api/client');
+        const res = await apiClient.get<any>('/workspaces/timezone', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = res.data || res;
+        if (data && data.timezone) {
+          setSystemTimezone(data.timezone);
+        }
+      } catch (err) {
+        console.error('Failed to fetch timezone:', err);
+      }
+    }
+    fetchTimezone();
+  }, []);
+
+  const fetchWorkspaceData = useCallback(async () => {
+    try {
+      const { apiClient } = await import('../api/client');
+      const response = await apiClient.get<any>(`/workspaces/find-all-data/${activeWorkspaceId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      const resBody = (response as any).data || response;
+      const actualData = resBody.data || resBody;
+      if (actualData && (Array.isArray(actualData.folders) || Array.isArray(actualData.projects) || Array.isArray(actualData.media))) {
+        const { folders, projects, allProjects, media } = actualData;
+
+        const sidebarFolders: SidebarFolder[] = (folders || []).map((f: any) => ({
+          id: f.id,
+          label: f.name,
+          color: f.color || undefined,
+          children: []
+        }));
+
+        const sidebarProjects: SidebarFolder[] = (allProjects || projects || []).map((p: any) => ({
+          id: p.id,
+          label: p.name,
+        }));
+
+        setWorkspaces((prev) =>
+          prev.map(w => w.id === activeWorkspaceId ? {
+            ...w,
+            folders: sidebarFolders,
+            projectFolders: sidebarProjects
+          } : w)
+        );
+
+        const folderMediaItems: MediaItem[] = (folders || []).map((f: any) => ({
+          id: f.id,
+          title: f.name,
+          type: 'folder',
+          workspaceId: activeWorkspaceId,
+          createdAt: f.createdAt || new Date().toISOString(),
+          sizeBytes: 0,
+          storageProvider: 'b2',
+          uploadedBy: CURRENT_USER.name,
+          status: 'active',
+          folderColor: f.color,
+          linkedProjectIds: f.sources?.map((s: any) => s.projectId) || [],
+          projectLocations: f.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
+        }));
+
+        const projectMediaItems: MediaItem[] = (allProjects || projects || []).map((p: any) => ({
+          id: p.id,
+          title: p.name,
+          type: 'folder',
+          workspaceId: activeWorkspaceId,
+          createdAt: p.createdAt || new Date().toISOString(),
+          sizeBytes: 0,
+          storageProvider: 'b2',
+          uploadedBy: CURRENT_USER.name,
+          status: 'active',
+          isProject: true,
+          parentFolderId: p.ownerType === 'FOLDER' ? p.folderId : undefined,
+        }));
+
+        const assetMediaItems: MediaItem[] = (media || []).map((a: any) => {
+          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.title || '');
+          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.title || '');
+          const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.title || '');
+          const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
+
+          return {
+            id: a.id,
+            title: a.title || 'Untitled',
+            type,
+            workspaceId: activeWorkspaceId,
+            createdAt: a.createdAt || a.uploadDate || new Date().toISOString(),
+            sizeBytes: Number(a.files?.[0]?.sizeBytes || a.size || 0),
+            storageProvider: 'b2',
+            uploadedBy: CURRENT_USER.name,
+            thumbnail: a.thumbnail || undefined,
+            videoSrc: isVideo ? a.files?.[0]?.fileUrl : undefined,
+            duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
+            tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
+            location: null,
+            linkedProjectIds: a.sources?.map((s: any) => s.projectId) || [],
+            projectLocations: a.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
+            compressionStatus: a.transcodingStatus || 'completed',
+            customMetadata: a.customMetadata,
+            status: a.status === 'duplicate' ? 'duplicate' : 'active',
+          };
+        });
+
+        setMediaItems((prev) => {
+          const otherWorkspaces = prev.filter(m => m.workspaceId !== activeWorkspaceId);
+          return [...otherWorkspaces, ...folderMediaItems, ...projectMediaItems, ...assetMediaItems];
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load workspace data:', err);
+    }
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    const fetchWorkspaces = async () => {
+      try {
+        const { apiClient } = await import('../api/client');
+        const response = await apiClient.get<Workspace[]>('/workspaces/find-all', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = Array.isArray(response) ? response : (response as any).data;
+
+        if (data && Array.isArray(data) && data.length > 0) {
+          const sanitizedWorkspaces = data.map((w: any) => ({
+            ...w,
+            folders: w.folders || [],
+            projectFolders: w.projectFolders || [],
+          }));
+          setWorkspaces(mergeWorkspaceFolderMetadata(sanitizedWorkspaces));
+          setActiveWorkspaceId(sanitizedWorkspaces[0].id);
+        } else {
+          setWorkspaces(mergeWorkspaceFolderMetadata(initialWorkspaces));
+        }
+      } catch (err) {
+        console.error('Failed to load workspaces from backend:', err);
+        setWorkspaces(mergeWorkspaceFolderMetadata(initialWorkspaces));
+      }
+    };
+
+    fetchWorkspaces();
   }, []);
 
   useEffect(() => {
-    const fetchAssets = async () => {
-      try {
-        const [activeAssets, trashRes] = await Promise.all([
-          getMediaAssetsRequest(),
-          apiClient.get<{ success: boolean; assets: any[] }>('/media/trash').catch(() => null)
-        ]);
+    fetchWorkspaceData();
+  }, [activeWorkspaceId, fetchWorkspaceData]);
 
-        const trashAssets = trashRes?.assets || [];
+  const fetchFolderData = useCallback(async (folderId: string) => {
+    try {
+      const { apiClient } = await import('../api/client');
+      const token = localStorage.getItem('token');
+      const response = await apiClient.get<any>(`/workspaces/folder/find-all-data/${folderId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
 
-        // Populate trashedAtById from real backend data
-        if (trashAssets.length > 0) {
-          setTrashedAtById((prev) => {
-            const next = { ...prev };
-            let changed = false;
-            trashAssets.forEach((ta: any) => {
-              if (ta.deletedAt && next[ta.id] !== ta.deletedAt) {
-                next[ta.id] = ta.deletedAt;
-                changed = true;
-              }
-            });
-            if (changed) saveTrashedMedia(next);
-            return changed ? next : prev;
-          });
-        }
+      const resBody = (response as any).data || response;
+      const actualData = resBody.data || resBody;
+      if (actualData && (Array.isArray(actualData.folders) || Array.isArray(actualData.projects) || Array.isArray(actualData.media) || actualData.folderInfo)) {
+        const { folders, projects, media, folderInfo } = actualData;
 
-        const allRawAssets = [...(activeAssets || []), ...trashAssets];
+        const currentFolderItem: MediaItem | null = folderInfo ? {
+          id: folderInfo.id,
+          title: folderInfo.name,
+          type: 'folder',
+          workspaceId: activeWorkspaceId!,
+          parentFolderId: folderInfo.parentId || undefined,
+          createdAt: folderInfo.createdAt || new Date().toISOString(),
+          sizeBytes: 0,
+          storageProvider: 'b2',
+          uploadedBy: CURRENT_USER.name,
+          status: 'active',
+          folderColor: folderInfo.color,
+          linkedProjectIds: folderInfo.sources?.map((s: any) => s.projectId) || [],
+          projectLocations: folderInfo.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
+        } : null;
 
-        if (allRawAssets.length > 0) {
-          setMediaItems((prev) => {
-            const backendMap = new Map<string, MediaItem>();
+        const folderMediaItems: MediaItem[] = (folders || []).map((f: any) => ({
+          id: f.id,
+          title: f.name,
+          type: 'folder',
+          workspaceId: activeWorkspaceId!,
+          parentFolderId: folderId,
+          createdAt: f.createdAt || new Date().toISOString(),
+          sizeBytes: 0,
+          storageProvider: 'b2',
+          uploadedBy: CURRENT_USER.name,
+          status: 'active',
+          folderColor: f.color,
+          linkedProjectIds: f.sources?.map((s: any) => s.projectId) || [],
+          projectLocations: f.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
+        }));
 
-            // Map all backend assets first
-            allRawAssets.forEach((a: any) => {
-              const inferredType = getMediaTypeFromFile({ name: a.name, type: '' } as File);
-              const type: MediaType =
-                a.type === 'image' || a.type === 'video' || a.type === 'audio' || a.type === 'document'
-                  ? a.type
-                  : (inferredType || 'image');
+        const projectMediaItems: MediaItem[] = (projects || []).map((p: any) => ({
+          id: p.id,
+          title: p.name,
+          type: 'folder',
+          workspaceId: activeWorkspaceId!,
+          parentFolderId: folderId,
+          createdAt: p.createdAt || new Date().toISOString(),
+          sizeBytes: 0,
+          storageProvider: 'b2',
+          uploadedBy: CURRENT_USER.name,
+          status: 'active',
+          isProject: true,
+        }));
 
-              // Tags: prefer top-level a.tags, then metadata.tags
-              const resolvedTags: string[] = Array.isArray(a.tags) && a.tags.length > 0
-                ? a.tags
-                : (Array.isArray(a.metadata?.tags) ? a.metadata.tags : []);
+        const assetMediaItems: MediaItem[] = (media || []).map((a: any) => {
+          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.title || '');
+          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.title || '');
+          const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.title || '');
+          const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
 
-              backendMap.set(a.id, {
-                id: a.id,
-                title: a.name,
-                type,
-                workspaceId: activeWorkspaceId,
-                createdAt: a.uploadDate || new Date().toISOString(),
-                sizeBytes: a.size || 0,
-                storageProvider: 'b2',
-                uploadedBy: a.uploadedBy?.name || (typeof a.uploadedBy === 'string' ? a.uploadedBy : CURRENT_USER.name),
-                thumbnail: a.thumbnail || undefined,
-                videoSrc: (type === 'video' || type === 'audio' || type === 'document' || type === 'image') ? a.url : undefined,
-                duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration
-                  : typeof a.metadata?.technicalSpecs?.duration === 'string' ? a.metadata.technicalSpecs.duration
-                  : undefined,
-                tags: resolvedTags,
-                location: null,
-                compressionStatus: a.transcodingStatus || a.compressionStatus || 'completed',
-                customMetadata: a.customMetadata,
-                status: a.status === 'duplicate' ? 'duplicate' : 'active',
-              } as MediaItem);
-            });
+          return {
+            id: a.id,
+            title: a.title || 'Untitled',
+            type,
+            workspaceId: activeWorkspaceId!,
+            parentFolderId: folderId,
+            createdAt: a.createdAt || a.uploadDate || new Date().toISOString(),
+            sizeBytes: Number(a.files?.[0]?.sizeBytes || a.size || 0),
+            storageProvider: 'b2',
+            uploadedBy: CURRENT_USER.name,
+            thumbnail: a.thumbnail || undefined,
+            videoSrc: isVideo ? a.files?.[0]?.fileUrl : undefined,
+            duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
+            tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
+            location: null,
+            linkedProjectIds: a.sources?.map((s: any) => s.projectId) || [],
+            projectLocations: a.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
+            compressionStatus: a.transcodingStatus || 'completed',
+            customMetadata: a.customMetadata,
+            status: a.status === 'duplicate' ? 'duplicate' : 'active',
+          };
+        });
 
-            // Merge: backend assets replace existing, keep local-only items
-            const prevMap = new Map(prev.map((item) => [item.id, item]));
-            backendMap.forEach((item, id) => prevMap.set(id, item));
-            return Array.from(prevMap.values());
-          });
-        }
-      } catch (err) {
-        console.error('Failed to load media assets from backend:', err);
+        setMediaItems((prev) => {
+          const newIds = new Set([
+            ...folderMediaItems.map(i => i.id),
+            ...projectMediaItems.map(i => i.id),
+            ...assetMediaItems.map(i => i.id),
+            ...(currentFolderItem ? [currentFolderItem.id] : [])
+          ]);
+          const withoutCurrentFolder = prev.filter(m => m.parentFolderId !== folderId && !newIds.has(m.id));
+          return [...withoutCurrentFolder, ...folderMediaItems, ...projectMediaItems, ...assetMediaItems, ...(currentFolderItem ? [currentFolderItem] : [])];
+        });
       }
-    };
-    fetchAssets();
+    } catch (err) {
+      console.error('Failed to load folder data:', err);
+    }
+  }, [activeWorkspaceId]);
+
+  const fetchProjectData = useCallback(async (projectId: string) => {
+    try {
+      const { apiClient } = await import('../api/client');
+      const token = localStorage.getItem('token');
+      const response = await apiClient.get<any>(`/workspaces/project/find-all-data/${projectId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      const resBody = (response as any).data || response;
+      const actualData = resBody.data || resBody;
+      if (actualData && (Array.isArray(actualData.folders) || Array.isArray(actualData.media))) {
+        const { folders, media } = actualData;
+
+        const folderMediaItems: MediaItem[] = (folders || []).map((f: any) => ({
+          id: f.id,
+          title: f.name,
+          type: 'folder',
+          workspaceId: activeWorkspaceId!,
+          parentFolderId: f.parentId || null,
+          linkedProjectIds: [projectId],
+          createdAt: f.createdAt || new Date().toISOString(),
+          sizeBytes: 0,
+          storageProvider: 'b2',
+          uploadedBy: CURRENT_USER.name,
+          status: 'active',
+          folderColor: f.color,
+        }));
+
+        const assetMediaItems: MediaItem[] = (media || []).map((a: any) => {
+          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.title || '');
+          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.title || '');
+          const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.title || '');
+          const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
+
+          return {
+            id: a.id,
+            title: a.title || 'Untitled',
+            type,
+            workspaceId: activeWorkspaceId!,
+            parentFolderId: a.folderId || null,
+            linkedProjectIds: [projectId],
+            createdAt: a.createdAt || a.uploadDate || new Date().toISOString(),
+            sizeBytes: Number(a.files?.[0]?.sizeBytes || a.size || 0),
+            storageProvider: 'b2',
+            uploadedBy: CURRENT_USER.name,
+            thumbnail: a.thumbnail || undefined,
+            videoSrc: isVideo ? a.files?.[0]?.fileUrl : undefined,
+            duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
+            tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
+            location: null,
+            compressionStatus: a.transcodingStatus || 'completed',
+            customMetadata: a.customMetadata,
+            status: a.status === 'duplicate' ? 'duplicate' : 'active',
+          };
+        });
+
+        setMediaItems((prev) => {
+          const newIds = new Set([
+            ...folderMediaItems.map(i => i.id),
+            ...assetMediaItems.map(i => i.id)
+          ]);
+          const withoutCurrentProject = prev.filter(m => !(m.linkedProjectIds || []).includes(projectId) && !newIds.has(m.id));
+          return [...withoutCurrentProject, ...folderMediaItems, ...assetMediaItems];
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load project data:', err);
+    }
   }, [activeWorkspaceId]);
 
   useEffect(() => {
@@ -303,8 +555,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setSidebarSelectionState(null);
   }, []);
 
+  const fallbackWorkspace: Workspace = useMemo(() => ({
+    id: 'loading',
+    name: 'Loading...',
+    description: '',
+    color: '#000000',
+    folders: [],
+    projectFolders: [],
+  }), []);
+
   const activeWorkspace =
-    workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces[0];
+    workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces[0] ?? fallbackWorkspace;
 
   const rootMediaItems = useMemo(
     () =>
@@ -421,23 +682,32 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const createWorkspace = useCallback((data: CreateWorkspaceFormData) => {
-    const newWorkspace: Workspace = {
-      id: `workspace-${Date.now()}`,
-      name: data.name,
-      description: data.description,
-      color: data.color,
-      folders: defaultWorkspaceFolders.map((folder) => ({
-        ...folder,
-        id: `${folder.id}-${Date.now()}`,
-      })),
-      projectFolders: defaultWorkspaceProjectFolders.map((folder) => ({
-        ...folder,
-        id: `${folder.id}-${Date.now()}`,
-      })),
-    };
-    setWorkspaces((prev) => [...prev, newWorkspace]);
-    setActiveWorkspaceId(newWorkspace.id);
+  const createWorkspace = useCallback(async (data: CreateWorkspaceFormData) => {
+    try {
+      const { apiClient } = await import('../api/client');
+
+      const payload = {
+        name: data.name,
+        description: data.description,
+        color: data.color,
+      };
+
+      const response = await apiClient.post<Workspace>('/workspaces/add', payload, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const newWorkspace = (response as any).data || response;
+
+      const sanitizedWorkspace: Workspace = {
+        ...newWorkspace,
+        folders: newWorkspace.folders || defaultWorkspaceFolders.map((f) => ({ ...f, id: `${f.id}-${Date.now()}` })),
+        projectFolders: newWorkspace.projectFolders || defaultWorkspaceProjectFolders.map((f) => ({ ...f, id: `${f.id}-${Date.now()}` })),
+      };
+
+      setWorkspaces((prev) => [...prev, sanitizedWorkspace]);
+      setActiveWorkspaceId(sanitizedWorkspace.id);
+    } catch (error) {
+      console.error('Failed to create workspace:', error);
+    }
   }, []);
 
   const moveMediaToFolder = useCallback(
@@ -923,54 +1193,100 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   );
 
   const addWorkspaceFolder = useCallback(
-    (name: string, color: string = DEFAULT_FOLDER_COLOR) => {
+    async (name: string, color: string = DEFAULT_FOLDER_COLOR) => {
       const trimmed = name.trim();
       if (!trimmed) return '';
 
-      const folderId = `folder-${Date.now()}`;
+      try {
+        const { apiClient } = await import('../api/client');
+        const response = await apiClient.post<any>(`/workspaces/folder/add/${activeWorkspaceId}`, {
+          name: trimmed,
+          color,
+        }, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
 
-      setWorkspaces((prev) =>
-        prev.map((workspace) => {
-          if (workspace.id !== activeWorkspaceId) return workspace;
+        const resData = (response as any).data || response;
+        const folderId = resData?.id || `folder-${Date.now()}`;
 
-          return {
-            ...workspace,
-            folders: [
-              ...workspace.folders,
-              {
-                id: folderId,
-                label: trimmed,
-                children: [],
-                color,
-                createdByEmail: CURRENT_USER.email,
-              },
-            ],
-          };
-        }),
-      );
+        setWorkspaces((prev) =>
+          prev.map((workspace) => {
+            if (workspace.id !== activeWorkspaceId) return workspace;
 
-      return folderId;
+            return {
+              ...workspace,
+              folders: [
+                ...workspace.folders,
+                {
+                  id: folderId,
+                  label: resData?.name || trimmed,
+                  children: [],
+                  color: resData?.color || color,
+                  createdByEmail: CURRENT_USER.email,
+                },
+              ],
+            };
+          }),
+        );
+
+        const newFolderItem: MediaItem = {
+          id: folderId,
+          title: resData?.name || trimmed,
+          type: 'folder',
+          workspaceId: activeWorkspaceId,
+          createdAt: new Date().toISOString(),
+          sizeBytes: 0,
+          storageProvider: 'b2',
+          uploadedBy: CURRENT_USER.name,
+          status: 'active',
+          folderColor: resData?.color || color,
+        };
+
+        setMediaItems((prev) => [...prev, newFolderItem]);
+
+        return folderId;
+      } catch (err) {
+        console.error('Failed to create workspace folder:', err);
+        return '';
+      }
     },
     [activeWorkspaceId],
   );
 
   const renameWorkspaceFolder = useCallback(
-    (folderId: string, newLabel: string) => {
+    async (folderId: string, newLabel: string) => {
       const trimmed = newLabel.trim();
       if (!trimmed) return;
 
-      setWorkspaces((prev) =>
-        prev.map((workspace) => {
-          if (workspace.id !== activeWorkspaceId) return workspace;
+      try {
+        const { apiClient } = await import('../api/client');
+        await apiClient.put(`/workspaces/folder/update/${folderId}`, {
+          name: trimmed,
+        }, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
 
-          return {
-            ...workspace,
-            folders: workspace.folders.map((folder) =>
-              folder.id === folderId ? { ...folder, label: trimmed } : folder,
-            ),
-          };
-        }),
-      );
+        setWorkspaces((prev) =>
+          prev.map((workspace) => {
+            if (workspace.id !== activeWorkspaceId) return workspace;
+
+            return {
+              ...workspace,
+              folders: workspace.folders.map((folder) =>
+                folder.id === folderId ? { ...folder, label: trimmed } : folder,
+              ),
+            };
+          }),
+        );
+
+        setMediaItems((prev) =>
+          prev.map((item) =>
+            item.id === folderId ? { ...item, title: trimmed } : item
+          )
+        );
+      } catch (err) {
+        console.error('Failed to rename folder:', err);
+      }
     },
     [activeWorkspaceId],
   );
@@ -1135,6 +1451,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       if (uploadable.length === 0) return 0;
 
       const parentFolderId = options?.parentFolderId ?? null;
+      const linkedProjectId = options?.linkedProjectId ?? null;
       const stagedUploads: PendingMediaUpload[] = uploadable.flatMap((file, index) => {
         const type = getMediaTypeFromFile(file);
         if (!type || type === 'folder') return [];
@@ -1147,6 +1464,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             previewSrc: URL.createObjectURL(file),
             defaultTitle: file.name.replace(/\.[^/.]+$/, '') || file.name,
             parentFolderId,
+            linkedProjectId,
           },
         ];
       });
@@ -1165,122 +1483,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const cancelVideoUpload = cancelMediaUpload;
-
-  async function extractFullBrowserVideoSpecs(file: File): Promise<Record<string, any>> {
-    const rawExif = await extractExifFromFile(file);
-
-    return new Promise((resolve) => {
-      if (!file.type.startsWith('video/')) {
-        resolve({});
-        return;
-      }
-      const video = document.createElement('video');
-      video.preload = 'metadata';
-      const objectUrl = URL.createObjectURL(file);
-      video.src = objectUrl;
-
-      video.onloadedmetadata = () => {
-        URL.revokeObjectURL(objectUrl);
-        const width = video.videoWidth || 1920;
-        const height = video.videoHeight || 1080;
-        const duration = video.duration || 0;
-        const megapixels = ((width * height) / 1000000).toFixed(2) + ' MP';
-
-        const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
-        const divisor = gcd(width, height) || 1;
-        const ratioWidth = width / divisor;
-        const ratioHeight = height / divisor;
-        const ratioCalc = (width / height).toFixed(2);
-        const aspectRatio = `${ratioWidth}:${ratioHeight} (${ratioCalc}:1)`;
-
-        const containerExt = file.name.split('.').pop()?.toUpperCase() || 'MP4';
-        const bitrateMbps = duration > 0 ? ((file.size * 8) / (duration * 1000000)).toFixed(2) + ' Mbps' : undefined;
-
-        const durationMin = Math.floor(duration / 60);
-        const durationSec = String(Math.floor(duration % 60)).padStart(2, '0');
-
-        const finalRes = rawExif?.resolution || `${width} × ${height} px`;
-        const finalOrient = rawExif?.orientation || (width >= height ? 'Landscape' : 'Portrait');
-
-        const exif: TechnicalExifDetails = {
-          make: rawExif?.make,
-          model: rawExif?.model,
-          lens: rawExif?.lens,
-          exposureTime: rawExif?.exposureTime,
-          fNumber: rawExif?.fNumber,
-          iso: rawExif?.iso,
-          focalLength: rawExif?.focalLength,
-          resolution: finalRes,
-          orientation: finalOrient,
-          dateTimeOriginal: rawExif?.dateTimeOriginal || new Date(file.lastModified).toISOString(),
-        };
-
-        resolve({
-          durationSeconds: Math.round(duration),
-          duration: `${durationMin}:${durationSec}`,
-          resolution: finalRes,
-          displaySize: `${width} × ${height} px`,
-          aspectRatio,
-          orientation: finalOrient,
-          megapixels,
-          fps: 24,
-          scanType: 'Progressive',
-          container: containerExt,
-          videoCodec: 'H.264 / AAC',
-          ...(bitrateMbps ? { bitrate: bitrateMbps } : {}),
-          audio: true,
-          fileSize: file.size,
-          sizeBytes: file.size,
-          storage: 'B2 Cloud',
-          originallyCreated: new Date(file.lastModified).toISOString(),
-          exif,
-          ...(rawExif?.make ? { make: rawExif.make } : {}),
-          ...(rawExif?.model ? { model: rawExif.model } : {}),
-          ...(rawExif?.lens ? { lens: rawExif.lens } : {}),
-          ...(rawExif?.exposureTime ? { exposureTime: rawExif.exposureTime } : {}),
-          ...(rawExif?.fNumber ? { fNumber: rawExif.fNumber } : {}),
-          ...(rawExif?.iso ? { iso: rawExif.iso } : {}),
-          ...(rawExif?.focalLength ? { focalLength: rawExif.focalLength } : {}),
-        });
-      };
-
-      video.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        const containerExt = file.name.split('.').pop()?.toUpperCase() || 'MP4';
-        const exif: TechnicalExifDetails = {
-          make: rawExif?.make,
-          model: rawExif?.model,
-          lens: rawExif?.lens,
-          exposureTime: rawExif?.exposureTime,
-          fNumber: rawExif?.fNumber,
-          iso: rawExif?.iso,
-          focalLength: rawExif?.focalLength,
-          resolution: rawExif?.resolution,
-          orientation: rawExif?.orientation,
-          dateTimeOriginal: rawExif?.dateTimeOriginal || new Date(file.lastModified).toISOString(),
-        };
-
-        resolve({
-          container: containerExt,
-          fileSize: file.size,
-          sizeBytes: file.size,
-          originallyCreated: new Date(file.lastModified).toISOString(),
-          exif,
-          ...(rawExif?.resolution ? { resolution: rawExif.resolution } : {}),
-          ...(rawExif?.orientation ? { orientation: rawExif.orientation } : {}),
-          ...(rawExif?.make ? { make: rawExif.make } : {}),
-          ...(rawExif?.model ? { model: rawExif.model } : {}),
-          ...(rawExif?.lens ? { lens: rawExif.lens } : {}),
-          ...(rawExif?.exposureTime ? { exposureTime: rawExif.exposureTime } : {}),
-          ...(rawExif?.fNumber ? { fNumber: rawExif.fNumber } : {}),
-          ...(rawExif?.iso ? { iso: rawExif.iso } : {}),
-          ...(rawExif?.focalLength ? { focalLength: rawExif.focalLength } : {}),
-        });
-      };
-    });
-  }
-
   const completeMediaUpload = useCallback(
     async (
       details: MediaUploadDetails,
@@ -1296,6 +1498,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       if (current.type !== 'audio' && current.type !== 'document' && !details.thumbnail) return;
 
       const parentFolderId = current.parentFolderId ?? null;
+      const linkedProjectId = current.linkedProjectId ?? null;
+
+      let ownerType = 'WORKSPACE';
+      let ownerId = activeWorkspaceId!;
+
+      if (parentFolderId) {
+        ownerType = 'FOLDER';
+        ownerId = parentFolderId;
+      }
 
       let uploadedAssetDto: MediaAssetResponseDto | null = null;
       try {
@@ -1326,18 +1537,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
         uploadedAssetDto = await uploadMediaFileRequest(
           current.file,
-          {
-            durationSeconds: durationSecs || fullTechSpecs.durationSeconds,
-            title: trimmedTitle,
-            summary: trimmedSummary,
-            folderId: details.folderId || undefined,
-            tagIds: details.tags,
-            technicalSpecs: {
-              ...fullTechSpecs,
-              ...(durationSecs ? { durationSeconds: durationSecs, duration: details.duration } : {}),
-              originallyCreated: new Date(current.file.lastModified).toISOString(),
-            },
-          },
+          { durationSeconds: durationSecs, ownerType, ownerId, linkedProjectId: linkedProjectId || undefined },
           onProgress,
         );
       } catch (error) {
@@ -1359,6 +1559,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         originallyCreatedAt: new Date(current.file.lastModified).toISOString(),
         tags: details.tags,
         ...(parentFolderId ? { parentFolderId } : {}),
+        linkedProjectIds: linkedProjectId ? [linkedProjectId] : [],
         location: details.folderId
           ? { folderId: details.folderId, childLabel: trimmedTitle }
           : null,
@@ -1369,62 +1570,50 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             duration: details.duration,
           }
           : {}),
-        ...(current.type === 'image'
-          ? {
-              thumbnail: uploadedAssetDto?.thumbnail || `/api/media/${encodeURIComponent(itemId)}/thumbnail`,
-              videoSrc: uploadedAssetDto?.url || `/api/media/${encodeURIComponent(itemId)}/stream`,
-            }
-          : {}),
-        ...(current.type === 'audio'
-          ? {
-              videoSrc: uploadedAssetDto?.url || current.previewSrc,
-              ...(details.duration ? { duration: details.duration } : {}),
-            }
-          : {}),
-        ...(current.type === 'document'
-          ? {
-              thumbnail: details.thumbnail || uploadedAssetDto?.thumbnail || undefined,
-              videoSrc: uploadedAssetDto?.url || current.previewSrc,
-            }
-          : {}),
       };
 
-      setMediaItems((items) => {
-        if (items.some((item) => item.id === newItem.id)) {
-          return items;
+      if (!parentFolderId) {
+        fetchWorkspaceData().then(() => {
+          if (uploadedAssetDto?.folderId) {
+            navigate(`/home/folder/${uploadedAssetDto.folderId}`);
+          }
+        });
+      } else {
+        setMediaItems((items) => {
+          if (items.some((item) => item.id === newItem.id)) {
+            return items;
+          }
+
+          const next = [...items, newItem];
+          return next.map((item) =>
+            item.id === parentFolderId && item.type === 'folder'
+              ? { ...item, itemCount: (item.itemCount ?? 0) + 1 }
+              : item,
+          );
+        });
+
+        if (details.folderId) {
+          setWorkspaces((workspaces) =>
+            workspaces.map((workspace) => {
+              if (workspace.id !== activeWorkspaceId) return workspace;
+
+              return {
+                ...workspace,
+                folders: workspace.folders.map((folder) => {
+                  if (folder.id !== details.folderId) return folder;
+
+                  const children = folder.children ?? [];
+                  if (children.includes(trimmedTitle)) return folder;
+
+                  return {
+                    ...folder,
+                    children: [...children, trimmedTitle],
+                  };
+                }),
+              };
+            }),
+          );
         }
-
-        const next = [...items, newItem];
-        if (!parentFolderId) return next;
-
-        return next.map((item) =>
-          item.id === parentFolderId && item.type === 'folder'
-            ? { ...item, itemCount: (item.itemCount ?? 0) + 1 }
-            : item,
-        );
-      });
-
-      if (details.folderId) {
-        setWorkspaces((workspaces) =>
-          workspaces.map((workspace) => {
-            if (workspace.id !== activeWorkspaceId) return workspace;
-
-            return {
-              ...workspace,
-              folders: workspace.folders.map((folder) => {
-                if (folder.id !== details.folderId) return folder;
-
-                const children = folder.children ?? [];
-                if (children.includes(trimmedTitle)) return folder;
-
-                return {
-                  ...folder,
-                  children: [...children, trimmedTitle],
-                };
-              }),
-            };
-          }),
-        );
       }
 
       if (current.type === 'image') {
@@ -1433,13 +1622,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       setPendingMediaQueue((prev) => prev.slice(1));
     },
-    [activeWorkspaceId],
+    [activeWorkspaceId, fetchWorkspaceData, navigate],
   );
 
-  const completeVideoUpload = completeMediaUpload;
-
   const createRootMediaFolder = useCallback(
-    (
+    async (
       name: string,
       color: string = DEFAULT_FOLDER_COLOR,
       parentFolderId?: string | null,
@@ -1448,51 +1635,175 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const trimmed = name.trim();
       if (!trimmed) return;
 
-      setMediaItems((prev) => {
-        let resolvedProjectLocation = projectLocation ?? null;
-        if (!resolvedProjectLocation && parentFolderId) {
-          const parent = prev.find(
-            (item) => item.id === parentFolderId && item.type === 'folder',
+      if (!parentFolderId && !projectLocation) {
+        await addWorkspaceFolder(trimmed, color);
+        return;
+      }
+      try {
+        const { apiClient } = await import('../api/client');
+        const linkedProjectId = projectLocation?.folderId;
+        const response = await apiClient.post<any>(`/workspaces/folder/add/${activeWorkspaceId}`, {
+          name: trimmed,
+          color,
+          parentId: parentFolderId || null,
+          linkedProjectId: linkedProjectId || undefined,
+        }, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        const resData = (response as any).data || response;
+        const folderId = resData?.id || `folder-${Date.now()}`;
+
+        setMediaItems((prev) => {
+          let resolvedProjectLocation = projectLocation ?? null;
+          if (!resolvedProjectLocation && parentFolderId) {
+            const parent = prev.find(
+              (item) => item.id === parentFolderId && item.type === 'folder',
+            );
+            resolvedProjectLocation = parent?.projectLocation ?? null;
+          }
+
+          const newItem: MediaItem = {
+            id: folderId,
+            title: resData?.name || trimmed,
+            type: 'folder',
+            workspaceId: activeWorkspaceId,
+            createdAt: new Date().toISOString(),
+            sizeBytes: 0,
+            storageProvider: 'b2',
+            uploadedBy: CURRENT_USER.name,
+            status: 'active',
+            folderColor: resData?.color || color,
+            ...(parentFolderId ? { parentFolderId } : {}),
+            linkedProjectIds: linkedProjectId ? [linkedProjectId] : [],
+            ...(resolvedProjectLocation ? { projectLocation: resolvedProjectLocation } : {}),
+          };
+
+          const next = [...prev, newItem];
+          if (!parentFolderId) return next;
+
+          return next.map((item) =>
+            item.id === parentFolderId && item.type === 'folder'
+              ? { ...item, itemCount: (item.itemCount ?? 0) + 1 }
+              : item,
           );
-          resolvedProjectLocation = parent?.projectLocation ?? null;
-        }
+        });
+      } catch (err) {
+        console.error('Failed to create media folder:', err);
+      }
+    },
+    [activeWorkspaceId, addWorkspaceFolder],
+  );
 
-        const newItem: MediaItem = {
-          id: `media-${Date.now()}`,
-          title: trimmed,
-          type: 'folder',
-          workspaceId: activeWorkspaceId,
-          createdAt: new Date().toISOString(),
-          sizeBytes: 0,
-          storageProvider: 'local',
-          itemCount: 0,
-          location: null,
-          folderColor: color,
-          ...(parentFolderId ? { parentFolderId } : {}),
-          ...(resolvedProjectLocation ? { projectLocation: resolvedProjectLocation } : {}),
-        };
+  const createProject = useCallback(
+    async (
+      name: string,
+      parentFolderId?: string | null,
+    ) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
 
-        const next = [...prev, newItem];
-        if (!parentFolderId) return next;
+      try {
+        const { apiClient } = await import('../api/client');
+        const response = await apiClient.post<any>(`/workspaces/project/add/${activeWorkspaceId}`, {
+          name: trimmed,
+          folderId: parentFolderId || null,
+        }, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
 
-        return next.map((item) =>
-          item.id === parentFolderId && item.type === 'folder'
-            ? { ...item, itemCount: (item.itemCount ?? 0) + 1 }
-            : item,
+        const resData = (response as any).data || response;
+        const projectId = resData?.id || `project-${Date.now()}`;
+        const resolvedFolderId = (response as any).folderId || parentFolderId;
+
+        setMediaItems((prev) => {
+          const newItem: MediaItem = {
+            id: projectId,
+            title: resData?.name || trimmed,
+            type: 'folder',
+            workspaceId: activeWorkspaceId,
+            createdAt: new Date().toISOString(),
+            sizeBytes: 0,
+            storageProvider: 'b2',
+            uploadedBy: CURRENT_USER.name,
+            status: 'active',
+            isProject: true,
+            ...(resolvedFolderId ? { parentFolderId: resolvedFolderId } : {}),
+          };
+
+          const next = [...prev, newItem];
+          if (!resolvedFolderId) return next;
+
+          return next.map((item) =>
+            item.id === resolvedFolderId && item.type === 'folder'
+              ? { ...item, itemCount: (item.itemCount ?? 0) + 1 }
+              : item,
+          );
+        });
+
+        setWorkspaces((prev) =>
+          prev.map((workspace) => {
+            if (workspace.id !== activeWorkspaceId) return workspace;
+            return {
+              ...workspace,
+              projectFolders: [
+                ...(workspace.projectFolders || []),
+                { id: projectId, label: resData?.name || trimmed },
+              ],
+            };
+          }),
         );
-      });
+
+        if (!parentFolderId && (response as any).folderId) {
+          fetchWorkspaceData().then(() => {
+            navigate(`/home/folder/${(response as any).folderId}`);
+          });
+        }
+      } catch (err) {
+        console.error('Failed to create project:', err);
+      }
     },
     [activeWorkspaceId],
   );
 
   const updateMediaProjectLocation = useCallback(
-    (mediaId: string, projectLocation: MediaLocation | null) => {
+    async (mediaId: string, projectLocation: MediaLocation | null, itemType?: string) => {
+      if (projectLocation && itemType) {
+        const isFolder = itemType === 'folder';
+        const sourceableType = isFolder ? 'FOLDER' : 'ASSET';
+
+        try {
+          const { apiClient } = await import('../api/client');
+          const token = localStorage.getItem('token');
+          await apiClient.post(`/workspaces/project/link-source/${projectLocation.folderId}`, {
+            sourceableType,
+            assetId: !isFolder ? mediaId : undefined,
+            folderId: isFolder ? mediaId : undefined
+          }, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+        } catch (err) {
+          console.error('Failed to link source to project:', err);
+        }
+      }
+
       setMediaItems((prev) =>
-        prev.map((item) =>
-          item.id === mediaId && item.type === 'folder'
-            ? { ...item, projectLocation }
-            : item,
-        ),
+        prev.map((item) => {
+          if (item.id !== mediaId) return item;
+          if (!projectLocation) return item;
+
+          const newLinkedProjectIds = [...(item.linkedProjectIds || [])];
+          if (!newLinkedProjectIds.includes(projectLocation.folderId)) {
+            newLinkedProjectIds.push(projectLocation.folderId);
+          }
+
+          const newProjectLocations = [...(item.projectLocations || [])];
+          if (!newProjectLocations.some(l => l.folderId === projectLocation.folderId)) {
+            newProjectLocations.push(projectLocation);
+          }
+
+          return { ...item, linkedProjectIds: newLinkedProjectIds, projectLocations: newProjectLocations };
+        }),
       );
     },
     [],
@@ -1526,11 +1837,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const cancelVideoUpload = cancelMediaUpload;
+  const completeVideoUpload = completeMediaUpload;
+
   const value = useMemo(
     () => ({
       workspaces,
       activeWorkspaceId,
       activeWorkspace,
+      systemTimezone,
       setActiveWorkspaceId,
       updateWorkspaceColor,
       createWorkspace,
@@ -1581,6 +1896,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       completeVideoUpload,
       cancelVideoUpload,
       createRootMediaFolder,
+      createProject,
       updateMediaProjectLocation,
       trashedIds,
       draggingMediaId,
@@ -1594,6 +1910,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       sidebarSelection,
       setSidebarSelection,
       clearSidebarSelection,
+      fetchWorkspaceData,
+      fetchFolderData,
+      fetchProjectData,
     }),
     [
       workspaces,
@@ -1648,6 +1967,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       completeVideoUpload,
       cancelVideoUpload,
       createRootMediaFolder,
+      createProject,
       updateMediaProjectLocation,
       trashedIds,
       draggingMediaId,
@@ -1659,6 +1979,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       sidebarSelection,
       setSidebarSelection,
       clearSidebarSelection,
+      fetchWorkspaceData,
+      fetchFolderData,
+      fetchProjectData,
     ],
   );
 

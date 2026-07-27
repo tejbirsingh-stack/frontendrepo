@@ -439,7 +439,7 @@ export default function MediaUploadDetailsModal({
     setThumbnail(null);
     setDuration(undefined);
     setSelectedTags([]);
-    setFolderId('');
+    setFolderId(pendingUpload.parentFolderId || '');
     setIsUploading(false);
     setUploadProgress(null);
 
@@ -526,16 +526,22 @@ export default function MediaUploadDetailsModal({
     setFolderId(value);
   };
 
-  const handleCreateFolder = (name: string, color: string) => {
-    const newFolderId = addWorkspaceFolder(name, color);
+  const handleCreateFolder = async (name: string, color: string) => {
+    const newFolderId = await addWorkspaceFolder(name, color);
     if (newFolderId) {
       setFolderId(newFolderId);
     }
     setCreateFolderOpen(false);
   };
 
+  const { systemTimezone } = useDashboard();
+  const now = new Date();
+  const currentYear = new Intl.DateTimeFormat('en-US', { year: 'numeric', timeZone: systemTimezone }).format(now);
+  const currentMonth = new Intl.DateTimeFormat('en-US', { month: 'long', timeZone: systemTimezone }).format(now);
+  const rootFolderLabel = `${currentYear} / ${currentMonth}`;
+
   const selectedFolderLabel =
-    folderOptions.find((folder) => folder.id === folderId)?.label ?? 'None (All media root)';
+    folderOptions.find((folder) => folder.id === folderId)?.label ?? rootFolderLabel;
 
   const handleCreateTag = (input: {
     name: string;
@@ -814,47 +820,50 @@ export default function MediaUploadDetailsModal({
               )}
             </Box>
 
-            <Box>
-              <FormControl fullWidth size="small">
-                <InputLabel shrink>Add to folder</InputLabel>
-                <Select
-                  value={folderId}
-                  onChange={handleFolderChange}
-                  label="Add to folder"
-                  notched
-                  displayEmpty
-                  renderValue={(value) =>
-                    value ? selectedFolderLabel : 'None (All media root)'
-                  }
-                  MenuProps={dropdownMenuProps}
-                  sx={{
-                    borderRadius: '10px',
-                    backgroundColor: cv.surface,
-                  }}
-                >
-                  <MenuItem value="">
-                    <em>None (All media root)</em>
-                  </MenuItem>
-                  {folderOptions.map((folder) => (
-                    <MenuItem key={folder.id} value={folder.id}>
-                      {folder.label}
-                    </MenuItem>
-                  ))}
-                  <MenuItem
-                    value={CREATE_FOLDER_VALUE}
+            {!pendingUpload?.linkedProjectId && (
+              <Box>
+                <FormControl fullWidth size="small">
+                  <InputLabel shrink>Add to folder</InputLabel>
+                  <Select
+                    value={folderId}
+                    onChange={handleFolderChange}
+                    label="Add to folder"
+                    notched
+                    displayEmpty
+                    disabled={!pendingUpload?.parentFolderId}
+                    renderValue={(value) =>
+                      value ? selectedFolderLabel : rootFolderLabel
+                    }
+                    MenuProps={dropdownMenuProps}
                     sx={{
-                      mt: 0.5,
-                      borderTop: `1px solid ${cv.border}`,
-                      color: cv.brandPurple,
-                      fontWeight: 600,
+                      borderRadius: '10px',
+                      backgroundColor: cv.surface,
                     }}
                   >
-                    <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, mr: 1.5 }} />
-                    Create new folder
-                  </MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
+                    <MenuItem value="">
+                      <em>{rootFolderLabel}</em>
+                    </MenuItem>
+                    {folderOptions.map((folder) => (
+                      <MenuItem key={folder.id} value={folder.id}>
+                        {folder.label}
+                      </MenuItem>
+                    ))}
+                    <MenuItem
+                      value={CREATE_FOLDER_VALUE}
+                      sx={{
+                        mt: 0.5,
+                        borderTop: `1px solid ${cv.border}`,
+                        color: cv.brandPurple,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, mr: 1.5 }} />
+                      Create new folder
+                    </MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+            )}
           </Box>
 
           <Box>

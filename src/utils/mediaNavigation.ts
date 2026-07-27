@@ -31,6 +31,9 @@ export function getMediaFolderBreadcrumbs(
 
 export function getMediaViewerPath(item: MediaItem): string | null {
   if (item.type === 'folder') {
+    if (item.isProject) {
+      return `/home/project/${item.id}`;
+    }
     return getMediaFolderPath(item.id);
   }
 

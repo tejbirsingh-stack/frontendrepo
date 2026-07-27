@@ -18,6 +18,7 @@ import {
   Typography,
 } from '@mui/material';
 import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
+import GridViewIcon from '@mui/icons-material/GridView';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import StarIcon from '@mui/icons-material/Star';
 import ControlPointDuplicateOutlinedIcon from '@mui/icons-material/ControlPointDuplicateOutlined';
@@ -37,6 +38,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import WorkspacesOutlinedIcon from '@mui/icons-material/WorkspacesOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import HistoryIcon from '@mui/icons-material/History';
+import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
 import NoahLogo from '../NoahLogo';
 import { dropdownMenuPaperSx } from '../../constants/dropdownMenu';
 import WorkspaceColorDot from './WorkspaceColorDot';
@@ -566,7 +568,17 @@ function FolderItem({
     [isPersonalRoot, mediaItems, trashedIds, workspaceId],
   );
 
-  const hasChildren = isProjectRoot || isPersonalRoot
+  const isCustomFolder = !isProjectRoot && !isPersonalRoot && (!folder.children || folder.children.length === 0);
+
+  const customFolderRoots = useMemo(
+    () =>
+      isCustomFolder
+        ? getMediaLibraryFolderChildren(folder.id, mediaItems, workspaceId, trashedIds)
+        : [],
+    [folder.id, isCustomFolder, mediaItems, trashedIds, workspaceId],
+  );
+
+  const hasChildren = isProjectRoot || isPersonalRoot || isCustomFolder
     ? true
     : Boolean(folder.children?.length);
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -615,7 +627,9 @@ function FolderItem({
     (isProjectRoot &&
       projectRoots.some((item) => item.title.toLowerCase().includes(normalizedSearch))) ||
     (isPersonalRoot &&
-      personalRoots.some((item) => item.title.toLowerCase().includes(normalizedSearch)));
+      personalRoots.some((item) => item.title.toLowerCase().includes(normalizedSearch))) ||
+    (isCustomFolder &&
+      customFolderRoots.some((item) => item.title.toLowerCase().includes(normalizedSearch)));
 
   if (!matchesSearch) return null;
 
@@ -790,9 +804,9 @@ function FolderItem({
       {hasChildren && (
         <Collapse in={showChildren} timeout="auto" unmountOnExit>
           <List disablePadding sx={{ pl: 3.5, pr: 1 }}>
-            {isProjectRoot || isPersonalRoot ? (
-              (isProjectRoot ? projectRoots : personalRoots).length > 0 ? (
-                (isProjectRoot ? projectRoots : personalRoots).map((item) =>
+            {isProjectRoot || isPersonalRoot || isCustomFolder ? (
+              (isProjectRoot ? projectRoots : isPersonalRoot ? personalRoots : customFolderRoots).length > 0 ? (
+                (isProjectRoot ? projectRoots : isPersonalRoot ? personalRoots : customFolderRoots).map((item) =>
                   item.type === 'folder' ? (
                     <SidebarMediaFolderRow
                       key={item.id}
@@ -1091,6 +1105,8 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     sidebarSelection,
     setSidebarSelection,
     clearSidebarSelection,
+    fetchFolderData,
+    fetchProjectData,
   } = useDashboard();
 
   const [fileSearch, setFileSearch] = useState('');
@@ -1198,8 +1214,18 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     setFolderColorPickerId(null);
   };
 
-  const toggleFolder = (id: string) => {
-    setOpenFolders((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggleFolder = (id: string, isProjectRoot?: boolean) => {
+    setOpenFolders((prev) => {
+      const isOpening = !prev[id];
+      if (isOpening) {
+        if (isProjectRoot) {
+          fetchProjectData(id);
+        } else if (id !== 'personal' && id !== 'all-files' && id !== 'archive' && id !== 'trash') {
+          fetchFolderData(id);
+        }
+      }
+      return { ...prev, [id]: isOpening };
+    });
   };
 
   const toggleChildFolder = (folderId: string, childLabel: string) => {
@@ -1208,8 +1234,14 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
   };
 
   const toggleMediaFolder = (mediaFolderId: string) => {
-    const key = getMediaFolderOpenKey(mediaFolderId);
-    setOpenMediaFolders((prev) => ({ ...prev, [key]: !prev[key] }));
+    setOpenMediaFolders((prev) => {
+      const key = getMediaFolderOpenKey(mediaFolderId);
+      const isOpening = !prev[key];
+      if (isOpening) {
+        fetchFolderData(mediaFolderId);
+      }
+      return { ...prev, [key]: isOpening };
+    });
   };
 
   const openWorkspaceMenu = (event: React.MouseEvent<HTMLElement>) => {
@@ -1360,8 +1392,8 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     setAddItemModalOpen(true);
   };
 
-  const handleCreateFolder = (name: string, color: string) => {
-    const folderId = addWorkspaceFolder(name, color);
+  const handleCreateFolder = async (name: string, color: string) => {
+    const folderId = await addWorkspaceFolder(name, color);
     if (folderId) {
       setOpenFolders((prev) => ({ ...prev, [folderId]: true }));
     }
@@ -1398,11 +1430,11 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     setDeleteFolderOpen(true);
   };
 
-  const handleConfirmRenameFolder = (newTitle: string) => {
+  const handleConfirmRenameFolder = async (newTitle: string) => {
     if (!folderActionsTarget) return;
 
     if (folderActionsTarget.type === 'folder') {
-      renameWorkspaceFolder(folderActionsTarget.folderId, newTitle);
+      await renameWorkspaceFolder(folderActionsTarget.folderId, newTitle);
     } else {
       renameWorkspaceFolderChild(
         folderActionsTarget.folderId,
@@ -1690,12 +1722,21 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         {/* Primary navigation */}
         <List disablePadding>
           <NavItem
-            icon={<AccessTimeOutlinedIcon />}
-            label="Recent"
+            icon={<GridViewIcon />}
+            label="All media"
             active={isRecentView && !sidebarSelection}
             onClick={() => {
               clearSidebarSelection();
               navigateAndClose('/home');
+            }}
+          />
+          <NavItem
+            icon={<WorkOutlineOutlinedIcon />}
+            label="Projects"
+            active={location.pathname === '/home/projects'}
+            onClick={() => {
+              clearSidebarSelection();
+              navigateAndClose('/home/projects');
             }}
           />
           <NavItem
@@ -1740,7 +1781,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         </List>
 
         <Collapse in={uploadPanelOpen}>
-          <UploadPanel onUpload={uploadMediaFiles} />
+          <UploadPanel onUpload={(files) => uploadMediaFiles(files, { parentFolderId: sidebarSelection?.folderId ?? null })} />
         </Collapse>
 
         <Divider sx={{ my: 2, mx: 2, borderColor: cv.border }} />
@@ -1815,7 +1856,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
               key={folder.id}
               folder={folder}
               isOpen={Boolean(openFolders[folder.id])}
-              onToggle={() => toggleFolder(folder.id)}
+              onToggle={() => toggleFolder(folder.id, browseMode === 'projects')}
               searchQuery={fileSearch}
               browseMode={browseMode}
               workspaceId={activeWorkspaceId}

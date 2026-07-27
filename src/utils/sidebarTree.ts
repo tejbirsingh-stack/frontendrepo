@@ -43,7 +43,7 @@ export function belongsToProject(
   projectId: string,
   mediaItems: MediaItem[],
 ): boolean {
-  if (item.projectLocation?.folderId === projectId) return true;
+  if ((item.linkedProjectIds || []).includes(projectId)) return true;
   if (!item.parentFolderId) return false;
 
   const parent = mediaItems.find((candidate) => candidate.id === item.parentFolderId);
@@ -74,8 +74,7 @@ export function getProjectRootItems(
       (item) =>
         item.workspaceId === workspaceId &&
         !trashedIds.has(item.id) &&
-        !item.parentFolderId &&
-        item.projectLocation?.folderId === projectId,
+        (item.linkedProjectIds || []).includes(projectId),
     )
     .sort((a, b) => {
       if (a.type === 'folder' && b.type !== 'folder') return -1;

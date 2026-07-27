@@ -11,6 +11,7 @@ import SettingsLayout from './layouts/SettingsLayout';
 import {
   DashboardPage,
   FolderPage,
+  ProjectPage,
   LoginPage,
   NotFoundPage,
   SignUpPage,
@@ -76,7 +77,9 @@ function App() {
             <Route index element={<DashboardPage libraryView="recent" />} />
             <Route path="favorites" element={<DashboardPage libraryView="favorites" />} />
             <Route path="duplicates" element={<DashboardPage libraryView="duplicates" />} />
+            <Route path="projects" element={<DashboardPage libraryView="projects" />} />
             <Route path="folder/:folderId" element={<FolderPage />} />
+            <Route path="project/:projectId" element={<ProjectPage />} />
             <Route path="tags" element={<TagsManagementPage />} />
             <Route path="user-activities" element={<UserActivitiesPage />} />
             <Route path="trash" element={<TrashPage />} />

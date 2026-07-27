@@ -14,7 +14,7 @@ import ProjectLocationFields, { buildProjectLocation } from './ProjectLocationFi
 
 interface AssignProjectModalProps {
   open: boolean;
-  folderTitle: string;
+  itemTitle: string;
   projectFolders: SidebarFolder[];
   initialProjectLocation?: MediaLocation | null;
   onClose: () => void;
@@ -32,7 +32,7 @@ const dialogPaperSx = {
 
 export default function AssignProjectModal({
   open,
-  folderTitle,
+  itemTitle,
   projectFolders,
   initialProjectLocation,
   onClose,
@@ -78,7 +78,7 @@ export default function AssignProjectModal({
         </DialogTitle>
         <DialogContent sx={{ pt: '8px !important' }}>
           <Typography variant="body2" sx={{ color: cv.textSecondary, mb: 1 }}>
-            Link <strong>{folderTitle}</strong> to a project so it appears in the Projects
+            Link <strong>{itemTitle}</strong> to a project so it appears in the Projects
             sidebar and project views.
           </Typography>
           <ProjectLocationFields

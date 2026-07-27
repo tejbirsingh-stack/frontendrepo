@@ -432,7 +432,7 @@ export default function MediaUploadDetailsModal({
     setThumbnail(null);
     setDuration(undefined);
     setSelectedTags([]);
-    setFolderId('');
+    setFolderId(pendingUpload.parentFolderId || '');
 
     let cancelled = false;
 
@@ -515,16 +515,22 @@ export default function MediaUploadDetailsModal({
     setFolderId(value);
   };
 
-  const handleCreateFolder = (name: string, color: string) => {
-    const newFolderId = addWorkspaceFolder(name, color);
+  const handleCreateFolder = async (name: string, color: string) => {
+    const newFolderId = await addWorkspaceFolder(name, color);
     if (newFolderId) {
       setFolderId(newFolderId);
     }
     setCreateFolderOpen(false);
   };
 
+  const { systemTimezone } = useDashboard();
+  const now = new Date();
+  const currentYear = new Intl.DateTimeFormat('en-US', { year: 'numeric', timeZone: systemTimezone }).format(now);
+  const currentMonth = new Intl.DateTimeFormat('en-US', { month: 'long', timeZone: systemTimezone }).format(now);
+  const rootFolderLabel = `${currentYear} / ${currentMonth}`;
+
   const selectedFolderLabel =
-    folderOptions.find((folder) => folder.id === folderId)?.label ?? 'None (All media root)';
+    folderOptions.find((folder) => folder.id === folderId)?.label ?? rootFolderLabel;
 
   const handleCreateTag = (input: {
     name: string;
@@ -796,8 +802,9 @@ export default function MediaUploadDetailsModal({
                   label="Add to folder"
                   notched
                   displayEmpty
+                  disabled={!pendingUpload?.parentFolderId}
                   renderValue={(value) =>
-                    value ? selectedFolderLabel : 'None (All media root)'
+                    value ? selectedFolderLabel : rootFolderLabel
                   }
                   MenuProps={dropdownMenuProps}
                   sx={{
@@ -806,7 +813,7 @@ export default function MediaUploadDetailsModal({
                   }}
                 >
                   <MenuItem value="">
-                    <em>None (All media root)</em>
+                    <em>{rootFolderLabel}</em>
                   </MenuItem>
                   {folderOptions.map((folder) => (
                     <MenuItem key={folder.id} value={folder.id}>
