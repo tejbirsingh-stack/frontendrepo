@@ -27,7 +27,7 @@ interface MediaListRowProps {
   isDragging: boolean;
   isDropTarget?: boolean;
   selectedMediaIds: Set<string>;
-  onToggleFavorite: (id: string) => void;
+  onToggleFavorite: (id: string, type?: 'asset' | 'folder' | 'project') => void;
   onToggleSelect: (id: string) => void;
   onDragStart: (ids: string[]) => void;
   onDragEnd: () => void;
@@ -270,7 +270,7 @@ export default function MediaListRow({
           aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           onClick={(e) => {
             e.stopPropagation();
-            onToggleFavorite(item.id);
+            onToggleFavorite(item.id, item.isProject ? 'project' : (item.type === 'folder' ? 'folder' : 'asset'));
           }}
           sx={{
             color: isFavorite ? cv.warning : cv.textMuted,

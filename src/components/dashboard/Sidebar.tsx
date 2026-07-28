@@ -2022,6 +2022,30 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         }}
       >
         <MenuItem
+          onClick={() => {
+            if (folderActionsTarget) {
+              const type = browseMode === 'projects' ? 'project' : 'folder';
+              toggleFavorite(folderActionsTarget.folderId, type);
+            }
+            closeFolderActionsMenu();
+          }}
+          sx={{
+            py: 1,
+            fontSize: '0.875rem',
+            color: cv.textSecondary,
+            '&:hover': { backgroundColor: cv.surfaceHover },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 32 }}>
+            {folderActionsTarget && favorites.has(folderActionsTarget.folderId) ? (
+              <StarIcon sx={{ fontSize: 18, color: cv.warning }} />
+            ) : (
+              <StarBorderOutlinedIcon sx={{ fontSize: 18, color: cv.textSecondary }} />
+            )}
+          </ListItemIcon>
+          {folderActionsTarget && favorites.has(folderActionsTarget.folderId) ? 'Remove from favorites' : 'Add to favorites'}
+        </MenuItem>
+        <MenuItem
           disabled={!user?.permissions?.includes('upload_delete_media')}
           onClick={() => {
             if (!user?.permissions?.includes('upload_delete_media')) return;

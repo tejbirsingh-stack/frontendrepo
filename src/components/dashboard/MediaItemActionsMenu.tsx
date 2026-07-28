@@ -18,6 +18,8 @@ import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
 import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import type { MediaItem } from '../../data/mockMedia';
 import { useDashboard } from '../../context/DashboardContext';
 import RenameMediaModal from './RenameMediaModal';
@@ -55,6 +57,8 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
     updateMediaFolderColor,
     updateMediaProjectLocation,
     activeWorkspace,
+    toggleFavorite,
+    favorites,
   } = useDashboard();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -183,6 +187,29 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             Assign to project
           </MenuItem>
         ) : null}
+        <MenuItem
+          onClick={(event) => {
+            consumeMenuPointerEvent(event);
+            toggleFavorite(item.id, item.isProject ? 'project' : (isFolder ? 'folder' : 'asset'));
+            closeMenu();
+          }}
+          onMouseDown={consumeMenuPointerEvent}
+          sx={{
+            py: 1,
+            fontSize: '0.875rem',
+            color: cv.textSecondary,
+            '&:hover': { backgroundColor: cv.surfaceHover },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 32 }}>
+            {favorites.has(item.id) ? (
+              <StarIcon sx={{ fontSize: 18, color: cv.warning }} />
+            ) : (
+              <StarBorderOutlinedIcon sx={{ fontSize: 18, color: cv.textSecondary }} />
+            )}
+          </ListItemIcon>
+          {favorites.has(item.id) ? 'Remove from favorites' : 'Add to favorites'}
+        </MenuItem>
         <MenuItem
           disabled={!user?.permissions?.includes('upload_delete_media')}
           onClick={(event) => {
