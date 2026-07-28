@@ -1650,7 +1650,7 @@ export default function VideoPlayerPage() {
       };
 
       if (record.type === 'drawing' && record.markDrawingErased) {
-        const targetEntryId = record.strokeId 
+        const targetEntryId = record.strokeId
           ? getDrawingHistoryEntryId(record.strokeId)
           : drawingEntryId;
 
@@ -1665,7 +1665,7 @@ export default function VideoPlayerPage() {
             };
           }),
         );
-        
+
         // Cascade delete any comment attached to this drawing
         if (record.strokeId) {
           setComments((prev) => prev.filter(c => c.linkedDrawingId !== record.strokeId));
@@ -1736,7 +1736,7 @@ export default function VideoPlayerPage() {
               };
             }),
           );
-          
+
           // Cascade delete any comment attached to this shape
           setComments((prev) => prev.filter(c => c.linkedShapeId !== record.shapeId));
           return;
