@@ -1,6 +1,6 @@
 # NOAH
 
-NOAH is a React + TypeScript media workspace prototype built with Vite, MUI, and React Router. Version **5.1.0 — Auth**.
+NOAH is a React + TypeScript media workspace prototype built with Vite, MUI, and React Router. Version **5.1.0 — Auth**
 
 ## Quick Start
 
