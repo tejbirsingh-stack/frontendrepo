@@ -206,9 +206,10 @@ function ImagePreview({ item }: { item: MediaItem }) {
     let active = true;
     const ext = item.title?.split('.').pop()?.toLowerCase() || '';
     const nonWebExts = ['exr', 'openexr', 'dpx', 'cin', 'tiff', 'tif', 'psd', 'psb', 'ai', 'eps', 'pcx', 'jpf', 'bmp', 'mpo'];
+    const mediaSource = item.videoSrc || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : item.thumbnail);
 
-    if (nonWebExts.includes(ext) && item.videoSrc) {
-      decodeClientImageToDataUrl(item.videoSrc, ext)
+    if (nonWebExts.includes(ext) && mediaSource) {
+      decodeClientImageToDataUrl(mediaSource, ext)
         .then((dataUrl) => {
           if (active && dataUrl) {
             setClientDecodedUrl(dataUrl);
@@ -219,9 +220,9 @@ function ImagePreview({ item }: { item: MediaItem }) {
     return () => {
       active = false;
     };
-  }, [item.title, item.videoSrc]);
+  }, [item.title, item.videoSrc, item.thumbnail, item.id]);
 
-  const displaySrc = clientDecodedUrl || item.thumbnail;
+  const displaySrc = clientDecodedUrl || item.thumbnail || (item.id ? `/api/media/${encodeURIComponent(item.id)}/thumbnail` : undefined);
 
   if (imageError && !clientDecodedUrl) {
     const ext = item.title?.split('.').pop()?.toUpperCase() || 'IMG';

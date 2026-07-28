@@ -25,7 +25,7 @@ interface TrashConfirmModalProps {
   /** Require typing the confirmation phrase before delete is enabled. */
   requireNameConfirmation?: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (reason: string) => void;
 }
 
 function blockClipboardInsertion(event: React.ClipboardEvent | React.DragEvent) {
@@ -54,25 +54,32 @@ export default function TrashConfirmModal({
   onConfirm,
 }: TrashConfirmModalProps) {
   const [confirmationText, setConfirmationText] = useState('');
+  const [reason, setReason] = useState('');
   const phraseToConfirm = confirmationPhrase ?? itemTitle;
   const isNameConfirmed = !requireNameConfirmation || confirmationText === phraseToConfirm;
+  const isReasonValid = reason.trim().length > 0;
+  const canSubmit = isNameConfirmed && isReasonValid;
   const isMultiItem = (itemNames?.length ?? 0) > 1;
 
   useEffect(() => {
     if (!open) {
       setConfirmationText('');
+      setReason('');
     }
   }, [open]);
 
   const handleClose = () => {
     setConfirmationText('');
+    setReason('');
     onClose();
   };
 
   const handleConfirm = () => {
-    if (!isNameConfirmed) return;
+    if (!canSubmit) return;
+    const currentReason = reason.trim();
     setConfirmationText('');
-    onConfirm();
+    setReason('');
+    onConfirm(currentReason);
   };
 
   return (
@@ -202,6 +209,37 @@ export default function TrashConfirmModal({
             />
           </>
         ) : null}
+
+        <Typography
+          id="trash-confirm-reason-label"
+          sx={{ mt: 2, mb: 1, fontSize: '0.875rem', color: cv.textSecondary, fontWeight: 500 }}
+        >
+          Reason for deletion <Box component="span" sx={{ color: cv.destructive }}>*</Box>
+        </Typography>
+        <TextField
+          fullWidth
+          multiline
+          rows={3}
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="Please enter a reason for deletion..."
+          aria-labelledby="trash-confirm-reason-label"
+          size="small"
+          sx={{
+            '& .MuiInputBase-root': {
+              borderRadius: '10px',
+              fontSize: '0.875rem',
+              color: cv.textPrimary,
+              backgroundColor: cv.surface,
+            },
+            '& .MuiOutlinedInput-notchedOutline': {
+              borderColor: cv.border,
+            },
+            '& .Mui-focused .MuiOutlinedInput-notchedOutline': {
+              borderColor: cv.destructiveBorder,
+            },
+          }}
+        />
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 3, pt: 1, gap: 1 }}>
         <Button
@@ -216,7 +254,7 @@ export default function TrashConfirmModal({
         </Button>
         <Button
           onClick={handleConfirm}
-          disabled={!isNameConfirmed}
+          disabled={!canSubmit}
           variant="contained"
           sx={{
             borderRadius: '10px',

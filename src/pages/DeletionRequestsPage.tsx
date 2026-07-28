@@ -4,12 +4,14 @@ import { cv } from '../theme/cssVars';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import GlassCard from '../components/GlassCard';
+import { useDashboard } from '../context/DashboardContext';
 
 interface PendingDeletion {
   id: string;
   title: string;
   status: string;
   deletedAt: string;
+  deletionReason?: string;
   deletedBy: {
     name: string;
     roleRelation?: { name: string };
@@ -18,6 +20,7 @@ interface PendingDeletion {
 
 export default function DeletionRequestsPage() {
   const navigate = useNavigate();
+  const { restoreFromTrashBulk } = useDashboard();
   const [requests, setRequests] = useState<PendingDeletion[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -49,6 +52,8 @@ export default function DeletionRequestsPage() {
   const handleReject = async (id: string) => {
     try {
       await apiClient.post(`/media/${id}/reject`);
+      // Remove from local frontend trash state so file reappears in its original location
+      restoreFromTrashBulk([id]);
       fetchRequests(); // refresh list
     } catch (error) {
       console.error(error);
@@ -69,6 +74,7 @@ export default function DeletionRequestsPage() {
                 <TableCell sx={{ color: cv.textSecondary, fontWeight: 600 }}>File Name</TableCell>
                 <TableCell sx={{ color: cv.textSecondary, fontWeight: 600 }}>Requested By</TableCell>
                 <TableCell sx={{ color: cv.textSecondary, fontWeight: 600 }}>Role</TableCell>
+                <TableCell sx={{ color: cv.textSecondary, fontWeight: 600 }}>Reason</TableCell>
                 <TableCell sx={{ color: cv.textSecondary, fontWeight: 600 }}>Status</TableCell>
                 <TableCell align="right" sx={{ color: cv.textSecondary, fontWeight: 600 }}>Actions</TableCell>
               </TableRow>
@@ -76,11 +82,11 @@ export default function DeletionRequestsPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 3, color: cv.textMuted }}>Loading requests...</TableCell>
+                  <TableCell colSpan={6} align="center" sx={{ py: 3, color: cv.textMuted }}>Loading requests...</TableCell>
                 </TableRow>
               ) : requests.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 3, color: cv.textMuted }}>No pending deletion requests.</TableCell>
+                  <TableCell colSpan={6} align="center" sx={{ py: 3, color: cv.textMuted }}>No pending deletion requests.</TableCell>
                 </TableRow>
               ) : (
                 requests.map((req) => (
@@ -89,6 +95,9 @@ export default function DeletionRequestsPage() {
                     <TableCell sx={{ color: cv.textPrimary }}>{req.deletedBy?.name || 'Unknown'}</TableCell>
                     <TableCell>
                       <Chip size="small" label={req.deletedBy?.roleRelation?.name || 'Unknown'} sx={{ backgroundColor: cv.surfaceActive, color: cv.textPrimary }} />
+                    </TableCell>
+                    <TableCell sx={{ color: cv.textPrimary, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={req.deletionReason}>
+                      {req.deletionReason || '-'}
                     </TableCell>
                     <TableCell>
                       <Chip size="small" label="Pending Review" color="warning" variant="outlined" />

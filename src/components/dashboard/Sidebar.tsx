@@ -1361,9 +1361,9 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     setPendingTrashMediaIds([]);
   };
 
-  const handleConfirmTrash = () => {
+  const handleConfirmTrash = (reason: string) => {
     if (pendingTrashMediaIds.length > 0) {
-      moveMediaToTrashBulk(pendingTrashMediaIds);
+      moveMediaToTrashBulk(pendingTrashMediaIds, reason);
     }
     closeTrashConfirm();
   };

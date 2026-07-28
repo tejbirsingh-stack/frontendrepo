@@ -10,8 +10,6 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loadFavoriteMediaIds, saveFavoriteMediaIds } from '../utils/favoritesStorage';
-import { loadTrashedMedia, saveTrashedMedia, type TrashedMediaRecord } from '../utils/trashStorage';
-import { getExpiredTrashIds, isTrashExpired } from '../utils/trashRetention';
 import {
   loadManagedTags,
   normalizeTagName,
@@ -69,10 +67,10 @@ interface DashboardContextValue {
   moveMediaToFolder: (mediaId: string, folderId: string, childLabel?: string) => void;
   moveMediaToFolderBulk: (mediaIds: string[], folderId: string, childLabel?: string) => void;
   moveMediaToDashboardFolder: (mediaIds: string[], folderId: string) => void;
-  moveMediaToTrash: (mediaId: string) => void;
-  moveMediaToTrashBulk: (mediaIds: string[]) => void;
+  moveMediaToTrash: (mediaId: string, reason?: string) => void;
+  moveMediaToTrashBulk: (mediaIds: string[], reason?: string) => void;
   trashedMediaItems: MediaItem[];
-  trashedAtById: TrashedMediaRecord;
+  trashedAtById: Record<string, string>;
   restoreFromTrashBulk: (mediaIds: string[]) => void;
   purgeExpiredTrash: () => void;
   selectedMediaIds: Set<string>;
@@ -146,38 +144,28 @@ interface DashboardContextValue {
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
 
-function getInitialTrashState(): { trashedAtById: TrashedMediaRecord; expiredIds: string[] } {
-  const trashedAtById = loadTrashedMedia();
-  const expiredIds = getExpiredTrashIds(trashedAtById);
-  expiredIds.forEach((id) => {
-    delete trashedAtById[id];
-  });
-  if (expiredIds.length > 0) {
-    saveTrashedMedia(trashedAtById);
-  }
-  return { trashedAtById, expiredIds };
-}
-
-const initialTrashState = getInitialTrashState();
+// Trash state is now derived from item.status === 'trash' in mediaItems (database-driven, no localStorage)
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [workspaces, setWorkspaces] = useState<Workspace[]>(initialWorkspaces);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaces[0]?.id || '');
   const [systemTimezone, setSystemTimezone] = useState<string>('Europe/London');
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>(() =>
-    initialMediaItems.filter((item) => !initialTrashState.expiredIds.includes(item.id)),
-  );
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>(initialMediaItems);
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavoriteMediaIds());
   const [draggingMediaIds, setDraggingMediaIdsState] = useState<Set<string>>(new Set());
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [sidebarSelection, setSidebarSelectionState] = useState<SidebarSelection | null>(null);
-  const [trashedAtById, setTrashedAtById] = useState<TrashedMediaRecord>(
-    () => initialTrashState.trashedAtById,
+
+  // Trash is now purely database-driven: derive trashedIds from item.status === 'trash'
+  const trashedIds = useMemo(
+    () => new Set(mediaItems.filter((item) => item.status === 'trash').map((item) => item.id)),
+    [mediaItems],
   );
 
-  const trashedIds = useMemo(() => new Set(Object.keys(trashedAtById)), [trashedAtById]);
+  // Empty stub kept for interface compatibility (no localStorage tracking)
+  const trashedAtById: Record<string, string> = {};
 
   useEffect(() => {
     async function fetchTimezone() {
@@ -259,10 +247,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }));
 
         const assetMediaItems: MediaItem[] = (media || []).map((a: any) => {
-          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.title || '');
-          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.title || '');
-          const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.title || '');
-          const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
+          const imageExtRegex = /\.(jpg|jpeg|png|webp|gif|svg|exr|openexr|dpx|cin|tiff|tif|psd|psb|ai|eps|pcx|jpf|bmp|mpo)$/i;
+          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv|flv|wmv|m4v)$/i.test(a.title || '');
+          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a|flac|alac)$/i.test(a.title || '');
+          const isImage = a.type === 'image' || imageExtRegex.test(a.title || '');
+          const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : (a.type || 'video');
 
           return {
             id: a.id,
@@ -273,8 +262,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             sizeBytes: Number(a.files?.[0]?.sizeBytes || a.size || 0),
             storageProvider: 'b2',
             uploadedBy: CURRENT_USER.name,
-            thumbnail: a.thumbnail || undefined,
-            videoSrc: isVideo ? a.files?.[0]?.fileUrl : undefined,
+            thumbnail: a.thumbnail || (a.id ? `/api/media/${encodeURIComponent(a.id)}/thumbnail` : undefined),
+            videoSrc: a.files?.[0]?.fileUrl || a.url || (a.id ? `/api/media/${encodeURIComponent(a.id)}/stream` : undefined),
             duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
             tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
             location: null,
@@ -389,10 +378,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }));
 
         const assetMediaItems: MediaItem[] = (media || []).map((a: any) => {
-          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.title || '');
-          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.title || '');
-          const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.title || '');
-          const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
+          const imageExtRegex = /\.(jpg|jpeg|png|webp|gif|svg|exr|openexr|dpx|cin|tiff|tif|psd|psb|ai|eps|pcx|jpf|bmp|mpo)$/i;
+          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv|flv|wmv|m4v)$/i.test(a.title || '');
+          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a|flac|alac)$/i.test(a.title || '');
+          const isImage = a.type === 'image' || imageExtRegex.test(a.title || '');
+          const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : (a.type || 'video');
 
           return {
             id: a.id,
@@ -404,8 +394,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             sizeBytes: Number(a.files?.[0]?.sizeBytes || a.size || 0),
             storageProvider: 'b2',
             uploadedBy: CURRENT_USER.name,
-            thumbnail: a.thumbnail || undefined,
-            videoSrc: isVideo ? a.files?.[0]?.fileUrl : undefined,
+            thumbnail: a.thumbnail || (a.id ? `/api/media/${encodeURIComponent(a.id)}/thumbnail` : undefined),
+            videoSrc: a.files?.[0]?.fileUrl || a.url || (a.id ? `/api/media/${encodeURIComponent(a.id)}/stream` : undefined),
             duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
             tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
             location: null,
@@ -462,10 +452,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }));
 
         const assetMediaItems: MediaItem[] = (media || []).map((a: any) => {
-          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.title || '');
-          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.title || '');
-          const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.title || '');
-          const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
+          const imageExtRegex = /\.(jpg|jpeg|png|webp|gif|svg|exr|openexr|dpx|cin|tiff|tif|psd|psb|ai|eps|pcx|jpf|bmp|mpo)$/i;
+          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv|flv|wmv|m4v)$/i.test(a.title || '');
+          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a|flac|alac)$/i.test(a.title || '');
+          const isImage = a.type === 'image' || imageExtRegex.test(a.title || '');
+          const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : (a.type || 'video');
 
           return {
             id: a.id,
@@ -478,8 +469,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             sizeBytes: Number(a.files?.[0]?.sizeBytes || a.size || 0),
             storageProvider: 'b2',
             uploadedBy: CURRENT_USER.name,
-            thumbnail: a.thumbnail || undefined,
-            videoSrc: isVideo ? a.files?.[0]?.fileUrl : undefined,
+            thumbnail: a.thumbnail || (a.id ? `/api/media/${encodeURIComponent(a.id)}/thumbnail` : undefined),
+            videoSrc: a.files?.[0]?.fileUrl || a.url || (a.id ? `/api/media/${encodeURIComponent(a.id)}/stream` : undefined),
             duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
             tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
             location: null,
@@ -503,28 +494,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   }, [activeWorkspaceId]);
 
-  useEffect(() => {
-    saveTrashedMedia(trashedAtById);
-  }, [trashedAtById]);
-
-  const purgeExpiredTrash = useCallback(() => {
-    setTrashedAtById((prev) => {
-      const expiredIds = getExpiredTrashIds(prev);
-      if (expiredIds.length === 0) return prev;
-
-      setMediaItems((items) => items.filter((item) => !expiredIds.includes(item.id)));
-
-      const next = { ...prev };
-      expiredIds.forEach((id) => {
-        delete next[id];
-      });
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    purgeExpiredTrash();
-  }, [purgeExpiredTrash]);
+  // No-op: purge is handled by the backend cron job now
+  const purgeExpiredTrash = useCallback(() => {}, []);
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
   const [managedTags, setManagedTags] = useState<ManagedTag[]>(() => loadManagedTags());
   const [tagScopeColors, setTagScopeColors] = useState<TagScopeColors>(() => loadTagScopeColors());
@@ -573,9 +544,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         (item) =>
           item.workspaceId === activeWorkspaceId &&
           !item.parentFolderId &&
-          !trashedIds.has(item.id),
+          item.status !== 'trash',
       ),
-    [mediaItems, activeWorkspaceId, trashedIds],
+    [mediaItems, activeWorkspaceId],
   );
 
   const duplicateMediaItems = useMemo(
@@ -592,22 +563,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         (item) =>
           item.workspaceId === activeWorkspaceId &&
           favorites.has(item.id) &&
-          !trashedIds.has(item.id),
+          item.status !== 'trash',
       ),
-    [mediaItems, activeWorkspaceId, favorites, trashedIds],
+    [mediaItems, activeWorkspaceId, favorites],
   );
 
   const trashedMediaItems = useMemo(
     () =>
-      mediaItems.filter((item) => {
-        const deletedAt = trashedAtById[item.id];
-        return (
-          item.workspaceId === activeWorkspaceId &&
-          deletedAt &&
-          !isTrashExpired(deletedAt)
-        );
-      }),
-    [mediaItems, activeWorkspaceId, trashedAtById],
+      mediaItems.filter(
+        (item) => item.workspaceId === activeWorkspaceId && item.status === 'trash',
+      ),
+    [mediaItems, activeWorkspaceId],
   );
 
   useEffect(() => {
@@ -899,7 +865,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   );
 
   const moveMediaToTrashBulk = useCallback(
-    (mediaIds: string[]) => {
+    (mediaIds: string[], reason?: string) => {
       const uniqueIds = [...new Set(mediaIds)].filter((id) => !trashedIds.has(id));
       if (uniqueIds.length === 0) return;
 
@@ -919,18 +885,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         removeMediaFromSidebar(media);
       });
 
-      const deletedAt = new Date().toISOString();
-
+      // Send DELETE to backend (with reason)
       uniqueIds.forEach((id) => {
-        apiClient.delete(`/media/${id}`).catch(err => console.error("Failed to sync delete with backend", err));
-      });
-
-      setTrashedAtById((prev) => {
-        const next = { ...prev };
-        uniqueIds.forEach((id) => {
-          next[id] = deletedAt;
-        });
-        return next;
+        apiClient.delete(`/media/${id}`, { body: { reason } }).catch(err => console.error('Failed to sync delete with backend', err));
       });
 
       setFavorites((prev) => {
@@ -945,10 +902,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         return changed ? next : prev;
       });
 
+      // Mark items as trash in local state (no localStorage)
       setMediaItems((prev) =>
         prev.map((item) => {
           if (uniqueIds.includes(item.id)) {
-            return { ...item, location: null, parentFolderId: null };
+            return { ...item, status: 'trash', location: null, parentFolderId: null };
           }
 
           if (item.type === 'folder' && folderCountDelta.has(item.id)) {
@@ -975,34 +933,42 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   );
 
   const moveMediaToTrash = useCallback(
-    (mediaId: string) => {
-      moveMediaToTrashBulk([mediaId]);
+    (mediaId: string, reason?: string) => {
+      moveMediaToTrashBulk([mediaId], reason);
     },
     [moveMediaToTrashBulk],
   );
 
   const restoreFromTrashBulk = useCallback((mediaIds: string[]) => {
-    const uniqueIds = [...new Set(mediaIds)].filter((id) => trashedAtById[id]);
-    if (uniqueIds.length === 0) return;
+    const uniqueIds = [...new Set(mediaIds)].filter((id) => trashedIds.has(id));
+    if (uniqueIds.length === 0) {
+      // Even if not in local trashedIds (e.g. rejected from admin panel), still update status
+      const allIds = [...new Set(mediaIds)];
+      setMediaItems((prev) =>
+        prev.map((item) =>
+          allIds.includes(item.id) ? { ...item, status: 'active' } : item,
+        ),
+      );
+      return;
+    }
 
     uniqueIds.forEach((id) => {
-      apiClient.post(`/media/${id}/restore`).catch(err => console.error("Failed to sync restore with backend", err));
+      apiClient.post(`/media/${id}/restore`).catch(err => console.error('Failed to sync restore with backend', err));
     });
 
-    setTrashedAtById((prev) => {
-      const next = { ...prev };
-      uniqueIds.forEach((id) => {
-        delete next[id];
-      });
-      return next;
-    });
+    // Restore to active in local state
+    setMediaItems((prev) =>
+      prev.map((item) =>
+        uniqueIds.includes(item.id) ? { ...item, status: 'active' } : item,
+      ),
+    );
 
     setSelectedMediaIds((prev) => {
       const next = new Set(prev);
       uniqueIds.forEach((id) => next.delete(id));
       return next;
     });
-  }, [trashedAtById]);
+  }, [trashedIds]);
 
   const updateMediaTags = useCallback((mediaId: string, tags: string[]) => {
     setMediaItems((prev) =>
@@ -1298,7 +1264,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           (item) =>
             item.workspaceId === activeWorkspaceId &&
             item.location?.folderId === folderId &&
-            !trashedIds.has(item.id),
+            item.status !== 'trash',
         )
         .map((item) => item.id);
 
@@ -1374,7 +1340,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             item.workspaceId === activeWorkspaceId &&
             item.location?.folderId === folderId &&
             (item.location?.childLabel ?? item.title) === childLabel &&
-            !trashedIds.has(item.id),
+            item.status !== 'trash',
         )
         .map((item) => item.id);
 
