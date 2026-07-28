@@ -1,34 +1,177 @@
-import { useEffect, useState } from 'react';
-import { Box, Typography, CircularProgress, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, TablePagination, TextField, InputAdornment, FormControl, Select, MenuItem, Button } from '@mui/material';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Box,
+  Typography,
+  CircularProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  InputAdornment,
+  FormControl,
+  Select,
+  MenuItem,
+  Button,
+} from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import DownloadIcon from '@mui/icons-material/Download';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import ExcelJS from 'exceljs';
 import { cv } from '../theme/cssVars';
 import { apiClient } from '../api/client';
+import { dropdownMenuPaperSx } from '../constants/dropdownMenu';
 
-const getOneYearAgo = () => {
+interface UserActivity {
+  id: string;
+  createdAt: string;
+  userName?: string;
+  userEmail?: string;
+  userRole?: string;
+  activityName?: string;
+  description?: string;
+  activityType?: string;
+}
+
+interface RoleOption {
+  id: string;
+  name: string;
+}
+
+type ActionTone = 'danger' | 'purple' | 'success' | 'neutral' | 'info';
+
+const ACTIVITY_TYPES = ['INFO', 'ERROR'] as const;
+
+function getOneYearAgo(): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 1);
   return d.toISOString().split('T')[0];
+}
+
+function getToday(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+function normalizeActionLabel(activity: UserActivity): string {
+  const raw = (activity.activityName || activity.activityType || 'Activity').trim();
+  return raw
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function getActionTone(label: string): ActionTone {
+  const key = label.toLowerCase();
+  if (key.includes('permanent delete') || key.includes('delete') || key.includes('error')) {
+    if (key.includes('approve')) return 'purple';
+    return 'danger';
+  }
+  if (key.includes('approve')) return 'purple';
+  if (
+    key.includes('upload') ||
+    key.includes('restore') ||
+    key.includes('create folder') ||
+    key.includes('create project') ||
+    key.includes('success')
+  ) {
+    return 'success';
+  }
+  if (key.includes('rename') || key.includes('login')) return 'info';
+  return 'neutral';
+}
+
+const actionToneSx: Record<ActionTone, { backgroundColor: string; color: string }> = {
+  danger: {
+    backgroundColor: cv.destructiveSurface,
+    color: cv.destructive,
+  },
+  purple: {
+    backgroundColor: cv.purpleSelectionSoft,
+    color: cv.brandPurple,
+  },
+  success: {
+    backgroundColor: cv.successSurface,
+    color: cv.successText,
+  },
+  info: {
+    backgroundColor: cv.blueGlow18,
+    color: cv.brandBlue,
+  },
+  neutral: {
+    backgroundColor: cv.surfaceHover,
+    color: cv.textSecondary,
+  },
 };
-const getToday = () => new Date().toISOString().split('T')[0];
+
+function formatActivityTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+    .format(date)
+    .replace(/(\d{4}),?/, '$1,');
+}
+
+const filterSelectSx = {
+  borderRadius: '10px',
+  backgroundColor: cv.surface,
+  fontSize: '0.875rem',
+  color: cv.textSecondary,
+  minWidth: 130,
+  '& .MuiOutlinedInput-notchedOutline': { borderColor: cv.border },
+  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: cv.borderStrong },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: cv.borderFocus },
+  '& .MuiSelect-icon': { color: cv.textMuted },
+};
+
+const dateFieldSx = {
+  minWidth: 150,
+  '& .MuiOutlinedInput-root': {
+    borderRadius: '10px',
+    backgroundColor: cv.surface,
+    '& fieldset': { borderColor: cv.border },
+    '&:hover fieldset': { borderColor: cv.borderStrong },
+    '&.Mui-focused fieldset': { borderColor: cv.borderFocus },
+  },
+  '& .MuiInputBase-input': { cursor: 'pointer' },
+  '& ::-webkit-calendar-picker-indicator': { cursor: 'pointer' },
+};
+
+const headerCellSx = {
+  fontWeight: 600,
+  fontSize: '0.8125rem',
+  color: cv.textSecondary,
+  borderBottom: `1px solid ${cv.border}`,
+  backgroundColor: 'transparent',
+  py: 1.5,
+  px: 2,
+};
+
+const bodyCellSx = {
+  borderBottom: `1px solid ${cv.border}`,
+  py: 1.75,
+  px: 2,
+  verticalAlign: 'top' as const,
+};
 
 export default function UserActivitiesPage() {
   const [loading, setLoading] = useState(true);
-  const [activities, setActivities] = useState<any[]>([]);
-  const [roles, setRoles] = useState<any[]>([]);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [activities, setActivities] = useState<UserActivity[]>([]);
+  const [roles, setRoles] = useState<RoleOption[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState('ALL');
   const [roleFilter, setRoleFilter] = useState('ALL');
+  const [typeFilter, setTypeFilter] = useState('ALL');
   const [startDate, setStartDate] = useState(getOneYearAgo());
   const [endDate, setEndDate] = useState(getToday());
-  const ACTIVITY_TYPE: Record<string, string> = {
-    INFO: 'INFO',
-    ERROR: 'ERROR'
-  };
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -36,6 +179,10 @@ export default function UserActivitiesPage() {
         const response = await apiClient.get<any>('/users/user-activities');
         if (response?.success) {
           setActivities(response.activities || []);
+        } else if (Array.isArray(response?.activities)) {
+          setActivities(response.activities);
+        } else if (Array.isArray(response)) {
+          setActivities(response);
         }
       } catch (error) {
         console.error('Failed to fetch user activities:', error);
@@ -43,64 +190,73 @@ export default function UserActivitiesPage() {
         setLoading(false);
       }
     };
+
     const fetchRoles = async () => {
       try {
         const response = await apiClient.get<any>('/users/roles');
         if (response?.success) {
           setRoles(response.roles || []);
+        } else if (Array.isArray(response?.roles)) {
+          setRoles(response.roles);
         }
       } catch (error) {
         console.error('Failed to fetch roles:', error);
       }
     };
-    fetchActivities();
-    fetchRoles();
+
+    void fetchActivities();
+    void fetchRoles();
   }, []);
 
-  const handleChangePage = (_event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
-  const filteredActivities = activities.filter((activity) => {
-    if (typeFilter !== 'ALL' && activity.activityType !== typeFilter) {
-      return false;
+  const roleOptions = useMemo(() => {
+    if (roles.length > 0) return roles;
+    const fromActivities = new Set<string>();
+    for (const activity of activities) {
+      if (activity.userRole) fromActivities.add(activity.userRole);
     }
-    if (roleFilter !== 'ALL' && activity.userRole !== roleFilter) {
-      return false;
-    }
+    return Array.from(fromActivities)
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ id: name, name }));
+  }, [roles, activities]);
 
-    if (startDate) {
-      const activityDate = new Date(activity.createdAt).getTime();
-      const filterStart = new Date(startDate).getTime();
-      if (activityDate < filterStart) return false;
-    }
+  const filteredActivities = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return activities.filter((activity) => {
+      if (roleFilter !== 'ALL' && activity.userRole !== roleFilter) return false;
 
-    if (endDate) {
-      const activityDate = new Date(activity.createdAt).getTime();
-      const filterEnd = new Date(endDate).getTime() + (24 * 60 * 60 * 1000); // include end day
-      if (activityDate >= filterEnd) return false;
-    }
+      const typeLabel = (activity.activityType || 'INFO').toUpperCase();
+      if (typeFilter !== 'ALL' && typeLabel !== typeFilter) return false;
 
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    const timeString = new Date(activity.createdAt).toLocaleString().toLowerCase();
-    return (
-      (activity.userName && activity.userName.toLowerCase().includes(query)) ||
-      (activity.userEmail && activity.userEmail.toLowerCase().includes(query)) ||
-      (activity.userRole && activity.userRole.toLowerCase().includes(query)) ||
-      (activity.activityName && activity.activityName.toLowerCase().includes(query)) ||
-      (activity.description && activity.description.toLowerCase().includes(query)) ||
-      (activity.activityType && activity.activityType.toLowerCase().includes(query)) ||
-      timeString.includes(query)
-    );
-  });
+      if (startDate) {
+        const activityDate = new Date(activity.createdAt).getTime();
+        const filterStart = new Date(startDate).getTime();
+        if (activityDate < filterStart) return false;
+      }
 
-  const paginatedActivities = filteredActivities.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+      if (endDate) {
+        const activityDate = new Date(activity.createdAt).getTime();
+        const filterEnd = new Date(endDate).getTime() + 24 * 60 * 60 * 1000;
+        if (activityDate >= filterEnd) return false;
+      }
+
+      if (!query) return true;
+
+      const haystack = [
+        formatActivityTime(activity.createdAt),
+        activity.userName,
+        activity.userEmail,
+        activity.userRole,
+        activity.activityName,
+        activity.activityType,
+        activity.description,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [activities, roleFilter, typeFilter, startDate, endDate, searchQuery]);
 
   const handleExport = async () => {
     if (filteredActivities.length === 0) return;
@@ -108,58 +264,54 @@ export default function UserActivitiesPage() {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('User Activities');
 
-    // Define columns
     worksheet.columns = [
       { header: 'User', key: 'user', width: 25 },
       { header: 'Email', key: 'email', width: 30 },
       { header: 'Role', key: 'role', width: 15 },
       { header: 'Activity Name', key: 'activityName', width: 25 },
-      { header: 'Description', key: 'description', width: 50 },
+      { header: 'Activity Details', key: 'description', width: 50 },
       { header: 'Type', key: 'type', width: 15 },
-      { header: 'Time', key: 'time', width: 25 }
+      { header: 'Time', key: 'time', width: 25 },
     ];
 
-    // Style the header row
     const headerRow = worksheet.getRow(1);
-    headerRow.height = 25; // Increase height for headings
+    headerRow.height = 25;
     headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     headerRow.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FF1976D2' } // Solid blue background
+      fgColor: { argb: 'FF1976D2' },
     };
     headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
-    // Add rows
     for (const activity of filteredActivities) {
       worksheet.addRow({
         user: activity.userName || 'System',
         email: activity.userEmail || '',
-        role: activity.userRole || '-',
+        role: activity.userRole || '—',
         activityName: activity.activityName || '',
         description: activity.description || '',
-        type: activity.activityType || 'INFO',
-        time: new Date(activity.createdAt).toLocaleString()
+        type: (activity.activityType || 'INFO').toUpperCase(),
+        time: new Date(activity.createdAt).toLocaleString(),
       });
     }
 
-    // Set height and styling for data rows
     worksheet.eachRow((row, rowNumber) => {
       if (rowNumber > 1) {
-        row.height = 20; // Set custom height for data rows
+        row.height = 20;
         row.alignment = { vertical: 'middle', wrapText: true };
       }
     });
 
-    // Enable auto-filter for all columns to allow easy filtering
     worksheet.autoFilter = {
       from: 'A1',
-      to: { row: 1, column: 7 }
+      to: { row: 1, column: 7 },
     };
 
-    // Generate Excel File
     const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -167,58 +319,91 @@ export default function UserActivitiesPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
-    <Box component="main" sx={{ flex: 1, overflowY: 'auto', px: { xs: 2, md: 3 }, py: { xs: 2, md: 3 } }}>
-      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', lg: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', lg: 'center' }, gap: 3, mb: 3 }}>
-        <Box sx={{ mb: { xs: 1, lg: 0 } }}>
-          <Typography variant="h5" sx={{ fontWeight: 600, fontSize: '1.375rem', mb: 0.5 }}>
+    <Box
+      component="main"
+      sx={{
+        flex: 1,
+        overflowY: 'auto',
+        px: { xs: 2, md: 3 },
+        py: { xs: 2, md: 3 },
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', lg: 'row' },
+          justifyContent: 'space-between',
+          alignItems: { xs: 'flex-start', lg: 'center' },
+          gap: 3,
+          mb: 3,
+        }}
+      >
+        <Box>
+          <Typography
+            variant="h5"
+            sx={{ fontWeight: 600, fontSize: { xs: '1.25rem', sm: '1.5rem' }, mb: 0.75 }}
+          >
             User Activities
           </Typography>
-          <Typography sx={{ fontSize: '0.875rem', color: cv.textSecondary }}>
-            View the complete audit log of activities in your organization.
+          <Typography sx={{ fontSize: '0.875rem', color: cv.textSecondary, maxWidth: 640 }}>
+            Audit log of user actions across workspaces — uploads, deletes, restores, shares, and
+            more.
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, width: { xs: '100%', lg: 'auto' } }}>
-          <FormControl size="small" sx={{ minWidth: 140 }}>
+
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 1.5,
+            width: { xs: '100%', lg: 'auto' },
+          }}
+        >
+          <FormControl size="small">
             <Select
               value={roleFilter}
-              onChange={(e: SelectChangeEvent) => {
-                setRoleFilter(e.target.value);
-                setPage(0);
-              }}
+              onChange={(e: SelectChangeEvent) => setRoleFilter(e.target.value)}
               displayEmpty
-              sx={{
-                borderRadius: '10px',
-                backgroundColor: cv.surface,
-                '& .MuiOutlinedInput-notchedOutline': { borderColor: cv.border },
+              IconComponent={KeyboardArrowDownIcon}
+              sx={filterSelectSx}
+              MenuProps={{
+                slotProps: { paper: { sx: dropdownMenuPaperSx } },
               }}
             >
-              <MenuItem value="ALL">All Roles</MenuItem>
-              {roles.map((role: any) => (
-                <MenuItem key={role.id} value={role.name}>{role.name}</MenuItem>
+              <MenuItem value="ALL" sx={{ fontSize: '0.875rem' }}>
+                All Roles
+              </MenuItem>
+              {roleOptions.map((role) => (
+                <MenuItem key={role.id} value={role.name} sx={{ fontSize: '0.875rem' }}>
+                  {role.name}
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
 
-          <FormControl size="small" sx={{ minWidth: 120 }}>
+          <FormControl size="small">
             <Select
               value={typeFilter}
-              onChange={(e: SelectChangeEvent) => {
-                setTypeFilter(e.target.value);
-                setPage(0);
-              }}
+              onChange={(e: SelectChangeEvent) => setTypeFilter(e.target.value)}
               displayEmpty
-              sx={{
-                borderRadius: '10px',
-                backgroundColor: cv.surface,
-                '& .MuiOutlinedInput-notchedOutline': { borderColor: cv.border },
+              IconComponent={KeyboardArrowDownIcon}
+              sx={filterSelectSx}
+              MenuProps={{
+                slotProps: { paper: { sx: dropdownMenuPaperSx } },
               }}
             >
-              <MenuItem value="ALL">All Types</MenuItem>
-              {(Object.keys(ACTIVITY_TYPE) as Array<keyof typeof ACTIVITY_TYPE>).map((key) => (
-                <MenuItem key={key} value={ACTIVITY_TYPE[key]}>{ACTIVITY_TYPE[key]}</MenuItem>
+              <MenuItem value="ALL" sx={{ fontSize: '0.875rem' }}>
+                All Types
+              </MenuItem>
+              {ACTIVITY_TYPES.map((type) => (
+                <MenuItem key={type} value={type} sx={{ fontSize: '0.875rem' }}>
+                  {type}
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
@@ -228,72 +413,38 @@ export default function UserActivitiesPage() {
             size="small"
             label="Start Date"
             value={startDate}
-            onChange={(e) => {
-              setStartDate(e.target.value);
-              setPage(0);
-            }}
+            onChange={(e) => setStartDate(e.target.value)}
             slotProps={{
               inputLabel: { shrink: true },
               htmlInput: {
                 min: getOneYearAgo(),
-                max: endDate || getToday()
-              }
-            }}
-            sx={{
-              minWidth: 140,
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                backgroundColor: cv.surface,
-                '& fieldset': { borderColor: cv.border },
+                max: endDate || getToday(),
               },
-              '& .MuiInputBase-input': {
-                cursor: 'pointer',
-              },
-              '& ::-webkit-calendar-picker-indicator': {
-                cursor: 'pointer',
-              }
             }}
+            sx={dateFieldSx}
           />
+
           <TextField
             type="date"
             size="small"
             label="End Date"
             value={endDate}
-            onChange={(e) => {
-              setEndDate(e.target.value);
-              setPage(0);
-            }}
+            onChange={(e) => setEndDate(e.target.value)}
             slotProps={{
               inputLabel: { shrink: true },
               htmlInput: {
                 min: startDate || getOneYearAgo(),
-                max: getToday()
-              }
-            }}
-            sx={{
-              minWidth: 140,
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                backgroundColor: cv.surface,
-                '& fieldset': { borderColor: cv.border },
+                max: getToday(),
               },
-              '& .MuiInputBase-input': {
-                cursor: 'pointer',
-              },
-              '& ::-webkit-calendar-picker-indicator': {
-                cursor: 'pointer',
-              }
             }}
+            sx={dateFieldSx}
           />
 
           <TextField
             size="small"
             placeholder="Search activities..."
             value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setPage(0); // Reset page on search
-            }}
+            onChange={(e) => setSearchQuery(e.target.value)}
             slotProps={{
               input: {
                 startAdornment: (
@@ -304,11 +455,13 @@ export default function UserActivitiesPage() {
               },
             }}
             sx={{
-              minWidth: { xs: '100%', sm: 260 },
+              minWidth: { xs: '100%', sm: 240 },
               '& .MuiOutlinedInput-root': {
                 borderRadius: '10px',
                 backgroundColor: cv.surface,
                 '& fieldset': { borderColor: cv.border },
+                '&:hover fieldset': { borderColor: cv.borderStrong },
+                '&.Mui-focused fieldset': { borderColor: cv.borderFocus },
               },
             }}
           />
@@ -316,7 +469,7 @@ export default function UserActivitiesPage() {
           <Button
             variant="outlined"
             startIcon={<DownloadIcon />}
-            onClick={handleExport}
+            onClick={() => void handleExport()}
             disabled={filteredActivities.length === 0}
             sx={{
               borderRadius: '10px',
@@ -324,6 +477,7 @@ export default function UserActivitiesPage() {
               borderColor: cv.border,
               color: cv.textPrimary,
               height: 40,
+              px: 1.75,
               '&:hover': {
                 borderColor: cv.textSecondary,
                 backgroundColor: cv.surface,
@@ -340,90 +494,126 @@ export default function UserActivitiesPage() {
           <CircularProgress />
         </Box>
       ) : (
-        <Paper sx={{ borderRadius: '12px', border: `1px solid ${cv.border}`, boxShadow: 'none', background: cv.surface, overflow: 'hidden' }}>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ backgroundColor: 'var(--noah-footer-tint)' }}>
-                  <TableCell sx={{ fontWeight: 600, color: cv.textSecondary }}>User</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: cv.textSecondary }}>Role</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: cv.textSecondary }}>Activity Name</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: cv.textSecondary, width: { xs: 200, sm: 300, md: 400 } }}>Activity Details</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: cv.textSecondary }}>Type</TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: cv.textSecondary }}>Time</TableCell>
+        <TableContainer
+          sx={{
+            borderRadius: '12px',
+            border: `1px solid ${cv.border}`,
+            backgroundColor: cv.surface,
+            overflowX: 'auto',
+          }}
+        >
+          <Table sx={{ minWidth: 960 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={headerCellSx}>User</TableCell>
+                <TableCell sx={headerCellSx}>Role</TableCell>
+                <TableCell sx={headerCellSx}>Activity Name</TableCell>
+                <TableCell sx={headerCellSx}>Activity Details</TableCell>
+                <TableCell sx={headerCellSx}>Type</TableCell>
+                <TableCell sx={headerCellSx}>Time</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredActivities.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    align="center"
+                    sx={{ ...bodyCellSx, py: 8, color: cv.textMuted }}
+                  >
+                    No activities found.
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {activities.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 6, color: cv.textMuted }}>
-                      No activities found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedActivities.map((activity) => (
-                    <TableRow key={activity.id} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
-                      <TableCell>
-                        <Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>{activity.userName || 'System'}</Typography>
-                        {activity.userEmail && (
-                          <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>{activity.userEmail}</Typography>
-                        )}
+              ) : (
+                filteredActivities.map((activity) => {
+                  const actionLabel = normalizeActionLabel(activity);
+                  const typeLabel = (activity.activityType || 'INFO').toUpperCase();
+                  const typeTone = typeLabel === 'ERROR' ? 'danger' : getActionTone(actionLabel);
+                  const toneStyles = actionToneSx[typeTone];
+                  const details = activity.description?.trim() || '—';
+
+                  return (
+                    <TableRow
+                      key={activity.id}
+                      sx={{
+                        '&:last-child td': { borderBottom: 0 },
+                        '&:hover td': { backgroundColor: cv.surfaceHover },
+                      }}
+                    >
+                      <TableCell sx={{ ...bodyCellSx, minWidth: 180 }}>
+                        <Typography
+                          sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary }}
+                        >
+                          {activity.userName || 'System'}
+                        </Typography>
+                        {activity.userEmail ? (
+                          <Typography sx={{ mt: 0.25, fontSize: '0.75rem', color: cv.textMuted }}>
+                            {activity.userEmail}
+                          </Typography>
+                        ) : null}
                       </TableCell>
-                      <TableCell>
-                        <Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>{activity.userRole || '-'}</Typography>
+
+                      <TableCell sx={{ ...bodyCellSx, minWidth: 120 }}>
+                        <Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
+                          {activity.userRole || '—'}
+                        </Typography>
                       </TableCell>
-                      <TableCell>
-                        <Typography sx={{ fontWeight: 500, fontSize: '0.875rem', color: cv.textPrimary }}>{activity.activityName}</Typography>
+
+                      <TableCell sx={{ ...bodyCellSx, minWidth: 160 }}>
+                        <Typography
+                          sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary }}
+                        >
+                          {activity.activityName || actionLabel}
+                        </Typography>
                       </TableCell>
-                      <TableCell sx={{ maxWidth: { xs: 200, sm: 300, md: 400 } }}>
+
+                      <TableCell sx={{ ...bodyCellSx, minWidth: 220, maxWidth: 400 }}>
                         <Typography
                           sx={{
                             fontSize: '0.875rem',
-                            color: cv.textSecondary,
+                            color: details === '—' ? cv.textMuted : cv.textSecondary,
                             display: '-webkit-box',
                             WebkitLineClamp: 2,
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden',
-                            textOverflow: 'ellipsis',
                           }}
                         >
-                          {activity.description || '-'}
+                          {details}
                         </Typography>
                       </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={activity.activityType || 'INFO'}
-                          size="small"
+
+                      <TableCell sx={{ ...bodyCellSx, minWidth: 100 }}>
+                        <Box
+                          component="span"
                           sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            px: 1,
+                            py: 0.35,
+                            borderRadius: '999px',
                             fontSize: '0.75rem',
-                            height: 24,
-                            fontWeight: 500,
-                            backgroundColor: activity.activityType === 'ERROR' ? '#fdeded' : cv.blueGlow18,
-                            color: activity.activityType === 'ERROR' ? '#5f2120' : cv.brandBlue,
+                            fontWeight: 600,
+                            lineHeight: 1.2,
+                            whiteSpace: 'nowrap',
+                            ...toneStyles,
                           }}
-                        />
+                        >
+                          {typeLabel}
+                        </Box>
                       </TableCell>
-                      <TableCell>
+
+                      <TableCell sx={{ ...bodyCellSx, whiteSpace: 'nowrap', minWidth: 150 }}>
                         <Typography sx={{ fontSize: '0.875rem', color: cv.textSecondary }}>
-                          {new Date(activity.createdAt).toLocaleString()}
+                          {formatActivityTime(activity.createdAt)}
                         </Typography>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          <TablePagination
-            rowsPerPageOptions={[5, 10, 25, 50]}
-            component="div"
-            count={filteredActivities.length}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
-          />
-        </Paper>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
     </Box>
   );

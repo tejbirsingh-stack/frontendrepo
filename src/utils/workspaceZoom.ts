@@ -12,3 +12,11 @@ export function stepWorkspaceZoom(current: number, direction: 'in' | 'out'): num
     direction === 'in' ? current + WORKSPACE_ZOOM_STEP : current - WORKSPACE_ZOOM_STEP;
   return clampWorkspaceZoom(Number(next.toFixed(2)));
 }
+
+export function formatWorkspaceZoomLabel(zoom: number): string {
+  return `${Math.round(zoom * 100)}%`;
+}
+
+export function isWorkspaceZoomDefault(zoom: number): boolean {
+  return Math.abs(zoom - WORKSPACE_ZOOM_DEFAULT) < 0.001;
+}

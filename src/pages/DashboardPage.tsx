@@ -38,6 +38,7 @@ import MediaListRow from '../components/dashboard/MediaListRow';
 import MediaSelectionBar, {
   getDashboardFolderDropTargetKey,
 } from '../components/dashboard/MediaSelectionBar';
+import MoveItemsModal, { type MoveDestination } from '../components/dashboard/MoveItemsModal';
 import NewFolderModal from '../components/dashboard/NewFolderModal';
 import NewProjectModal from '../components/dashboard/NewProjectModal';
 import TrashConfirmModal from '../components/dashboard/TrashConfirmModal';
@@ -51,12 +52,14 @@ import { dropdownMenuPaperSx } from '../constants/dropdownMenu';
 import { UPLOAD_ACCEPT, getUploadableFiles } from '../utils/fileMediaType';
 import {
   matchesDateRange,
+  matchesMediaTypeFilter,
   type DateRangeFilter,
   type MediaTypeFilter,
 } from '../constants/mediaFilters';
 import { useDashboard } from '../context/DashboardContext';
 import type { MediaItem, MediaLocation, MediaType } from '../data/mockMedia';
-import { resolveFolderColor } from '../utils/folderColorStyle';
+import { resolveLibraryFolderColor } from '../utils/folderColorStyle';
+import { isYearOrMonthFolder } from '../utils/dateFolder';
 import type { LibraryView } from '../types/libraryView';
 import { canInviteTeamMembersToFolderSelection, isProjectSelection } from '../utils/folderInviteAccess';
 import {
@@ -69,7 +72,6 @@ import { MULTI_ITEM_TRASH_CONFIRMATION_PHRASE } from '../constants/trash';
 import { CURRENT_USER } from '../constants/currentUser';
 import {
   InviteTeamMemberButton,
-  TeamMemberAvatarStack,
 } from '../components/common/TeamMemberAvatarStack';
 import InviteTeamMemberModal from '../components/common/InviteTeamMemberModal';
 import { createWorkspaceTeamMember } from '../data/mockSettingsData';
@@ -249,10 +251,10 @@ export default function DashboardPage({
   const isFolderView = Boolean(folderMedia);
 
   const {
-    rootMediaItems,
     favoriteMediaItems,
     duplicateMediaItems,
     mediaItems,
+    workspaces,
     activeWorkspaceId,
     globalSearchQuery,
     setGlobalSearchQuery,
@@ -269,7 +271,9 @@ export default function DashboardPage({
     setMediaSelection,
     clearMediaSelection,
     moveMediaToDashboardFolder,
+    moveMediaToWorkspaceFolder,
     moveMediaToTrashBulk,
+    updateMediaProjectLocation,
     uploadMediaFiles,
     createRootMediaFolder,
     createProject,
@@ -287,7 +291,12 @@ export default function DashboardPage({
         : isProjectsView
           ? 'Projects'
           : selectionTitle ?? 'All media';
-  const folderAccent = folderMedia ? resolveFolderColor(folderMedia.folderColor) : null;
+  const folderAccent = folderMedia
+    ? resolveLibraryFolderColor({
+        folderColor: folderMedia.folderColor,
+        isProject: folderMedia.isProject,
+      })
+    : null;
 
   const folderBreadcrumbs = useMemo(() => {
     if (!folderMedia) return [];
@@ -323,6 +332,7 @@ export default function DashboardPage({
   const [newFolderModalOpen, setNewFolderModalOpen] = useState(false);
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
   const [bulkTrashOpen, setBulkTrashOpen] = useState(false);
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
   const [inviteTeamMemberOpen, setInviteTeamMemberOpen] = useState(false);
   const [folderTeamMembers, setFolderTeamMembers] = useState<
     Record<string, WorkspaceTeamMember[]>
@@ -488,7 +498,10 @@ export default function DashboardPage({
         item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
     );
 
-    if (!sidebarSelection) return rootMediaItems;
+    // All media: every project, folder, and file — hide organizational year/month folders.
+    if (!sidebarSelection) {
+      return workspaceItems.filter((item) => !isYearOrMonthFolder(item));
+    }
 
     return filterMediaBySidebarSelection(workspaceItems, sidebarSelection, mediaItems);
   }, [
@@ -501,7 +514,6 @@ export default function DashboardPage({
     activeWorkspaceId,
     trashedIds,
     sidebarSelection,
-    rootMediaItems,
     isProjectsView,
   ]);
 
@@ -527,7 +539,7 @@ export default function DashboardPage({
       ) {
         return false;
       }
-      if (mediaTypeFilter !== 'all' && item.type !== mediaTypeFilter) return false;
+      if (!matchesMediaTypeFilter(item, mediaTypeFilter)) return false;
       if (!matchesDateRange(item.createdAt, dateRangeFilter)) return false;
       if (
         selectedTags.size > 0 &&
@@ -698,8 +710,12 @@ export default function DashboardPage({
     itemId: string,
     event?: React.MouseEvent,
   ) => {
+    const target = displayedItems.find((item) => item.id === itemId);
+    if (target?.isProject) return;
+
     if (event?.shiftKey && lastSelectedIdRef.current) {
-      const ids = displayedItems.map((item) => item.id);
+      const selectableItems = displayedItems.filter((item) => !item.isProject);
+      const ids = selectableItems.map((item) => item.id);
       const start = ids.indexOf(lastSelectedIdRef.current);
       const end = ids.indexOf(itemId);
       if (start !== -1 && end !== -1) {
@@ -719,14 +735,55 @@ export default function DashboardPage({
     lastSelectedIdRef.current = itemId;
   };
 
+  const selectableDisplayedItems = useMemo(
+    () => displayedItems.filter((item) => !item.isProject),
+    [displayedItems],
+  );
+
+  useEffect(() => {
+    const projectIds = mediaItems
+      .filter((item) => item.isProject && selectedMediaIds.has(item.id))
+      .map((item) => item.id);
+    if (projectIds.length === 0) return;
+
+    setMediaSelection(
+      [...selectedMediaIds].filter((id) => !projectIds.includes(id)),
+    );
+  }, [mediaItems, selectedMediaIds, setMediaSelection]);
+
   const handleBulkDelete = () => {
     if (selectedMediaIds.size === 0) return;
     setBulkTrashOpen(true);
   };
 
+  const handleBulkMove = () => {
+    if (selectedMediaIds.size === 0) return;
+    setBulkMoveOpen(true);
+  };
+
   const confirmBulkDelete = () => {
     moveMediaToTrashBulk([...selectedMediaIds]);
     setBulkTrashOpen(false);
+    lastSelectedIdRef.current = null;
+  };
+
+  const handleBulkMoveDestination = (destination: MoveDestination) => {
+    const selectedIds = [...selectedMediaIds];
+    if (selectedIds.length === 0) return;
+
+    if (destination.kind === 'project') {
+      selectedIds.forEach((mediaId) => {
+        const media = mediaItems.find((item) => item.id === mediaId);
+        if (!media || media.isProject) return;
+        void updateMediaProjectLocation(mediaId, { folderId: destination.projectId }, media.type);
+      });
+    } else if (destination.workspaceId === activeWorkspaceId) {
+      moveMediaToDashboardFolder(selectedIds, destination.folderId);
+    } else {
+      moveMediaToWorkspaceFolder(selectedIds, destination.workspaceId, destination.folderId);
+    }
+
+    clearMediaSelection();
     lastSelectedIdRef.current = null;
   };
 
@@ -1031,9 +1088,6 @@ export default function DashboardPage({
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', width: { xs: '100%', lg: 'auto' } }}>
-            {displayedTeamMembers.length > 0 ? (
-              <TeamMemberAvatarStack members={displayedTeamMembers} />
-            ) : null}
             {canInviteToFolder ? (
               <InviteTeamMemberButton onClick={() => setInviteTeamMemberOpen(true)} />
             ) : null}
@@ -1258,13 +1312,27 @@ export default function DashboardPage({
 
       <MediaSelectionBar
         selectedCount={selectedMediaIds.size}
-        totalCount={displayedItems.length}
-        onSelectAll={() => setMediaSelection(displayedItems.map((item) => item.id))}
+        totalCount={selectableDisplayedItems.length}
+        onSelectAll={() =>
+          setMediaSelection(selectableDisplayedItems.map((item) => item.id))
+        }
         onClearSelection={() => {
           clearMediaSelection();
           lastSelectedIdRef.current = null;
         }}
+        onMove={handleBulkMove}
         onDelete={handleBulkDelete}
+      />
+
+      <MoveItemsModal
+        open={bulkMoveOpen}
+        itemCount={selectedMediaIds.size}
+        mediaItems={mediaItems}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        trashedIds={trashedIds}
+        onClose={() => setBulkMoveOpen(false)}
+        onMove={handleBulkMoveDestination}
       />
 
       <TrashConfirmModal

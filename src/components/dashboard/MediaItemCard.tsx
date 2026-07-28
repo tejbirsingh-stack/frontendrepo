@@ -21,7 +21,9 @@ import { removeMediaDragGhost, setMediaDragImage } from '../../utils/mediaDragPr
 import {
   folderAccentBackground,
   folderAccentTint,
-  resolveFolderColor,
+  projectAccentBackground,
+  projectAccentTint,
+  resolveLibraryFolderColor,
 } from '../../utils/folderColorStyle';
 import VideoHoverPreview from './VideoHoverPreview';
 import {
@@ -123,7 +125,7 @@ function FavoriteButton({
 
 function TypeBadge({ type, isProject }: { type: MediaType; isProject?: boolean }) {
   const config = typeConfig[type];
-  const Icon = config.icon;
+  const Icon = type === 'folder' && isProject ? WorkOutlineOutlinedIcon : config.icon;
   const label = type === 'folder' && isProject ? 'Project' : config.label;
 
   return (
@@ -152,7 +154,10 @@ function TypeBadge({ type, isProject }: { type: MediaType; isProject?: boolean }
 }
 
 function FolderPreview({ item, childCount }: { item: MediaItem; childCount: number }) {
-  const folderColor = resolveFolderColor(item.folderColor);
+  const accentColor = resolveLibraryFolderColor({
+    folderColor: item.folderColor,
+    isProject: item.isProject,
+  });
 
   return (
     <Box
@@ -162,14 +167,16 @@ function FolderPreview({ item, childCount }: { item: MediaItem; childCount: numb
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        background: folderAccentBackground(item.folderColor),
+        background: item.isProject
+          ? projectAccentBackground()
+          : folderAccentBackground(item.folderColor),
         gap: 1,
       }}
     >
       {item.isProject ? (
-        <WorkOutlineOutlinedIcon sx={{ fontSize: 48, color: folderColor }} />
+        <WorkOutlineOutlinedIcon sx={{ fontSize: 48, color: accentColor }} />
       ) : (
-        <FolderOutlinedIcon sx={{ fontSize: 48, color: folderColor }} />
+        <FolderOutlinedIcon sx={{ fontSize: 48, color: accentColor }} />
       )}
       <Typography variant="caption" sx={{ color: cv.textMuted }}>
         {formatFolderItemCount(childCount)}
@@ -356,7 +363,11 @@ export default function MediaItemCard({
       trashedIds,
     })
     : 0;
-  const folderFooterAccent = isFolder ? folderAccentTint(item.folderColor) : config.accent;
+  const folderFooterAccent = isFolder
+    ? item.isProject
+      ? projectAccentTint()
+      : folderAccentTint(item.folderColor)
+    : config.accent;
   const selectionActive = selectedMediaIds.size > 0;
 
   const openPath = getMediaViewerPath(item);
@@ -551,36 +562,38 @@ export default function MediaItemCard({
               <DragIndicatorIcon sx={{ fontSize: 18, pointerEvents: 'none' }} />
             </Box>
           </Tooltip>
-          <Tooltip
-            title={isSelected ? 'Deselect' : 'Select'}
-            arrow
-            placement="top"
-          >
-            <Checkbox
-              size="small"
-              className="media-select-checkbox"
-              checked={isSelected}
-              onClick={(e) => e.stopPropagation()}
-              onChange={() => onToggleSelect(item.id)}
-              slotProps={{ input: { 'aria-label': `Select ${item.title}` } }}
-              sx={{
-                p: 0,
-                width: 32,
-                height: 32,
-                ...thumbnailOverlayChipStyles,
-                borderRadius: '8px',
-                color: cv.textInverse,
-                opacity: isSelected || selectionActive ? 1 : 0,
-                transition: 'opacity 0.15s ease, background-color 0.15s ease',
-                '&.Mui-checked': {
-                  color: cv.brandOrchid,
-                },
-                '&:hover': {
-                  ...thumbnailOverlayChipHoverStyles,
-                },
-              }}
-            />
-          </Tooltip>
+          {item.isProject ? null : (
+            <Tooltip
+              title={isSelected ? 'Deselect' : 'Select'}
+              arrow
+              placement="top"
+            >
+              <Checkbox
+                size="small"
+                className="media-select-checkbox"
+                checked={isSelected}
+                onClick={(e) => e.stopPropagation()}
+                onChange={() => onToggleSelect(item.id)}
+                slotProps={{ input: { 'aria-label': `Select ${item.title}` } }}
+                sx={{
+                  p: 0,
+                  width: 32,
+                  height: 32,
+                  ...thumbnailOverlayChipStyles,
+                  borderRadius: '8px',
+                  color: cv.textInverse,
+                  opacity: isSelected || selectionActive ? 1 : 0,
+                  transition: 'opacity 0.15s ease, background-color 0.15s ease',
+                  '&.Mui-checked': {
+                    color: cv.brandOrchid,
+                  },
+                  '&:hover': {
+                    ...thumbnailOverlayChipHoverStyles,
+                  },
+                }}
+              />
+            </Tooltip>
+          )}
         </Box>
 
         {isDropTarget ? (
