@@ -28,10 +28,11 @@ export interface MediaItem {
   itemCount?: number;
   tags?: string[];
   aiTags?: string[];
-  location: MediaLocation | null;
+  location?: MediaLocation | null;
   linkedProjectIds?: string[];
   /** Placement in the Projects sidebar (separate from files & folders location). */
   projectLocations?: MediaLocation[];
+  projectLocation?: MediaLocation;
   parentFolderId?: string | null;
   /** Custom folder color for media library folders */
   folderColor?: string;
@@ -42,7 +43,7 @@ export interface MediaItem {
   originallyCreatedAt?: string;
   compressionStatus?: string;
   customMetadata?: Record<string, unknown>;
-  status?: 'active' | 'duplicate' | 'archived';
+  status?: 'active' | 'duplicate' | 'archived' | 'trash';
   isProject?: boolean;
 }
 

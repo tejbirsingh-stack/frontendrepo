@@ -1723,7 +1723,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         let fullTechSpecs: Record<string, any> = {};
         try {
           if (current.type === 'video') {
-            fullTechSpecs = await extractFullBrowserVideoSpecs(current.file);
+            fullTechSpecs = {};
           } else if (current.type === 'image') {
             fullTechSpecs = await extractImageMetadata(current.file);
           } else if (current.type === 'audio') {
