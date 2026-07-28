@@ -40,7 +40,7 @@ const HANDLE_WIDTH = 8;
 const MIN_SEGMENT_PX = 14;
 const MAX_VISIBLE_LANES = 3;
 const RULER_HEIGHT = 16;
-const MAX_TIMELINE_EXPANDED_HEIGHT = 108;
+const MAX_TIMELINE_EXPANDED_HEIGHT = 200;
 const SEGMENT_CLICK_MOVE_THRESHOLD_PX = 5;
 
 const TRACKS: {
@@ -938,16 +938,16 @@ export default function AnnotationTimeline({
         </Box>
       </Box>
 
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: hasAnnotations ? 'flex-end' : 'space-between',
-          mt: 0.5,
-          gap: 1,
-        }}
-      >
-        {!hasAnnotations ? (
+      {!hasAnnotations ? (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            mt: 0.5,
+            gap: 1,
+          }}
+        >
           <Typography
             sx={{
               fontSize: '0.75rem',
@@ -956,19 +956,8 @@ export default function AnnotationTimeline({
           >
             {footerHint}
           </Typography>
-        ) : null}
-        <Typography
-          aria-live="polite"
-          sx={{
-            flexShrink: 0,
-            fontSize: '0.8125rem',
-            fontVariantNumeric: 'tabular-nums',
-            color: cv.textSecondary,
-          }}
-        >
-          {formatVideoTimestamp(currentTime)} / {formatVideoTimestamp(safeDuration)}
-        </Typography>
-      </Box>
+        </Box>
+      ) : null}
     </Box>
   );
 }

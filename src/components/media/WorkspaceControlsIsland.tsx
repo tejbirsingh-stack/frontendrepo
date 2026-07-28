@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cv } from '../../theme/cssVars';
-import { Box, Divider, IconButton } from '@mui/material';
+import { Box, Divider, IconButton, Typography } from '@mui/material';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import RemoveOutlinedIcon from '@mui/icons-material/RemoveOutlined';
 import HelpMenuDrawer, { getHelpMenuShortcutLabel } from './HelpMenuDrawer';
 import LabeledToolbarButton from './LabeledToolbarButton';
@@ -43,11 +44,20 @@ const controlButtonSx = {
   },
 };
 
+const dividerSx = {
+  borderColor: cv.surfaceActive,
+  height: { xs: 16, lg: 20 },
+  alignSelf: 'center',
+};
+
 interface WorkspaceControlsIslandProps {
+  zoomLabel?: string;
   canZoomOut: boolean;
   canZoomIn: boolean;
+  canResetZoom?: boolean;
   onZoomOut: () => void;
   onZoomIn: () => void;
+  onZoomReset?: () => void;
   onKeyboardShortcuts: () => void;
   compact?: boolean;
   /** Rendered after zoom controls and before Help in compact (mobile) layout. */
@@ -56,10 +66,13 @@ interface WorkspaceControlsIslandProps {
 }
 
 export default function WorkspaceControlsIsland({
+  zoomLabel = '100%',
   canZoomOut,
   canZoomIn,
+  canResetZoom = false,
   onZoomOut,
   onZoomIn,
+  onZoomReset,
   onKeyboardShortcuts,
   compact = false,
   insertBeforeHelp,
@@ -109,6 +122,19 @@ export default function WorkspaceControlsIsland({
             >
               <RemoveOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
             </LabeledToolbarButton>
+            <Box
+              aria-live="polite"
+              sx={{
+                minWidth: 44,
+                px: 0.5,
+                textAlign: 'center',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: cv.textPrimary,
+              }}
+            >
+              {zoomLabel}
+            </Box>
             <LabeledToolbarButton
               label="Zoom in"
               disabled={!canZoomIn}
@@ -117,6 +143,16 @@ export default function WorkspaceControlsIsland({
             >
               <AddOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
             </LabeledToolbarButton>
+            {onZoomReset ? (
+              <LabeledToolbarButton
+                label="Reset zoom"
+                disabled={!canResetZoom}
+                onClick={onZoomReset}
+                ariaLabel="Reset zoom"
+              >
+                <HistoryOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
+              </LabeledToolbarButton>
+            ) : null}
           </>
         )}
         {insertBeforeHelp}
@@ -171,15 +207,26 @@ export default function WorkspaceControlsIsland({
             </span>
           </ShortcutTooltip>
 
-          <Divider
-            orientation="vertical"
-            flexItem
+          <Divider orientation="vertical" flexItem sx={dividerSx} />
+
+          <Typography
+            component="span"
+            aria-live="polite"
+            aria-label={`Zoom ${zoomLabel}`}
             sx={{
-              borderColor: cv.surfaceActive,
-              height: { xs: 16, lg: 20 },
-              alignSelf: 'center',
+              minWidth: 52,
+              px: 1,
+              textAlign: 'center',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              color: cv.textPrimary,
+              userSelect: 'none',
             }}
-          />
+          >
+            {zoomLabel}
+          </Typography>
+
+          <Divider orientation="vertical" flexItem sx={dividerSx} />
 
           <ShortcutTooltip label="Zoom in" shortcut={zoomInShortcut}>
             <span>
@@ -194,6 +241,25 @@ export default function WorkspaceControlsIsland({
               </IconButton>
             </span>
           </ShortcutTooltip>
+
+          {onZoomReset ? (
+            <>
+              <Divider orientation="vertical" flexItem sx={dividerSx} />
+              <ShortcutTooltip label="Reset zoom">
+                <span>
+                  <IconButton
+                    type="button"
+                    aria-label="Reset zoom"
+                    disabled={!canResetZoom}
+                    onClick={onZoomReset}
+                    sx={controlButtonSx}
+                  >
+                    <HistoryOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
+                  </IconButton>
+                </span>
+              </ShortcutTooltip>
+            </>
+          ) : null}
         </Box>
       )}
 

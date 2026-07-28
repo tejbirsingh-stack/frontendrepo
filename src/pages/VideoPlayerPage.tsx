@@ -6,11 +6,14 @@ import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import StarIcon from '@mui/icons-material/Star';
-import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
@@ -141,6 +144,8 @@ import {
   startFrameRateMeasurement,
 } from '../utils/videoTechnicalMetadata';
 import {
+  formatWorkspaceZoomLabel,
+  isWorkspaceZoomDefault,
   stepWorkspaceZoom,
   WORKSPACE_ZOOM_DEFAULT,
   WORKSPACE_ZOOM_MAX,
@@ -195,6 +200,14 @@ const mediaTypeLabels = {
   image: 'Image',
   audio: 'Audio',
   document: 'File',
+} as const;
+
+const mediaTypeHeaderIcons = {
+  folder: InsertDriveFileOutlinedIcon,
+  video: VideocamOutlinedIcon,
+  image: ImageOutlinedIcon,
+  audio: AudioFileOutlinedIcon,
+  document: InsertDriveFileOutlinedIcon,
 } as const;
 
 export default function VideoPlayerPage() {
@@ -520,6 +533,12 @@ export default function VideoPlayerPage() {
   useEffect(() => {
     setToolsDrawerOpen(false);
   }, [isDesktopAnnotationToolbar]);
+
+  useEffect(() => {
+    if (item?.type !== 'video') {
+      setToolsDrawerOpen(false);
+    }
+  }, [item?.type]);
   const [clearAnnotationsModalOpen, setClearAnnotationsModalOpen] = useState(false);
   const [keyboardShortcutsOpen, setKeyboardShortcutsOpen] = useState(false);
   const [workspaceZoom, setWorkspaceZoom] = useState(WORKSPACE_ZOOM_DEFAULT);
@@ -719,7 +738,7 @@ export default function VideoPlayerPage() {
   const headerMetadataItems = useMemo(() => {
     if (!item) return [];
 
-    const items: string[] = [mediaTypeLabels[item.type]];
+    const items: string[] = [];
 
     const qualityLabel = getVideoQualityLabel(
       videoTechnicalDetails.width,
@@ -831,6 +850,8 @@ export default function VideoPlayerPage() {
 
   const canWorkspaceZoomOut = workspaceZoom > WORKSPACE_ZOOM_MIN;
   const canWorkspaceZoomIn = workspaceZoom < WORKSPACE_ZOOM_MAX;
+  const canWorkspaceZoomReset = !isWorkspaceZoomDefault(workspaceZoom);
+  const workspaceZoomLabel = formatWorkspaceZoomLabel(workspaceZoom);
 
   const handleWorkspaceZoomOut = useCallback(() => {
     setWorkspaceZoom((current) => stepWorkspaceZoom(current, 'out'));
@@ -838,6 +859,10 @@ export default function VideoPlayerPage() {
 
   const handleWorkspaceZoomIn = useCallback(() => {
     setWorkspaceZoom((current) => stepWorkspaceZoom(current, 'in'));
+  }, []);
+
+  const handleWorkspaceZoomReset = useCallback(() => {
+    setWorkspaceZoom(WORKSPACE_ZOOM_DEFAULT);
   }, []);
 
   const handleOpenClearAnnotationsModal = useCallback(() => {
@@ -2536,7 +2561,7 @@ export default function VideoPlayerPage() {
               text={item.title}
               sx={{
                 fontWeight: 600,
-                fontSize: { xs: '1.0625rem', md: '1.25rem' },
+                fontSize: { xs: '1.25rem', md: '1.5rem' },
                 lineHeight: 1,
                 color: cv.textPrimary,
               }}
@@ -2601,31 +2626,40 @@ export default function VideoPlayerPage() {
               maxWidth: 'min(42vw, 560px)',
             }}
           >
+            {item ? (
+              <Box
+                component={mediaTypeHeaderIcons[item.type]}
+                aria-label={mediaTypeLabels[item.type]}
+                sx={{
+                  fontSize: 18,
+                  color: cv.textSecondary,
+                  flexShrink: 0,
+                }}
+              />
+            ) : null}
             {headerMetadataItems.map((label, index) => (
               <Box
                 key={`${label}-${index}`}
                 sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, minWidth: 0 }}
               >
-                {index > 0 ? (
-                  <Box
-                    component="span"
-                    aria-hidden
-                    sx={{
-                      width: 4,
-                      height: 4,
-                      borderRadius: '50%',
-                      backgroundColor: cv.textMuted,
-                      flexShrink: 0,
-                    }}
-                  />
-                ) : null}
+                <Box
+                  component="span"
+                  aria-hidden
+                  sx={{
+                    width: 4,
+                    height: 4,
+                    borderRadius: '50%',
+                    backgroundColor: cv.textMuted,
+                    flexShrink: 0,
+                  }}
+                />
                 <Typography
                   component="span"
                   noWrap
                   sx={{
                     fontSize: { lg: '0.9375rem', xl: '1rem' },
-                    fontWeight: index === 0 ? 600 : 500,
-                    color: index === 0 ? cv.textSecondary : cv.textMuted,
+                    fontWeight: 500,
+                    color: cv.textMuted,
                     letterSpacing: '0.01em',
                   }}
                 >
@@ -2740,26 +2774,34 @@ export default function VideoPlayerPage() {
             </Box>
           </Tooltip>
 
-          <Tooltip
-            title={historyOpen ? 'Hide annotation history' : 'Show annotation history'}
-            arrow
-            placement="bottom"
-          >
-            <IconButton
-              type="button"
-              aria-label={historyOpen ? 'Hide annotation history' : 'Show annotation history'}
-              aria-pressed={historyOpen}
-              onClick={() => setHistoryOpen((current) => !current)}
-              sx={{
-                color: historyOpen ? cv.textPrimary : cv.textSecondary,
-                border: "1px solid var(--noah-border)",
-                backgroundColor: historyOpen ? cv.surfaceHover : 'transparent',
-                '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceHover },
-              }}
-            >
-              <HistoryOutlinedIcon />
-            </IconButton>
-          </Tooltip>
+          {!historyOpen ? (
+            <Tooltip title="Show annotation history" arrow placement="bottom">
+              <IconButton
+                type="button"
+                aria-label="Show annotation history"
+                onClick={() => setHistoryOpen(true)}
+                sx={{
+                  position: 'absolute',
+                  right: { xs: 16, sm: 24 },
+                  top: '100%',
+                  mt: 1.25,
+                  zIndex: 3,
+                  width: 44,
+                  height: 44,
+                  color: cv.textPrimary,
+                  border: '1px solid var(--noah-border)',
+                  backgroundColor: 'var(--noah-popover-surface-deep)',
+                  boxShadow: cv.popoverShadow,
+                  '&:hover': {
+                    color: cv.textPrimary,
+                    backgroundColor: cv.surfaceHover,
+                  },
+                }}
+              >
+                <ForumOutlinedIcon sx={{ fontSize: 22 }} />
+              </IconButton>
+            </Tooltip>
+          ) : null}
         </Box>
       </Box>
 
@@ -3245,6 +3287,11 @@ export default function VideoPlayerPage() {
                 timelineFallbackDuration={timelineFallbackDuration}
                 onAnnotationRangeChange={handleAnnotationRangeChange}
                 onAnnotationClick={handleAnnotationClick}
+                frameRateLabel={
+                  videoTechnicalDetails?.frameRate ||
+                  item?.frameRate ||
+                  undefined
+                }
               />
             )}
 
@@ -3354,10 +3401,13 @@ export default function VideoPlayerPage() {
                     }}
                   >
                     <WorkspaceControlsIsland
+                      zoomLabel={workspaceZoomLabel}
                       canZoomOut={canWorkspaceZoomOut}
                       canZoomIn={canWorkspaceZoomIn}
+                      canResetZoom={canWorkspaceZoomReset}
                       onZoomOut={handleWorkspaceZoomOut}
                       onZoomIn={handleWorkspaceZoomIn}
+                      onZoomReset={handleWorkspaceZoomReset}
                       onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
                       hideZoomControls={item?.type === 'audio'}
                     />
@@ -3405,10 +3455,13 @@ export default function VideoPlayerPage() {
                     />
                     <WorkspaceControlsIsland
                       compact
+                      zoomLabel={workspaceZoomLabel}
                       canZoomOut={canWorkspaceZoomOut}
                       canZoomIn={canWorkspaceZoomIn}
+                      canResetZoom={canWorkspaceZoomReset}
                       onZoomOut={handleWorkspaceZoomOut}
                       onZoomIn={handleWorkspaceZoomIn}
+                      onZoomReset={handleWorkspaceZoomReset}
                       onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
                       hideZoomControls={item?.type === 'audio'}
                       insertBeforeHelp={

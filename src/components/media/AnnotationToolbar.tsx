@@ -509,9 +509,9 @@ export default function AnnotationToolbar({
           );
         })}
 
-        {mediaType !== 'audio' && !compact && <Divider orientation="vertical" flexItem sx={dividerSx} />}
+        {mediaType === 'video' && !compact && <Divider orientation="vertical" flexItem sx={dividerSx} />}
 
-        {mediaType !== 'audio' && playerToolsViewState && playerToolHandlers ? (
+        {mediaType === 'video' && playerToolsViewState && playerToolHandlers ? (
           <PinnedPlayerToolButtons
             pinnedTools={pinnedPlayerTools}
             viewState={playerToolsViewState}
@@ -520,7 +520,7 @@ export default function AnnotationToolbar({
           />
         ) : null}
 
-        {mediaType !== 'audio' && (
+        {mediaType === 'video' && (
           compact ? (
             <Box ref={moreToolsAnchorRef} sx={{ display: 'inline-flex', flexShrink: 0 }}>
               <LabeledToolbarButton

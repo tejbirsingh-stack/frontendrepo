@@ -21,11 +21,7 @@ const SHAPE_LABELS: Partial<Record<ShapeTool, string>> = {
   'triangle-down': 'Triangle',
 };
 
-const SKIPPED_HISTORY_TYPES = new Set<AnnotationHistoryEntry['type']>([
-  'reply',
-  'text',
-  'sticky_note',
-]);
+const SKIPPED_HISTORY_TYPES = new Set<AnnotationHistoryEntry['type']>(['reply']);
 
 interface BuildTimelineItemsInput {
   comments: VideoComment[];

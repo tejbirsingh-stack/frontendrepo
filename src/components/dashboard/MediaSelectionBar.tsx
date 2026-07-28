@@ -1,6 +1,7 @@
 import { Box, Button, IconButton, Typography } from '@mui/material';
 import { cv } from '../../theme/cssVars';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
+import CreateNewFolderOutlinedIcon from '@mui/icons-material/CreateNewFolderOutlined';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 
 interface MediaSelectionBarProps {
@@ -8,6 +9,7 @@ interface MediaSelectionBarProps {
   totalCount: number;
   onSelectAll: () => void;
   onClearSelection: () => void;
+  onMove: () => void;
   onDelete: () => void;
 }
 
@@ -16,11 +18,15 @@ export default function MediaSelectionBar({
   totalCount,
   onSelectAll,
   onClearSelection,
+  onMove,
   onDelete,
 }: MediaSelectionBarProps) {
   if (selectedCount === 0) return null;
 
   const allSelected = selectedCount === totalCount && totalCount > 0;
+  const isMulti = selectedCount > 1;
+  const moveLabel = isMulti ? 'Move All' : 'Move';
+  const deleteLabel = isMulti ? 'Delete All' : 'Delete';
 
   return (
     <Box
@@ -60,6 +66,27 @@ export default function MediaSelectionBar({
 
       <Button
         size="small"
+        startIcon={<CreateNewFolderOutlinedIcon sx={{ fontSize: 18 }} />}
+        onClick={onMove}
+        sx={{
+          px: 1.5,
+          py: 0.65,
+          fontSize: '0.8125rem',
+          fontWeight: 600,
+          color: cv.textPrimary,
+          borderRadius: '8px',
+          border: `1px solid ${cv.border}`,
+          '&:hover': {
+            backgroundColor: cv.surfaceHover,
+            borderColor: cv.borderFocus,
+          },
+        }}
+      >
+        {moveLabel}
+      </Button>
+
+      <Button
+        size="small"
         startIcon={<DeleteOutlinedIcon sx={{ fontSize: 18 }} />}
         onClick={onDelete}
         sx={{
@@ -76,7 +103,7 @@ export default function MediaSelectionBar({
           },
         }}
       >
-        Delete
+        {deleteLabel}
       </Button>
 
       <IconButton

@@ -5,9 +5,7 @@ export type AnnotationHistoryType =
   | 'comment'
   | 'reply'
   | 'drawing'
-  | 'text'
   | 'shape'
-  | 'sticky_note'
   | 'stamp';
 
 export interface AnnotationHistoryEntry {
