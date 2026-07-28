@@ -225,6 +225,12 @@ export default function TrashConfirmModal({
           placeholder="Please enter a reason for deletion..."
           aria-labelledby="trash-confirm-reason-label"
           size="small"
+          slotProps={{
+            htmlInput: {
+              maxLength: 500
+            }
+          }}
+          helperText={`${reason.length}/500`}
           sx={{
             '& .MuiInputBase-root': {
               borderRadius: '10px',
@@ -237,6 +243,12 @@ export default function TrashConfirmModal({
             },
             '& .Mui-focused .MuiOutlinedInput-notchedOutline': {
               borderColor: cv.destructiveBorder,
+            },
+            '& .MuiFormHelperText-root': {
+              textAlign: 'right',
+              color: cv.textMuted,
+              fontSize: '0.75rem',
+              mt: 0.5,
             },
           }}
         />

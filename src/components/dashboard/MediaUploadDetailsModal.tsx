@@ -649,10 +649,20 @@ export default function MediaUploadDetailsModal({
                 onChange={(event) => setTitle(event.target.value)}
                 autoFocus
                 size="small"
+                slotProps={{
+                  htmlInput: { maxLength: 255 },
+                }}
+                helperText={`${title.length}/255`}
                 sx={{
                   '& .MuiInputBase-root': {
                     borderRadius: '10px',
                     backgroundColor: cv.surface,
+                  },
+                  '& .MuiFormHelperText-root': {
+                    textAlign: 'right',
+                    color: cv.textMuted,
+                    fontSize: '0.75rem',
+                    mt: 0.5,
                   },
                 }}
               />
@@ -673,10 +683,20 @@ export default function MediaUploadDetailsModal({
                 value={summary}
                 onChange={(event) => setSummary(event.target.value)}
                 size="small"
+                slotProps={{
+                  htmlInput: { maxLength: 1000 },
+                }}
+                helperText={`${summary.length}/1000`}
                 sx={{
                   '& .MuiInputBase-root': {
                     borderRadius: '10px',
                     backgroundColor: cv.surface,
+                  },
+                  '& .MuiFormHelperText-root': {
+                    textAlign: 'right',
+                    color: cv.textMuted,
+                    fontSize: '0.75rem',
+                    mt: 0.5,
                   },
                 }}
               />

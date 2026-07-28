@@ -93,8 +93,20 @@ export default function NewProjectModal({
             onChange={(e) => setName(e.target.value)}
             autoFocus
             required
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ mb: !parentFolderTitle ? 2.5 : 0 }}
+            helperText={`${name.length}/100`}
+            slotProps={{
+              inputLabel: { shrink: true },
+              htmlInput: { maxLength: 100 }
+            }}
+            sx={{
+              mb: !parentFolderTitle ? 2.5 : 0,
+              '& .MuiFormHelperText-root': {
+                textAlign: 'right',
+                color: cv.textMuted,
+                fontSize: '0.75rem',
+                mt: 0.5,
+              },
+            }}
           />
 
           {!parentFolderTitle && (
