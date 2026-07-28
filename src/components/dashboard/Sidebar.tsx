@@ -24,9 +24,14 @@ import StarIcon from '@mui/icons-material/Star';
 import ControlPointDuplicateOutlinedIcon from '@mui/icons-material/ControlPointDuplicateOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
+import DeleteSweepOutlinedIcon from '@mui/icons-material/DeleteSweepOutlined';
 import UploadOutlinedIcon from '@mui/icons-material/UploadOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -38,14 +43,14 @@ import CloseIcon from '@mui/icons-material/Close';
 import WorkspacesOutlinedIcon from '@mui/icons-material/WorkspacesOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import HistoryIcon from '@mui/icons-material/History';
-import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
 import NoahLogo from '../NoahLogo';
 import { dropdownMenuPaperSx } from '../../constants/dropdownMenu';
+import { apiClient } from '../../api/client';
 import WorkspaceColorDot from './WorkspaceColorDot';
 import WorkspaceColorPicker from './WorkspaceColorPicker';
 import { FOLDER_COLORS } from '../../constants/folderColors';
 import { ROLE_IDS } from '../../constants/userRoles';
-import { resolveFolderColor, folderAccentTint } from '../../utils/folderColorStyle';
+import { resolveFolderColor, folderAccentTint, PROJECT_ACCENT_COLOR, projectAccentTint } from '../../utils/folderColorStyle';
 import AddSidebarItemModal, { type SidebarItemMode } from './AddSidebarItemModal';
 import CreateWorkspaceModal, { type CreateWorkspaceFormData } from './CreateWorkspaceModal';
 import RenameMediaModal from './RenameMediaModal';
@@ -68,7 +73,7 @@ import {
   getSidebarChildKey,
 } from '../../utils/sidebarMediaFilter';
 import { getMediaFileName } from '../../utils/mediaFileName';
-import { getMediaFolderPath } from '../../utils/mediaNavigation';
+import { getMediaFolderPath, getMediaViewerPath } from '../../utils/mediaNavigation';
 
 import { MULTI_ITEM_TRASH_CONFIRMATION_PHRASE } from '../../constants/trash';
 import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, SIDE_PANEL_WIDTH, SIDEBAR_DESKTOP_BREAKPOINT } from '../../constants/layout';
@@ -87,6 +92,7 @@ interface NavItemProps {
   label: string;
   active?: boolean;
   onClick?: () => void;
+  badgeCount?: number;
 }
 
 const TRASH_DROP_TARGET_KEY = 'trash';
@@ -251,7 +257,7 @@ function TrashNavItem({
   );
 }
 
-function NavItem({ icon, label, active, onClick }: NavItemProps) {
+function NavItem({ icon, label, active, onClick, badgeCount }: NavItemProps) {
   return (
     <ListItemButton
       onClick={onClick}
@@ -285,6 +291,26 @@ function NavItem({ icon, label, active, onClick }: NavItemProps) {
           },
         }}
       />
+      {badgeCount != null && badgeCount > 0 ? (
+        <Typography
+          component="span"
+          sx={{
+            ml: 1,
+            minWidth: 22,
+            height: 22,
+            px: 0.75,
+            borderRadius: '999px',
+            fontSize: '0.6875rem',
+            fontWeight: 700,
+            lineHeight: '22px',
+            textAlign: 'center',
+            color: cv.textPrimary,
+            backgroundColor: cv.purpleSelectionSoft,
+          }}
+        >
+          {badgeCount > 99 ? '99+' : badgeCount}
+        </Typography>
+      ) : null}
     </ListItemButton>
   );
 }
@@ -320,10 +346,20 @@ interface FolderItemProps {
 }
 
 function getSidebarFileIcon(type: MediaType) {
-  if (type === 'folder') {
-    return <FolderOutlinedIcon sx={{ fontSize: 14 }} />;
+  const iconSx = { fontSize: 14 };
+
+  switch (type) {
+    case 'folder':
+      return <FolderOutlinedIcon sx={iconSx} />;
+    case 'video':
+      return <VideocamOutlinedIcon sx={iconSx} />;
+    case 'image':
+      return <ImageOutlinedIcon sx={iconSx} />;
+    case 'audio':
+      return <AudioFileOutlinedIcon sx={iconSx} />;
+    default:
+      return <InsertDriveFileOutlinedIcon sx={iconSx} />;
   }
-  return <InsertDriveFileOutlinedIcon sx={{ fontSize: 14 }} />;
 }
 
 interface SidebarMediaFolderRowProps {
@@ -364,12 +400,23 @@ function SidebarMediaFolderRow({
 }: SidebarMediaFolderRowProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { activeWorkspace } = useDashboard();
   const normalizedSearch = searchQuery.trim().toLowerCase();
-  const folderAccent = resolveFolderColor(mediaFolder.folderColor) ?? parentAccentColor;
+  const isProject =
+    Boolean(mediaFolder.isProject) ||
+    Boolean(activeWorkspace?.projectFolders?.some((project) => project.id === mediaFolder.id));
+  const folderAccent = isProject
+    ? PROJECT_ACCENT_COLOR
+    : (resolveFolderColor(mediaFolder.folderColor) ?? parentAccentColor);
   const openKey = getMediaFolderOpenKey(mediaFolder.id);
   const isOpen = Boolean(openMediaFolders[openKey]);
   const showChildren = isOpen || Boolean(normalizedSearch);
-  const isActive = location.pathname === getMediaFolderPath(mediaFolder.id);
+  const itemPath =
+    getMediaViewerPath(mediaFolder) ?? getMediaFolderPath(mediaFolder.id);
+  const isActive = location.pathname === itemPath;
+  const activeBackground = isProject
+    ? projectAccentTint()
+    : folderAccentTint(mediaFolder.folderColor);
 
   const children = useMemo(
     () =>
@@ -387,7 +434,7 @@ function SidebarMediaFolderRow({
     if (!isOpen) {
       onToggleMediaFolder(mediaFolder.id);
     }
-    navigate(getMediaFolderPath(mediaFolder.id));
+    navigate(itemPath);
   };
 
   const selection = {
@@ -407,10 +454,10 @@ function SidebarMediaFolderRow({
           borderRadius: '8px',
           mb: 0.15,
           color: isActive ? cv.textPrimary : cv.textSecondary,
-          backgroundColor: isActive ? folderAccentTint(mediaFolder.folderColor) : 'transparent',
+          backgroundColor: isActive ? activeBackground : 'transparent',
           border: isActive ? `1px solid ${folderAccent}66` : '1px solid transparent',
           '&:hover': {
-            backgroundColor: isActive ? folderAccentTint(mediaFolder.folderColor) : cv.surfaceHover,
+            backgroundColor: isActive ? activeBackground : cv.surfaceHover,
             color: cv.textPrimary,
           },
         }}
@@ -441,7 +488,11 @@ function SidebarMediaFolderRow({
           </IconButton>
         </ListItemIcon>
         <ListItemIcon sx={{ minWidth: 24 }}>
-          <FolderOutlinedIcon sx={{ fontSize: 14, color: folderAccent, opacity: 0.9 }} />
+          {isProject ? (
+            <WorkOutlineOutlinedIcon sx={{ fontSize: 14, color: folderAccent, opacity: 0.95 }} />
+          ) : (
+            <FolderOutlinedIcon sx={{ fontSize: 14, color: folderAccent, opacity: 0.9 }} />
+          )}
         </ListItemIcon>
         <ListItemText
           disableTypography
@@ -549,9 +600,15 @@ function FolderItem({
   onOpenColorPicker,
   onOpenActionsMenu,
 }: FolderItemProps) {
-  const folderColor = resolveFolderColor(folder.color);
-  const selectedBackground = folderAccentTint(folder.color);
+  const navigate = useNavigate();
+  const location = useLocation();
   const isProjectRoot = browseMode === 'projects';
+  const folderColor = isProjectRoot
+    ? PROJECT_ACCENT_COLOR
+    : resolveFolderColor(folder.color);
+  const selectedBackground = isProjectRoot
+    ? projectAccentTint()
+    : folderAccentTint(folder.color);
   const isPersonalRoot = folder.id === 'personal';
 
   const projectRoots = useMemo(
@@ -637,13 +694,18 @@ function FolderItem({
   const folderTargetKey = `folder-${folder.id}`;
   const isFolderDropTarget = dropTargetKey === folderTargetKey;
   const isFolderSelected =
-    sidebarSelection?.browseMode === browseMode &&
-    sidebarSelection.folderId === folder.id &&
-    !sidebarSelection.childLabel;
+    (sidebarSelection?.browseMode === browseMode &&
+      sidebarSelection.folderId === folder.id &&
+      !sidebarSelection.childLabel) ||
+    (isCustomFolder && location.pathname === getMediaFolderPath(folder.id));
 
   const handleFolderClick = () => {
     if (hasChildren && !isOpen) {
       onToggle();
+    }
+    if (isCustomFolder) {
+      navigate(getMediaFolderPath(folder.id));
+      return;
     }
     onSelectFolder({
       folderId: folder.id,
@@ -736,7 +798,11 @@ function FolderItem({
           )}
         </ListItemIcon>
         <ListItemIcon sx={{ minWidth: 28 }}>
-          <FolderOutlinedIcon sx={{ fontSize: 18, color: folderColor }} />
+          {isProjectRoot ? (
+            <WorkOutlineOutlinedIcon sx={{ fontSize: 18, color: folderColor }} />
+          ) : (
+            <FolderOutlinedIcon sx={{ fontSize: 18, color: folderColor }} />
+          )}
         </ListItemIcon>
         <ListItemText
           disableTypography
@@ -1066,6 +1132,12 @@ export interface SidebarProps {
 
 export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = false }: SidebarProps) {
   const { user } = useAuth();
+  const canManageDeletions =
+    user?.role === 'Super Admin' ||
+    user?.role === 'Admin' ||
+    user?.roleId === ROLE_IDS.SUPER_ADMIN ||
+    user?.roleId === ROLE_IDS.ADMIN;
+  const [pendingDeletionCount, setPendingDeletionCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const isRecentView =
@@ -1134,6 +1206,41 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
   );
   const [renameFolderOpen, setRenameFolderOpen] = useState(false);
   const [deleteFolderOpen, setDeleteFolderOpen] = useState(false);
+
+  useEffect(() => {
+    if (!canManageDeletions) {
+      setPendingDeletionCount(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadPendingDeletionCount = async () => {
+      try {
+        const res = await apiClient.get<any>('/media/pending-deletions');
+        const list = Array.isArray(res)
+          ? res
+          : Array.isArray(res?.data)
+            ? res.data
+            : Array.isArray(res?.items)
+              ? res.items
+              : [];
+        if (!cancelled) setPendingDeletionCount(list.length);
+      } catch {
+        if (!cancelled) setPendingDeletionCount(0);
+      }
+    };
+
+    void loadPendingDeletionCount();
+    const intervalId = window.setInterval(() => {
+      void loadPendingDeletionCount();
+    }, 60_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [canManageDeletions, location.pathname]);
 
   useEffect(() => {
     if (sidebarSelection?.browseMode) {
@@ -1731,15 +1838,6 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
             }}
           />
           <NavItem
-            icon={<WorkOutlineOutlinedIcon />}
-            label="Projects"
-            active={location.pathname === '/home/projects'}
-            onClick={() => {
-              clearSidebarSelection();
-              navigateAndClose('/home/projects');
-            }}
-          />
-          <NavItem
             icon={
               isFavoritesView ? (
                 <StarIcon sx={{ color: cv.warning }} />
@@ -1895,11 +1993,12 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
             active={location.pathname === '/home/user-activities'}
             onClick={() => navigateAndClose('/home/user-activities')}
           />
-          {(user?.role === 'Super Admin' || user?.role === 'Admin' || user?.roleId === ROLE_IDS.SUPER_ADMIN || user?.roleId === ROLE_IDS.ADMIN) && (
+          {canManageDeletions && (
             <NavItem
-              icon={<HistoryIcon />} 
-              label="Deletion Requests"
+              icon={<DeleteSweepOutlinedIcon />}
+              label="Delete Management"
               active={location.pathname === '/home/deletion-requests'}
+              badgeCount={pendingDeletionCount}
               onClick={() => navigateAndClose('/home/deletion-requests')}
             />
           )}

@@ -177,6 +177,17 @@ export function matchesSidebarSelection(
     return belongsToPersonal(item, mediaItems);
   }
 
+  // Real media-library folders are matched by parentFolderId (sidebar tree children).
+  const selectedMediaFolder = mediaItems.find(
+    (candidate) =>
+      candidate.id === selection.folderId &&
+      candidate.type === 'folder',
+  );
+  if (selectedMediaFolder) {
+    if (selection.childLabel) return false;
+    return item.parentFolderId === selection.folderId;
+  }
+
   const location = item.location;
   if (location?.folderId === selection.folderId) {
     if (!selection.childLabel) return true;

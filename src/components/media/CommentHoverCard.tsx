@@ -8,6 +8,7 @@ import {
 } from '../../constants/overlayScroll';
 
 interface CommentHoverCardProps {
+  index?: number;
   authorName: string;
   authorAvatarUrl?: string;
   authorInitials?: string;
@@ -18,6 +19,7 @@ interface CommentHoverCardProps {
 }
 
 export default function CommentHoverCard({
+  index,
   authorName,
   authorAvatarUrl,
   authorInitials,
@@ -80,7 +82,7 @@ export default function CommentHoverCard({
               color: palette.black,
             }}
           >
-            {authorName}
+            {index != null ? `#${index} ` : ''}{authorName}
           </Typography>
           <Typography
             component="time"

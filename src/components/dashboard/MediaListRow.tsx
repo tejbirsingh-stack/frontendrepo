@@ -16,7 +16,7 @@ import type { MediaItem, MediaType } from '../../data/mockMedia';
 import { getMediaViewerPath } from '../../utils/mediaNavigation';
 import { getMediaDragPayload, hasMediaDragPayload, setMediaDragPayload } from '../../utils/mediaDrag';
 import { removeMediaDragGhost, setMediaDragImage } from '../../utils/mediaDragPreview';
-import { resolveFolderColor } from '../../utils/folderColorStyle';
+import { resolveLibraryFolderColor } from '../../utils/folderColorStyle';
 import TruncatedText from '../TruncatedText';
 import VideoHoverPreview from './VideoHoverPreview';
 import { formatFolderItemCount, getFolderChildCount } from '../../utils/folderItemCount';
@@ -167,20 +167,24 @@ export default function MediaListRow({
         },
       }}
     >
-      <Tooltip title={isSelected ? 'Deselect' : 'Select'} arrow placement="top">
-        <Checkbox
-          size="small"
-          checked={isSelected}
-          onClick={(e) => e.stopPropagation()}
-          onChange={() => onToggleSelect(item.id)}
-          slotProps={{ input: { 'aria-label': `Select ${item.title}` } }}
-          sx={{
-            p: 0.25,
-            color: cv.textMuted,
-            '&.Mui-checked': { color: cv.brandBlue },
-          }}
-        />
-      </Tooltip>
+      {item.isProject ? (
+        <Box sx={{ width: 28, height: 28, flexShrink: 0 }} aria-hidden />
+      ) : (
+        <Tooltip title={isSelected ? 'Deselect' : 'Select'} arrow placement="top">
+          <Checkbox
+            size="small"
+            checked={isSelected}
+            onClick={(e) => e.stopPropagation()}
+            onChange={() => onToggleSelect(item.id)}
+            slotProps={{ input: { 'aria-label': `Select ${item.title}` } }}
+            sx={{
+              p: 0.25,
+              color: cv.textMuted,
+              '&.Mui-checked': { color: cv.brandBlue },
+            }}
+          />
+        </Tooltip>
+      )}
 
       <Tooltip title="Drag to move" arrow placement="top">
         <Box
@@ -246,7 +250,10 @@ export default function MediaListRow({
               fontSize: 22,
               color:
                 item.type === 'folder'
-                  ? resolveFolderColor(item.folderColor)
+                  ? resolveLibraryFolderColor({
+                      folderColor: item.folderColor,
+                      isProject: item.isProject,
+                    })
                   : cv.brandPurple,
             }}
           />

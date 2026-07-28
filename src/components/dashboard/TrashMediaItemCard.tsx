@@ -6,13 +6,14 @@ import {
   thumbnailOverlayChipStyles,
 } from '../../utils/thumbnailOverlayStyles';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import RestoreFromTrashOutlinedIcon from '@mui/icons-material/RestoreFromTrashOutlined';
 import type { MediaItem, MediaType } from '../../data/mockMedia';
-import { folderAccentBackground, resolveFolderColor } from '../../utils/folderColorStyle';
+import { folderAccentBackground, projectAccentBackground, resolveLibraryFolderColor } from '../../utils/folderColorStyle';
 import { formatTrashDaysRemaining } from '../../utils/trashRetention';
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import TruncatedText from '../TruncatedText';
@@ -71,7 +72,10 @@ function MediaPreview({ item, childCount }: { item: MediaItem; childCount?: numb
   const config = typeConfig[item.type];
 
   if (item.type === 'folder') {
-    const folderColor = resolveFolderColor(item.folderColor);
+    const accentColor = resolveLibraryFolderColor({
+      folderColor: item.folderColor,
+      isProject: item.isProject,
+    });
     return (
       <Box
         sx={{
@@ -80,11 +84,17 @@ function MediaPreview({ item, childCount }: { item: MediaItem; childCount?: numb
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          background: folderAccentBackground(item.folderColor),
+          background: item.isProject
+            ? projectAccentBackground()
+            : folderAccentBackground(item.folderColor),
           gap: 1,
         }}
       >
-        <FolderOutlinedIcon sx={{ fontSize: 48, color: folderColor }} />
+        {item.isProject ? (
+          <WorkOutlineOutlinedIcon sx={{ fontSize: 48, color: accentColor }} />
+        ) : (
+          <FolderOutlinedIcon sx={{ fontSize: 48, color: accentColor }} />
+        )}
         <Typography variant="caption" sx={{ color: cv.textMuted }}>
           {formatFolderItemCount(childCount ?? 0)}
         </Typography>

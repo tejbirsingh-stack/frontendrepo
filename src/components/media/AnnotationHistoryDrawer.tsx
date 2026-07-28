@@ -5,20 +5,24 @@ import {
   Box,
   Divider,
   Drawer,
+  FormControl,
   IconButton,
   InputAdornment,
   Menu,
   MenuItem,
+  Select,
   TextField,
   Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
 } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material';
 import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import FilterListOutlinedIcon from '@mui/icons-material/FilterListOutlined';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import MoreHorizOutlinedIcon from '@mui/icons-material/MoreHorizOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import { useActiveUser } from '../../hooks/useActiveUser';
@@ -39,8 +43,16 @@ import { getHistoryTypeLabel } from '../../utils/annotationHistoryLabels';
 import { historyEntryBodyScrollSx, longFormTextSx } from '../../constants/overlayScroll';
 import { formatAnnotationDisplayText } from '../../utils/textContent';
 import { SIDEBAR_DESKTOP_BREAKPOINT } from '../../constants/layout';
+import {
+  DATE_RANGE_OPTIONS,
+  matchesCustomDateRange,
+  matchesDateRange,
+  type DateRangeFilter,
+} from '../../constants/mediaFilters';
+import { dropdownMenuPaperSx } from '../../constants/dropdownMenu';
 
 type DrawerTab = 'history' | 'details';
+type StatusFilter = 'all' | 'unread' | 'resolved' | 'archive';
 
 function getCommentIdForEntry(entry: AnnotationHistoryEntry): string | null {
   if (entry.sourceCommentId) return entry.sourceCommentId;
@@ -150,7 +162,7 @@ interface AnnotationHistoryDrawerProps {
   detailsSection?: MediaDetailsSection;
   onDetailsSectionChange?: (section: MediaDetailsSection) => void;
   onClose: () => void;
-  onSeekToTimestamp?: (timestamp: number, entryId?: string) => void;
+  onEntryClick?: (entry: AnnotationHistoryEntry) => void;
   onToggleResolved: (entryId: string) => void;
   onMarkUnread: (entryId: string) => void;
   onCopyLink: (entry: AnnotationHistoryEntry) => void;
@@ -172,8 +184,15 @@ const DRAWER_TABS: { value: DrawerTab; label: string }[] = [
   { value: 'details', label: 'Details' },
 ];
 
-const FILTER_OPTIONS: { value: 'all' | AnnotationHistoryType; label: string }[] = [
+const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'All' },
+  { value: 'unread', label: 'Unread' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'archive', label: 'Archive' },
+];
+
+const TYPE_FILTER_OPTIONS: { value: 'all' | AnnotationHistoryType; label: string }[] = [
+  { value: 'all', label: 'All types' },
   { value: 'comment', label: 'Comments' },
   { value: 'drawing', label: 'Drawings' },
   { value: 'shape', label: 'Shapes' },
@@ -182,6 +201,17 @@ const FILTER_OPTIONS: { value: 'all' | AnnotationHistoryType; label: string }[] 
 
 const drawerSurface = 'var(--noah-drawer-surface)';
 
+const filterSelectSx = {
+  borderRadius: '10px',
+  backgroundColor: cv.surface,
+  fontSize: '0.75rem',
+  color: cv.textSecondary,
+  '& .MuiOutlinedInput-notchedOutline': { borderColor: cv.border },
+  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: cv.borderStrong },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: cv.brandPurple },
+  '& .MuiSelect-icon': { color: cv.textMuted },
+  '& .MuiSelect-select': { py: 0.85 },
+};
 const menuPaperSx = {
   mt: 0.5,
   minWidth: 168,
@@ -207,7 +237,7 @@ function HistoryEntryRow({
   replies = [],
   isTimeBasedMedia = true,
   annotationGroups,
-  onSeekToTimestamp,
+  onEntryClick,
   onToggleResolved,
   onMarkUnread,
   onCopyLink,
@@ -224,7 +254,7 @@ function HistoryEntryRow({
   onEditComment?: (commentId: string, text: string) => void;
   annotationGroups: AnnotationAccessGroup[];
   collaborators: MediaCollaborator[];
-  onSeekToTimestamp?: (timestamp: number, entryId?: string) => void;
+  onEntryClick?: (entry: AnnotationHistoryEntry) => void;
   onToggleResolved: (entryId: string) => void;
   onMarkUnread: (entryId: string) => void;
   onCopyLink: (entry: AnnotationHistoryEntry) => void;
@@ -273,8 +303,8 @@ function HistoryEntryRow({
     setIsEditing(false);
   };
 
-  const handleSeek = () => {
-    onSeekToTimestamp?.(entry.videoTimestamp, entry.id);
+  const handleEntryClick = () => {
+    onEntryClick?.(entry);
   };
 
   return (
@@ -437,15 +467,15 @@ function HistoryEntryRow({
       </Menu>
 
       <Tooltip
-        title={onSeekToTimestamp && isTimeBasedMedia ? `Jump to ${formatVideoTimestamp(entry.videoTimestamp)}` : ''}
+        title={onEntryClick && isTimeBasedMedia ? `Jump to ${formatVideoTimestamp(entry.videoTimestamp)}` : ''}
         arrow
         placement="top"
-        disableHoverListener={!onSeekToTimestamp || !isTimeBasedMedia}
+        disableHoverListener={!onEntryClick || !isTimeBasedMedia}
       >
         <Box
           component="button"
           type="button"
-          onClick={handleSeek}
+          onClick={handleEntryClick}
           sx={{
             display: 'flex',
             gap: 1.25,
@@ -454,7 +484,7 @@ function HistoryEntryRow({
             textAlign: 'left',
             border: 'none',
             background: 'transparent',
-            cursor: onSeekToTimestamp ? 'pointer' : 'default',
+            cursor: onEntryClick ? 'pointer' : 'default',
             p: 0,
             color: 'inherit',
           }}
@@ -615,13 +645,11 @@ function HistoryEntryRow({
             >
               {entry.type === 'shape'
                 ? 'Shape deleted'
-                : entry.type === 'sticky_note'
-                  ? 'Sticky note deleted'
-                  : entry.type === 'stamp'
-                    ? 'Stamp deleted'
-                    : entry.type === 'text'
-                      ? 'Text deleted'
-                      : 'Erased'}{' '}
+                : entry.type === 'stamp'
+                  ? 'Stamp deleted'
+                  : entry.type === 'drawing'
+                    ? 'Drawing deleted'
+                    : 'Erased'}{' '}
               by {entry.erasedBy.name} · {formatRelativeTime(entry.erasedAt)}
             </Typography>
           )}
@@ -704,7 +732,7 @@ export default function AnnotationHistoryDrawer({
   detailsSection,
   onDetailsSectionChange,
   onClose,
-  onSeekToTimestamp,
+  onEntryClick,
   onToggleResolved,
   onMarkUnread,
   onCopyLink,
@@ -731,7 +759,11 @@ export default function AnnotationHistoryDrawer({
     }
   };
   const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | AnnotationHistoryType>('all');
+  const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
 
   const commentById = useMemo(
@@ -744,7 +776,27 @@ export default function AnnotationHistoryDrawer({
 
     return [...entries]
       .filter((entry) => {
+        const isArchived = Boolean(entry.erasedAt);
+
+        if (statusFilter === 'unread' && !(entry.unread && !entry.resolved && !isArchived)) {
+          return false;
+        }
+        if (statusFilter === 'resolved' && !entry.resolved) return false;
+        if (statusFilter === 'archive' && !isArchived) return false;
+        if (statusFilter === 'all' && isArchived) return false;
+
         if (typeFilter !== 'all' && entry.type !== typeFilter) return false;
+
+        if (dateRangeFilter === 'custom') {
+          if (!matchesCustomDateRange(entry.createdAt, customStartDate, customEndDate)) {
+            return false;
+          }
+        } else if (
+          !matchesDateRange(new Date(entry.createdAt).toISOString(), dateRangeFilter)
+        ) {
+          return false;
+        }
+
         if (!normalizedQuery) return true;
 
         const commentId = getCommentIdForEntry(entry);
@@ -772,7 +824,7 @@ export default function AnnotationHistoryDrawer({
         return haystack.includes(normalizedQuery);
       })
       .sort((a, b) => b.createdAt - a.createdAt);
-  }, [commentById, entries, query, typeFilter]);
+  }, [commentById, customEndDate, customStartDate, dateRangeFilter, entries, query, statusFilter, typeFilter]);
 
   const panelBody = (
     <>
@@ -850,100 +902,238 @@ export default function AnnotationHistoryDrawer({
         <Box
           sx={{
             display: 'flex',
-            alignItems: 'center',
-            gap: 0.75,
+            flexDirection: 'column',
+            gap: 1,
             px: 1.5,
             pb: 1.25,
           }}
         >
-          <TextField
-            size="small"
-            placeholder="Search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            aria-label="Search history"
-            sx={{
-              flex: 1,
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '999px',
-                backgroundColor: cv.surface,
-                fontSize: '0.875rem',
-                color: cv.textPrimary,
-                '& fieldset': { borderColor: cv.border },
-                '&:hover fieldset': { borderColor: cv.annotationGuide },
-                '&.Mui-focused fieldset': { borderColor: cv.purpleFocusBorder },
-              },
-              '& .MuiInputBase-input::placeholder': {
-                color: cv.textMuted,
-                opacity: 1,
-              },
-            }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
-                  </InputAdornment>
-                ),
-              },
-            }}
-          />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <TextField
+              size="small"
+              placeholder="Search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              aria-label="Search history"
+              sx={{
+                flex: 1,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '999px',
+                  backgroundColor: cv.surface,
+                  fontSize: '0.875rem',
+                  color: cv.textPrimary,
+                  '& fieldset': { borderColor: cv.border },
+                  '&:hover fieldset': { borderColor: cv.annotationGuide },
+                  '&.Mui-focused fieldset': { borderColor: cv.purpleFocusBorder },
+                },
+                '& .MuiInputBase-input::placeholder': {
+                  color: cv.textMuted,
+                  opacity: 1,
+                },
+              }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
 
-          <Tooltip title={filterOpen ? 'Hide filters' : 'Filter by type'} arrow placement="top">
-            <IconButton
-              type="button"
-              aria-label="Filter history"
-              aria-expanded={filterOpen}
-              onClick={() => setFilterOpen((current) => !current)}
-              sx={{ color: cv.textSecondary }}
-            >
-              <FilterListOutlinedIcon sx={{ fontSize: 20 }} />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      )}
-
-      {activeTab === 'history' && filterOpen && (
-        <Box
-          sx={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 0.75,
-            px: 1.5,
-            pb: 1,
-          }}
-        >
-          {FILTER_OPTIONS.map((option) => {
-            const isActive = typeFilter === option.value;
-
-            return (
-              <Tooltip
-                key={option.value}
-                title={`Show ${option.label.toLowerCase()} annotations`}
-                arrow
-                placement="top"
+            <Tooltip title={filterOpen ? 'Hide filters' : 'Show filters'} arrow placement="top">
+              <IconButton
+                type="button"
+                aria-label="Toggle filters"
+                aria-expanded={filterOpen}
+                onClick={() => setFilterOpen((current) => !current)}
+                sx={{
+                  color: filterOpen ? cv.brandPurple : cv.textSecondary,
+                  backgroundColor: filterOpen ? cv.purpleSelectionSoft : 'transparent',
+                  '&:hover': {
+                    color: filterOpen ? cv.purpleLight : cv.textPrimary,
+                    backgroundColor: filterOpen ? cv.purpleSelectionHover : cv.surfaceHover,
+                  },
+                }}
               >
+                <FilterListOutlinedIcon sx={{ fontSize: 20 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 0.75,
+            }}
+          >
+            {STATUS_FILTER_OPTIONS.map((option) => {
+              const isActive = statusFilter === option.value;
+
+              return (
                 <Box
+                  key={option.value}
                   component="button"
                   type="button"
-                  onClick={() => setTypeFilter(option.value)}
+                  onClick={() => setStatusFilter(option.value)}
+                  aria-pressed={isActive}
                   sx={{
                     border: `1px solid ${isActive ? cv.brandPurple : cv.border}`,
                     backgroundColor: isActive ? cv.purpleSelectionHover : 'transparent',
-                    color: isActive ? cv.purpleLight : cv.textSecondary,
+                    color: isActive ? cv.textPrimary : cv.textSecondary,
                     borderRadius: '999px',
                     px: 1.25,
                     py: 0.5,
                     fontSize: '0.75rem',
                     fontWeight: 500,
                     cursor: 'pointer',
+                    '&:hover': {
+                      color: cv.textPrimary,
+                      borderColor: isActive ? cv.brandPurple : cv.borderStrong,
+                    },
                   }}
                 >
                   {option.label}
                 </Box>
-              </Tooltip>
-            );
-          })}
+              );
+            })}
+          </Box>
+
+          {filterOpen ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 1,
+                }}
+              >
+                <FormControl size="small" fullWidth>
+                  <Select
+                    value={typeFilter}
+                    onChange={(event: SelectChangeEvent) =>
+                      setTypeFilter(event.target.value as 'all' | AnnotationHistoryType)
+                    }
+                    displayEmpty
+                    IconComponent={KeyboardArrowDownIcon}
+                    sx={filterSelectSx}
+                    MenuProps={{
+                      slotProps: { paper: { sx: dropdownMenuPaperSx } },
+                    }}
+                  >
+                    {TYPE_FILTER_OPTIONS.map((option) => (
+                      <MenuItem key={option.value} value={option.value} sx={{ fontSize: '0.8125rem' }}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small" fullWidth>
+                  <Select
+                    value={dateRangeFilter}
+                    onChange={(event: SelectChangeEvent) =>
+                      setDateRangeFilter(event.target.value as DateRangeFilter)
+                    }
+                    displayEmpty
+                    IconComponent={KeyboardArrowDownIcon}
+                    sx={{
+                      ...filterSelectSx,
+                      ...(dateRangeFilter === 'custom'
+                        ? {
+                            '& .MuiOutlinedInput-notchedOutline': {
+                              borderColor: cv.brandPurple,
+                            },
+                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                              borderColor: cv.brandPurple,
+                            },
+                          }
+                        : null),
+                    }}
+                    MenuProps={{
+                      slotProps: { paper: { sx: dropdownMenuPaperSx } },
+                    }}
+                  >
+                    {DATE_RANGE_OPTIONS.map((option) => (
+                      <MenuItem key={option.value} value={option.value} sx={{ fontSize: '0.8125rem' }}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+
+              {dateRangeFilter === 'custom' ? (
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: 1,
+                    mt: 0.5,
+                  }}
+                >
+                  <TextField
+                    type="date"
+                    size="small"
+                    label="Start date"
+                    value={customStartDate}
+                    onChange={(event) => setCustomStartDate(event.target.value)}
+                    slotProps={{
+                      inputLabel: { shrink: true },
+                      htmlInput: {
+                        max: customEndDate || undefined,
+                      },
+                    }}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: '10px',
+                        backgroundColor: cv.surface,
+                        fontSize: '0.75rem',
+                        '& fieldset': { borderColor: cv.border },
+                        '&:hover fieldset': { borderColor: cv.borderStrong },
+                        '&.Mui-focused fieldset': { borderColor: cv.brandPurple },
+                      },
+                      '& .MuiInputLabel-root': {
+                        fontSize: '0.75rem',
+                        color: cv.textMuted,
+                      },
+                      '& ::-webkit-calendar-picker-indicator': { cursor: 'pointer' },
+                    }}
+                  />
+                  <TextField
+                    type="date"
+                    size="small"
+                    label="End date"
+                    value={customEndDate}
+                    onChange={(event) => setCustomEndDate(event.target.value)}
+                    slotProps={{
+                      inputLabel: { shrink: true },
+                      htmlInput: {
+                        min: customStartDate || undefined,
+                      },
+                    }}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: '10px',
+                        backgroundColor: cv.surface,
+                        fontSize: '0.75rem',
+                        '& fieldset': { borderColor: cv.border },
+                        '&:hover fieldset': { borderColor: cv.borderStrong },
+                        '&.Mui-focused fieldset': { borderColor: cv.brandPurple },
+                      },
+                      '& .MuiInputLabel-root': {
+                        fontSize: '0.75rem',
+                        color: cv.textMuted,
+                      },
+                      '& ::-webkit-calendar-picker-indicator': { cursor: 'pointer' },
+                    }}
+                  />
+                </Box>
+              ) : null}
+            </Box>
+          ) : null}
         </Box>
       )}
 
@@ -980,7 +1170,7 @@ export default function AnnotationHistoryDrawer({
                   }
                   annotationGroups={annotationGroups}
                   collaborators={collaborators}
-                  onSeekToTimestamp={onSeekToTimestamp}
+                  onEntryClick={onEntryClick}
                   onToggleResolved={onToggleResolved}
                   onMarkUnread={onMarkUnread}
                   onCopyLink={onCopyLink}

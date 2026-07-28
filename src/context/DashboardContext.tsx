@@ -72,6 +72,11 @@ interface DashboardContextValue {
   moveMediaToDashboardFolder: (mediaIds: string[], folderId: string) => void;
   moveMediaToTrash: (mediaId: string, reason?: string) => void;
   moveMediaToTrashBulk: (mediaIds: string[], reason?: string) => void;
+  moveMediaToWorkspaceFolder: (
+    mediaIds: string[],
+    workspaceId: string,
+    folderId: string | null,
+  ) => void;
   trashedMediaItems: MediaItem[];
   trashedAtById: Record<string, string>;
   restoreFromTrashBulk: (mediaIds: string[]) => void;
@@ -141,7 +146,7 @@ interface DashboardContextValue {
   setSidebarSelection: (selection: SidebarSelection) => void;
   clearSidebarSelection: () => void;
   fetchWorkspaceData: () => Promise<void>;
-  fetchFolderData: (folderId: string) => Promise<void>;
+  fetchFolderData: (folderId: string) => Promise<string[]>;
   fetchProjectData: (projectId: string) => Promise<void>;
 }
 
@@ -170,6 +175,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   // Empty stub kept for interface compatibility (no localStorage tracking)
   const trashedAtById: Record<string, string> = {};
+  const prefetchFolderTreesRef = useRef<(folderIds: string[]) => Promise<void>>(async () => {});
 
   useEffect(() => {
     async function fetchTimezone() {
@@ -221,21 +227,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           } : w)
         );
 
-        const folderMediaItems: MediaItem[] = (folders || []).map((f: any) => ({
-          id: f.id,
-          title: f.name,
-          type: 'folder',
-          workspaceId: activeWorkspaceId,
-          createdAt: f.createdAt || new Date().toISOString(),
-          sizeBytes: 0,
-          storageProvider: 'b2',
-          uploadedBy: CURRENT_USER.name,
-          status: 'active',
-          folderColor: f.color,
-          linkedProjectIds: f.sources?.map((s: any) => s.projectId) || [],
-          projectLocations: f.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
-        }));
-
         const projectMediaItems: MediaItem[] = (allProjects || projects || []).map((p: any) => ({
           id: p.id,
           title: p.name,
@@ -250,6 +241,27 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           parentFolderId: p.ownerType === 'FOLDER' ? p.folderId : undefined,
         }));
 
+        const projectIds = new Set(projectMediaItems.map((item) => item.id));
+
+        const folderMediaItems: MediaItem[] = (folders || [])
+          .filter((f: any) => !projectIds.has(f.id))
+          .map((f: any) => ({
+          id: f.id,
+          title: f.name,
+          type: 'folder',
+          workspaceId: activeWorkspaceId,
+          parentFolderId: f.parentId || undefined,
+          createdAt: f.createdAt || new Date().toISOString(),
+          sizeBytes: 0,
+          storageProvider: 'b2',
+          uploadedBy: CURRENT_USER.name,
+          status: 'active',
+          folderColor: f.color,
+          linkedProjectIds: f.sources?.map((s: any) => s.projectId) || [],
+          projectLocations: f.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
+          isProject: Boolean(f.isProject || f.type === 'PROJECT' || f.type === 'project'),
+        }));
+
         const assetMediaItems: MediaItem[] = (media || []).map((a: any) => {
           const imageExtRegex = /\.(jpg|jpeg|png|webp|gif|svg|exr|openexr|dpx|cin|tiff|tif|psd|psb|ai|eps|pcx|jpf|bmp|mpo)$/i;
           const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv|flv|wmv|m4v)$/i.test(a.title || '');
@@ -262,6 +274,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             title: a.title || 'Untitled',
             type,
             workspaceId: activeWorkspaceId,
+            parentFolderId: a.folderId || a.parentFolderId || undefined,
             createdAt: a.createdAt || a.uploadDate || new Date().toISOString(),
             sizeBytes: Number(a.files?.[0]?.sizeBytes || a.size || 0),
             storageProvider: 'b2',
@@ -283,6 +296,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           const otherWorkspaces = prev.filter(m => m.workspaceId !== activeWorkspaceId);
           return [...otherWorkspaces, ...folderMediaItems, ...projectMediaItems, ...assetMediaItems];
         });
+
+        // Nested files/folders only arrive via folder endpoints — prefetch the tree so
+        // All media is complete without requiring sidebar expansion first.
+        const folderIdsToPrefetch = folderMediaItems.map((folder) => folder.id);
+        void prefetchFolderTreesRef.current(folderIdsToPrefetch);
       }
     } catch (err) {
       console.error('Failed to load workspace data:', err);
@@ -322,7 +340,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     fetchWorkspaceData();
   }, [activeWorkspaceId, fetchWorkspaceData]);
 
-  const fetchFolderData = useCallback(async (folderId: string) => {
+  const fetchFolderData = useCallback(async (folderId: string): Promise<string[]> => {
     try {
       const { apiClient } = await import('../api/client');
       const token = localStorage.getItem('token');
@@ -351,7 +369,25 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           projectLocations: folderInfo.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
         } : null;
 
-        const folderMediaItems: MediaItem[] = (folders || []).map((f: any) => ({
+        const projectMediaItems: MediaItem[] = (projects || []).map((p: any) => ({
+          id: p.id,
+          title: p.name,
+          type: 'folder',
+          workspaceId: activeWorkspaceId!,
+          parentFolderId: folderId,
+          createdAt: p.createdAt || new Date().toISOString(),
+          sizeBytes: 0,
+          storageProvider: 'b2',
+          uploadedBy: CURRENT_USER.name,
+          status: 'active',
+          isProject: true,
+        }));
+
+        const projectIds = new Set(projectMediaItems.map((item) => item.id));
+
+        const folderMediaItems: MediaItem[] = (folders || [])
+          .filter((f: any) => !projectIds.has(f.id))
+          .map((f: any) => ({
           id: f.id,
           title: f.name,
           type: 'folder',
@@ -365,20 +401,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           folderColor: f.color,
           linkedProjectIds: f.sources?.map((s: any) => s.projectId) || [],
           projectLocations: f.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
-        }));
-
-        const projectMediaItems: MediaItem[] = (projects || []).map((p: any) => ({
-          id: p.id,
-          title: p.name,
-          type: 'folder',
-          workspaceId: activeWorkspaceId!,
-          parentFolderId: folderId,
-          createdAt: p.createdAt || new Date().toISOString(),
-          sizeBytes: 0,
-          storageProvider: 'b2',
-          uploadedBy: CURRENT_USER.name,
-          status: 'active',
-          isProject: true,
+          isProject: Boolean(f.isProject || f.type === 'PROJECT' || f.type === 'project'),
         }));
 
         const assetMediaItems: MediaItem[] = (media || []).map((a: any) => {
@@ -421,11 +444,38 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           const withoutCurrentFolder = prev.filter(m => m.parentFolderId !== folderId && !newIds.has(m.id));
           return [...withoutCurrentFolder, ...folderMediaItems, ...projectMediaItems, ...assetMediaItems, ...(currentFolderItem ? [currentFolderItem] : [])];
         });
+
+        return folderMediaItems.map((folder) => folder.id);
       }
     } catch (err) {
       console.error('Failed to load folder data:', err);
     }
+
+    return [];
   }, [activeWorkspaceId]);
+
+  const fetchFolderDataRef = useRef(fetchFolderData);
+  fetchFolderDataRef.current = fetchFolderData;
+
+  const prefetchFolderTrees = useCallback(async (folderIds: string[]) => {
+    const visited = new Set<string>();
+    const queue = [...new Set(folderIds.filter(Boolean))];
+
+    // Sequential loads avoid parallel setMediaItems races that can drop siblings.
+    while (queue.length > 0) {
+      const folderId = queue.shift()!;
+      if (visited.has(folderId)) continue;
+      visited.add(folderId);
+      const childIds = await fetchFolderDataRef.current(folderId);
+      for (const childId of childIds) {
+        if (!visited.has(childId)) {
+          queue.push(childId);
+        }
+      }
+    }
+  }, []);
+
+  prefetchFolderTreesRef.current = prefetchFolderTrees;
 
   const fetchProjectData = useCallback(async (projectId: string) => {
     try {
@@ -976,6 +1026,74 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       });
     },
     [mediaItems, removeMediaFromSidebar],
+  );
+
+  const moveMediaToWorkspaceFolder = useCallback(
+    (mediaIds: string[], workspaceId: string, folderId: string | null) => {
+      const uniqueIds = [...new Set(mediaIds)].filter((id) => id !== folderId);
+      if (uniqueIds.length === 0) return;
+
+      if (folderId && workspaceId === activeWorkspaceId) {
+        moveMediaToDashboardFolder(uniqueIds, folderId);
+        return;
+      }
+
+      const folderCountDelta = new Map<string, number>();
+
+      uniqueIds.forEach((mediaId) => {
+        const media = mediaItems.find((item) => item.id === mediaId);
+        if (!media) return;
+
+        if (media.parentFolderId && media.parentFolderId !== folderId) {
+          folderCountDelta.set(
+            media.parentFolderId,
+            (folderCountDelta.get(media.parentFolderId) ?? 0) - 1,
+          );
+        }
+        if (folderId && media.parentFolderId !== folderId) {
+          folderCountDelta.set(folderId, (folderCountDelta.get(folderId) ?? 0) + 1);
+        }
+
+        removeMediaFromSidebar(media);
+      });
+
+      setMediaItems((prev) =>
+        prev.map((item) => {
+          if (uniqueIds.includes(item.id)) {
+            return {
+              ...item,
+              workspaceId,
+              parentFolderId: folderId,
+              location: null,
+            };
+          }
+
+          if (item.type === 'folder' && folderCountDelta.has(item.id)) {
+            return {
+              ...item,
+              itemCount: Math.max(
+                0,
+                (item.itemCount ?? 0) + (folderCountDelta.get(item.id) ?? 0),
+              ),
+            };
+          }
+
+          return item;
+        }),
+      );
+
+      setSelectedMediaIds((prev) => {
+        const next = new Set(prev);
+        uniqueIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    },
+    [
+      activeWorkspaceId,
+      mediaItems,
+      moveMediaToDashboardFolder,
+      removeMediaFromSidebar,
+    ],
   );
 
   const moveMediaToTrashBulk = useCallback(
@@ -1949,6 +2067,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       moveMediaToFolder,
       moveMediaToFolderBulk,
       moveMediaToDashboardFolder,
+      moveMediaToWorkspaceFolder,
       moveMediaToTrash,
       moveMediaToTrashBulk,
       trashedMediaItems,
@@ -2021,6 +2140,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       moveMediaToFolder,
       moveMediaToFolderBulk,
       moveMediaToDashboardFolder,
+      moveMediaToWorkspaceFolder,
       moveMediaToTrash,
       moveMediaToTrashBulk,
       trashedMediaItems,

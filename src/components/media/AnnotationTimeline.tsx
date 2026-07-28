@@ -40,7 +40,7 @@ const HANDLE_WIDTH = 8;
 const MIN_SEGMENT_PX = 14;
 const MAX_VISIBLE_LANES = 3;
 const RULER_HEIGHT = 16;
-const MAX_TIMELINE_EXPANDED_HEIGHT = 108;
+const MAX_TIMELINE_EXPANDED_HEIGHT = 200;
 const SEGMENT_CLICK_MOVE_THRESHOLD_PX = 5;
 
 const TRACKS: {
@@ -98,6 +98,7 @@ interface AnnotationTimelineProps {
   onScrubStart?: () => void;
   onScrubEnd?: () => void;
   fallbackDuration?: number;
+  onAnnotationClick?: (id: string, type: TimelineAnnotationType) => void;
 }
 
 function getTickStep(duration: number, zoom: number): number {
@@ -177,6 +178,7 @@ export default function AnnotationTimeline({
   onScrubStart,
   onScrubEnd,
   fallbackDuration,
+  onAnnotationClick,
 }: AnnotationTimelineProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const horizontalScrollRef = useRef<HTMLDivElement>(null);
@@ -463,7 +465,8 @@ export default function AnnotationTimeline({
 
     if (pendingInteraction && !pendingInteraction.activated) {
       if (pendingInteraction.kind === 'move') {
-        onSeek(getTimeFromClientX(pendingInteraction.originX));
+        onSeek(pendingInteraction.startTime);
+        onAnnotationClick?.(pendingInteraction.itemId, pendingInteraction.itemType);
       } else if (pendingInteraction.kind === 'resize-start') {
         onSeek(pendingInteraction.startTime);
       } else {
@@ -489,7 +492,7 @@ export default function AnnotationTimeline({
     segmentInteractionRef.current = null;
     setDragPreview(null);
     onScrubEnd?.();
-  }, [dragPreview, getTimeFromClientX, onRangeChange, onScrubEnd, onSeek]);
+  }, [dragPreview, getTimeFromClientX, onRangeChange, onScrubEnd, onSeek, onAnnotationClick]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -935,16 +938,16 @@ export default function AnnotationTimeline({
         </Box>
       </Box>
 
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: hasAnnotations ? 'flex-end' : 'space-between',
-          mt: 0.5,
-          gap: 1,
-        }}
-      >
-        {!hasAnnotations ? (
+      {!hasAnnotations ? (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            mt: 0.5,
+            gap: 1,
+          }}
+        >
           <Typography
             sx={{
               fontSize: '0.75rem',
@@ -953,19 +956,8 @@ export default function AnnotationTimeline({
           >
             {footerHint}
           </Typography>
-        ) : null}
-        <Typography
-          aria-live="polite"
-          sx={{
-            flexShrink: 0,
-            fontSize: '0.8125rem',
-            fontVariantNumeric: 'tabular-nums',
-            color: cv.textSecondary,
-          }}
-        >
-          {formatVideoTimestamp(currentTime)} / {formatVideoTimestamp(safeDuration)}
-        </Typography>
-      </Box>
+        </Box>
+      ) : null}
     </Box>
   );
 }

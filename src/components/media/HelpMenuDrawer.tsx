@@ -53,7 +53,7 @@ const shortcutBadgeSx = {
 };
 
 const HELP_MENU_SECTIONS: string[][] = [
-  ['Help Center', 'Support Forum', 'YouTube videos', 'Release notes', 'Legal summary'],
+  ['Help Center', 'Support Forum', 'References'],
   ['Submit feedback', 'Contact support'],
   ['Change keyboard layout...'],
 ];

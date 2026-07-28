@@ -253,7 +253,7 @@ export default function AnnotationToolbar({
   const undoShortcut = getShortcut('annotation-undo') ?? getUndoShortcutLabel();
   const redoShortcut = getShortcut('annotation-redo') ?? getRedoShortcutLabel();
   const filteredTools = mediaType === 'audio'
-    ? tools.filter(t => t.id === 'comment')
+    ? tools.filter(t => t.id === 'comment' || t.id === 'select')
     : tools;
 
   const getAnnotationToolShortcut = (toolId: AnnotationTool) =>
@@ -408,8 +408,8 @@ export default function AnnotationToolbar({
           compact
             ? { display: 'contents' }
             : {
-                ...toolbarHorizontalScrollSx,
-              }
+              ...toolbarHorizontalScrollSx,
+            }
         }
       >
         <Box
@@ -418,237 +418,237 @@ export default function AnnotationToolbar({
           sx={
             compact
               ? {
-                  display: 'contents',
-                }
+                display: 'contents',
+              }
               : islandSx
           }
         >
-        {filteredTools.map((tool, index) => {
-          const Icon = tool.icon;
-          const isActive = activeTool === tool.id;
-          const shortcut = getAnnotationToolShortcut(tool.id);
-          const isExpanded =
-            tool.id === 'shape'
-              ? showShapeSubIsland
-              : tool.id === 'draw'
-                ? showDrawSubIsland
-                : tool.id === 'stamp'
-                  ? showStampSubIsland
-                  : undefined;
+          {filteredTools.map((tool, index) => {
+            const Icon = tool.icon;
+            const isActive = activeTool === tool.id;
+            const shortcut = getAnnotationToolShortcut(tool.id);
+            const isExpanded =
+              tool.id === 'shape'
+                ? showShapeSubIsland
+                : tool.id === 'draw'
+                  ? showDrawSubIsland
+                  : tool.id === 'stamp'
+                    ? showStampSubIsland
+                    : undefined;
 
-          return (
-            <Box
-              key={tool.id}
-              ref={
-                tool.id === 'draw'
-                  ? drawToolAnchorRef
-                  : tool.id === 'shape'
-                    ? shapeToolAnchorRef
-                    : tool.id === 'stamp'
-                      ? stampToolAnchorRef
-                      : undefined
-              }
-              sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}
-            >
-              {!compact && index === 2 && (
-                <Divider orientation="vertical" flexItem sx={dividerSx} />
-              )}
-              {!compact && index === 4 && (
-                <Divider orientation="vertical" flexItem sx={dividerSx} />
-              )}
-              {compact ? (
+            return (
+              <Box
+                key={tool.id}
+                ref={
+                  tool.id === 'draw'
+                    ? drawToolAnchorRef
+                    : tool.id === 'shape'
+                      ? shapeToolAnchorRef
+                      : tool.id === 'stamp'
+                        ? stampToolAnchorRef
+                        : undefined
+                }
+                sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}
+              >
+                {!compact && index === 2 && (
+                  <Divider orientation="vertical" flexItem sx={dividerSx} />
+                )}
+                {!compact && index === 4 && (
+                  <Divider orientation="vertical" flexItem sx={dividerSx} />
+                )}
+                {compact ? (
+                  <LabeledToolbarButton
+                    label={tool.label}
+                    active={isActive}
+                    disabled={disabled}
+                    onClick={() => {
+                      if (disabled) return;
+                      handleSelect(tool.id);
+                    }}
+                    ariaLabel={shortcut ? `${tool.label} (${shortcut})` : tool.label}
+                    ariaPressed={isActive}
+                    ariaExpanded={isExpanded}
+                  >
+                    <Icon sx={{ fontSize: TOOL_ICON_SIZE }} />
+                  </LabeledToolbarButton>
+                ) : (
+                  <ShortcutTooltip label={tool.label} shortcut={shortcut}>
+                    <span>
+                      <IconButton
+                        disabled={disabled}
+                        aria-label={shortcut ? `${tool.label} (${shortcut})` : tool.label}
+                        aria-keyshortcuts={shortcut}
+                        aria-pressed={isActive}
+                        aria-expanded={isExpanded}
+                        onClick={() => {
+                          if (disabled) return;
+                          handleSelect(tool.id);
+                        }}
+                        sx={{
+                          ...toolButtonSx,
+                          color: disabled ? cv.textMuted : (isActive ? cv.textPrimary : cv.textSecondary),
+                          background: isActive && !disabled
+                            ? cv.stampGradient
+                            : 'transparent',
+                          border: isActive && !disabled
+                            ? `1px solid ${cv.purpleSelectionBorder}`
+                            : '1px solid transparent',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            backgroundColor: disabled ? 'transparent' : (isActive ? undefined : cv.surfaceHover),
+                            color: disabled ? cv.textMuted : cv.textPrimary,
+                          },
+                        }}
+                      >
+                        <Icon sx={{ fontSize: TOOL_ICON_SIZE }} />
+                      </IconButton>
+                    </span>
+                  </ShortcutTooltip>
+                )}
+              </Box>
+            );
+          })}
+
+          {mediaType === 'video' && !compact && <Divider orientation="vertical" flexItem sx={dividerSx} />}
+
+          {mediaType === 'video' && playerToolsViewState && playerToolHandlers ? (
+            <PinnedPlayerToolButtons
+              pinnedTools={pinnedPlayerTools}
+              viewState={playerToolsViewState}
+              handlers={playerToolHandlers}
+              compact={compact}
+            />
+          ) : null}
+
+          {mediaType === 'video' && (
+            compact ? (
+              <Box ref={moreToolsAnchorRef} sx={{ display: 'inline-flex', flexShrink: 0 }}>
                 <LabeledToolbarButton
-                  label={tool.label}
-                  active={isActive}
+                  label="More"
+                  active={toolsDrawerOpen}
                   disabled={disabled}
                   onClick={() => {
                     if (disabled) return;
-                    handleSelect(tool.id);
+                    handleMoreToolsClick();
                   }}
-                  ariaLabel={shortcut ? `${tool.label} (${shortcut})` : tool.label}
-                  ariaPressed={isActive}
-                  ariaExpanded={isExpanded}
+                  ariaLabel="More tools"
+                  ariaPressed={toolsDrawerOpen}
+                  ariaExpanded={toolsDrawerOpen}
+                  buttonRef={moreToolsButtonRef}
                 >
-                  <Icon sx={{ fontSize: TOOL_ICON_SIZE }} />
+                  <AddOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
                 </LabeledToolbarButton>
-              ) : (
-                <ShortcutTooltip label={tool.label} shortcut={shortcut}>
+              </Box>
+            ) : (
+              <Box ref={moreToolsAnchorRef} sx={{ display: 'inline-flex', flexShrink: 0 }}>
+                <ShortcutTooltip label="More tools">
                   <span>
                     <IconButton
+                      ref={moreToolsButtonRef}
+                      type="button"
                       disabled={disabled}
-                      aria-label={shortcut ? `${tool.label} (${shortcut})` : tool.label}
-                      aria-keyshortcuts={shortcut}
-                      aria-pressed={isActive}
-                      aria-expanded={isExpanded}
+                      aria-label="More tools"
+                      aria-expanded={toolsDrawerOpen}
+                      aria-pressed={toolsDrawerOpen}
                       onClick={() => {
                         if (disabled) return;
-                        handleSelect(tool.id);
+                        handleMoreToolsClick();
                       }}
                       sx={{
                         ...toolButtonSx,
-                        color: disabled ? cv.textMuted : (isActive ? cv.textPrimary : cv.textSecondary),
-                        background: isActive && !disabled
-                          ? cv.stampGradient
-                          : 'transparent',
-                        border: isActive && !disabled
-                          ? `1px solid ${cv.purpleSelectionBorder}`
-                          : '1px solid transparent',
-                        transition: 'all 0.2s ease',
+                        color: disabled ? cv.textMuted : (toolsDrawerOpen ? cv.textPrimary : cv.textSecondary),
+                        backgroundColor: toolsDrawerOpen && !disabled ? cv.surfaceHover : 'transparent',
+                        border: toolsDrawerOpen && !disabled ? '1px solid var(--noah-border)' : '1px solid transparent',
                         '&:hover': {
-                          backgroundColor: disabled ? 'transparent' : (isActive ? undefined : cv.surfaceHover),
+                          backgroundColor: disabled ? 'transparent' : cv.surfaceHover,
                           color: disabled ? cv.textMuted : cv.textPrimary,
                         },
                       }}
                     >
-                      <Icon sx={{ fontSize: TOOL_ICON_SIZE }} />
+                      <AddOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
                     </IconButton>
                   </span>
                 </ShortcutTooltip>
-              )}
-            </Box>
-          );
-        })}
+              </Box>
+            )
+          )}
 
-        {mediaType !== 'audio' && !compact && <Divider orientation="vertical" flexItem sx={dividerSx} />}
+          {mediaType !== 'audio' && !compact && <Divider orientation="vertical" flexItem sx={dividerSx} />}
 
-        {mediaType !== 'audio' && playerToolsViewState && playerToolHandlers ? (
-          <PinnedPlayerToolButtons
-            pinnedTools={pinnedPlayerTools}
-            viewState={playerToolsViewState}
-            handlers={playerToolHandlers}
-            compact={compact}
-          />
-        ) : null}
+          {mediaType !== 'audio' && (
+            compact ? (
+              <>
+                <LabeledToolbarButton
+                  label="Undo"
+                  disabled={!canUndo || disabled}
+                  onClick={onUndo}
+                  ariaLabel="Undo"
+                >
+                  <UndoOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
+                </LabeledToolbarButton>
+                <LabeledToolbarButton
+                  label="Redo"
+                  disabled={!canRedo || disabled}
+                  onClick={onRedo}
+                  ariaLabel="Redo"
+                >
+                  <RedoOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
+                </LabeledToolbarButton>
+              </>
+            ) : (
+              <>
+                <ShortcutTooltip label="Undo" shortcut={undoShortcut}>
+                  <span>
+                    <IconButton
+                      type="button"
+                      aria-label="Undo"
+                      disabled={!canUndo}
+                      onClick={onUndo}
+                      sx={{
+                        ...toolButtonSx,
+                        color: canUndo ? cv.textSecondary : cv.textMuted,
+                        border: '1px solid transparent',
+                        '&:hover': {
+                          backgroundColor: canUndo ? cv.surfaceHover : undefined,
+                          color: canUndo ? cv.textPrimary : cv.textMuted,
+                        },
+                        '&.Mui-disabled': {
+                          color: cv.textMuted,
+                        },
+                      }}
+                    >
+                      <UndoOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
+                    </IconButton>
+                  </span>
+                </ShortcutTooltip>
 
-        {mediaType !== 'audio' && (
-          compact ? (
-            <Box ref={moreToolsAnchorRef} sx={{ display: 'inline-flex', flexShrink: 0 }}>
-              <LabeledToolbarButton
-                label="More"
-                active={toolsDrawerOpen}
-                disabled={disabled}
-                onClick={() => {
-                  if (disabled) return;
-                  handleMoreToolsClick();
-                }}
-                ariaLabel="More tools"
-                ariaPressed={toolsDrawerOpen}
-                ariaExpanded={toolsDrawerOpen}
-                buttonRef={moreToolsButtonRef}
-              >
-                <AddOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
-              </LabeledToolbarButton>
-            </Box>
-          ) : (
-            <Box ref={moreToolsAnchorRef} sx={{ display: 'inline-flex', flexShrink: 0 }}>
-              <ShortcutTooltip label="More tools">
-                <span>
-                  <IconButton
-                    ref={moreToolsButtonRef}
-                    type="button"
-                    disabled={disabled}
-                    aria-label="More tools"
-                    aria-expanded={toolsDrawerOpen}
-                    aria-pressed={toolsDrawerOpen}
-                    onClick={() => {
-                      if (disabled) return;
-                      handleMoreToolsClick();
-                    }}
-                    sx={{
-                      ...toolButtonSx,
-                      color: disabled ? cv.textMuted : (toolsDrawerOpen ? cv.textPrimary : cv.textSecondary),
-                      backgroundColor: toolsDrawerOpen && !disabled ? cv.surfaceHover : 'transparent',
-                      border: toolsDrawerOpen && !disabled ? '1px solid var(--noah-border)' : '1px solid transparent',
-                      '&:hover': {
-                        backgroundColor: disabled ? 'transparent' : cv.surfaceHover,
-                        color: disabled ? cv.textMuted : cv.textPrimary,
-                      },
-                    }}
-                  >
-                    <AddOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
-                  </IconButton>
-                </span>
-              </ShortcutTooltip>
-            </Box>
-          )
-        )}
-
-        {mediaType !== 'audio' && !compact && <Divider orientation="vertical" flexItem sx={dividerSx} />}
-
-        {mediaType !== 'audio' && (
-          compact ? (
-            <>
-              <LabeledToolbarButton
-                label="Undo"
-                disabled={!canUndo || disabled}
-                onClick={onUndo}
-                ariaLabel="Undo"
-              >
-                <UndoOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
-              </LabeledToolbarButton>
-              <LabeledToolbarButton
-                label="Redo"
-                disabled={!canRedo || disabled}
-                onClick={onRedo}
-                ariaLabel="Redo"
-              >
-                <RedoOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
-              </LabeledToolbarButton>
-            </>
-          ) : (
-            <>
-              <ShortcutTooltip label="Undo" shortcut={undoShortcut}>
-                <span>
-                  <IconButton
-                    type="button"
-                    aria-label="Undo"
-                    disabled={!canUndo}
-                    onClick={onUndo}
-                    sx={{
-                      ...toolButtonSx,
-                      color: canUndo ? cv.textSecondary : cv.textMuted,
-                      border: '1px solid transparent',
-                      '&:hover': {
-                        backgroundColor: canUndo ? cv.surfaceHover : undefined,
-                        color: canUndo ? cv.textPrimary : cv.textMuted,
-                      },
-                      '&.Mui-disabled': {
-                        color: cv.textMuted,
-                      },
-                    }}
-                  >
-                    <UndoOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
-                  </IconButton>
-                </span>
-              </ShortcutTooltip>
-
-              <ShortcutTooltip label="Redo" shortcut={redoShortcut}>
-                <span>
-                  <IconButton
-                    type="button"
-                    aria-label="Redo"
-                    disabled={!canRedo}
-                    onClick={onRedo}
-                    sx={{
-                      ...toolButtonSx,
-                      color: canRedo ? cv.textSecondary : cv.textMuted,
-                      border: '1px solid transparent',
-                      '&:hover': {
-                        backgroundColor: canRedo ? cv.surfaceHover : undefined,
-                        color: canRedo ? cv.textPrimary : cv.textMuted,
-                      },
-                      '&.Mui-disabled': {
-                        color: cv.textMuted,
-                      },
-                    }}
-                  >
-                    <RedoOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
-                  </IconButton>
-                </span>
-              </ShortcutTooltip>
-            </>
-          )
-        )}
+                <ShortcutTooltip label="Redo" shortcut={redoShortcut}>
+                  <span>
+                    <IconButton
+                      type="button"
+                      aria-label="Redo"
+                      disabled={!canRedo}
+                      onClick={onRedo}
+                      sx={{
+                        ...toolButtonSx,
+                        color: canRedo ? cv.textSecondary : cv.textMuted,
+                        border: '1px solid transparent',
+                        '&:hover': {
+                          backgroundColor: canRedo ? cv.surfaceHover : undefined,
+                          color: canRedo ? cv.textPrimary : cv.textMuted,
+                        },
+                        '&.Mui-disabled': {
+                          color: cv.textMuted,
+                        },
+                      }}
+                    >
+                      <RedoOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
+                    </IconButton>
+                  </span>
+                </ShortcutTooltip>
+              </>
+            )
+          )}
         </Box>
       </Box>
 

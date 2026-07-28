@@ -13,9 +13,9 @@ import {
 } from '@mui/material';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
+import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
-import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
@@ -24,7 +24,7 @@ import { useDashboard } from '../../context/DashboardContext';
 import RenameMediaModal from './RenameMediaModal';
 import TrashConfirmModal from './TrashConfirmModal';
 import WorkspaceColorPicker from './WorkspaceColorPicker';
-import AssignProjectModal from './AssignProjectModal';
+import MoveItemsModal, { type MoveDestination } from './MoveItemsModal';
 import { FOLDER_COLORS } from '../../constants/folderColors';
 import { resolveFolderColor } from '../../utils/folderColorStyle';
 
@@ -53,16 +53,22 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
   const {
     renameMedia,
     moveMediaToTrash,
+    moveMediaToDashboardFolder,
+    moveMediaToWorkspaceFolder,
     updateMediaFolderColor,
     updateMediaProjectLocation,
     activeWorkspace,
     toggleFavorite,
     favorites,
+    mediaItems,
+    workspaces,
+    activeWorkspaceId,
+    trashedIds,
   } = useDashboard();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [assignProjectOpen, setAssignProjectOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const [colorPickerAnchor, setColorPickerAnchor] = useState<null | HTMLElement>(null);
   const isFolder = item.type === 'folder';
 
@@ -83,13 +89,27 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
     closeMenu();
   };
 
-  const openAssignProject = () => {
+  const openMove = () => {
     closeMenu();
-    setAssignProjectOpen(true);
+    setMoveOpen(true);
   };
 
   const closeColorPicker = () => {
     setColorPickerAnchor(null);
+  };
+
+  const handleMove = (destination: MoveDestination) => {
+    if (destination.kind === 'project') {
+      void updateMediaProjectLocation(item.id, { folderId: destination.projectId }, item.type);
+      return;
+    }
+
+    if (destination.workspaceId === activeWorkspaceId) {
+      moveMediaToDashboardFolder([item.id], destination.folderId);
+      return;
+    }
+
+    moveMediaToWorkspaceFolder([item.id], destination.workspaceId, destination.folderId);
   };
 
   return (
@@ -168,7 +188,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             onClick={(event) => {
               if (!user?.permissions?.includes('upload_delete_media')) return;
               consumeMenuPointerEvent(event);
-              openAssignProject();
+              openMove();
             }}
             onMouseDown={consumeMenuPointerEvent}
             sx={{
@@ -181,9 +201,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <WorkOutlineOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
+              <DriveFileMoveOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
-            Assign to project
+            Move
           </MenuItem>
         ) : null}
         <MenuItem
@@ -342,15 +362,16 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
         onSelect={(color) => updateMediaFolderColor(item.id, color)}
       />
 
-      <AssignProjectModal
-        open={assignProjectOpen}
-        itemTitle={item.title}
-        projectFolders={activeWorkspace.projectFolders.filter(
-          p => !(item.projectLocations?.some(l => l.folderId === p.id)) && !(item.linkedProjectIds || []).includes(p.id)
-        )}
-        initialProjectLocation={null}
-        onClose={() => setAssignProjectOpen(false)}
-        onSave={(projectLocation) => updateMediaProjectLocation(item.id, projectLocation, item.type)}
+      <MoveItemsModal
+        open={moveOpen}
+        itemCount={1}
+        excludeItemId={item.id}
+        mediaItems={mediaItems}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        trashedIds={trashedIds}
+        onClose={() => setMoveOpen(false)}
+        onMove={handleMove}
       />
 
       <RenameMediaModal

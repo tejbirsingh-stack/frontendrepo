@@ -16,6 +16,7 @@ export interface CommentReply {
 
 export interface VideoComment {
   id: string;
+  historyIndex?: number;
   xPercent: number;
   yPercent: number;
   text: string;
