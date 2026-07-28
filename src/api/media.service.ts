@@ -159,7 +159,7 @@ export interface UploadMediaMetadataOptions {
 
 async function uploadResumableChunkedFile(
   file: File,
-  options?: { durationSeconds?: number; ownerType?: string; ownerId?: string; linkedProjectId?: string },
+  options?: UploadMediaMetadataOptions & { ownerType?: string; ownerId?: string; linkedProjectId?: string },
   progressCallback?: (progress: UploadMediaProgress) => void,
 ): Promise<MediaAssetResponseDto> {
   const initRes = await apiClient.post<{ sessionId: string; uploadId: string; key: string }>(

@@ -368,8 +368,8 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
         requireNameConfirmation
         description="This item will be removed from your library and moved to trash. You can restore it later from the Trash view."
         onClose={() => setDeleteOpen(false)}
-        onConfirm={() => {
-          moveMediaToTrash(item.id);
+        onConfirm={(reason) => {
+          moveMediaToTrash(item.id, reason);
           setDeleteOpen(false);
         }}
       />

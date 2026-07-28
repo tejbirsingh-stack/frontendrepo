@@ -103,7 +103,19 @@ export default function NewFolderModal({
             onChange={(e) => setName(e.target.value)}
             autoFocus
             required
-            slotProps={{ inputLabel: { shrink: true } }}
+            helperText={`${name.length}/100`}
+            sx={{
+              '& .MuiFormHelperText-root': {
+                textAlign: 'right',
+                color: cv.textMuted,
+                fontSize: '0.75rem',
+                mt: 0.5,
+              },
+            }}
+            slotProps={{
+              inputLabel: { shrink: true },
+              htmlInput: { maxLength: 100 }
+            }}
           />
           <FolderColorPickerField value={color} onChange={setColor} />
           {projectFolders.length > 0 ? (

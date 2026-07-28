@@ -32,6 +32,7 @@ export default function VideoHoverPreview({
   const [isHovering, setIsHovering] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
+  const [thumbnailError, setThumbnailError] = useState(false);
 
   const stopPreview = useCallback(() => {
     const video = videoRef.current;
@@ -58,34 +59,26 @@ export default function VideoHoverPreview({
 
     const video = videoRef.current;
     if (!video) return;
-
-    const handleTimeUpdate = () => {
-      if (video.currentTime >= PREVIEW_DURATION_SEC) {
-        video.currentTime = 0;
-      }
-    };
-
-    const handlePlaying = () => setIsPreviewing(true);
-    const handlePause = () => {
-      if (!isHovering) setIsPreviewing(false);
-    };
-
-    video.currentTime = 0;
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('playing', handlePlaying);
-    video.addEventListener('pause', handlePause);
-
     const playPromise = video.play();
-    if (playPromise) {
-      playPromise.catch(() => setIsPreviewing(false));
+
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          setIsPreviewing(true);
+        })
+        .catch(() => {
+          setIsPreviewing(false);
+        });
     }
 
+    const timer = setTimeout(() => {
+      stopPreview();
+    }, PREVIEW_DURATION_SEC * 1000);
+
     return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('playing', handlePlaying);
-      video.removeEventListener('pause', handlePause);
+      clearTimeout(timer);
     };
-  }, [isHovering, shouldLoadVideo, videoSrc]);
+  }, [isHovering, shouldLoadVideo, videoSrc, stopPreview]);
 
   useEffect(() => {
     if (!isHovering) stopPreview();
@@ -98,12 +91,13 @@ export default function VideoHoverPreview({
       aria-label={`${title} video. Hover to preview the first ${PREVIEW_DURATION_SEC} seconds.`}
       sx={{ position: 'relative', width: '100%', height: '100%' }}
     >
-      {thumbnail ? (
+      {thumbnail && !thumbnailError ? (
         <Box
           component="img"
           src={thumbnail}
           alt=""
           loading="lazy"
+          onError={() => setThumbnailError(true)}
           sx={{
             width: '100%',
             height: '100%',

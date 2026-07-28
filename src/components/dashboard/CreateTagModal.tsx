@@ -149,8 +149,21 @@ export default function CreateTagModal({
             }}
             autoFocus
             required
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ mb: 2 }}
+            error={!!error}
+            helperText={error || `${name.length}/50`}
+            slotProps={{
+              inputLabel: { shrink: true },
+              htmlInput: { maxLength: 50 },
+            }}
+            sx={{
+              mb: 2,
+              '& .MuiFormHelperText-root': {
+                textAlign: error ? 'left' : 'right',
+                color: error ? undefined : cv.textMuted,
+                fontSize: '0.75rem',
+                mt: 0.5,
+              },
+            }}
           />
 
           {mode === 'create' ? (

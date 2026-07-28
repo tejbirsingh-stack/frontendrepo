@@ -86,7 +86,19 @@ export default function RenameMediaModal({
             onChange={(e) => setTitle(e.target.value)}
             autoFocus
             required
-            slotProps={{ inputLabel: { shrink: true } }}
+            helperText={`${title.length}/255`}
+            sx={{
+              '& .MuiFormHelperText-root': {
+                textAlign: 'right',
+                color: cv.textMuted,
+                fontSize: '0.75rem',
+                mt: 0.5,
+              },
+            }}
+            slotProps={{
+              inputLabel: { shrink: true },
+              htmlInput: { maxLength: 255 }
+            }}
           />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3, pt: 1, gap: 1 }}>

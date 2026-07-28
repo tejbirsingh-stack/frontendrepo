@@ -132,8 +132,20 @@ export default function CreateWorkspaceModal({
             onChange={(e) => setName(e.target.value)}
             required
             autoFocus
-            sx={{ mb: 2.5 }}
-            slotProps={{ inputLabel: { shrink: true } }}
+            helperText={`${name.length}/100`}
+            sx={{
+              mb: 2.5,
+              '& .MuiFormHelperText-root': {
+                textAlign: 'right',
+                color: cv.textMuted,
+                fontSize: '0.75rem',
+                mt: 0.5,
+              },
+            }}
+            slotProps={{
+              inputLabel: { shrink: true },
+              htmlInput: { maxLength: 100 }
+            }}
           />
 
           <TextField
@@ -144,8 +156,20 @@ export default function CreateWorkspaceModal({
             onChange={(e) => setDescription(e.target.value)}
             multiline
             minRows={3}
-            sx={{ mb: 3 }}
-            slotProps={{ inputLabel: { shrink: true } }}
+            helperText={`${description.length}/500`}
+            sx={{
+              mb: 3,
+              '& .MuiFormHelperText-root': {
+                textAlign: 'right',
+                color: cv.textMuted,
+                fontSize: '0.75rem',
+                mt: 0.5,
+              },
+            }}
+            slotProps={{
+              inputLabel: { shrink: true },
+              htmlInput: { maxLength: 500 }
+            }}
           />
 
           <Typography

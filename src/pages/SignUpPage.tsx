@@ -321,9 +321,19 @@ const handleSubmit = async (e: React.FormEvent) => {
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
-              sx={{ mb: 2.5 }}
+              helperText={`${name.length}/100`}
+              sx={{
+                mb: 2.5,
+                '& .MuiFormHelperText-root': {
+                  textAlign: 'right',
+                  color: cv.textMuted,
+                  fontSize: '0.75rem',
+                  mt: 0.5,
+                },
+              }}
               slotProps={{
                 inputLabel: { shrink: true },
+                htmlInput: { maxLength: 100 }
               }}
             />
 
@@ -335,9 +345,19 @@ const handleSubmit = async (e: React.FormEvent) => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
-              sx={{ mb: 2.5 }}
+              helperText={`${email.length}/255`}
+              sx={{
+                mb: 2.5,
+                '& .MuiFormHelperText-root': {
+                  textAlign: 'right',
+                  color: cv.textMuted,
+                  fontSize: '0.75rem',
+                  mt: 0.5,
+                },
+              }}
               slotProps={{
                 inputLabel: { shrink: true },
+                htmlInput: { maxLength: 255 }
               }}
             />
 
@@ -348,9 +368,19 @@ const handleSubmit = async (e: React.FormEvent) => {
               placeholder="Company Name"
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
-              sx={{ mb: 2.5 }}
+              helperText={`${companyName.length}/100`}
+              sx={{
+                mb: 2.5,
+                '& .MuiFormHelperText-root': {
+                  textAlign: 'right',
+                  color: cv.textMuted,
+                  fontSize: '0.75rem',
+                  mt: 0.5,
+                },
+              }}
               slotProps={{
                 inputLabel: { shrink: true },
+                htmlInput: { maxLength: 100 }
               }}
             />
 
@@ -367,9 +397,19 @@ const handleSubmit = async (e: React.FormEvent) => {
                 }
               }}
               autoComplete="tel"
-              sx={{ mb: 2.5 }}
+              helperText={`${phone.length}/10`}
+              sx={{
+                mb: 2.5,
+                '& .MuiFormHelperText-root': {
+                  textAlign: 'right',
+                  color: cv.textMuted,
+                  fontSize: '0.75rem',
+                  mt: 0.5,
+                },
+              }}
               slotProps={{
                 inputLabel: { shrink: true },
+                htmlInput: { maxLength: 50 }
               }}
             />
 
