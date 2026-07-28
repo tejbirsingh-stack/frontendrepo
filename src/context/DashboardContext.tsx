@@ -48,6 +48,8 @@ import { extractImageMetadata, extractAudioMetadata, extractExifFromFile, type T
 import {
   uploadMediaFileRequest,
   getMediaAssetsRequest,
+  toggleFavoriteRequest,
+  getFavoritesRequest,
   type MediaAssetResponseDto,
 } from '../api';
 const token = (await import('../auth/authTokenBridge')).getAccessToken();
@@ -61,11 +63,12 @@ interface DashboardContextValue {
   updateWorkspaceColor: (workspaceId: string, color: string) => void;
   createWorkspace: (data: CreateWorkspaceFormData) => void;
   mediaItems: MediaItem[];
+  fetchedFavorites: MediaItem[];
   rootMediaItems: MediaItem[];
   favoriteMediaItems: MediaItem[];
   duplicateMediaItems: MediaItem[];
   favorites: Set<string>;
-  toggleFavorite: (id: string) => void;
+  toggleFavorite: (id: string, type?: 'asset' | 'folder' | 'project') => void;
   moveMediaToFolder: (mediaId: string, folderId: string, childLabel?: string) => void;
   moveMediaToFolderBulk: (mediaIds: string[], folderId: string, childLabel?: string) => void;
   moveMediaToDashboardFolder: (mediaIds: string[], folderId: string) => void;
@@ -163,12 +166,13 @@ const initialTrashState = getInitialTrashState();
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [workspaces, setWorkspaces] = useState<Workspace[]>(initialWorkspaces);
+  const [fetchedFavorites, setFetchedFavorites] = useState<MediaItem[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaces[0]?.id || '');
   const [systemTimezone, setSystemTimezone] = useState<string>('Europe/London');
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(() =>
     initialMediaItems.filter((item) => !initialTrashState.expiredIds.includes(item.id)),
   );
-  const [favorites, setFavorites] = useState<Set<string>>(() => loadFavoriteMediaIds());
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [draggingMediaIds, setDraggingMediaIdsState] = useState<Set<string>>(new Set());
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
@@ -586,16 +590,23 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     [mediaItems, activeWorkspaceId],
   );
 
-  const favoriteMediaItems = useMemo(
-    () =>
-      mediaItems.filter(
-        (item) =>
-          item.workspaceId === activeWorkspaceId &&
-          favorites.has(item.id) &&
-          !trashedIds.has(item.id),
-      ),
-    [mediaItems, activeWorkspaceId, favorites, trashedIds],
-  );
+  const favoriteMediaItems = useMemo(() => {
+    const fromMediaItems = mediaItems.filter(
+      (item) =>
+        item.workspaceId === activeWorkspaceId &&
+        favorites.has(item.id) &&
+        !trashedIds.has(item.id),
+    );
+    const existingIds = new Set(fromMediaItems.map(i => i.id));
+    const extra = fetchedFavorites.filter(
+      (item) =>
+        item.workspaceId === activeWorkspaceId &&
+        !existingIds.has(item.id) &&
+        favorites.has(item.id) &&
+        !trashedIds.has(item.id)
+    );
+    return [...fromMediaItems, ...extra];
+  }, [mediaItems, fetchedFavorites, activeWorkspaceId, favorites, trashedIds]);
 
   const trashedMediaItems = useMemo(
     () =>
@@ -611,8 +622,97 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    saveFavoriteMediaIds(favorites);
-  }, [favorites]);
+    const fetchFavorites = async () => {
+      if (!activeWorkspaceId) return;
+      try {
+        const res = await getFavoritesRequest(activeWorkspaceId);
+        if (Array.isArray(res)) {
+          const favIds = new Set<string>();
+          const mappedFavs: MediaItem[] = [];
+
+          res.forEach((fav: any) => {
+            if (fav.assetId) favIds.add(fav.assetId);
+            if (fav.folderId) favIds.add(fav.folderId);
+            if (fav.projectId) favIds.add(fav.projectId);
+
+            if (fav.asset) {
+              const a = fav.asset;
+              const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.title || '');
+              const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.title || '');
+              const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.title || '');
+              const type = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
+              
+              mappedFavs.push({
+                id: a.id,
+                title: a.title || 'Untitled',
+                type: type as any,
+                workspaceId: fav.workspaceId || a.workspaceId || a.ownerId,
+                parentFolderId: a.folderId,
+                createdAt: a.createdAt || a.uploadDate || new Date().toISOString(),
+                sizeBytes: Number(a.files?.[0]?.sizeBytes || a.size || 0),
+                storageProvider: 'b2',
+                uploadedBy: CURRENT_USER.name,
+                thumbnail: a.thumbnail || undefined,
+                videoSrc: isVideo ? (a.files?.[0]?.fileUrl || a.url) : undefined,
+                duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
+                tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
+                location: null,
+                linkedProjectIds: a.sources?.map((s: any) => s.projectId) || [],
+                projectLocations: a.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
+                compressionStatus: a.transcodingStatus || 'completed',
+                customMetadata: a.customMetadata,
+                status: a.status === 'duplicate' ? 'duplicate' : 'active',
+              });
+            }
+
+            if (fav.folder) {
+              const f = fav.folder;
+              mappedFavs.push({
+                id: f.id,
+                title: f.name,
+                type: 'folder',
+                workspaceId: fav.workspaceId || f.workspaceId,
+                parentFolderId: f.parentId,
+                createdAt: f.createdAt || new Date().toISOString(),
+                sizeBytes: 0,
+                storageProvider: 'b2',
+                uploadedBy: CURRENT_USER.name,
+                status: 'active',
+                folderColor: f.color,
+                linkedProjectIds: f.sources?.map((s: any) => s.projectId) || [],
+                projectLocations: f.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
+              });
+            }
+
+            if (fav.project) {
+              const p = fav.project;
+              mappedFavs.push({
+                id: p.id,
+                title: p.name,
+                type: 'folder',
+                workspaceId: fav.workspaceId || p.workspaceId,
+                parentFolderId: p.ownerType === 'FOLDER' ? p.folderId : undefined,
+                createdAt: p.createdAt || new Date().toISOString(),
+                sizeBytes: 0,
+                storageProvider: 'b2',
+                uploadedBy: CURRENT_USER.name,
+                status: 'active',
+                isProject: true,
+                linkedProjectIds: [],
+                projectLocations: [],
+              });
+            }
+          });
+          
+          setFavorites(favIds);
+          setFetchedFavorites(mappedFavs);
+        }
+      } catch (err) {
+        console.error('Failed to fetch favorites', err);
+      }
+    };
+    fetchFavorites();
+  }, [activeWorkspaceId]);
 
   useEffect(() => {
     saveManagedTags(managedTags);
@@ -667,13 +767,27 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const toggleFavorite = useCallback((id: string) => {
+  const toggleFavorite = useCallback(async (id: string, type: 'asset' | 'folder' | 'project' = 'asset') => {
+    // Optimistic UI update
     setFavorites((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+
+    try {
+      await toggleFavoriteRequest({ id, type });
+    } catch (err) {
+      console.error('Failed to toggle favorite', err);
+      // Revert optimistic update
+      setFavorites((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    }
   }, []);
 
   const updateWorkspaceColor = useCallback((workspaceId: string, color: string) => {
@@ -1852,6 +1966,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       createWorkspace,
       mediaItems,
       rootMediaItems,
+      fetchedFavorites,
       favoriteMediaItems,
       duplicateMediaItems,
       favorites,
@@ -1923,6 +2038,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       createWorkspace,
       mediaItems,
       rootMediaItems,
+      fetchedFavorites,
       favoriteMediaItems,
       duplicateMediaItems,
       favorites,

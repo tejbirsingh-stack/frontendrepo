@@ -39,7 +39,7 @@ interface MediaItemCardProps {
   isDragging: boolean;
   isDropTarget?: boolean;
   selectedMediaIds: Set<string>;
-  onToggleFavorite: (id: string) => void;
+  onToggleFavorite: (id: string, type?: 'asset' | 'folder' | 'project') => void;
   onToggleSelect: (id: string) => void;
   onDragStart: (ids: string[]) => void;
   onDragEnd: () => void;
@@ -508,7 +508,7 @@ export default function MediaItemCard({
         >
           <FavoriteButton
             isFavorite={isFavorite}
-            onToggle={() => onToggleFavorite(item.id)}
+            onToggle={() => onToggleFavorite(item.id, item.isProject ? 'project' : (item.type === 'folder' ? 'folder' : 'asset'))}
           />
           <TypeBadge type={item.type} isProject={item.isProject} />
         </Box>

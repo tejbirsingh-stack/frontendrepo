@@ -16,6 +16,11 @@ export {
   retryTranscodeRequest
 } from './media.service';
 export type { MediaAssetResponseDto, UploadMediaProgress } from './media.service';
+export {
+  toggleFavoriteRequest,
+  getFavoritesRequest,
+} from './favorites.service';
+export type { ToggleFavoriteDto } from './favorites.service';
 export type {
   ApiErrorCode,
   ApiRequestOptions,
