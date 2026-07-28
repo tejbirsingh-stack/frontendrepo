@@ -226,19 +226,20 @@ export default function VideoPlayerPage() {
   const item =
     contextItem && fetchedItem?.id === contextItem.id
       ? {
-          ...contextItem,
-          videoSrc: contextItem.videoSrc || fetchedItem.videoSrc,
-          thumbnail: contextItem.thumbnail || fetchedItem.thumbnail,
-          compressionStatus: fetchedItem.compressionStatus || contextItem.compressionStatus,
-          duration: contextItem.duration || fetchedItem.duration,
-          customMetadata: fetchedItem.customMetadata || contextItem.customMetadata,
-        }
+        ...contextItem,
+        videoSrc: contextItem.videoSrc || fetchedItem.videoSrc,
+        thumbnail: contextItem.thumbnail || fetchedItem.thumbnail,
+        compressionStatus: fetchedItem.compressionStatus || contextItem.compressionStatus,
+        duration: contextItem.duration || fetchedItem.duration,
+        customMetadata: fetchedItem.customMetadata || contextItem.customMetadata,
+      }
       : contextItem || fetchedItem;
   const [isFetching, setIsFetching] = useState(!contextItem);
   const [fetchError, setFetchError] = useState(false);
 
   const [clientDecodedUrl, setClientDecodedUrl] = useState<string | null>(null);
   const [isDecodingImage, setIsDecodingImage] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
 
   const [syncTrigger, setSyncTrigger] = useState(0);
 
@@ -258,11 +259,11 @@ export default function VideoPlayerPage() {
 
           if (commentText) {
             const videoTitle = fetchedItem?.title || contextItem?.title || 'a video';
-            
+
             // Check if current user is mentioned in the comment
             const userIdentifier = user?.name || user?.email?.split('@')[0] || '';
             const isMentioned = userIdentifier && commentText.toLowerCase().includes(`@${userIdentifier.toLowerCase()}`);
-            
+
             if (isMentioned) {
               addInAppNotification(
                 'Mentioned in comment',
@@ -300,10 +301,10 @@ export default function VideoPlayerPage() {
           const tagList = Array.isArray((asset as any).tags) && (asset as any).tags.length > 0
             ? (asset as any).tags
             : (Array.isArray((asset.metadata as any)?.tags)
-                ? (asset.metadata as any).tags
-                : (Array.isArray((asset.customMetadata as any)?.tags)
-                    ? (asset.customMetadata as any).tags
-                    : []));
+              ? (asset.metadata as any).tags
+              : (Array.isArray((asset.customMetadata as any)?.tags)
+                ? (asset.customMetadata as any).tags
+                : []));
 
           setFetchedItem({
             id: asset.id,
@@ -336,6 +337,28 @@ export default function VideoPlayerPage() {
     }
   }, [mediaId]);
   const [activeTool, setActiveTool] = useState<AnnotationTool>('select');
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+  const [selectedStampId, setSelectedStampId] = useState<string | null>(null);
+  const [openCommentId, setOpenCommentId] = useState<string | null>(null);
+
+  const handleAnnotationClick = useCallback((id: string, type: TimelineAnnotationType) => {
+    setSelectedShapeId(null);
+    setSelectedStampId(null);
+    setOpenCommentId(null);
+
+    if (type === 'shape') {
+      setSelectedShapeId(id);
+      setActiveTool('shape');
+    } else if (type === 'stamp') {
+      setSelectedStampId(id);
+      setActiveTool('stamp');
+    } else if (type === 'comment') {
+      setOpenCommentId(id);
+      setActiveTool('comment');
+    } else if (type === 'drawing') {
+      setActiveTool('draw');
+    }
+  }, []);
 
   useEffect(() => {
     if (item?.type === 'audio') {
@@ -1602,9 +1625,13 @@ export default function VideoPlayerPage() {
       };
 
       if (record.type === 'drawing' && record.markDrawingErased) {
+        const targetEntryId = record.strokeId 
+          ? getDrawingHistoryEntryId(record.strokeId)
+          : drawingEntryId;
+
         setHistory((current) =>
           current.map((entry) => {
-            if (entry.id !== drawingEntryId) return entry;
+            if (entry.id !== targetEntryId) return entry;
 
             return {
               ...entry,
@@ -1613,6 +1640,11 @@ export default function VideoPlayerPage() {
             };
           }),
         );
+        
+        // Cascade delete any comment attached to this drawing
+        if (record.strokeId) {
+          setComments((prev) => prev.filter(c => c.linkedDrawingId !== record.strokeId));
+        }
         return;
       }
 
@@ -1679,6 +1711,9 @@ export default function VideoPlayerPage() {
               };
             }),
           );
+          
+          // Cascade delete any comment attached to this shape
+          setComments((prev) => prev.filter(c => c.linkedShapeId !== record.shapeId));
           return;
         }
 
@@ -2268,13 +2303,13 @@ export default function VideoPlayerPage() {
       console.error('Failed to retry transcode:', err);
       // ApiError (fetch) uses `details`, Axios uses `response.data`. 
       // Also ignore generic 'Request failed with status 400' if a better error exists.
-      const backendError = 
-        err?.details?.error || 
-        err?.details?.message || 
-        err?.response?.data?.error || 
-        err?.response?.data?.message || 
+      const backendError =
+        err?.details?.error ||
+        err?.details?.message ||
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
         (err?.message && !err.message.includes('status 400') ? err.message : null);
-        
+
       setStatusToast({
         open: true,
         message: backendError || 'Failed to retry processing. Please try again.',
@@ -2822,6 +2857,11 @@ export default function VideoPlayerPage() {
                 />
               </Box>
             )}
+            {isBuffering && item?.type !== 'image' && (
+              <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 40, pointerEvents: 'none' }}>
+                <CircularProgress size={48} sx={{ color: '#6366F1' }} />
+              </Box>
+            )}
             <Box
               sx={{
                 position: 'relative',
@@ -2875,6 +2915,10 @@ export default function VideoPlayerPage() {
                     poster={item?.thumbnail}
                     playsInline
                     preload="metadata"
+                    onWaiting={() => setIsBuffering(true)}
+                    onPlaying={() => setIsBuffering(false)}
+                    onCanPlay={() => setIsBuffering(false)}
+                    onLoadedData={() => setIsBuffering(false)}
                     sx={{
                       width: '100%',
                       height: '100%',
@@ -2932,7 +2976,7 @@ export default function VideoPlayerPage() {
                       }}
                     >
                       <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#1976d2' }}>
-                        <path d="M12 2v20M17 5v14M22 9v6M7 8v8M2 10v4"/>
+                        <path d="M12 2v20M17 5v14M22 9v6M7 8v8M2 10v4" />
                       </svg>
                     </Box>
 
@@ -3132,6 +3176,10 @@ export default function VideoPlayerPage() {
                   onStampsChange={setStamps}
                   activeStamp={activeStamp}
                   customStamp={customStamp}
+                  selectedShapeId={selectedShapeId}
+                  onSelectedShapeIdChange={setSelectedShapeId}
+                  selectedStampId={selectedStampId}
+                  onSelectedStampIdChange={setSelectedStampId}
                   drawTool={activeDrawTool}
                   drawStroke={activeDrawStroke}
                   drawColor={activeDrawColor}
@@ -3150,7 +3198,15 @@ export default function VideoPlayerPage() {
                   panActive={activeTool === 'pan'}
                   annotationsVisible={annotationsVisible}
                   videoRef={videoRef}
-                  comments={comments}
+                  comments={comments.map(c => {
+                    const entryId = c.linkedShapeId
+                      ? `shape-${c.linkedShapeId}`
+                      : c.linkedDrawingId
+                        ? `drawing-${c.linkedDrawingId}`
+                        : `comment-${c.id}`;
+                    const index = history.find(e => e.id === entryId)?.index;
+                    return { ...c, historyIndex: index };
+                  })}
                   draftComment={draftComment}
                   onPlaceDraft={handlePlaceDraft}
                   onDraftTextChange={handleDraftTextChange}
@@ -3165,6 +3221,8 @@ export default function VideoPlayerPage() {
                   onEditComment={handleEditComment}
                   onEditReply={handleEditReply}
                   onThreadOpenChange={setCommentThreadOpen}
+                  openCommentId={openCommentId}
+                  onOpenCommentIdChange={setOpenCommentId}
                   annotationGroups={annotationGroups}
                   collaborators={collaborators}
                   onCommentVisibilityChange={handleCommentVisibilityChange}
@@ -3186,6 +3244,7 @@ export default function VideoPlayerPage() {
                 timelineItems={timelineItems}
                 timelineFallbackDuration={timelineFallbackDuration}
                 onAnnotationRangeChange={handleAnnotationRangeChange}
+                onAnnotationClick={handleAnnotationClick}
               />
             )}
 
@@ -3383,7 +3442,12 @@ export default function VideoPlayerPage() {
           detailsSection={detailsSection}
           onDetailsSectionChange={setDetailsSection}
           onClose={() => setHistoryOpen(false)}
-          onSeekToTimestamp={handleSeekToTimestamp}
+          onEntryClick={(entry) => {
+            handleSeekToTimestamp(entry.videoTimestamp, entry.id);
+            if (['comment', 'drawing', 'shape', 'stamp'].includes(entry.type)) {
+              handleAnnotationClick(entry.id, entry.type as any);
+            }
+          }}
           onToggleResolved={handleToggleResolved}
           onMarkUnread={handleMarkUnread}
           onCopyLink={handleCopyLink}

@@ -98,6 +98,7 @@ interface AnnotationTimelineProps {
   onScrubStart?: () => void;
   onScrubEnd?: () => void;
   fallbackDuration?: number;
+  onAnnotationClick?: (id: string, type: TimelineAnnotationType) => void;
 }
 
 function getTickStep(duration: number, zoom: number): number {
@@ -177,6 +178,7 @@ export default function AnnotationTimeline({
   onScrubStart,
   onScrubEnd,
   fallbackDuration,
+  onAnnotationClick,
 }: AnnotationTimelineProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const horizontalScrollRef = useRef<HTMLDivElement>(null);
@@ -463,7 +465,8 @@ export default function AnnotationTimeline({
 
     if (pendingInteraction && !pendingInteraction.activated) {
       if (pendingInteraction.kind === 'move') {
-        onSeek(getTimeFromClientX(pendingInteraction.originX));
+        onSeek(pendingInteraction.startTime);
+        onAnnotationClick?.(pendingInteraction.itemId, pendingInteraction.itemType);
       } else if (pendingInteraction.kind === 'resize-start') {
         onSeek(pendingInteraction.startTime);
       } else {
@@ -489,7 +492,7 @@ export default function AnnotationTimeline({
     segmentInteractionRef.current = null;
     setDragPreview(null);
     onScrubEnd?.();
-  }, [dragPreview, getTimeFromClientX, onRangeChange, onScrubEnd, onSeek]);
+  }, [dragPreview, getTimeFromClientX, onRangeChange, onScrubEnd, onSeek, onAnnotationClick]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {

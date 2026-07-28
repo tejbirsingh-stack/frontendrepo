@@ -41,6 +41,7 @@ import {
 } from '../../utils/textInsertion';
 
 interface CommentMarkerProps {
+  index?: number;
   xPercent: number;
   yPercent: number;
   mode: 'draft' | 'placed';
@@ -94,6 +95,7 @@ const actionIconSx = {
 };
 
 export default function CommentMarker({
+  index,
   xPercent,
   yPercent,
   mode,
@@ -496,6 +498,7 @@ export default function CommentMarker({
               }}
             >
               <CommentHoverCard
+                index={index}
                 authorName={author.name}
                 authorAvatarUrl={author.avatarUrl}
                 authorInitials={author.initials}

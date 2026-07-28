@@ -150,7 +150,7 @@ interface AnnotationHistoryDrawerProps {
   detailsSection?: MediaDetailsSection;
   onDetailsSectionChange?: (section: MediaDetailsSection) => void;
   onClose: () => void;
-  onSeekToTimestamp?: (timestamp: number, entryId?: string) => void;
+  onEntryClick?: (entry: AnnotationHistoryEntry) => void;
   onToggleResolved: (entryId: string) => void;
   onMarkUnread: (entryId: string) => void;
   onCopyLink: (entry: AnnotationHistoryEntry) => void;
@@ -207,7 +207,7 @@ function HistoryEntryRow({
   replies = [],
   isTimeBasedMedia = true,
   annotationGroups,
-  onSeekToTimestamp,
+  onEntryClick,
   onToggleResolved,
   onMarkUnread,
   onCopyLink,
@@ -224,7 +224,7 @@ function HistoryEntryRow({
   onEditComment?: (commentId: string, text: string) => void;
   annotationGroups: AnnotationAccessGroup[];
   collaborators: MediaCollaborator[];
-  onSeekToTimestamp?: (timestamp: number, entryId?: string) => void;
+  onEntryClick?: (entry: AnnotationHistoryEntry) => void;
   onToggleResolved: (entryId: string) => void;
   onMarkUnread: (entryId: string) => void;
   onCopyLink: (entry: AnnotationHistoryEntry) => void;
@@ -273,8 +273,8 @@ function HistoryEntryRow({
     setIsEditing(false);
   };
 
-  const handleSeek = () => {
-    onSeekToTimestamp?.(entry.videoTimestamp, entry.id);
+  const handleEntryClick = () => {
+    onEntryClick?.(entry);
   };
 
   return (
@@ -437,15 +437,15 @@ function HistoryEntryRow({
       </Menu>
 
       <Tooltip
-        title={onSeekToTimestamp && isTimeBasedMedia ? `Jump to ${formatVideoTimestamp(entry.videoTimestamp)}` : ''}
+        title={onEntryClick && isTimeBasedMedia ? `Jump to ${formatVideoTimestamp(entry.videoTimestamp)}` : ''}
         arrow
         placement="top"
-        disableHoverListener={!onSeekToTimestamp || !isTimeBasedMedia}
+        disableHoverListener={!onEntryClick || !isTimeBasedMedia}
       >
         <Box
           component="button"
           type="button"
-          onClick={handleSeek}
+          onClick={handleEntryClick}
           sx={{
             display: 'flex',
             gap: 1.25,
@@ -454,7 +454,7 @@ function HistoryEntryRow({
             textAlign: 'left',
             border: 'none',
             background: 'transparent',
-            cursor: onSeekToTimestamp ? 'pointer' : 'default',
+            cursor: onEntryClick ? 'pointer' : 'default',
             p: 0,
             color: 'inherit',
           }}
@@ -704,7 +704,7 @@ export default function AnnotationHistoryDrawer({
   detailsSection,
   onDetailsSectionChange,
   onClose,
-  onSeekToTimestamp,
+  onEntryClick,
   onToggleResolved,
   onMarkUnread,
   onCopyLink,
@@ -980,7 +980,7 @@ export default function AnnotationHistoryDrawer({
                   }
                   annotationGroups={annotationGroups}
                   collaborators={collaborators}
-                  onSeekToTimestamp={onSeekToTimestamp}
+                  onEntryClick={onEntryClick}
                   onToggleResolved={onToggleResolved}
                   onMarkUnread={onMarkUnread}
                   onCopyLink={onCopyLink}

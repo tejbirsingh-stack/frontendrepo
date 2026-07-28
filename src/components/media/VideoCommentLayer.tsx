@@ -44,6 +44,8 @@ interface VideoCommentLayerProps {
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
   onMoveComment?: (commentId: string, xPercent: number, yPercent: number) => void;
   onPanActionStart?: () => void;
+  openCommentId?: string | null;
+  onOpenCommentIdChange?: (id: string | null) => void;
 }
 
 export default function VideoCommentLayer({
@@ -73,8 +75,15 @@ export default function VideoCommentLayer({
   onAddCollaborator,
   onMoveComment,
   onPanActionStart,
+  openCommentId: externalOpenCommentId,
+  onOpenCommentIdChange,
 }: VideoCommentLayerProps) {
-  const [openCommentId, setOpenCommentId] = useState<string | null>(null);
+  const [internalOpenCommentId, setInternalOpenCommentId] = useState<string | null>(null);
+  const openCommentId = externalOpenCommentId !== undefined ? externalOpenCommentId : internalOpenCommentId;
+  const setOpenCommentId = (id: string | null) => {
+    setInternalOpenCommentId(id);
+    onOpenCommentIdChange?.(id);
+  };
   const overlayRef = useRef<HTMLDivElement>(null);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
 
@@ -209,6 +218,7 @@ export default function VideoCommentLayer({
       {annotationsVisible && visibleComments.map((comment) => (
         <CommentMarker
           key={comment.id}
+          index={comment.historyIndex}
           xPercent={comment.xPercent}
           yPercent={comment.yPercent}
           mode="placed"

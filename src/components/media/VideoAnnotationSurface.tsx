@@ -58,8 +58,9 @@ import {
 } from '../../utils/drawStrokeStyle';
 import { useActiveUser } from '../../hooks/useActiveUser';
 import SelectedShapeToolbar from './SelectedShapeToolbar';
-import StampMarker from './StampMarker';
 import SelectedStampToolbar from './SelectedStampToolbar';
+import SelectedDrawingToolbar from './SelectedDrawingToolbar';
+import StampMarker from './StampMarker';
 import ShapeGraphic, { shapeHasMinSize, shapeSummary } from './ShapeGraphic';
 import type { DrawStrokeThickness, DrawTool } from './DrawSubToolbar';
 import type { ShapeStrokeThickness, ShapeTool } from './ShapeSubToolbar';
@@ -122,6 +123,7 @@ export interface AnnotationSurfaceRecord {
   videoStampId?: string;
   /** Mark the existing stamp history entry as deleted */
   markStampDeleted?: boolean;
+  strokeId?: string;
 }
 
 interface VideoAnnotationSurfaceProps {
@@ -149,6 +151,12 @@ interface VideoAnnotationSurfaceProps {
   onAnnotationNeedsComment?: (request: AnnotationCommentPromptRequest) => void;
   annotationCommentPending?: boolean;
   onMoveLinkedComment?: (move: LinkedCommentMove) => void;
+  selectedShapeId?: string | null;
+  onSelectedShapeIdChange?: (id: string | null) => void;
+  selectedStampId?: string | null;
+  onSelectedStampIdChange?: (id: string | null) => void;
+  selectedDrawingId?: string | null;
+  onSelectedDrawingIdChange?: (id: string | null) => void;
 }
 
 export interface LinkedCommentMove {
@@ -283,6 +291,12 @@ export default function VideoAnnotationSurface({
   onAnnotationNeedsComment,
   annotationCommentPending = false,
   onMoveLinkedComment,
+  selectedShapeId: externalSelectedShapeId,
+  onSelectedShapeIdChange,
+  selectedStampId: externalSelectedStampId,
+  onSelectedStampIdChange,
+  selectedDrawingId: externalSelectedDrawingId,
+  onSelectedDrawingIdChange,
 }: VideoAnnotationSurfaceProps) {
   const activeUser = useActiveUser();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -304,9 +318,25 @@ export default function VideoAnnotationSurface({
     rainbow?: boolean;
   } | null>(null);
   const [shapeDraft, setShapeDraft] = useState<ShapeDraft | null>(null);
-  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+  const [internalSelectedShapeId, setInternalSelectedShapeId] = useState<string | null>(null);
+  const selectedShapeId = externalSelectedShapeId !== undefined ? externalSelectedShapeId : internalSelectedShapeId;
+  const setSelectedShapeId = (id: string | null) => {
+    setInternalSelectedShapeId(id);
+    onSelectedShapeIdChange?.(id);
+  };
   const [shapeCursor, setShapeCursor] = useState('crosshair');
-  const [selectedStampId, setSelectedStampId] = useState<string | null>(null);
+  const [internalSelectedStampId, setInternalSelectedStampId] = useState<string | null>(null);
+  const selectedStampId = externalSelectedStampId !== undefined ? externalSelectedStampId : internalSelectedStampId;
+  const setSelectedStampId = (id: string | null) => {
+    setInternalSelectedStampId(id);
+    onSelectedStampIdChange?.(id);
+  };
+  const [internalSelectedDrawingId, setInternalSelectedDrawingId] = useState<string | null>(null);
+  const selectedDrawingId = externalSelectedDrawingId !== undefined ? externalSelectedDrawingId : internalSelectedDrawingId;
+  const setSelectedDrawingId = (id: string | null) => {
+    setInternalSelectedDrawingId(id);
+    onSelectedDrawingIdChange?.(id);
+  };
   const [stampCursor, setStampCursor] = useState('crosshair');
   const [panCursor, setPanCursor] = useState('default');
 
@@ -539,6 +569,29 @@ export default function VideoAnnotationSurface({
     setSelectedStampId(null);
   }, [customStamp, onAnnotationActionStart, onRecord, onStampsChange, selectedStampId, stamps]);
 
+  const selectedDrawing = useMemo(
+    () => visibleStrokes.find((stroke) => stroke.id === selectedDrawingId) ?? null,
+    [selectedDrawingId, visibleStrokes],
+  );
+
+  const handleDeleteSelectedDrawing = useCallback(() => {
+    if (!selectedDrawingId) return;
+
+    const strokeToDelete = visibleStrokes.find((stroke) => stroke.id === selectedDrawingId);
+    if (!strokeToDelete) return;
+
+    onAnnotationActionStart?.();
+    onStrokesChange(strokes.filter((stroke) => stroke.id !== selectedDrawingId));
+    onRecord({
+      type: 'drawing',
+      summary: 'Drawing erased',
+      videoTimestamp: strokeToDelete.videoTimestamp,
+      strokeId: selectedDrawingId,
+      markDrawingErased: true,
+    });
+    setSelectedDrawingId(null);
+  }, [onAnnotationActionStart, onRecord, onStrokesChange, selectedDrawingId, strokes, visibleStrokes]);
+
   const getPercentPoint = useCallback((event: React.PointerEvent | React.MouseEvent) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return null;
@@ -744,7 +797,7 @@ export default function VideoAnnotationSurface({
     const point = getPercentPoint(event);
     if (!point) return;
 
-    if (activeTool === 'pan') {
+    if (activeTool === 'pan' || activeTool === 'select') {
       if ((event.target as HTMLElement).closest('[data-video-stamp]')) {
         return;
       }
@@ -757,12 +810,19 @@ export default function VideoAnnotationSurface({
         return;
       }
 
+      if ((event.target as HTMLElement).closest('[data-drawing-toolbar]')) {
+        return;
+      }
+
       event.preventDefault();
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
 
       const hitShape = findTopShapeAtPoint(point, visibleShapes, rect);
       if (hitShape) {
+        setSelectedShapeId(hitShape.id);
+        setSelectedStampId(null);
+        setInternalSelectedDrawingId(null);
         onAnnotationActionStart?.();
         shapeInteractionRef.current = {
           mode: 'move',
@@ -777,6 +837,9 @@ export default function VideoAnnotationSurface({
 
       const hitStroke = findTopStrokeAtPoint(point, visibleStrokes, rect);
       if (hitStroke) {
+        setInternalSelectedDrawingId(hitStroke.id);
+        setSelectedShapeId(null);
+        setSelectedStampId(null);
         onAnnotationActionStart?.();
         drawingInteractionRef.current = {
           mode: 'move',
@@ -789,6 +852,10 @@ export default function VideoAnnotationSurface({
         return;
       }
 
+      // If we clicked on nothing, deselect everything
+      setSelectedShapeId(null);
+      setSelectedStampId(null);
+      setInternalSelectedDrawingId(null);
       return;
     }
 
@@ -1326,7 +1393,7 @@ export default function VideoAnnotationSurface({
       </Box>
       ) : null}
 
-      {annotationsVisible && selectedShape && activeTool === 'shape' ? (
+      {annotationsVisible && selectedShape && (activeTool === 'shape' || activeTool === 'select' || activeTool === 'pan') ? (
         <SelectedShapeToolbar
           bounds={shapeToBounds(selectedShape)}
           activeColor={selectedShapeColor}
@@ -1342,7 +1409,7 @@ export default function VideoAnnotationSurface({
           key={stamp.id}
           stamp={stamp}
           selected={selectedStampId === stamp.id}
-          interactive={activeTool === 'stamp' || activeTool === 'pan'}
+          interactive={activeTool === 'stamp' || activeTool === 'pan' || activeTool === 'select'}
           onSelect={() => setSelectedStampId(stamp.id)}
           onPointerDown={(event) => {
             const point = getPercentPoint(event);
@@ -1374,6 +1441,13 @@ export default function VideoAnnotationSurface({
           xPercent={selectedStamp.xPercent}
           yPercent={selectedStamp.yPercent}
           onDelete={selectedStamp.author?.name === activeUser.name ? handleDeleteSelectedStamp : undefined}
+        />
+      ) : null}
+
+      {annotationsVisible && selectedDrawing && (activeTool === 'draw' || activeTool === 'select' || activeTool === 'pan') ? (
+        <SelectedDrawingToolbar
+          stroke={selectedDrawing}
+          onDelete={selectedDrawing.author?.name === activeUser.name ? handleDeleteSelectedDrawing : undefined}
         />
       ) : null}
 
