@@ -4,12 +4,16 @@ import {
   Avatar,
   Box,
   Button,
+  Checkbox,
+  Chip,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
   FormControl,
+  FormControlLabel,
   IconButton,
   InputAdornment,
   InputLabel,
@@ -17,9 +21,18 @@ import {
   Select,
   Switch,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import AutorenewOutlinedIcon from '@mui/icons-material/AutorenewOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
@@ -44,6 +57,12 @@ import type {
 import type { SettingsUserRow } from '../../data/mockSettingsData';
 import { MOCK_SETTINGS_USER_GROUPS, MOCK_SETTINGS_GUEST_USERS } from '../../data/mockSettingsData';
 import type { ShareLink } from '../../types/shareLink';
+import {
+  createShareLinkApi,
+  getShareLinksApi,
+  deleteShareLinkApi,
+  type BackendShareLink,
+} from '../../api/share.service';
 import {
   getMemberTypeManageSubtitle,
   isOrganizationEmail,
@@ -209,10 +228,23 @@ export default function WorkspaceMembersDialog({
   const [access, setAccess] = useState<WorkspaceMemberAccess>('Full Access');
   const [error, setError] = useState('');
   const [typeaheadOpen, setTypeaheadOpen] = useState(false);
-  const [pendingGuestInvite, setPendingGuestInvite] = useState<{
-    email: string;
-    name?: string;
-  } | null>(null);
+  // External email — single recipient for secure share
+  const [pendingExternalEmail, setPendingExternalEmail] = useState<string | null>(null);
+  // Real API share links state
+  const [apiShareLinks, setApiShareLinks] = useState<BackendShareLink[]>([]);
+  const [isSubmittingInvite, setIsSubmittingInvite] = useState(false);
+  // Secure share dialog state
+  const [secureShareOpen, setSecureShareOpen] = useState(false);
+  const [shareExpiry, setShareExpiry] = useState<'7' | '15' | '30' | 'custom'>('7');
+  const [shareCustomDate, setShareCustomDate] = useState('');
+  const [sharePermComment, setSharePermComment] = useState(false);
+  const [sharePermDownload, setSharePermDownload] = useState(false);
+  const [sharePermDownloadProxy, setSharePermDownloadProxy] = useState(false);
+  const [shareRequirePassword, setShareRequirePassword] = useState(false);
+  const [sharePassword, setSharePassword] = useState('');
+  const [sharePasswordVisible, setSharePasswordVisible] = useState(false);
+  const [sharePasswordCopied, setSharePasswordCopied] = useState(false);
+  // Legacy state
   const [pendingMemberRemove, setPendingMemberRemove] = useState<WorkspaceTeamMember | null>(null);
   const [pendingShareLinkDelete, setPendingShareLinkDelete] = useState<ShareLink | null>(null);
   const [shareLinkCopied, setShareLinkCopied] = useState(false);
@@ -228,12 +260,86 @@ export default function WorkspaceMembersDialog({
   const dialogTitle = isPublicProject ? `Share ${workspaceName}` : `Add to ${workspaceName}`;
 
   const showMemberInvitePanel = !isPublicProject;
-  const hasShareLinks = (shareLinks?.length ?? 0) > 0;
-
+  const hasShareLinks = (shareLinks?.length ?? 0) > 0 || (apiShareLinks?.length ?? 0) > 0;
   const activeShareLink = useMemo(
     () => shareLinks?.find((link) => link.id === activeShareLinkId),
     [shareLinks, activeShareLinkId],
   );
+
+  const activeAssetId = resourceId || activeShareLink?.assetId || (shareLinks && shareLinks[0]?.assetId);
+
+  // Fetch real DB share links when dialog opens or asset changes
+  const fetchBackendShareLinks = async () => {
+    const targetAssetId = activeAssetId || resourceId;
+    if (!targetAssetId) return;
+    try {
+      const res: any = await getShareLinksApi(targetAssetId);
+      const linksArray = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      setApiShareLinks(linksArray);
+    } catch (err) {
+      console.error('Failed to fetch backend share links:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      void fetchBackendShareLinks();
+    }
+  }, [open, activeAssetId, resourceId]);
+
+  // Extract non-expired guest invites for listing below org members
+  const guestInvitesList = useMemo(() => {
+    const now = new Date();
+    const list: Array<{
+      id: string;
+      email: string;
+      expiresAt?: string;
+      permissions: any;
+      hasPassword: boolean;
+      linkId: string;
+    }> = [];
+
+    const processLink = (link: any) => {
+      if (!link) return;
+      if (link.expiresAt && new Date(link.expiresAt) <= now) return;
+      if (link.revokedAt) return;
+
+      if (Array.isArray(link.recipients) && link.recipients.length > 0) {
+        link.recipients.forEach((r: any) => {
+          const email = typeof r === 'string' ? r : r?.email;
+          if (email && !list.some((item) => item.email.toLowerCase() === email.toLowerCase())) {
+            list.push({
+              id: r.id || `${link.id}-${email}`,
+              email: email,
+              expiresAt: link.expiresAt,
+              permissions: link.permissions,
+              hasPassword: Boolean(link.hasPassword || link.passwordHash),
+              linkId: link.id,
+            });
+          }
+        });
+      } else if (link.mode === 'email' || link.recipientEmail || link.email) {
+        const email = link.recipientEmail || link.email || 'Guest (External)';
+        if (!list.some((item) => item.email.toLowerCase() === email.toLowerCase())) {
+          list.push({
+            id: link.id,
+            email: email,
+            expiresAt: link.expiresAt,
+            permissions: link.permissions,
+            hasPassword: Boolean(link.hasPassword || link.passwordHash),
+            linkId: link.id,
+          });
+        }
+      }
+    };
+
+    apiShareLinks.forEach(processLink);
+    if (Array.isArray(shareLinks)) {
+      shareLinks.forEach(processLink);
+    }
+
+    return list;
+  }, [apiShareLinks, shareLinks]);
 
   const inviteCopyLinkUrl = useMemo(() => {
     if (!resourceId || showShareLinks) return undefined;
@@ -276,7 +382,16 @@ export default function WorkspaceMembersDialog({
       setAccess('Full Access');
       setError('');
       setTypeaheadOpen(false);
-      setPendingGuestInvite(null);
+      setPendingExternalEmail(null);
+      setSecureShareOpen(false);
+      setShareExpiry('7');
+      setShareCustomDate('');
+      setSharePermComment(false);
+      setSharePermDownload(false);
+      setSharePermDownloadProxy(false);
+      setShareRequirePassword(false);
+      setSharePassword('');
+      setSharePasswordVisible(false);
       setPendingMemberRemove(null);
       setPendingShareLinkDelete(null);
       setShareLinkCopied(false);
@@ -398,20 +513,33 @@ export default function WorkspaceMembersDialog({
 
   const isExternalEmail = (email: string) => resolveMemberType(email) === 'Guest';
 
-  const beginGuestInvite = (email: string, name?: string) => {
-    setPendingGuestInvite({ email, name });
+  // Check if current query input is an external/guest email
+  const queryIsExternal = EMAIL_PATTERN.test(query.trim()) && isExternalEmail(query.trim().toLowerCase());
+
+  const generatePassword = () => {
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+    const arr = Array.from(crypto.getRandomValues(new Uint8Array(16)));
+    return arr.map((b) => chars[b % chars.length]).join('');
   };
 
-  const confirmGuestInvite = () => {
-    if (!pendingGuestInvite) return;
-    inviteUser(pendingGuestInvite.email, pendingGuestInvite.name, 'Guest');
-    setPendingGuestInvite(null);
+  const openSecureShare = (email: string) => {
+    setPendingExternalEmail(email);
+    setQuery('');
+    setError('');
+    setTypeaheadOpen(false);
+    setSecureShareOpen(true);
   };
 
   const handleAdd = () => {
     const trimmed = query.trim();
     if (!trimmed) {
       setError('Enter a name, email, or group.');
+      return;
+    }
+
+    // External email typed — open secure share popup directly
+    if (EMAIL_PATTERN.test(trimmed) && isExternalEmail(trimmed.toLowerCase())) {
+      openSecureShare(trimmed.toLowerCase());
       return;
     }
 
@@ -431,7 +559,7 @@ export default function WorkspaceMembersDialog({
     );
     if (matchedUser) {
       if (!isOrganizationUser(matchedUser)) {
-        beginGuestInvite(matchedUser.email, matchedUser.name);
+        openSecureShare(matchedUser.email.toLowerCase());
         return;
       }
       inviteUser(matchedUser.email, matchedUser.name, 'Member');
@@ -445,7 +573,7 @@ export default function WorkspaceMembersDialog({
 
     const email = trimmed.toLowerCase();
     if (isExternalEmail(email)) {
-      beginGuestInvite(email);
+      openSecureShare(email);
       return;
     }
 
@@ -469,7 +597,7 @@ export default function WorkspaceMembersDialog({
     }
 
     if (!isOrganizationUser(option.user)) {
-      beginGuestInvite(option.user.email, option.user.name);
+      openSecureShare(option.user.email.toLowerCase());
       return;
     }
 
@@ -661,23 +789,22 @@ export default function WorkspaceMembersDialog({
             setQuery(value);
             setTypeaheadOpen(true);
             if (error) setError('');
-
-            const trimmed = value.trim();
-            if (EMAIL_PATTERN.test(trimmed) && isExternalEmail(trimmed)) {
-              beginGuestInvite(trimmed.toLowerCase());
-            } else {
-              setPendingGuestInvite(null);
-            }
           }}
           onFocus={() => setTypeaheadOpen(true)}
           onBlur={handleInviteInputBlur}
           onKeyDown={handleInviteKeyDown}
           error={Boolean(error)}
-          helperText={error || 'Type to search people and groups, or enter an email to invite.'}
+          helperText={
+            error
+              ? error
+              : queryIsExternal
+              ? 'External email — click Invite to set sharing permissions.'
+              : 'Type to search people and groups, or enter an email to invite.'
+          }
           autoFocus={!showShareLinks}
           slotProps={{
             input: {
-              endAdornment: (
+              endAdornment: !queryIsExternal ? (
                 <InputAdornment position="end" sx={{ ml: 0, height: '100%' }}>
                   <Select
                     value={access}
@@ -696,7 +823,7 @@ export default function WorkspaceMembersDialog({
                     ))}
                   </Select>
                 </InputAdornment>
-              ),
+              ) : undefined,
             },
           }}
         />
@@ -913,6 +1040,7 @@ export default function WorkspaceMembersDialog({
           Direct access
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          {/* 1. Render Organization Members */}
           {members.map((member) => {
             const memberGroup = member.groupId
               ? suggestedGroups.find((group) => group.id === member.groupId)
@@ -979,40 +1107,160 @@ export default function WorkspaceMembersDialog({
                   </Typography>
                 </Box>
               </Box>
-              <FormControl size="small">
-                <InputLabel id={`access-${member.id}`} shrink>
-                  Access
-                </InputLabel>
-                <Select
-                  labelId={`access-${member.id}`}
-                  label="Access"
-                  value={member.access ?? 'Full Access'}
-                  onChange={(event: SelectChangeEvent) =>
-                    handleMemberAccessChange(member, event.target.value)
-                  }
-                  MenuProps={selectInDialogMenuProps}
-                  sx={{ ...dialogSelectSx, minWidth: 140 }}
+              {member.memberType === 'Guest' ? (
+                <Typography
+                  sx={{
+                    fontSize: '0.8125rem',
+                    fontWeight: 500,
+                    color: cv.textSecondary,
+                    px: 1.5,
+                    py: 0.5,
+                    borderRadius: '8px',
+                    backgroundColor: cv.surfaceMuted,
+                    border: `1px solid ${cv.border}`,
+                  }}
                 >
-                  {ACCESS_OPTIONS.map((option) => (
-                    <MenuItem key={option} value={option} sx={{ fontSize: '0.875rem' }}>
-                      {option}
-                    </MenuItem>
-                  ))}
-                  {onRemoveMember && !isCurrentMember ? (
-                    <>
-                      <Divider sx={{ my: 0.5, borderColor: cv.divider }} />
-                      <MenuItem
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => beginMemberRemove(member)}
-                        sx={{ fontSize: '0.875rem', color: cv.destructive }}
-                      >
-                        Remove
+                  Guest Access
+                </Typography>
+              ) : (
+                <FormControl size="small">
+                  <InputLabel id={`access-${member.id}`} shrink>
+                    Access
+                  </InputLabel>
+                  <Select
+                    labelId={`access-${member.id}`}
+                    label="Access"
+                    value={member.access ?? 'Full Access'}
+                    onChange={(event: SelectChangeEvent) =>
+                      handleMemberAccessChange(member, event.target.value)
+                    }
+                    MenuProps={selectInDialogMenuProps}
+                    sx={{ ...dialogSelectSx, minWidth: 140 }}
+                  >
+                    {ACCESS_OPTIONS.map((option) => (
+                      <MenuItem key={option} value={option} sx={{ fontSize: '0.875rem' }}>
+                        {option}
                       </MenuItem>
-                    </>
-                  ) : null}
-                </Select>
-              </FormControl>
+                    ))}
+                    {onRemoveMember && !isCurrentMember ? (
+                      <>
+                        <Divider sx={{ my: 0.5, borderColor: cv.divider }} />
+                        <MenuItem
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => beginMemberRemove(member)}
+                          sx={{ fontSize: '0.875rem', color: cv.destructive }}
+                        >
+                          Remove
+                        </MenuItem>
+                      </>
+                    ) : null}
+                  </Select>
+                </FormControl>
+              )}
             </Box>
+            );
+          })}
+
+          {/* 2. Render Invited Guest Users Below Organization Members */}
+          {guestInvitesList.map((item) => {
+            const formattedExpires = item.expiresAt
+              ? new Date(item.expiresAt).toLocaleString([], {
+                  month: 'numeric',
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : 'Never';
+
+            const perms = item.permissions || {};
+            const permList: string[] = [];
+            if (perms.view) permList.push('View');
+            if (perms.comment) permList.push('Comment');
+            if (perms.download || perms.downloadProxy) permList.push('Download');
+            const permsString = permList.join(' • ') || 'View';
+
+            return (
+              <Box
+                key={`guest-invite-${item.id}`}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 1.5,
+                  px: 1.25,
+                  py: 1,
+                  borderRadius: '10px',
+                  backgroundColor: cv.surfaceSubtle,
+                  border: `1px solid ${cv.border}`,
+                  '&:hover': { backgroundColor: cv.surfaceHover },
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+                  <Avatar
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      fontSize: '0.8125rem',
+                      fontWeight: 700,
+                      bgcolor: cv.brandPurple,
+                      color: '#fff',
+                    }}
+                  >
+                    {item.email[0]?.toUpperCase() || 'G'}
+                  </Avatar>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
+                        {item.email}
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontSize: '0.625rem',
+                          fontWeight: 700,
+                          letterSpacing: '0.04em',
+                          textTransform: 'uppercase',
+                          color: cv.indigoLight,
+                          px: 0.65,
+                          py: 0.15,
+                          borderRadius: '6px',
+                          border: `1px solid ${cv.brandPurple}`,
+                          backgroundColor: cv.indigoSurface,
+                        }}
+                      >
+                        Guest
+                      </Typography>
+                    </Box>
+                    <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25 }}>
+                      Permissions: <strong>{permsString}</strong> · Exp at: {formattedExpires} {item.hasPassword ? '· 🔒 Password' : ''}
+                    </Typography>
+                  </Box>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+                  <Button
+                    size="small"
+                    onClick={async () => {
+                      try {
+                        await deleteShareLinkApi(item.linkId);
+                        void fetchBackendShareLinks();
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    sx={{
+                      fontSize: '0.75rem',
+                      color: cv.destructive,
+                      textTransform: 'none',
+                      px: 1.25,
+                      py: 0.4,
+                      borderRadius: '6px',
+                      '&:hover': { backgroundColor: cv.destructiveHover },
+                    }}
+                  >
+                    Revoke
+                  </Button>
+                </Box>
+              </Box>
             );
           })}
         </Box>
@@ -1020,22 +1268,21 @@ export default function WorkspaceMembersDialog({
     </>
   ) : null;
 
-  const memberAccessPanel = showMemberInvitePanel ? (
+  const memberAccessPanel = (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {inviteFormSection}
       {directAccessSection}
     </Box>
-  ) : null;
+  );
 
-  const footerMembersSummary =
-    showMemberInvitePanel ? (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
-        <TeamMemberAvatarStack members={members} borderColor={cv.dialogSurface} />
-        <Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
-          {members.length} Member{members.length === 1 ? '' : 's'}
-        </Typography>
-      </Box>
-    ) : null;
+  const footerMembersSummary = (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+      <TeamMemberAvatarStack members={members} borderColor={cv.dialogSurface} />
+      <Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
+        {members.length} Member{members.length === 1 ? '' : 's'}
+      </Typography>
+    </Box>
+  );
 
   const dialogFooter = (
     <Box
@@ -1133,7 +1380,7 @@ export default function WorkspaceMembersDialog({
           <ShareLinksEmptyState onNewShareLink={handleCreateShareLink} />
         </Box>
       ) : (
-        <Box sx={{ ...shareDialogBodySx, minHeight: { md: showMemberInvitePanel ? 460 : 260 } }}>
+        <Box sx={{ ...shareDialogBodySx, minHeight: { md: 460 } }}>
           <Box sx={shareLinkPanelSx}>{shareLinksPanel}</Box>
           <Box sx={shareMainPanelSx}>
             {shareLinkSettingsSection}
@@ -1167,43 +1414,248 @@ export default function WorkspaceMembersDialog({
         <Box sx={{ backgroundColor: cv.dialogSurface }}>{dialogContent}</Box>
       </Dialog>
 
+      {/* ── Secure External Share Dialog ── */}
       <Dialog
-        open={Boolean(pendingGuestInvite)}
-        onClose={() => setPendingGuestInvite(null)}
+        open={secureShareOpen}
+        onClose={() => setSecureShareOpen(false)}
         maxWidth="xs"
         fullWidth
-        aria-labelledby="guest-invite-warning-title"
+        aria-labelledby="secure-share-dialog-title"
         slotProps={noahNestedDialogSlotProps()}
       >
-        <DialogTitle id="guest-invite-warning-title" sx={{ color: cv.textPrimary, fontWeight: 600 }}>
-          Outside organization
+        <DialogTitle
+          id="secure-share-dialog-title"
+          sx={{ color: cv.textPrimary, fontWeight: 600, pb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}
+        >
+          <SendOutlinedIcon sx={{ fontSize: 20, color: cv.brandPurple }} />
+          Share with external recipients
         </DialogTitle>
-        <DialogContent>
-          <Typography sx={{ color: cv.textSecondary, fontSize: '0.9375rem', lineHeight: 1.55 }}>
-            {pendingGuestInvite?.name ? (
-              <>
-                <Box component="span" sx={{ color: cv.textPrimary, fontWeight: 600 }}>
-                  {pendingGuestInvite.name}
-                </Box>{' '}
-                ({pendingGuestInvite.email})
-              </>
-            ) : (
-              <Box component="span" sx={{ color: cv.textPrimary, fontWeight: 600 }}>
-                {pendingGuestInvite?.email}
+        <DialogContent sx={{ pt: '12px !important', display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+
+          {/* Recipient */}
+          {pendingExternalEmail ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, borderRadius: '10px', backgroundColor: cv.indigoSurface }}>
+              <SendOutlinedIcon sx={{ fontSize: 16, color: cv.indigoLight, flexShrink: 0 }} />
+              <Typography sx={{ fontSize: '0.875rem', color: cv.indigoLight, fontWeight: 500, wordBreak: 'break-all' }}>
+                {pendingExternalEmail}
+              </Typography>
+            </Box>
+          ) : null}
+
+          {/* Expiry */}
+          <Box>
+            <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: cv.textSecondary, mb: 1 }}>
+              EXPIRY
+            </Typography>
+            <ToggleButtonGroup
+              value={shareExpiry}
+              exclusive
+              onChange={(_e, val) => { if (val) setShareExpiry(val as typeof shareExpiry); }}
+              size="small"
+              sx={{ flexWrap: 'wrap', gap: 0.5 }}
+            >
+              {(['7', '15', '30', 'custom'] as const).map((opt) => (
+                <ToggleButton
+                  key={opt}
+                  value={opt}
+                  sx={{
+                    textTransform: 'none',
+                    fontSize: '0.8125rem',
+                    borderRadius: '8px !important',
+                    border: `1px solid ${cv.border} !important`,
+                    px: 1.5,
+                    '&.Mui-selected': {
+                      backgroundColor: cv.indigoSurface,
+                      color: cv.indigoLight,
+                      borderColor: `${cv.brandPurple} !important`,
+                    },
+                  }}
+                >
+                  {opt === 'custom' ? 'Custom' : `${opt} days`}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+            <Collapse in={shareExpiry === 'custom'}>
+              <TextField
+                fullWidth
+                size="small"
+                type="date"
+                label="Custom expiry date"
+                value={shareCustomDate}
+                onChange={(e) => setShareCustomDate(e.target.value)}
+                inputProps={{ min: new Date(Date.now() + 86400000).toISOString().split('T')[0] }}
+                slotProps={{ inputLabel: { shrink: true } }}
+                sx={{ mt: 1.5 }}
+              />
+            </Collapse>
+          </Box>
+
+          {/* Permissions */}
+          <Box>
+            <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: cv.textSecondary, mb: 0.5 }}>
+              PERMISSIONS
+            </Typography>
+            <FormControlLabel
+              control={<Checkbox checked disabled size="small" />}
+              label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>View (always on)</Typography>}
+            />
+            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={sharePermComment}
+                    onChange={(e) => setSharePermComment(e.target.checked)}
+                  />
+                }
+                label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Comment</Typography>}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={sharePermDownload}
+                    onChange={(e) => setSharePermDownload(e.target.checked)}
+                  />
+                }
+                label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Download original</Typography>}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={sharePermDownloadProxy}
+                    onChange={(e) => setSharePermDownloadProxy(e.target.checked)}
+                  />
+                }
+                label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Download proxy</Typography>}
+              />
+            </Box>
+          </Box>
+
+          {/* Password */}
+          <Box>
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={shareRequirePassword}
+                  onChange={(e) => {
+                    setShareRequirePassword(e.target.checked);
+                    if (!e.target.checked) setSharePassword('');
+                  }}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <LockOutlinedIcon sx={{ fontSize: 16, color: cv.textSecondary }} />
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary }}>
+                    Require password
+                  </Typography>
+                </Box>
+              }
+            />
+            <Collapse in={shareRequirePassword}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Password"
+                  type={sharePasswordVisible ? 'text' : 'password'}
+                  value={sharePassword}
+                  onChange={(e) => setSharePassword(e.target.value)}
+                  slotProps={{ inputLabel: { shrink: true } }}
+                />
+                <Tooltip title={sharePasswordVisible ? 'Hide' : 'Show'}>
+                  <IconButton
+                    size="small"
+                    onClick={() => setSharePasswordVisible((v) => !v)}
+                  >
+                    {sharePasswordVisible
+                      ? <VisibilityOffOutlinedIcon sx={{ fontSize: 18 }} />
+                      : <VisibilityOutlinedIcon sx={{ fontSize: 18 }} />}
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Generate random password">
+                  <IconButton
+                    size="small"
+                    onClick={() => { setSharePassword(generatePassword()); setSharePasswordVisible(true); }}
+                  >
+                    <AutorenewOutlinedIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title={sharePasswordCopied ? 'Copied!' : 'Copy password'}>
+                  <IconButton
+                    size="small"
+                    disabled={!sharePassword}
+                    onClick={() => {
+                      void navigator.clipboard.writeText(sharePassword);
+                      setSharePasswordCopied(true);
+                      window.setTimeout(() => setSharePasswordCopied(false), 2000);
+                    }}
+                  >
+                    <ContentCopyOutlinedIcon sx={{ fontSize: 18, color: sharePasswordCopied ? cv.brandPurple : undefined }} />
+                  </IconButton>
+                </Tooltip>
               </Box>
-            )}{' '}
-            is outside your organization ({ORGANIZATION_EMAIL_DOMAIN}). They will be invited as a guest.
-          </Typography>
+              <Typography sx={{ mt: 0.75, fontSize: '0.75rem', color: cv.textMuted, lineHeight: 1.4 }}>
+                Share this password separately — it will not be included in the invite email.
+              </Typography>
+            </Collapse>
+          </Box>
+
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5, pt: 0, gap: 1 }}>
           <Button
-            onClick={() => setPendingGuestInvite(null)}
+            onClick={() => setSecureShareOpen(false)}
             sx={{ textTransform: 'none', color: cv.textSecondary }}
           >
             Cancel
           </Button>
-          <Button variant="contained" onClick={confirmGuestInvite} sx={containedButtonSx}>
-            Continue
+          <Button
+            variant="contained"
+            disabled={isSubmittingInvite || !pendingExternalEmail || (shareRequirePassword && !sharePassword) || (shareExpiry === 'custom' && !shareCustomDate)}
+            onClick={async () => {
+              if (!pendingExternalEmail) return;
+              setIsSubmittingInvite(true);
+              const config = {
+                mode: 'email' as const,
+                email: pendingExternalEmail,
+                expiresInDays: shareExpiry !== 'custom' ? Number(shareExpiry) : undefined,
+                expiresAt: shareExpiry === 'custom' ? shareCustomDate : undefined,
+                permissions: {
+                  view: true as const,
+                  comment: sharePermComment,
+                  download: sharePermDownload,
+                  downloadProxy: sharePermDownloadProxy,
+                },
+                password: shareRequirePassword ? sharePassword : undefined,
+              };
+
+              try {
+                if (activeAssetId) {
+                  await createShareLinkApi(activeAssetId, config);
+                  await fetchBackendShareLinks();
+                } else {
+                  onInvite({
+                    email: pendingExternalEmail,
+                    memberType: 'Guest',
+                    access: 'Can view',
+                  });
+                }
+              } catch (err) {
+                console.error('Failed to create secure share link:', err);
+              } finally {
+                setIsSubmittingInvite(false);
+              }
+
+              setPendingExternalEmail(null);
+              setSecureShareOpen(false);
+            }}
+            sx={containedButtonSx}
+          >
+            <SendOutlinedIcon sx={{ fontSize: 16, mr: 0.75 }} />
+            {isSubmittingInvite ? 'Sending...' : 'Send Invite'}
           </Button>
         </DialogActions>
       </Dialog>

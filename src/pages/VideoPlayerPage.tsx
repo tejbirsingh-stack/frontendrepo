@@ -59,6 +59,7 @@ import {
   addShareLink,
   createShareLinkForMedia,
   loadShareLinks,
+  fetchShareLinks,
   removeShareLink,
   updateShareLink,
 } from '../utils/shareLinkStorage';
@@ -104,6 +105,10 @@ import {
   updateMediaAnnotationRequest,
   deleteMediaAnnotationRequest,
 } from '../api/annotations.service';
+import {
+  getShareAnnotationsApi,
+  createShareAnnotationApi,
+} from '../api/share.service';
 import { fetchOrganizationUsers } from '../api/auth.service';
 import { addInAppNotification } from '../data/mockNotifications';
 
@@ -210,9 +215,42 @@ const mediaTypeHeaderIcons = {
   document: InsertDriveFileOutlinedIcon,
 } as const;
 
-export default function VideoPlayerPage() {
-  const { user } = useAuth();
-  const isViewer = !user?.permissions?.includes('timeline_annotations');
+export interface VideoPlayerPageProps {
+  isGuestMode?: boolean;
+  shareToken?: string;
+  guestPermissions?: {
+    view: boolean;
+    comment: boolean;
+    download: boolean;
+    downloadProxy: boolean;
+  };
+  guestAssetMeta?: {
+    id: string;
+    title: string;
+    fileType: string;
+    mimeType: string;
+    fileSize: number;
+  };
+  guestExpiresAt?: string | null;
+}
+
+export default function VideoPlayerPage({
+  isGuestMode = false,
+  shareToken,
+  guestPermissions = { view: true, comment: true, download: true, downloadProxy: true },
+  guestAssetMeta,
+  guestExpiresAt,
+}: VideoPlayerPageProps = {}) {
+  let user: any = null;
+  try {
+    const auth = useAuth();
+    user = auth?.user || null;
+  } catch {
+    user = null;
+  }
+  const isViewer = isGuestMode
+    ? !guestPermissions?.comment
+    : !user?.permissions?.includes('timeline_annotations');
   const { mediaId } = useParams<{ mediaId: string }>();
   const activeUser = useActiveUser();
   const navigate = useNavigate();
@@ -220,7 +258,16 @@ export default function VideoPlayerPage() {
   const isDesktopAnnotationToolbar = useMediaQuery(
     theme.breakpoints.up(SIDEBAR_DESKTOP_BREAKPOINT),
   );
-  const { mediaItems, updateMediaTags, favorites, toggleFavorite } = useDashboard();
+
+  let dashboardData: any = { mediaItems: [], updateMediaTags: () => {}, favorites: new Set<string>(), toggleFavorite: () => {} };
+  try {
+    const dashboard = useDashboard();
+    if (dashboard) dashboardData = dashboard;
+  } catch {
+    // Guest mode outside DashboardProvider
+  }
+  const { mediaItems = [], updateMediaTags = () => {}, favorites, toggleFavorite = () => {} } = dashboardData;
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoStageRef = useRef<HTMLDivElement>(null);
   const moreToolsButtonRef = useRef<HTMLButtonElement>(null);
@@ -234,10 +281,41 @@ export default function VideoPlayerPage() {
 
   const clampPercent = (value: number) => Math.min(100, Math.max(0, value));
 
+  const guestItem: MediaItem | null = useMemo(() => {
+    if (!isGuestMode || !guestAssetMeta) return null;
+    const rawType = (guestAssetMeta.fileType || (guestAssetMeta as any).type || '').toLowerCase();
+    const mime = (guestAssetMeta.mimeType || '').toLowerCase();
+
+    const type: MediaType =
+      rawType === 'image' || rawType.includes('image') || mime.startsWith('image/')
+        ? 'image'
+        : rawType === 'audio' || rawType.includes('audio') || mime.startsWith('audio/')
+          ? 'audio'
+          : rawType === 'document' || rawType.includes('pdf') || mime.includes('pdf')
+            ? 'document'
+            : 'video';
+
+    const tokenStreamUrl = shareToken ? `/api/share/${shareToken}/stream` : '';
+
+    return {
+      id: guestAssetMeta.id || 'guest-asset',
+      title: guestAssetMeta.title || 'Shared Media',
+      type,
+      url: tokenStreamUrl,
+      videoSrc: tokenStreamUrl,
+      thumbnail: tokenStreamUrl,
+      duration: '0:00',
+      size: formatFileSize(guestAssetMeta.fileSize || 0),
+      updatedAt: guestExpiresAt ? `Expires: ${new Date(guestExpiresAt).toLocaleDateString()}` : '',
+      tags: [],
+    };
+  }, [isGuestMode, guestAssetMeta, shareToken, guestExpiresAt]);
+
   const contextItem = mediaItems.find((media) => media.id === mediaId);
   const [fetchedItem, setFetchedItem] = useState<MediaItem | null>(null);
-  const item =
-    contextItem && fetchedItem?.id === contextItem.id
+  const item = isGuestMode
+    ? (guestItem || contextItem || fetchedItem)
+    : (contextItem && fetchedItem?.id === contextItem.id
       ? {
         ...contextItem,
         videoSrc: contextItem.videoSrc || fetchedItem.videoSrc,
@@ -246,8 +324,19 @@ export default function VideoPlayerPage() {
         duration: contextItem.duration || fetchedItem.duration,
         customMetadata: fetchedItem.customMetadata || contextItem.customMetadata,
       }
-      : contextItem || fetchedItem;
-  const [isFetching, setIsFetching] = useState(!contextItem);
+      : contextItem || fetchedItem);
+
+  const isFavorite = useMemo(() => {
+    if (!item?.id || !favorites) return false;
+    if (typeof (favorites as any).has === 'function') {
+      return (favorites as any).has(item.id);
+    }
+    if (Array.isArray(favorites)) {
+      return (favorites as Array<any>).includes(item.id);
+    }
+    return false;
+  }, [favorites, item?.id]);
+  const [isFetching, setIsFetching] = useState(isGuestMode ? false : !contextItem);
   const [fetchError, setFetchError] = useState(false);
 
   const [clientDecodedUrl, setClientDecodedUrl] = useState<string | null>(null);
@@ -1046,6 +1135,47 @@ export default function VideoPlayerPage() {
   );
 
   useEffect(() => {
+    if (isGuestMode && shareToken) {
+      const loadGuestApiAnnotations = async () => {
+        try {
+          const res = await getShareAnnotationsApi(shareToken);
+          if (res && res.data) {
+            const raw = res.data;
+            const mapAnnotationData = <T extends any>(a: any): T => {
+              return {
+                ...a.data,
+                id: a.id,
+                videoTimestamp: a.videoTimestamp !== null ? a.videoTimestamp : a.data?.videoTimestamp,
+                resolved: a.resolved ?? a.data?.resolved,
+                author: a.author || {
+                  name: a.guestName || 'Guest User',
+                  initials: (a.guestName || 'G')[0]?.toUpperCase(),
+                },
+                userId: a.userId,
+                createdAt: a.createdAt,
+                text: a.data?.text || a.text || '',
+                replies: a.data?.replies || [],
+              } as T;
+            };
+
+            const commentsData = raw.filter((a: any) => a.type === 'comment').map((a: any) => mapAnnotationData<VideoComment>(a));
+            const shapesData = raw.filter((a: any) => a.type === 'shape').map((a: any) => mapAnnotationData<VideoShape>(a));
+            const drawingsData = raw.filter((a: any) => a.type === 'drawing').map((a: any) => mapAnnotationData<VideoDrawingStroke>(a));
+            const stampsData = raw.filter((a: any) => a.type === 'stamp').map((a: any) => mapAnnotationData<VideoStamp>(a));
+
+            setComments(commentsData);
+            setShapes(shapesData);
+            setDrawings(drawingsData);
+            setStamps(stampsData);
+          }
+        } catch {
+          // ignore
+        }
+      };
+      void loadGuestApiAnnotations();
+      return;
+    }
+
     if (!mediaId) return;
 
     const loadApiAnnotations = async () => {
@@ -1207,7 +1337,13 @@ export default function VideoPlayerPage() {
       setShareLinks([]);
       return;
     }
-    setShareLinks(loadShareLinks(mediaId));
+    fetchShareLinks(mediaId).then((links) => {
+      if (links && links.length > 0) {
+        setShareLinks(links);
+      } else {
+        setShareLinks(loadShareLinks(mediaId));
+      }
+    });
   }, [mediaId]);
 
   useEffect(() => {
@@ -2434,11 +2570,13 @@ export default function VideoPlayerPage() {
     liveAssetStatus === 'queued' ||
     liveAssetStatus === 'in_progress';
 
-  const baseSrc = item.type === 'image'
-    ? (item.url || item.thumbnail || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
-    : item.type === 'audio'
-      ? (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
-      : (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : SAMPLE_VIDEO_SRC));
+  const baseSrc = isGuestMode && shareToken
+    ? `/api/share/${shareToken}/stream`
+    : item.type === 'image'
+      ? (item.url || item.thumbnail || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
+      : item.type === 'audio'
+        ? (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
+        : (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : SAMPLE_VIDEO_SRC));
   // Audio/original is available immediately; only blank video while proxy is processing.
   const shouldBlockMediaSrc = isProcessing && item.type === 'video';
   const videoSrc = shouldBlockMediaSrc || !baseSrc
@@ -2566,36 +2704,38 @@ export default function VideoPlayerPage() {
                 color: cv.textPrimary,
               }}
             />
-            <Tooltip
-              title={favorites.has(item.id) ? 'Remove from favorites' : 'Add to favorites'}
-              placement="bottom"
-            >
-              <IconButton
-                type="button"
-                size="small"
-                aria-label={
-                  favorites.has(item.id) ? 'Remove from favorites' : 'Add to favorites'
-                }
-                aria-pressed={favorites.has(item.id)}
-                onClick={() => toggleFavorite(item.id)}
-                sx={{
-                  width: 32,
-                  height: 32,
-                  flexShrink: 0,
-                  color: favorites.has(item.id) ? cv.warning : cv.textMuted,
-                  '&:hover': {
-                    color: favorites.has(item.id) ? cv.warning : cv.textPrimary,
-                    backgroundColor: cv.surfaceHover,
-                  },
-                }}
+            {!isGuestMode ? (
+              <Tooltip
+                title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                placement="bottom"
               >
-                {favorites.has(item.id) ? (
-                  <StarIcon sx={{ fontSize: 18 }} />
-                ) : (
-                  <StarBorderOutlinedIcon sx={{ fontSize: 18 }} />
-                )}
-              </IconButton>
-            </Tooltip>
+                <IconButton
+                  type="button"
+                  size="small"
+                  aria-label={
+                    isFavorite ? 'Remove from favorites' : 'Add to favorites'
+                  }
+                  aria-pressed={isFavorite}
+                  onClick={() => toggleFavorite(item.id)}
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    flexShrink: 0,
+                    color: isFavorite ? cv.warning : cv.textMuted,
+                    '&:hover': {
+                      color: isFavorite ? cv.warning : cv.textPrimary,
+                      backgroundColor: cv.surfaceHover,
+                    },
+                  }}
+                >
+                  {isFavorite ? (
+                    <StarIcon sx={{ fontSize: 18 }} />
+                  ) : (
+                    <StarBorderOutlinedIcon sx={{ fontSize: 18 }} />
+                  )}
+                </IconButton>
+              </Tooltip>
+            ) : null}
           </Box>
         </Box>
 
@@ -2701,78 +2841,103 @@ export default function VideoPlayerPage() {
             </Tooltip>
           </Box>
 
-          <PeopleCollaboratorsPopover
-            collaborators={collaborators}
-            onCollaboratorsChange={setCollaborators}
-            onInvited={(name) =>
-              setStatusToast({
-                open: true,
-                message: `Invite sent to ${name}`,
-                variant: 'resolved',
-              })
-            }
-          />
-
-          <Tooltip title="Share video" arrow placement="bottom">
-            <Box sx={{ display: 'inline-flex' }}>
-              <IconButton
-                type="button"
-                size="small"
-                aria-haspopup="dialog"
-                aria-expanded={shareDialogOpen}
-                aria-label="Share video"
-                onClick={handleOpenShareDialog}
-                sx={{
-                  display: { xs: 'inline-flex', lg: 'none' },
-                  width: 36,
-                  height: 36,
-                  borderRadius: '10px',
-                  color: cv.textPrimary,
-                  background: cv.brandGradient,
-                  boxShadow: cv.brandShadowSoft,
-                  '&:hover': {
+          {isGuestMode ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {(guestPermissions.download || guestPermissions.downloadProxy) && shareToken ? (
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<FileDownloadOutlinedIcon />}
+                  component="a"
+                  href={`/api/share/${shareToken}/stream?download=true`}
+                  download
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    borderRadius: '10px',
                     background: cv.brandGradient,
-                    filter: 'brightness(1.08)',
-                  },
-                }}
-              >
-                <ShareOutlinedIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-              <Button
-                type="button"
-                size="small"
-                variant="contained"
-                aria-haspopup="dialog"
-                aria-expanded={shareDialogOpen}
-                startIcon={<ShareOutlinedIcon sx={{ fontSize: 16 }} />}
-                onClick={handleOpenShareDialog}
-                sx={{
-                  display: { xs: 'none', lg: 'inline-flex' },
-                  minHeight: 36,
-                  height: 36,
-                  py: 0,
-                  px: 1.5,
-                  borderRadius: '10px',
-                  textTransform: 'none',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  lineHeight: 1,
-                  background: cv.brandGradient,
-                  boxShadow: cv.brandShadowSoft,
-                  '& .MuiButton-startIcon': {
-                    marginLeft: 0,
-                    marginRight: 0.5,
-                  },
-                  '&:hover': {
-                    background: cv.brandGradient,
-                    filter: 'brightness(1.08)',
-                  },
-                }}
-              >
-                Share
-              </Button>
+                    color: '#fff',
+                    minHeight: 36,
+                    px: 2,
+                  }}
+                >
+                  Download
+                </Button>
+              ) : null}
             </Box>
-          </Tooltip>
+          ) : (
+            <>
+              <PeopleCollaboratorsPopover
+                collaborators={collaborators}
+                onCollaboratorsChange={setCollaborators}
+                onInvited={(name) =>
+                  setStatusToast({
+                    open: true,
+                    message: `Invite sent to ${name}`,
+                    variant: 'resolved',
+                  })
+                }
+              />
+
+              <Tooltip title="Share video" arrow placement="bottom">
+                <Box sx={{ display: 'inline-flex' }}>
+                  <IconButton
+                    type="button"
+                    size="small"
+                    aria-haspopup="dialog"
+                    aria-expanded={shareDialogOpen}
+                    aria-label="Share video"
+                    onClick={handleOpenShareDialog}
+                    sx={{
+                      display: { xs: 'inline-flex', lg: 'none' },
+                      width: 36,
+                      height: 36,
+                      borderRadius: '10px',
+                      color: cv.textPrimary,
+                      background: cv.brandGradient,
+                      boxShadow: cv.brandShadowSoft,
+                      '&:hover': {
+                        background: cv.brandGradient,
+                        filter: 'brightness(1.08)',
+                      },
+                    }}
+                  >
+                    <ShareOutlinedIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                  <Button
+                    type="button"
+                    size="small"
+                    variant="contained"
+                    aria-haspopup="dialog"
+                    aria-expanded={shareDialogOpen}
+                    startIcon={<ShareOutlinedIcon sx={{ fontSize: 16 }} />}
+                    onClick={handleOpenShareDialog}
+                    sx={{
+                      display: { xs: 'none', lg: 'inline-flex' },
+                      minHeight: 36,
+                      height: 36,
+                      py: 0,
+                      px: 1.5,
+                      borderRadius: '10px',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.8125rem',
+                      letterSpacing: '0.01em',
+                      color: cv.textPrimary,
+                      background: cv.brandGradient,
+                      boxShadow: cv.brandShadowSoft,
+                      '&:hover': {
+                        background: cv.brandGradient,
+                        filter: 'brightness(1.08)',
+                      },
+                    }}
+                  >
+                    Share
+                  </Button>
+                </Box>
+              </Tooltip>
+            </>
+          )}
 
           {!historyOpen ? (
             <Tooltip title="Show annotation history" arrow placement="bottom">
@@ -2808,6 +2973,7 @@ export default function VideoPlayerPage() {
       {item ? (
         <WorkspaceMembersDialog
           open={shareDialogOpen}
+          resourceId={mediaId || item.id}
           workspaceName={item.title}
           members={shareTeamMembers}
           suggestedUsers={MOCK_SETTINGS_USERS}
