@@ -66,6 +66,7 @@ interface CommentThreadPopoverProps {
   collaborators: MediaCollaborator[];
   onVisibilityChange: (visibility: AnnotationVisibility, groupId?: string) => void;
   onCreateAnnotationGroup: (name: string, memberIds: string[]) => AnnotationAccessGroup;
+  onUpdateAnnotationGroup?: (groupId: string, name: string, memberIds: string[]) => Promise<AnnotationAccessGroup | null | undefined>;
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
 }
 
@@ -425,6 +426,7 @@ export default function CommentThreadPopover({
   collaborators,
   onVisibilityChange,
   onCreateAnnotationGroup,
+  onUpdateAnnotationGroup,
   onAddCollaborator,
 }: CommentThreadPopoverProps) {
   const activeUser = useActiveUser();
@@ -733,6 +735,7 @@ export default function CommentThreadPopover({
             collaborators={collaborators}
             onChange={onVisibilityChange}
             onCreateGroup={onCreateAnnotationGroup}
+            onUpdateGroup={onUpdateAnnotationGroup}
             onAddCollaborator={onAddCollaborator}
             variant="light"
             size="medium"

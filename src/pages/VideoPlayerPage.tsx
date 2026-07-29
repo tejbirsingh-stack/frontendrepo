@@ -107,11 +107,7 @@ import {
 import { fetchOrganizationUsers } from '../api/auth.service';
 import { addInAppNotification } from '../data/mockNotifications';
 
-import {
-  createAnnotationGroup,
-  loadAnnotationGroups,
-  saveAnnotationGroups,
-} from '../utils/annotationGroupStorage';
+import { getAnnotationGroupsRequest, createAnnotationGroupRequest, deleteAnnotationGroupRequest, updateAnnotationGroupRequest } from '../api/annotations.service';
 import { getPlayerBackgroundStyle, getVideoTransform } from '../utils/playerDisplay';
 import {
   loadPinnedPlayerTools,
@@ -236,8 +232,8 @@ export default function VideoPlayerPage() {
 
   const contextItem = mediaItems.find((media) => media.id === mediaId);
   const [fetchedItem, setFetchedItem] = useState<MediaItem | null>(null);
-  const item =
-    contextItem && fetchedItem?.id === contextItem.id
+  const item = useMemo(() => {
+    return contextItem && fetchedItem?.id === contextItem.id
       ? {
         ...contextItem,
         videoSrc: contextItem.videoSrc || fetchedItem.videoSrc,
@@ -247,6 +243,7 @@ export default function VideoPlayerPage() {
         customMetadata: fetchedItem.customMetadata || contextItem.customMetadata,
       }
       : contextItem || fetchedItem;
+  }, [contextItem, fetchedItem]);
   const [isFetching, setIsFetching] = useState(!contextItem);
   const [fetchError, setFetchError] = useState(false);
 
@@ -771,17 +768,28 @@ export default function VideoPlayerPage() {
     [item?.duration],
   );
 
+  const canSeeAnnotation = useCallback(
+    (ann: { visibility?: AnnotationVisibility; author?: any }) => {
+      if (ann.visibility === 'private') {
+        const authorName = ann.author?.name;
+        if (authorName && authorName !== activeUser.name) return false;
+      }
+      return true;
+    },
+    [activeUser.name],
+  );
+
   const timelineItems = useMemo(
     () =>
       buildTimelineItems({
-        comments,
-        drawings,
-        shapes,
-        stamps,
-        history,
+        comments: comments.filter(canSeeAnnotation),
+        drawings: drawings.filter(canSeeAnnotation),
+        shapes: shapes.filter(canSeeAnnotation),
+        stamps: stamps.filter(canSeeAnnotation),
+        history: history.filter(canSeeAnnotation),
         customStamp,
       }),
-    [comments, customStamp, drawings, history, shapes, stamps],
+    [comments, customStamp, drawings, history, shapes, stamps, canSeeAnnotation],
   );
 
   const handleAnnotationRangeChange = useCallback(
@@ -906,8 +914,11 @@ export default function VideoPlayerPage() {
     if (!element) return;
 
     element.loop = playerLoop;
+    
+    let rafId: number;
+    let isVideoPlaying = false;
 
-    const handleTimeUpdate = () => {
+    const enforceLoop = () => {
       if (
         playerRangeEnabled &&
         playerInPoint != null &&
@@ -919,10 +930,46 @@ export default function VideoPlayerPage() {
       }
     };
 
-    element.addEventListener('timeupdate', handleTimeUpdate);
+    const tick = () => {
+      enforceLoop();
+      if (isVideoPlaying) {
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+
+    const handlePlay = () => {
+      isVideoPlaying = true;
+      tick();
+    };
+
+    const handlePause = () => {
+      isVideoPlaying = false;
+      cancelAnimationFrame(rafId);
+      enforceLoop();
+    };
+
+    const handleSeek = () => {
+      enforceLoop();
+    };
+
+    element.addEventListener('play', handlePlay);
+    element.addEventListener('pause', handlePause);
+    element.addEventListener('seeked', handleSeek);
+    element.addEventListener('timeupdate', handleSeek);
+
+    if (!element.paused && !element.ended) {
+      handlePlay();
+    } else {
+      enforceLoop();
+    }
 
     return () => {
-      element.removeEventListener('timeupdate', handleTimeUpdate);
+      isVideoPlaying = false;
+      cancelAnimationFrame(rafId);
+      element.removeEventListener('play', handlePlay);
+      element.removeEventListener('pause', handlePause);
+      element.removeEventListener('seeked', handleSeek);
+      element.removeEventListener('timeupdate', handleSeek);
     };
   }, [playerInPoint, playerOutPoint, playerLoop, playerRangeEnabled]);
 
@@ -1062,7 +1109,10 @@ export default function VideoPlayerPage() {
             userId: a.userId,
             createdAt: a.createdAt,
             text: a.data?.text || '',
-            replies: a.data?.replies || []
+            replies: a.data?.replies || [],
+            pinned: a.pinned ?? a.data?.pinned ?? false,
+            erasedAt: a.data?.erasedAt,
+            erasedBy: a.data?.erasedBy,
           } as T;
         };
 
@@ -1121,6 +1171,9 @@ export default function VideoPlayerPage() {
               groupId: c.groupId,
               linkedDrawingId: c.linkedDrawingId,
               linkedShapeId: c.linkedShapeId,
+              pinned: c.pinned ?? false,
+              erasedAt: c.erasedAt,
+              erasedBy: c.erasedBy,
             });
           } else if (ann.type === 'shape') {
             const s = ann.data as VideoShape;
@@ -1135,6 +1188,9 @@ export default function VideoPlayerPage() {
               summary: shapeSummary(s.type),
               resolved: ann.resolved || false,
               unread: checkUnread(ann, entryId),
+              pinned: s.pinned ?? false,
+              erasedAt: s.erasedAt,
+              erasedBy: s.erasedBy,
             });
           } else if (ann.type === 'drawing') {
             const d = ann.data as VideoDrawingStroke;
@@ -1150,6 +1206,9 @@ export default function VideoPlayerPage() {
               summary: summaryStr,
               resolved: ann.resolved || false,
               unread: checkUnread(ann, entryId),
+              pinned: d.pinned ?? false,
+              erasedAt: d.erasedAt,
+              erasedBy: d.erasedBy,
             });
           } else if (ann.type === 'stamp') {
             const st = ann.data as VideoStamp;
@@ -1164,6 +1223,9 @@ export default function VideoPlayerPage() {
               summary: getStampSummary(st.stampId, customStamp, st.customEmoji),
               resolved: ann.resolved || false,
               unread: checkUnread(ann, entryId),
+              pinned: st.pinned ?? false,
+              erasedAt: st.erasedAt,
+              erasedBy: st.erasedBy,
             });
           }
         });
@@ -1258,13 +1320,13 @@ export default function VideoPlayerPage() {
       setAnnotationGroups([]);
       return;
     }
-    setAnnotationGroups(loadAnnotationGroups(mediaId));
+    
+    getAnnotationGroupsRequest(mediaId).then((res) => {
+      if (Array.isArray(res)) {
+        setAnnotationGroups(res);
+      }
+    }).catch(console.error);
   }, [mediaId]);
-
-  useEffect(() => {
-    if (!mediaId) return;
-    saveAnnotationGroups(mediaId, annotationGroups);
-  }, [annotationGroups, mediaId]);
 
   useEffect(() => {
     if (!item) return;
@@ -1305,10 +1367,18 @@ export default function VideoPlayerPage() {
       const quality = extractPlaybackQualityMetadata(video);
       if (!quality.decodedFrames && !quality.droppedFrames) return;
 
-      setVideoTechnicalDetails((current) => ({
-        ...current,
-        ...quality,
-      }));
+      setVideoTechnicalDetails((current) => {
+        if (
+          current.decodedFrames === quality.decodedFrames &&
+          current.droppedFrames === quality.droppedFrames
+        ) {
+          return current;
+        }
+        return {
+          ...current,
+          ...quality,
+        };
+      });
     };
 
     const handleLoadedMetadata = () => {
@@ -1317,10 +1387,13 @@ export default function VideoPlayerPage() {
 
     const handleResize = () => {
       const stream = extractVideoStreamMetadata(video, item);
-      setVideoTechnicalDetails((current) => ({
-        ...current,
-        displayResolution: stream.displayResolution,
-      }));
+      setVideoTechnicalDetails((current) => {
+        if (current.displayResolution === stream.displayResolution) return current;
+        return {
+          ...current,
+          displayResolution: stream.displayResolution,
+        };
+      });
     };
 
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -1332,10 +1405,13 @@ export default function VideoPlayerPage() {
     }
 
     const stopFrameRateMeasurement = startFrameRateMeasurement(video, (frameRate) => {
-      setVideoTechnicalDetails((current) => ({
-        ...current,
-        frameRate,
-      }));
+      setVideoTechnicalDetails((current) => {
+        if (current.frameRate === frameRate) return current;
+        return {
+          ...current,
+          frameRate,
+        };
+      });
     });
 
     return () => {
@@ -2081,6 +2157,62 @@ export default function VideoPlayerPage() {
     [history, updateCommentResolved],
   );
 
+  const handleTogglePinned = useCallback(
+    (entryId: string) => {
+      setHistory((current) => {
+        const entry = current.find((item) => item.id === entryId);
+        if (!entry) return current;
+
+        const nextPinned = !entry.pinned;
+
+        let targetId = entry.sourceCommentId;
+        if (!targetId) {
+          if (entry.id.startsWith('shape-')) targetId = entry.id.replace('shape-', '');
+          else if (entry.id.startsWith('drawing-')) targetId = entry.id.replace('drawing-', '');
+          else if (entry.id.startsWith('stamp-')) targetId = entry.id.replace('stamp-', '');
+          else if (entry.id.startsWith('comment-')) targetId = entry.id.replace('comment-', '');
+        }
+
+        if (targetId) {
+          if (entry.type === 'comment' || entry.type === 'reply') {
+            setComments((prev) => {
+              const updated = prev.map(c => c.id === targetId ? { ...c, pinned: nextPinned } : c);
+              const c = updated.find(c => c.id === targetId);
+              if (c) updateMediaAnnotationRequest(c.id, { data: c }).catch(console.error);
+              return updated;
+            });
+          } else if (entry.type === 'shape') {
+            setShapes((prev) => {
+              const updated = prev.map(s => s.id === targetId ? { ...s, pinned: nextPinned } : s);
+              const s = updated.find(s => s.id === targetId);
+              if (s) updateMediaAnnotationRequest(s.id, { data: s }).catch(console.error);
+              return updated;
+            });
+          } else if (entry.type === 'drawing') {
+            setDrawings((prev) => {
+              const updated = prev.map(d => d.id === targetId ? { ...d, pinned: nextPinned } : d);
+              const d = updated.find(d => d.id === targetId);
+              if (d) updateMediaAnnotationRequest(d.id, { data: d }).catch(console.error);
+              return updated;
+            });
+          } else if (entry.type === 'stamp') {
+            setStamps((prev) => {
+              const updated = prev.map(s => s.id === targetId ? { ...s, pinned: nextPinned } : s);
+              const s = updated.find(s => s.id === targetId);
+              if (s) updateMediaAnnotationRequest(s.id, { data: s }).catch(console.error);
+              return updated;
+            });
+          }
+        }
+
+        return current.map((item) =>
+          item.id === entryId ? { ...item, pinned: nextPinned } : item
+        );
+      });
+    },
+    [],
+  );
+
   const handleToggleCommentResolved = useCallback(
     (commentId: string) => {
       const comment = comments.find((item) => item.id === commentId);
@@ -2108,11 +2240,57 @@ export default function VideoPlayerPage() {
     );
   }, []);
 
-  const handleCreateAnnotationGroup = useCallback((name: string, memberIds: string[]) => {
-    const group = createAnnotationGroup(name, memberIds);
-    setAnnotationGroups((current) => [...current, group]);
-    return group;
-  }, []);
+  const handleCreateAnnotationGroup = useCallback(async (name: string, memberIds: string[]) => {
+    if (!mediaId) return;
+    try {
+      const res = await createAnnotationGroupRequest(mediaId, name, memberIds);
+      if (res && res.id) {
+        setAnnotationGroups((current) => [...current, res]);
+        return res;
+      }
+    } catch (err) {
+      console.error('Failed to create annotation group', err);
+    }
+    return null;
+  }, [mediaId]);
+
+  const handleDeleteAnnotationGroup = useCallback(async (groupId: string) => {
+    if (!mediaId) return;
+    try {
+      await deleteAnnotationGroupRequest(mediaId, groupId);
+      setAnnotationGroups((current) => current.filter((g) => g.id !== groupId));
+      setHistory((current) => 
+        current.map(entry => {
+          if (entry.visibility === 'group' && entry.groupId === groupId) {
+            return {
+              ...entry,
+              visibility: 'private' as const,
+              groupId: undefined,
+            };
+          }
+          return entry;
+        })
+      );
+    } catch (err) {
+      console.error('Failed to delete annotation group', err);
+    }
+  }, [mediaId]);
+
+  const handleUpdateAnnotationGroup = useCallback(async (groupId: string, name: string, memberIds: string[]) => {
+    if (!mediaId) return null;
+    try {
+      const res = await updateAnnotationGroupRequest(mediaId, groupId, name, memberIds);
+      if (res && res.id) {
+        setAnnotationGroups((current) => 
+          current.map(g => g.id === groupId ? res : g)
+        );
+        return res;
+      }
+    } catch (err) {
+      console.error('Failed to update annotation group', err);
+    }
+    return null;
+  }, [mediaId]);
 
   const handleAddCollaboratorForGroup = useCallback(
     (name: string, email: string) => {
@@ -2269,10 +2447,49 @@ export default function VideoPlayerPage() {
 
       pushSnapshot(getAnnotationSnapshot());
 
+      const erasedBy = { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials };
+
       if (entry.sourceCommentId) {
         setComments((prev) =>
-          prev.filter((comment) => comment.id !== entry.sourceCommentId),
+          prev.map((comment) => comment.id === entry.sourceCommentId ? { ...comment, erasedAt: Date.now(), erasedBy } : comment),
         );
+      }
+
+      const linkedDrawingId =
+        entry.linkedDrawingId ??
+        (entry.id.startsWith('drawing-') ? entry.id.slice('drawing-'.length) : undefined);
+      const linkedShapeId =
+        entry.linkedShapeId ??
+        (entry.id.startsWith('shape-') ? entry.id.slice('shape-'.length) : undefined);
+      const linkedStampId =
+        entry.id.startsWith('stamp-') ? entry.id.slice('stamp-'.length) : undefined;
+
+      if (linkedDrawingId) {
+        setDrawings((prev) => prev.map((stroke) => stroke.id === linkedDrawingId ? { ...stroke, erasedAt: Date.now(), erasedBy } : stroke));
+      }
+
+      if (linkedShapeId) {
+        setShapes((prev) => prev.map((shape) => shape.id === linkedShapeId ? { ...shape, erasedAt: Date.now(), erasedBy } : shape));
+      }
+
+      if (linkedStampId) {
+        setStamps((prev) => prev.map((stamp) => stamp.id === linkedStampId ? { ...stamp, erasedAt: Date.now(), erasedBy } : stamp));
+      }
+
+      setHistory((current) => current.map((item) => item.id === entryId ? { ...item, erasedAt: Date.now(), erasedBy } : item));
+    },
+    [getAnnotationSnapshot, history, pushSnapshot, activeUser],
+  );
+
+  const handleHardDeleteEntry = useCallback(
+    (entryId: string) => {
+      const entry = history.find((item) => item.id === entryId);
+      if (!entry) return;
+
+      pushSnapshot(getAnnotationSnapshot());
+
+      if (entry.sourceCommentId) {
+        setComments((prev) => prev.filter((comment) => comment.id !== entry.sourceCommentId));
       }
 
       const linkedDrawingId =
@@ -2297,6 +2514,45 @@ export default function VideoPlayerPage() {
       }
 
       setHistory((current) => current.filter((item) => item.id !== entryId));
+    },
+    [getAnnotationSnapshot, history, pushSnapshot],
+  );
+
+  const handleRestoreEntry = useCallback(
+    (entryId: string) => {
+      const entry = history.find((item) => item.id === entryId);
+      if (!entry) return;
+
+      pushSnapshot(getAnnotationSnapshot());
+
+      if (entry.sourceCommentId) {
+        setComments((prev) =>
+          prev.map((comment) => comment.id === entry.sourceCommentId ? { ...comment, erasedAt: undefined, erasedBy: undefined } : comment),
+        );
+      }
+
+      const linkedDrawingId =
+        entry.linkedDrawingId ??
+        (entry.id.startsWith('drawing-') ? entry.id.slice('drawing-'.length) : undefined);
+      const linkedShapeId =
+        entry.linkedShapeId ??
+        (entry.id.startsWith('shape-') ? entry.id.slice('shape-'.length) : undefined);
+      const linkedStampId =
+        entry.id.startsWith('stamp-') ? entry.id.slice('stamp-'.length) : undefined;
+
+      if (linkedDrawingId) {
+        setDrawings((prev) => prev.map((stroke) => stroke.id === linkedDrawingId ? { ...stroke, erasedAt: undefined, erasedBy: undefined } : stroke));
+      }
+
+      if (linkedShapeId) {
+        setShapes((prev) => prev.map((shape) => shape.id === linkedShapeId ? { ...shape, erasedAt: undefined, erasedBy: undefined } : shape));
+      }
+
+      if (linkedStampId) {
+        setStamps((prev) => prev.map((stamp) => stamp.id === linkedStampId ? { ...stamp, erasedAt: undefined, erasedBy: undefined } : stamp));
+      }
+
+      setHistory((current) => current.map((item) => item.id === entryId ? { ...item, erasedAt: undefined, erasedBy: undefined } : item));
     },
     [getAnnotationSnapshot, history, pushSnapshot],
   );
@@ -3269,6 +3525,7 @@ export default function VideoPlayerPage() {
                   collaborators={collaborators}
                   onCommentVisibilityChange={handleCommentVisibilityChange}
                   onCreateAnnotationGroup={handleCreateAnnotationGroup}
+                  onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
                   onAddCollaborator={handleAddCollaboratorForGroup}
                   onMoveComment={handleMoveComment}
                   onPanActionStart={handleAnnotationActionStart}
@@ -3502,14 +3759,19 @@ export default function VideoPlayerPage() {
             }
           }}
           onToggleResolved={handleToggleResolved}
+          onTogglePinned={handleTogglePinned}
           onMarkUnread={handleMarkUnread}
           onCopyLink={handleCopyLink}
           onDeleteEntry={handleDeleteEntry}
+          onHardDeleteEntry={handleHardDeleteEntry}
+          onRestoreEntry={handleRestoreEntry}
           onEditComment={handleEditComment}
           annotationGroups={annotationGroups}
           collaborators={collaborators}
           onVisibilityChange={handleEntryVisibilityChange}
           onCreateAnnotationGroup={handleCreateAnnotationGroup}
+          onDeleteAnnotationGroup={handleDeleteAnnotationGroup}
+          onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
           onAddCollaborator={handleAddCollaboratorForGroup}
         />
       </Box>

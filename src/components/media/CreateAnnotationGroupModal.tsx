@@ -13,6 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { MediaCollaborator } from '../../types/mediaCollaborator';
+import type { AnnotationAccessGroup } from '../../types/annotationVisibility';
 
 interface CreateAnnotationGroupModalProps {
   open: boolean;
@@ -20,6 +21,7 @@ interface CreateAnnotationGroupModalProps {
   collaborators: MediaCollaborator[];
   onCreate: (name: string, memberIds: string[]) => void;
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
+  groupToEdit?: AnnotationAccessGroup;
 }
 
 const dialogPaperSx = {
@@ -108,14 +110,11 @@ export default function CreateAnnotationGroupModal({
   collaborators,
   onCreate,
   onAddCollaborator,
+  groupToEdit,
 }: CreateAnnotationGroupModalProps) {
-  const [name, setName] = useState('');
+  const [name, setName] = useState(groupToEdit?.name || '');
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [error, setError] = useState('');
-  const [showAddMember, setShowAddMember] = useState(false);
-  const [newMemberName, setNewMemberName] = useState('');
-  const [newMemberEmail, setNewMemberEmail] = useState('');
-  const [addMemberError, setAddMemberError] = useState('');
 
   const currentUserId = useMemo(
     () => collaborators.find((person) => person.isCurrentUser)?.id,
@@ -124,14 +123,17 @@ export default function CreateAnnotationGroupModal({
 
   useEffect(() => {
     if (!open) return;
-    setName('');
-    setSelectedMemberIds(currentUserId ? [currentUserId] : []);
+    
+    if (groupToEdit) {
+      setName(groupToEdit.name);
+      setSelectedMemberIds(groupToEdit.memberIds);
+    } else {
+      setName('');
+      setSelectedMemberIds(currentUserId ? [currentUserId] : []);
+    }
+    
     setError('');
-    setShowAddMember(false);
-    setNewMemberName('');
-    setNewMemberEmail('');
-    setAddMemberError('');
-  }, [open, currentUserId]);
+  }, [open, currentUserId, groupToEdit]);
 
   const toggleMember = (memberId: string) => {
     setSelectedMemberIds((current) =>
@@ -142,41 +144,22 @@ export default function CreateAnnotationGroupModal({
     if (error) setError('');
   };
 
-  const handleAddMember = () => {
-    const trimmedName = newMemberName.trim();
-    const trimmedEmail = newMemberEmail.trim();
-
-    if (!trimmedName || !trimmedEmail) {
-      setAddMemberError('Name and email are required.');
-      return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setAddMemberError('Enter a valid email address.');
-      return;
-    }
-
-    const collaborator = onAddCollaborator?.(trimmedName, trimmedEmail);
-    if (!collaborator) {
-      setAddMemberError('Could not add this person.');
-      return;
-    }
-
-    setSelectedMemberIds((current) =>
-      current.includes(collaborator.id) ? current : [...current, collaborator.id],
-    );
-    setNewMemberName('');
-    setNewMemberEmail('');
-    setAddMemberError('');
-    setShowAddMember(false);
-  };
-
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     const trimmed = name.trim();
 
     if (!trimmed) {
       setError('Group name is required.');
+      return;
+    }
+
+    if (trimmed.length > 50) {
+      setError('Group name cannot exceed 50 characters.');
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9 \-_]+$/.test(trimmed)) {
+      setError('Group name can only contain letters, numbers, spaces, hyphens, and underscores.');
       return;
     }
 
@@ -207,7 +190,7 @@ export default function CreateAnnotationGroupModal({
           id="create-annotation-group-title"
           sx={{ fontSize: '1.125rem', fontWeight: 600, color: cv.textPrimary, pb: 0.5 }}
         >
-          Create group
+          {groupToEdit ? 'Edit group' : 'Create group'}
         </DialogTitle>
         <DialogContent sx={{ pt: '4px !important' }}>
           <TextField
@@ -217,10 +200,19 @@ export default function CreateAnnotationGroupModal({
             label="Group name"
             value={name}
             onChange={(event) => {
-              setName(event.target.value);
-              if (error) setError('');
+              const value = event.target.value;
+              setName(value);
+              if (value.length > 50) {
+                setError('Group name cannot exceed 50 characters.');
+              } else if (value.trim() && !/^[a-zA-Z0-9 \-_]+$/.test(value.trim())) {
+                setError('Group name can only contain letters, numbers, spaces, hyphens, and underscores.');
+              } else {
+                setError('');
+              }
             }}
-            error={Boolean(error) && !name.trim()}
+            error={Boolean(error) && (error.includes('Group name') || error.includes('characters') || error.includes('required'))}
+            helperText={error && (error.includes('Group name') || error.includes('characters') || error.includes('required')) ? error : undefined}
+            inputProps={{ maxLength: 50 }}
             sx={{ mb: 2 }}
           />
 
@@ -261,95 +253,9 @@ export default function CreateAnnotationGroupModal({
             )}
           </Box>
 
-          {showAddMember ? (
-            <Box
-              sx={{
-                p: 1.5,
-                mb: 1.5,
-                borderRadius: '12px',
-                border: `1px solid ${cv.border}`,
-                backgroundColor: cv.surfaceMuted,
-              }}
-            >
-              <TextField
-                fullWidth
-                size="small"
-                label="Full name"
-                value={newMemberName}
-                onChange={(event) => {
-                  setNewMemberName(event.target.value);
-                  setAddMemberError('');
-                }}
-                sx={{ mb: 1.5 }}
-              />
-              <TextField
-                fullWidth
-                size="small"
-                label="Email address"
-                type="email"
-                value={newMemberEmail}
-                onChange={(event) => {
-                  setNewMemberEmail(event.target.value);
-                  setAddMemberError('');
-                }}
-                sx={{ mb: 1 }}
-              />
-              {addMemberError ? (
-                <Typography sx={{ mb: 1, fontSize: '0.8125rem', color: cv.destructive }}>
-                  {addMemberError}
-                </Typography>
-              ) : null}
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button
-                  type="button"
-                  size="small"
-                  onClick={() => {
-                    setShowAddMember(false);
-                    setNewMemberName('');
-                    setNewMemberEmail('');
-                    setAddMemberError('');
-                  }}
-                  sx={{ textTransform: 'none', color: cv.textSecondary }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  size="small"
-                  variant="contained"
-                  onClick={handleAddMember}
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    background: cv.brandGradient,
-                    boxShadow: 'none',
-                    '&:hover': { boxShadow: 'none', filter: 'brightness(1.05)' },
-                  }}
-                >
-                  Add member
-                </Button>
-              </Box>
-            </Box>
-          ) : (
-            <Button
-              type="button"
-              onClick={() => setShowAddMember(true)}
-              sx={{
-                mb: 1,
-                px: 0,
-                minWidth: 0,
-                textTransform: 'none',
-                fontWeight: 500,
-                fontSize: '0.8125rem',
-                color: cv.brandPurple,
-                '&:hover': { backgroundColor: 'transparent', color: cv.purpleLight },
-              }}
-            >
-              + Add someone new
-            </Button>
-          )}
 
-          {error ? (
+
+          {error && !error.includes('Group name') && !error.includes('characters') && !error.includes('required') ? (
             <Typography sx={{ fontSize: '0.8125rem', color: cv.destructive }}>{error}</Typography>
           ) : (
             <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
@@ -364,7 +270,7 @@ export default function CreateAnnotationGroupModal({
           <Button
             type="submit"
             variant="contained"
-            disabled={!name.trim() || selectedMemberIds.length === 0}
+            disabled={!name.trim() || selectedMemberIds.length === 0 || Boolean(error)}
             sx={{
               textTransform: 'none',
               fontWeight: 600,
@@ -373,7 +279,7 @@ export default function CreateAnnotationGroupModal({
               '&:hover': { boxShadow: 'none', filter: 'brightness(1.05)' },
             }}
           >
-            Create group
+            {groupToEdit ? 'Save changes' : 'Create group'}
           </Button>
         </DialogActions>
       </Box>

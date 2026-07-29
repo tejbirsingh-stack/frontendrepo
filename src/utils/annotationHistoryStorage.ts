@@ -96,8 +96,8 @@ export function backfillHistoryFromComments(
       replyCount: comment.replies.length,
       visibility: comment.visibility ?? DEFAULT_ANNOTATION_VISIBILITY,
       groupId: comment.groupId,
+      pinned: comment.pinned,
     });
-
   }
 
   return entries;
@@ -146,6 +146,7 @@ export function mergeLinkedAnnotationHistory(
       visibility: comment.visibility ?? merged[linkedIndex].visibility ?? DEFAULT_ANNOTATION_VISIBILITY,
       groupId: comment.groupId ?? merged[linkedIndex].groupId,
       replyCount: comment.replies.length,
+      pinned: comment.pinned ?? merged[linkedIndex].pinned,
     };
 
     redundantCommentEntryIds.add(commentEntryId);
@@ -179,6 +180,7 @@ export function normalizeCommentHistory(
           reopenedBy: comment?.reopenedBy ?? entry.reopenedBy,
           visibility: comment?.visibility ?? entry.visibility ?? DEFAULT_ANNOTATION_VISIBILITY,
           groupId: comment?.groupId ?? entry.groupId,
+          pinned: comment?.pinned ?? entry.pinned,
         };
       }
 
@@ -195,6 +197,7 @@ export function normalizeCommentHistory(
         reopenedBy: comment.reopenedBy ?? entry.reopenedBy,
         visibility: comment.visibility ?? entry.visibility ?? DEFAULT_ANNOTATION_VISIBILITY,
         groupId: comment.groupId ?? entry.groupId,
+        pinned: comment.pinned ?? entry.pinned,
       };
     });
 }

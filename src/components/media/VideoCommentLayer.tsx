@@ -7,6 +7,7 @@ import type { AnnotationAccessGroup, AnnotationVisibility } from '../../types/an
 import type { MediaCollaborator } from '../../types/mediaCollaborator';
 import { getAnnotationCommentPlaceholder } from '../../utils/annotationCommentPrompt';
 import { isCommentVisibleAtTime } from '../../utils/commentTimestampVisibility';
+import { useActiveUser } from '../../hooks/useActiveUser';
 
 interface VideoCommentLayerProps {
   active: boolean;
@@ -41,6 +42,7 @@ interface VideoCommentLayerProps {
     groupId?: string,
   ) => void;
   onCreateAnnotationGroup: (name: string, memberIds: string[]) => AnnotationAccessGroup;
+  onUpdateAnnotationGroup?: (groupId: string, name: string, memberIds: string[]) => Promise<AnnotationAccessGroup | null | undefined>;
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
   onMoveComment?: (commentId: string, xPercent: number, yPercent: number) => void;
   onPanActionStart?: () => void;
@@ -72,12 +74,14 @@ export default function VideoCommentLayer({
   collaborators,
   onCommentVisibilityChange,
   onCreateAnnotationGroup,
+  onUpdateAnnotationGroup,
   onAddCollaborator,
   onMoveComment,
   onPanActionStart,
   openCommentId: externalOpenCommentId,
   onOpenCommentIdChange,
 }: VideoCommentLayerProps) {
+  const activeUser = useActiveUser();
   const [internalOpenCommentId, setInternalOpenCommentId] = useState<string | null>(null);
   const openCommentId = externalOpenCommentId !== undefined ? externalOpenCommentId : internalOpenCommentId;
   const setOpenCommentId = (id: string | null) => {
@@ -91,17 +95,53 @@ export default function VideoCommentLayer({
     const video = videoRef?.current;
     if (!video) return;
 
+    let rafId: number;
+    let isVideoPlaying = false;
+
     const handleTimeUpdate = () => {
       setCurrentVideoTime(video.currentTime);
     };
 
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('seeked', handleTimeUpdate);
-    handleTimeUpdate();
+    const tick = () => {
+      handleTimeUpdate();
+      if (isVideoPlaying) {
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+
+    const handlePlay = () => {
+      isVideoPlaying = true;
+      tick();
+    };
+
+    const handlePause = () => {
+      isVideoPlaying = false;
+      cancelAnimationFrame(rafId);
+      handleTimeUpdate();
+    };
+
+    const handleSeek = () => {
+      handleTimeUpdate();
+    };
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('seeked', handleSeek);
+    video.addEventListener('timeupdate', handleSeek);
+
+    if (!video.paused && !video.ended) {
+      handlePlay();
+    } else {
+      handleTimeUpdate();
+    }
 
     return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('seeked', handleTimeUpdate);
+      isVideoPlaying = false;
+      cancelAnimationFrame(rafId);
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('seeked', handleSeek);
+      video.removeEventListener('timeupdate', handleSeek);
     };
   }, [videoRef]);
 
@@ -138,10 +178,12 @@ export default function VideoCommentLayer({
     () =>
       comments.filter(
         (comment) =>
+          !comment.erasedAt &&
           !comment.resolved &&
+          !(comment.visibility === 'private' && comment.author?.name !== activeUser.name) &&
           isCommentVisibleAtTime(comment.videoTimestamp, currentVideoTime, comment.endTimestamp),
       ),
-    [comments, currentVideoTime],
+    [comments, currentVideoTime, activeUser.name],
   );
 
   useEffect(() => {
@@ -150,7 +192,9 @@ export default function VideoCommentLayer({
     const openComment = comments.find((comment) => comment.id === openCommentId);
     if (
       !openComment ||
+      openComment.erasedAt ||
       openComment.resolved ||
+      (openComment.visibility === 'private' && openComment.author?.name !== activeUser.name) ||
       !isCommentVisibleAtTime(
         openComment.videoTimestamp,
         currentVideoTime,
@@ -159,7 +203,7 @@ export default function VideoCommentLayer({
     ) {
       setOpenCommentId(null);
     }
-  }, [comments, currentVideoTime, openCommentId]);
+  }, [comments, currentVideoTime, openCommentId, activeUser.name]);
 
   const handleOverlayClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (panActive) return;
@@ -270,6 +314,7 @@ export default function VideoCommentLayer({
             onCommentVisibilityChange(comment.id, visibility, groupId)
           }
           onCreateAnnotationGroup={onCreateAnnotationGroup}
+          onUpdateAnnotationGroup={onUpdateAnnotationGroup}
           onAddCollaborator={onAddCollaborator}
         />
       ))}

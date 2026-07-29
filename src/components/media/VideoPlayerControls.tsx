@@ -148,6 +148,9 @@ export default function VideoPlayerControls({
     if (!element) return;
 
 
+    let rafId: number;
+    let isVideoPlaying = false;
+
     const handleTimeUpdate = () => {
       if (!isScrubbing) {
         setCurrentTime(element.currentTime);
@@ -155,9 +158,31 @@ export default function VideoPlayerControls({
       setIsPlaying(!element.paused && !element.ended);
     };
 
+    const tick = () => {
+      handleTimeUpdate();
+      if (isVideoPlaying) {
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+
+    const handlePlay = () => {
+      isVideoPlaying = true;
+      tick();
+      syncFromVideo();
+    };
+
+    const handlePause = () => {
+      isVideoPlaying = false;
+      cancelAnimationFrame(rafId);
+      handleTimeUpdate();
+      syncFromVideo();
+    };
+
+    const handleSeek = () => {
+      handleTimeUpdate();
+    };
+
     const events: Array<keyof HTMLMediaElementEventMap> = [
-      'play',
-      'pause',
       'ended',
       'volumechange',
       'ratechange',
@@ -168,13 +193,29 @@ export default function VideoPlayerControls({
     ];
 
     events.forEach((event) => element.addEventListener(event, syncFromVideo));
-    element.addEventListener('timeupdate', handleTimeUpdate);
+    
+    element.addEventListener('play', handlePlay);
+    element.addEventListener('pause', handlePause);
+    element.addEventListener('seeked', handleSeek);
+    // Still bind timeupdate as a fallback for some browsers when scrubbing natively
+    element.addEventListener('timeupdate', handleSeek);
 
     syncFromVideo();
+    
+    if (!element.paused && !element.ended) {
+      handlePlay();
+    } else {
+      handleTimeUpdate();
+    }
 
     return () => {
+      isVideoPlaying = false;
+      cancelAnimationFrame(rafId);
       events.forEach((event) => element.removeEventListener(event, syncFromVideo));
-      element.removeEventListener('timeupdate', handleTimeUpdate);
+      element.removeEventListener('play', handlePlay);
+      element.removeEventListener('pause', handlePause);
+      element.removeEventListener('seeked', handleSeek);
+      element.removeEventListener('timeupdate', handleSeek);
     };
   }, [videoRef, isScrubbing, syncFromVideo]);
 

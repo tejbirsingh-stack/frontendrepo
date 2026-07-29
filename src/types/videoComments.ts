@@ -35,6 +35,9 @@ export interface VideoComment {
   groupId?: string;
   linkedDrawingId?: string;
   linkedShapeId?: string;
+  pinned?: boolean;
+  erasedAt?: number;
+  erasedBy?: CommentAuthor;
 }
 
 export type LinkedAnnotationKind = 'drawing' | 'shape';

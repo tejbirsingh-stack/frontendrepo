@@ -31,4 +31,5 @@ export interface AnnotationHistoryEntry {
   replyCount?: number;
   visibility?: AnnotationVisibility;
   groupId?: string;
+  pinned?: boolean;
 }

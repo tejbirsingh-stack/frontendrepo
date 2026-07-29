@@ -71,6 +71,7 @@ interface CommentMarkerProps {
   collaborators?: MediaCollaborator[];
   onVisibilityChange?: (visibility: AnnotationVisibility, groupId?: string) => void;
   onCreateAnnotationGroup?: (name: string, memberIds: string[]) => AnnotationAccessGroup;
+  onUpdateAnnotationGroup?: (groupId: string, name: string, memberIds: string[]) => Promise<AnnotationAccessGroup | null | undefined>;
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
   onTextChange?: (text: string) => void;
   onImageChange?: (imageUrl: string | null) => void;
@@ -125,6 +126,7 @@ export default function CommentMarker({
   collaborators = [],
   onVisibilityChange,
   onCreateAnnotationGroup,
+  onUpdateAnnotationGroup,
   onAddCollaborator,
   onTextChange,
   onImageChange,
@@ -558,6 +560,7 @@ export default function CommentMarker({
                         memberIds,
                       }
                     }
+                    onUpdateAnnotationGroup={onUpdateAnnotationGroup}
                     onAddCollaborator={onAddCollaborator}
                   />
                 </Box>,

@@ -34,3 +34,38 @@ export async function deleteMediaAnnotationRequest(
 ): Promise<{ success: boolean; message: string }> {
   return apiClient.delete<{ success: boolean; message: string }>(`/annotations/${annotationId}`);
 }
+
+export interface BackendAnnotationGroup {
+  id: string;
+  name: string;
+  createdAt: number;
+  memberIds: string[];
+}
+
+export async function getAnnotationGroupsRequest(mediaId: string): Promise<BackendAnnotationGroup[]> {
+  return apiClient.get<BackendAnnotationGroup[]>(`/annotations/media/${mediaId}/groups`);
+}
+
+export async function createAnnotationGroupRequest(
+  mediaId: string,
+  name: string,
+  memberIds: string[]
+): Promise<BackendAnnotationGroup> {
+  return apiClient.post<BackendAnnotationGroup>(`/annotations/media/${mediaId}/groups`, { name, memberIds });
+}
+
+export async function deleteAnnotationGroupRequest(
+  mediaId: string,
+  groupId: string
+): Promise<{ success: boolean }> {
+  return apiClient.delete<{ success: boolean }>(`/annotations/media/${mediaId}/groups/${groupId}`);
+}
+
+export async function updateAnnotationGroupRequest(
+  mediaId: string,
+  groupId: string,
+  name: string,
+  memberIds: string[]
+): Promise<BackendAnnotationGroup> {
+  return apiClient.put<BackendAnnotationGroup>(`/annotations/media/${mediaId}/groups/${groupId}`, { name, memberIds });
+}

@@ -243,6 +243,8 @@ export function startFrameRateMeasurement(
 
       if (elapsed >= 0.75 && frameCount >= 8) {
         onFrameRate(formatMeasuredFrameRate(frameCount / elapsed));
+        frameCount = 0;
+        startMediaTime = metadata.mediaTime;
       }
     }
 

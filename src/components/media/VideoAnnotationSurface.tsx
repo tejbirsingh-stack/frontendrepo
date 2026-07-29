@@ -350,6 +350,8 @@ export default function VideoAnnotationSurface({
   const visibleStrokes = useMemo(
     () =>
       strokes.filter((stroke) =>
+        !stroke.erasedAt &&
+        !(stroke.visibility === 'private' && stroke.author?.name !== activeUser.name) &&
         isOverlayAnnotationVisible(
           getDrawingHistoryEntryId(stroke.id),
           stroke.videoTimestamp,
@@ -364,6 +366,8 @@ export default function VideoAnnotationSurface({
   const visibleShapes = useMemo(
     () =>
       shapes.filter((shape) =>
+        !shape.erasedAt &&
+        !(shape.visibility === 'private' && shape.author?.name !== activeUser.name) &&
         isOverlayAnnotationVisible(
           getShapeHistoryEntryId(shape.id),
           shape.videoTimestamp,
@@ -378,6 +382,8 @@ export default function VideoAnnotationSurface({
   const visibleStamps = useMemo(
     () =>
       stamps.filter((stamp) =>
+        !stamp.erasedAt &&
+        !(stamp.visibility === 'private' && stamp.author?.name !== activeUser.name) &&
         isOverlayAnnotationVisible(
           getStampHistoryEntryId(stamp.id),
           stamp.videoTimestamp,
@@ -393,17 +399,53 @@ export default function VideoAnnotationSurface({
     const video = videoRef?.current;
     if (!video) return;
 
+    let rafId: number;
+    let isVideoPlaying = false;
+
     const handleTimeUpdate = () => {
       setCurrentVideoTime(video.currentTime);
     };
 
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('seeked', handleTimeUpdate);
-    handleTimeUpdate();
+    const tick = () => {
+      handleTimeUpdate();
+      if (isVideoPlaying) {
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+
+    const handlePlay = () => {
+      isVideoPlaying = true;
+      tick();
+    };
+
+    const handlePause = () => {
+      isVideoPlaying = false;
+      cancelAnimationFrame(rafId);
+      handleTimeUpdate();
+    };
+
+    const handleSeek = () => {
+      handleTimeUpdate();
+    };
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('seeked', handleSeek);
+    video.addEventListener('timeupdate', handleSeek);
+
+    if (!video.paused && !video.ended) {
+      handlePlay();
+    } else {
+      handleTimeUpdate();
+    }
 
     return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('seeked', handleTimeUpdate);
+      isVideoPlaying = false;
+      cancelAnimationFrame(rafId);
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('seeked', handleSeek);
+      video.removeEventListener('timeupdate', handleSeek);
     };
   }, [videoRef]);
 
@@ -493,7 +535,7 @@ export default function VideoAnnotationSurface({
     if (!shapeToDelete) return;
 
     onAnnotationActionStart?.();
-    onShapesChange(shapes.filter((shape) => shape.id !== selectedShapeId));
+    onShapesChange(shapes.map((shape) => shape.id === selectedShapeId ? { ...shape, erasedAt: Date.now(), erasedBy: { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials } } : shape));
     onRecord({
       type: 'shape',
       summary: shapeSummary(shapeToDelete.type),
@@ -554,7 +596,7 @@ export default function VideoAnnotationSurface({
     if (!stampToDelete) return;
 
     onAnnotationActionStart?.();
-    onStampsChange(stamps.filter((stamp) => stamp.id !== selectedStampId));
+    onStampsChange(stamps.map((stamp) => stamp.id === selectedStampId ? { ...stamp, erasedAt: Date.now(), erasedBy: { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials } } : stamp));
     onRecord({
       type: 'stamp',
       summary: getStampSummary(
@@ -624,32 +666,46 @@ export default function VideoAnnotationSurface({
       const eraseTimestamp = getVideoTimestamp();
       const currentStrokes = strokesRef.current;
 
-      const nextStrokes = currentStrokes.filter((stroke) => {
+      const nextStrokes = currentStrokes.map((stroke) => {
+        if (stroke.erasedAt) return stroke;
+
         if (!isAnnotationVisibleAtTime(stroke.videoTimestamp, eraseTimestamp, stroke.endTimestamp)) {
-          return true;
+          return stroke;
         }
 
         if (stroke.author?.name !== activeUser.name) {
-          return true;
+          return stroke;
         }
 
-        return !strokeHitsEraser(
+        const isHit = strokeHitsEraser(
           stroke.points,
           point,
           eraserRadius,
           rect,
           stroke.width,
         );
+
+        if (isHit) {
+          return {
+            ...stroke,
+            erasedAt: Date.now(),
+            erasedBy: { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials }
+          };
+        }
+
+        return stroke;
       });
 
-      if (nextStrokes.length !== currentStrokes.length) {
+      const hasChanges = nextStrokes.some((s, i) => s.erasedAt !== currentStrokes[i].erasedAt);
+
+      if (hasChanges) {
         erasedThisGestureRef.current = true;
         strokesRef.current = nextStrokes;
         onStrokesChange(nextStrokes);
 
         const timestampSecond = Math.floor(eraseTimestamp);
         erasedRemainingAtTimestampRef.current = nextStrokes.filter(
-          (stroke) => Math.floor(stroke.videoTimestamp) === timestampSecond,
+          (stroke) => !stroke.erasedAt && Math.floor(stroke.videoTimestamp) === timestampSecond,
         ).length;
       }
     },

@@ -1,4 +1,5 @@
 import type { StampId } from '../constants/stamps';
+import type { AnnotationVisibility } from './annotationVisibility';
 
 export interface VideoStamp {
   id: string;
@@ -11,4 +12,9 @@ export interface VideoStamp {
   endTimestamp?: number;
   userId?: string;
   author?: any;
+  pinned?: boolean;
+  erasedAt?: number;
+  erasedBy?: { name: string; avatarUrl?: string; initials?: string };
+  visibility?: AnnotationVisibility;
+  groupId?: string;
 }

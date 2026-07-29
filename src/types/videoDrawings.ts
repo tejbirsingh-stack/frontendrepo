@@ -1,4 +1,5 @@
 import type { DrawTool } from '../components/media/DrawSubToolbar';
+import type { AnnotationVisibility } from './annotationVisibility';
 
 export interface VideoDrawingStroke {
   id: string;
@@ -14,4 +15,9 @@ export interface VideoDrawingStroke {
   commentId?: string;
   userId?: string;
   author?: any;
+  pinned?: boolean;
+  erasedAt?: number;
+  erasedBy?: { name: string; avatarUrl?: string; initials?: string };
+  visibility?: AnnotationVisibility;
+  groupId?: string;
 }

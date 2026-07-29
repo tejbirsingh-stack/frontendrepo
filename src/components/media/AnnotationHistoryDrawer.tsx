@@ -16,11 +16,19 @@ import {
   Typography,
   useMediaQuery,
   useTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Button,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
+import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
+import PushPinIcon from '@mui/icons-material/PushPin';
 import FilterListOutlinedIcon from '@mui/icons-material/FilterListOutlined';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import MoreHorizOutlinedIcon from '@mui/icons-material/MoreHorizOutlined';
@@ -164,9 +172,12 @@ interface AnnotationHistoryDrawerProps {
   onClose: () => void;
   onEntryClick?: (entry: AnnotationHistoryEntry) => void;
   onToggleResolved: (entryId: string) => void;
+  onTogglePinned?: (entryId: string) => void;
   onMarkUnread: (entryId: string) => void;
   onCopyLink: (entry: AnnotationHistoryEntry) => void;
   onDeleteEntry: (entryId: string) => void;
+  onHardDeleteEntry?: (entryId: string) => void;
+  onRestoreEntry?: (entryId: string) => void;
   onEditComment?: (commentId: string, text: string) => void;
   annotationGroups: AnnotationAccessGroup[];
   onVisibilityChange: (
@@ -175,7 +186,9 @@ interface AnnotationHistoryDrawerProps {
     groupId?: string,
   ) => void;
   collaborators: MediaCollaborator[];
-  onCreateAnnotationGroup: (name: string, memberIds: string[]) => AnnotationAccessGroup;
+  onCreateAnnotationGroup: (name: string, memberIds: string[]) => AnnotationAccessGroup | Promise<AnnotationAccessGroup | null | undefined>;
+  onDeleteAnnotationGroup?: (groupId: string) => void;
+  onUpdateAnnotationGroup?: (groupId: string, name: string, memberIds: string[]) => Promise<AnnotationAccessGroup | null | undefined>;
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
 }
 
@@ -246,7 +259,12 @@ function HistoryEntryRow({
   onVisibilityChange,
   onCreateAnnotationGroup,
   collaborators,
+  onDeleteAnnotationGroup,
+  onUpdateAnnotationGroup,
   onAddCollaborator,
+  onTogglePinned,
+  onHardDeleteEntry,
+  onRestoreEntry,
 }: {
   entry: AnnotationHistoryEntry;
   replies?: CommentReply[];
@@ -256,19 +274,25 @@ function HistoryEntryRow({
   collaborators: MediaCollaborator[];
   onEntryClick?: (entry: AnnotationHistoryEntry) => void;
   onToggleResolved: (entryId: string) => void;
+  onTogglePinned?: (entryId: string) => void;
   onMarkUnread: (entryId: string) => void;
   onCopyLink: (entry: AnnotationHistoryEntry) => void;
   onDeleteEntry: (entryId: string) => void;
+  onHardDeleteEntry?: (entryId: string) => void;
+  onRestoreEntry?: (entryId: string) => void;
   onVisibilityChange: (
     entryId: string,
     visibility: AnnotationVisibility,
     groupId?: string,
   ) => void;
-  onCreateAnnotationGroup: (name: string, memberIds: string[]) => AnnotationAccessGroup;
+  onCreateAnnotationGroup: (name: string, memberIds: string[]) => AnnotationAccessGroup | Promise<AnnotationAccessGroup | null | undefined>;
+  onDeleteAnnotationGroup?: (groupId: string) => void;
+  onUpdateAnnotationGroup?: (groupId: string, name: string, memberIds: string[]) => Promise<AnnotationAccessGroup | null | undefined>;
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
 }) {
   const activeUser = useActiveUser();
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [repliesOpen, setRepliesOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState('');
@@ -343,7 +367,10 @@ function HistoryEntryRow({
             onVisibilityChange(entry.id, visibility, groupId)
           }
           onCreateGroup={onCreateAnnotationGroup}
+          onDeleteGroup={onDeleteAnnotationGroup}
+          onUpdateGroup={onUpdateAnnotationGroup}
           onAddCollaborator={onAddCollaborator}
+          isAuthor={entry.author.name === activeUser.name}
           variant="dark"
         />
 
@@ -402,6 +429,39 @@ function HistoryEntryRow({
             )}
           </IconButton>
         </Tooltip>
+
+        <Tooltip
+          title={entry.pinned ? 'Unpin' : 'Pin to top'}
+          arrow
+          placement="top"
+        >
+          <IconButton
+            type="button"
+            aria-label={entry.pinned ? 'Unpin' : 'Pin to top'}
+            aria-pressed={Boolean(entry.pinned)}
+            size="small"
+            onClick={(event) => {
+              event.stopPropagation();
+              onTogglePinned?.(entry.id);
+            }}
+            sx={{
+              ...rowActionSx,
+              color: entry.pinned ? cv.brandPurple : cv.textSecondary,
+              '&:hover': {
+                backgroundColor: entry.pinned
+                  ? cv.purpleSelectionHover
+                  : cv.surfaceHover,
+                color: entry.pinned ? cv.purpleLight : cv.textPrimary,
+              },
+            }}
+          >
+            {entry.pinned ? (
+              <PushPinIcon sx={{ fontSize: 18, transform: 'rotate(45deg)', color: 'var(--noah-brand-purple)' }} />
+            ) : (
+              <PushPinOutlinedIcon sx={{ fontSize: 18, transform: 'rotate(45deg)', color: cv.textSecondary }} />
+            )}
+          </IconButton>
+        </Tooltip>
       </Box>
 
       <Menu
@@ -454,15 +514,34 @@ function HistoryEntryRow({
           Copy link
         </MenuItem>
         {entry.author.name === activeUser.name ? (
-          <MenuItem
-            onClick={() => {
-              onDeleteEntry(entry.id);
-              setMenuAnchor(null);
-            }}
-            sx={{ fontSize: '0.875rem', color: cv.destructive }}
-          >
-            Delete thread...
-          </MenuItem>
+          <>
+            {isErased ? (
+              <MenuItem
+                onClick={() => {
+                  if (onRestoreEntry) {
+                    onRestoreEntry(entry.id);
+                  }
+                  setMenuAnchor(null);
+                }}
+                sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
+              >
+                Restore from Archive
+              </MenuItem>
+            ) : null}
+            <MenuItem
+              onClick={() => {
+                if (isErased && onHardDeleteEntry) {
+                  setDeleteConfirmOpen(true);
+                } else {
+                  onDeleteEntry(entry.id);
+                }
+                setMenuAnchor(null);
+              }}
+              sx={{ fontSize: '0.875rem', color: cv.destructive }}
+            >
+              {isErased ? 'Delete Permanently' : 'Archive'}
+            </MenuItem>
+          </>
         ) : null}
       </Menu>
 
@@ -715,6 +794,51 @@ function HistoryEntryRow({
           Resolved by {entry.resolvedBy.name} · {formatRelativeTime(entry.resolvedAt)}
         </Typography>
       ) : null}
+
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        PaperProps={{
+          sx: {
+            backgroundColor: cv.surface,
+            backgroundImage: 'none',
+            borderRadius: '12px',
+            border: `1px solid ${cv.border}`,
+            boxShadow: cv.dialogShadow,
+          },
+        }}
+      >
+        <DialogTitle sx={{ color: cv.textPrimary, fontSize: '1.125rem', pb: 1 }}>
+          Permanently Delete Annotation?
+        </DialogTitle>
+        <DialogContent sx={{ pb: 2 }}>
+          <DialogContentText sx={{ color: cv.textSecondary, fontSize: '0.875rem' }}>
+            Are you sure you want to permanently delete this annotation? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button
+            onClick={() => setDeleteConfirmOpen(false)}
+            sx={{ textTransform: 'none', color: cv.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              if (onHardDeleteEntry) {
+                onHardDeleteEntry(entry.id);
+              }
+              setDeleteConfirmOpen(false);
+            }}
+            variant="contained"
+            color="error"
+            disableElevation
+            sx={{ textTransform: 'none' }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -734,17 +858,23 @@ export default function AnnotationHistoryDrawer({
   onClose,
   onEntryClick,
   onToggleResolved,
+  onTogglePinned,
   onMarkUnread,
   onCopyLink,
   onDeleteEntry,
+  onHardDeleteEntry,
+  onRestoreEntry,
   onEditComment,
   annotationGroups,
   collaborators,
   onVisibilityChange,
   onCreateAnnotationGroup,
+  onDeleteAnnotationGroup,
+  onUpdateAnnotationGroup,
   onAddCollaborator,
 }: AnnotationHistoryDrawerProps) {
   const theme = useTheme();
+  const activeUser = useActiveUser();
   const isDesktopPanel = useMediaQuery(theme.breakpoints.up(SIDEBAR_DESKTOP_BREAKPOINT));
   const [internalTab, setInternalTab] = useState<DrawerTab>('history');
   const activeTab = controlledTab ?? internalTab;
@@ -776,14 +906,19 @@ export default function AnnotationHistoryDrawer({
 
     return [...entries]
       .filter((entry) => {
+        if (entry.visibility === 'private' && entry.author.name !== activeUser.name) {
+          return false;
+        }
+
         const isArchived = Boolean(entry.erasedAt);
 
-        if (statusFilter === 'unread' && !(entry.unread && !entry.resolved && !isArchived)) {
+        if (isArchived && statusFilter !== 'archive') return false;
+        if (statusFilter === 'archive' && !isArchived) return false;
+
+        if (statusFilter === 'unread' && !(entry.unread && !entry.resolved)) {
           return false;
         }
         if (statusFilter === 'resolved' && !entry.resolved) return false;
-        if (statusFilter === 'archive' && !isArchived) return false;
-        if (statusFilter === 'all' && isArchived) return false;
 
         if (typeFilter !== 'all' && entry.type !== typeFilter) return false;
 
@@ -823,8 +958,12 @@ export default function AnnotationHistoryDrawer({
 
         return haystack.includes(normalizedQuery);
       })
-      .sort((a, b) => b.createdAt - a.createdAt);
-  }, [commentById, customEndDate, customStartDate, dateRangeFilter, entries, query, statusFilter, typeFilter]);
+      .sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return b.createdAt - a.createdAt;
+      });
+  }, [commentById, customEndDate, customStartDate, dateRangeFilter, entries, query, statusFilter, typeFilter, activeUser.name]);
 
   const panelBody = (
     <>
@@ -1172,13 +1311,18 @@ export default function AnnotationHistoryDrawer({
                   collaborators={collaborators}
                   onEntryClick={onEntryClick}
                   onToggleResolved={onToggleResolved}
+                  onTogglePinned={onTogglePinned}
                   onMarkUnread={onMarkUnread}
                   onCopyLink={onCopyLink}
                   onDeleteEntry={onDeleteEntry}
                   onEditComment={onEditComment}
                   onVisibilityChange={onVisibilityChange}
                   onCreateAnnotationGroup={onCreateAnnotationGroup}
+                  onDeleteAnnotationGroup={onDeleteAnnotationGroup}
+                  onUpdateAnnotationGroup={onUpdateAnnotationGroup}
                   onAddCollaborator={onAddCollaborator}
+                  onHardDeleteEntry={onHardDeleteEntry}
+                  onRestoreEntry={onRestoreEntry}
                 />
                 {index < filteredEntries.length - 1 && (
                   <Divider sx={{ borderColor: cv.border }} />
