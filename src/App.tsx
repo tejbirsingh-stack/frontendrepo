@@ -24,6 +24,7 @@ import {
   ResetPasswordPage,
   VerifyEmailPage,
   DeletionRequestsPage,
+  ShareGuestPage,
 } from './routes/lazyPages';
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
       <StampStickerFilterDefs />
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
+          <Route path="/s/:token" element={<ShareGuestPage />} />
           <Route
             path="/"
             element={
