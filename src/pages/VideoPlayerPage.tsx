@@ -345,7 +345,7 @@ export default function VideoPlayerPage({
 
   const [syncTrigger, setSyncTrigger] = useState(0);
 
-  // Listen for incoming websocket messages from other users
+  // Listen for incoming websocket messages from other users & external guests
   const handleWebSocketMessage = useCallback((msg: WebSocketMessage) => {
     if (msg.type === 'NEW_ANNOTATION') {
       // Force a re-fetch of the API annotations so all state arrays (comments, shapes, etc) update correctly!
@@ -355,12 +355,12 @@ export default function VideoPlayerPage({
         if (payload) {
           const author = payload.author || (payload.data && payload.data.author);
           const authorEmail = author?.email;
-          const authorName = author?.name || 'Someone';
+          const authorName = author?.name || (payload.data?.guestName ? `${payload.data.guestName} (Guest)` : 'Guest User');
 
           const commentText = payload.text || (payload.data && payload.data.text) || '';
 
           if (commentText) {
-            const videoTitle = fetchedItem?.title || contextItem?.title || 'a video';
+            const videoTitle = fetchedItem?.title || contextItem?.title || guestAssetMeta?.title || 'a video';
 
             // Check if current user is mentioned in the comment
             const userIdentifier = user?.name || user?.email?.split('@')[0] || '';
@@ -372,12 +372,11 @@ export default function VideoPlayerPage({
                 `${authorName} mentioned you in a comment on "${videoTitle}": "${commentText.substring(0, 40)}${commentText.length > 40 ? '...' : ''}"`,
                 user?.email
               );
-            } else if (fetchedItem?.uploadedByUserId === user?.id && authorEmail !== user?.email) {
-              const currentItem = fetchedItem || contextItem;
-              // Notification for media owner
+            } else if (authorEmail !== user?.email) {
+              // Notification for media owner and room members
               addInAppNotification(
                 `Comment on ${videoTitle}`,
-                `${authorName} commented on your ${currentItem?.type || 'media'}: "${commentText.substring(0, 40)}${commentText.length > 40 ? '...' : ''}"`,
+                `${authorName} commented: "${commentText.substring(0, 40)}${commentText.length > 40 ? '...' : ''}"`,
                 user?.email
               );
             }
@@ -387,10 +386,12 @@ export default function VideoPlayerPage({
         console.error('Failed to process web socket notification:', err);
       }
     }
-  }, [user, fetchedItem, contextItem]);
+  }, [user, fetchedItem, contextItem, guestAssetMeta]);
 
-  // Initialize the real-time connection using our DRY hook!
-  const { broadcastMessage } = useMediaWebSocket(mediaId, handleWebSocketMessage);
+  // Initialize the real-time connection using our DRY hook (supports both mediaId and guest asset ID)!
+  const wsTargetMediaId = guestAssetMeta?.id || mediaId;
+  const { broadcastMessage } = useMediaWebSocket(wsTargetMediaId, handleWebSocketMessage);
+
 
   useEffect(() => {
     if (mediaId) {
@@ -498,7 +499,7 @@ export default function VideoPlayerPage({
     prevRef: React.MutableRefObject<T[]>
   ) => {
     useEffect(() => {
-      if (!initialLoadComplete || !mediaId) return;
+      if (!initialLoadComplete || (!mediaId && !shareToken)) return;
 
       const current = currentData;
       const previous = prevRef.current;
@@ -515,19 +516,30 @@ export default function VideoPlayerPage({
         const anyC = c as any;
         const vTime = anyC.videoTimestamp !== undefined ? anyC.videoTimestamp : (anyC.timestamp !== undefined ? anyC.timestamp : null);
         try {
-          await saveMediaAnnotationRequest(mediaId, {
-            id: c.id,
-            type,
-            data: c,
-            videoTimestamp: vTime,
-            parentId: anyC.parentId || null
-          });
+          if (isGuestMode && shareToken) {
+            const guestName = localStorage.getItem('guest_name') || 'Guest User';
+            await createShareAnnotationApi(shareToken, {
+              guestName,
+              text: anyC.text || (anyC.data && anyC.data.text) || '',
+              videoTimestamp: vTime,
+              type,
+              data: c,
+            });
+          } else if (mediaId) {
+            await saveMediaAnnotationRequest(mediaId, {
+              id: c.id,
+              type,
+              data: c,
+              videoTimestamp: vTime,
+              parentId: anyC.parentId || null
+            });
+          }
           broadcastMessage({ type: 'NEW_ANNOTATION', payload: c as any });
           // Generate client-side in-app notifications if text is present
           const commentText = anyC.text || (anyC.data && anyC.data.text) || '';
           if (commentText) {
             const authorName = user?.name || 'Someone';
-            const videoTitle = (fetchedItem || contextItem)?.title || 'a video';
+            const videoTitle = (fetchedItem || contextItem || guestAssetMeta)?.title || 'a video';
 
             // 1. Scan for mentions in the collaborators list
             collaborators.forEach((collab) => {
@@ -552,7 +564,7 @@ export default function VideoPlayerPage({
             });
 
             // 2. Scan if owner/uploader needs comment notification
-            const currentItem = fetchedItem || contextItem;
+            const currentItem = fetchedItem || contextItem || guestAssetMeta;
             if (currentItem?.uploadedByUserId && currentItem?.uploadedByUserId !== user?.id) {
               const uploaderCollab = collaborators.find(collab => collab.id === currentItem.uploadedByUserId);
               if (uploaderCollab) {
@@ -565,7 +577,7 @@ export default function VideoPlayerPage({
             }
           }
         } catch (error) {
-          console.error(error);
+          console.error('Failed to save annotation:', error);
         }
       });
 
@@ -573,11 +585,13 @@ export default function VideoPlayerPage({
         const anyC = c as any;
         const vTime = anyC.videoTimestamp !== undefined ? anyC.videoTimestamp : (anyC.timestamp !== undefined ? anyC.timestamp : null);
         try {
-          await updateMediaAnnotationRequest(c.id, {
-            data: c,
-            videoTimestamp: vTime,
-            resolved: anyC.resolved
-          });
+          if (!isGuestMode && mediaId) {
+            await updateMediaAnnotationRequest(c.id, {
+              data: c,
+              videoTimestamp: vTime,
+              resolved: anyC.resolved
+            });
+          }
           broadcastMessage({ type: 'NEW_ANNOTATION', payload: c as any });
         } catch (error) {
           console.error(error);
@@ -586,7 +600,9 @@ export default function VideoPlayerPage({
 
       deleted.forEach(async (c) => {
         try {
-          await deleteMediaAnnotationRequest(c.id);
+          if (!isGuestMode && mediaId) {
+            await deleteMediaAnnotationRequest(c.id);
+          }
           broadcastMessage({ type: 'NEW_ANNOTATION', payload: c as any });
         } catch (error) {
           console.error(error);
@@ -594,7 +610,7 @@ export default function VideoPlayerPage({
       });
 
       prevRef.current = current;
-    }, [currentData, mediaId, initialLoadComplete, type, prevRef, user, item, collaborators]);
+    }, [currentData, mediaId, initialLoadComplete, type, prevRef, user, item, collaborators, isGuestMode, shareToken, guestAssetMeta]);
   };
 
   useGranularSync('comment', comments, prevCommentsRef);
@@ -1148,8 +1164,8 @@ export default function VideoPlayerPage({
                 videoTimestamp: a.videoTimestamp !== null ? a.videoTimestamp : a.data?.videoTimestamp,
                 resolved: a.resolved ?? a.data?.resolved,
                 author: a.author || {
-                  name: a.guestName || 'Guest User',
-                  initials: (a.guestName || 'G')[0]?.toUpperCase(),
+                  name: a.guestName ? (a.guestEmail ? `${a.guestName} (${a.guestEmail})` : a.guestName) : (a.guestEmail || 'Guest User'),
+                  initials: (a.guestName || a.guestEmail || 'G')[0]?.toUpperCase(),
                 },
                 userId: a.userId,
                 createdAt: a.createdAt,
@@ -1167,9 +1183,17 @@ export default function VideoPlayerPage({
             setShapes(shapesData);
             setDrawings(drawingsData);
             setStamps(stampsData);
+
+            prevCommentsRef.current = commentsData;
+            prevShapesRef.current = shapesData;
+            prevDrawingsRef.current = drawingsData;
+            prevStampsRef.current = stampsData;
+            setInitialLoadComplete(true);
+          } else {
+            setInitialLoadComplete(true);
           }
         } catch {
-          // ignore
+          setInitialLoadComplete(true);
         }
       };
       void loadGuestApiAnnotations();
@@ -1311,7 +1335,7 @@ export default function VideoPlayerPage({
     };
 
     loadApiAnnotations();
-  }, [mediaId, syncTrigger]);
+  }, [mediaId, syncTrigger, isGuestMode, shareToken]);
 
   // Reset tools and UI state only when navigating to a new media asset
   useEffect(() => {
