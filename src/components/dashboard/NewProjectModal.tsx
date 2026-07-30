@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { cv } from '../../theme/cssVars';
 import { useDashboard } from '../../context/DashboardContext';
+import { apiClient } from '../../api/client';
 import {
   Box,
   Button,
@@ -66,15 +67,12 @@ export default function NewProjectModal({
   useEffect(() => {
     if (!open) return;
     setTagsLoading(true);
-    const token = localStorage.getItem('token');
-    fetch('/api/tags?scope=company', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.success && Array.isArray(res.data)) {
-          setTags(res.data);
-        }
+    apiClient
+      .get<any>('/tags?scope=project')
+      .then((res: any) => {
+        // apiClient auto-unwraps .data, so res is the array directly
+        const list = Array.isArray(res) ? res : (res?.data ?? []);
+        setTags(list);
       })
       .catch(() => {})
       .finally(() => setTagsLoading(false));
@@ -93,20 +91,6 @@ export default function NewProjectModal({
     onCreate(trimmed, selectedTagIds);
     onClose();
   };
-
-  const scopeLabel: Record<string, string> = {
-    company: 'Company tags',
-    project: 'Project tags',
-    personal: 'Personal tags',
-  };
-
-  // Group tags by scope for clearer display
-  const groupedTags: Record<string, TagOption[]> = {};
-  for (const tag of tags) {
-    const key = tag.scope || 'company';
-    if (!groupedTags[key]) groupedTags[key] = [];
-    groupedTags[key].push(tag);
-  }
 
   return (
     <Dialog
@@ -223,7 +207,7 @@ export default function NewProjectModal({
               </Box>
             ) : tags.length === 0 ? (
               <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, fontStyle: 'italic' }}>
-                No tags found. Create tags in the Tags Management page first.
+                No project tags found. Create project-scoped tags in the Tags Management page first.
               </Typography>
             ) : (
               <Box
@@ -233,61 +217,43 @@ export default function NewProjectModal({
                   backgroundColor: cv.surface,
                   p: 1.5,
                   display: 'flex',
-                  flexDirection: 'column',
-                  gap: 1.5,
+                  flexWrap: 'wrap',
+                  gap: 0.75,
                   maxHeight: 200,
                   overflowY: 'auto',
                 }}
               >
-                {Object.entries(groupedTags).map(([scope, scopeTags]) => (
-                  <Box key={scope}>
-                    <Typography
+                {tags.map((tag) => {
+                  const selected = selectedTagIds.includes(tag.id);
+                  return (
+                    <Chip
+                      key={tag.id}
+                      label={tag.name}
+                      size="small"
+                      onClick={() => toggleTag(tag.id)}
                       sx={{
-                        fontSize: '0.6875rem',
-                        fontWeight: 700,
-                        color: cv.textMuted,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        mb: 0.75,
+                        fontSize: '0.75rem',
+                        height: 26,
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        border: selected
+                          ? `1.5px solid ${tag.color ?? cv.brand}`
+                          : `1px solid ${cv.border}`,
+                        backgroundColor: selected
+                          ? `${tag.color ?? cv.brand}22`
+                          : cv.surfaceRaised,
+                        color: selected ? (tag.color ?? cv.brand) : cv.textSecondary,
+                        fontWeight: selected ? 600 : 400,
+                        transition: 'all 0.15s ease',
+                        '&:hover': {
+                          backgroundColor: selected
+                            ? `${tag.color ?? cv.brand}33`
+                            : cv.surfaceHover,
+                        },
                       }}
-                    >
-                      {scopeLabel[scope] ?? scope}
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                      {scopeTags.map((tag) => {
-                        const selected = selectedTagIds.includes(tag.id);
-                        return (
-                          <Chip
-                            key={tag.id}
-                            label={tag.name}
-                            size="small"
-                            onClick={() => toggleTag(tag.id)}
-                            sx={{
-                              fontSize: '0.75rem',
-                              height: 26,
-                              borderRadius: '8px',
-                              cursor: 'pointer',
-                              border: selected
-                                ? `1.5px solid ${tag.color ?? cv.brand}`
-                                : `1px solid ${cv.border}`,
-                              backgroundColor: selected
-                                ? `${tag.color ?? cv.brand}22`
-                                : cv.surfaceRaised,
-                              color: selected ? (tag.color ?? cv.brand) : cv.textSecondary,
-                              fontWeight: selected ? 600 : 400,
-                              transition: 'all 0.15s ease',
-                              '&:hover': {
-                                backgroundColor: selected
-                                  ? `${tag.color ?? cv.brand}33`
-                                  : cv.surfaceHover,
-                              },
-                            }}
-                          />
-                        );
-                      })}
-                    </Box>
-                  </Box>
-                ))}
+                    />
+                  );
+                })}
               </Box>
             )}
 
