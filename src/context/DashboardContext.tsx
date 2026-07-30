@@ -90,9 +90,9 @@ interface DashboardContextValue {
   managedTags: ManagedTag[];
   tagScopeColors: TagScopeColors;
   updateTagScopeColor: (scope: TagScope, color: string) => void;
-  createManagedTag: (input: CreateManagedTagInput) => ManagedTag | null;
-  updateManagedTag: (id: string, updates: { name?: string }) => boolean;
-  deleteManagedTag: (id: string) => void;
+  createManagedTag: (input: CreateManagedTagInput) => Promise<ManagedTag | null>;
+  updateManagedTag: (id: string, updates: { name?: string; parentId?: string | null }) => Promise<boolean>;
+  deleteManagedTag: (id: string) => Promise<void>;
   getTagUsageCount: (tagName: string) => number;
   getAssignableTags: (workspaceId: string) => ManagedTag[];
   addWorkspaceFolder: (name: string, color?: string) => Promise<string>;
@@ -555,7 +555,39 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   // No-op: purge is handled by the backend cron job now
   const purgeExpiredTrash = useCallback(() => { }, []);
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
-  const [managedTags, setManagedTags] = useState<ManagedTag[]>(() => loadManagedTags());
+  const [managedTags, setManagedTags] = useState<ManagedTag[]>([]);
+  
+  useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        const { apiClient } = await import('../api/client');
+        const token = localStorage.getItem('token');
+        const response = await apiClient.get<any>('/tags', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = response.data || response;
+        if (Array.isArray(data)) {
+          const tags = data.map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            scope: t.scope,
+            workspaceId: t.workspaceId,
+            color: t.color || '#9333ea', // Fallback color
+            parentId: t.parentId,
+            parentName: t.parent?.name,
+            ancestors: t.ancestors || [],
+            createdAt: t.createdAt || new Date().toISOString()
+          }));
+          setManagedTags(tags);
+        }
+      } catch (err) {
+        console.error('Failed to fetch tags from backend:', err);
+        setManagedTags([]);
+      }
+    };
+    fetchTags();
+  }, []);
+
   const [tagScopeColors, setTagScopeColors] = useState<TagScopeColors>(() => loadTagScopeColors());
   const [pendingMediaQueue, setPendingMediaQueue] = useState<PendingMediaUpload[]>([]);
   const pendingMediaQueueRef = useRef(pendingMediaQueue);
@@ -734,8 +766,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     fetchFavorites();
   }, [activeWorkspaceId]);
 
+  // Deprecated, we don't save to localStorage anymore
   useEffect(() => {
-    saveManagedTags(managedTags);
+    // saveManagedTags(managedTags);
   }, [managedTags]);
 
   useEffect(() => {
@@ -1255,7 +1288,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createManagedTag = useCallback(
-    (input: CreateManagedTagInput): ManagedTag | null => {
+    async (input: CreateManagedTagInput): Promise<ManagedTag | null> => {
       const name = normalizeTagName(input.name);
       if (!name) return null;
 
@@ -1264,23 +1297,44 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       if (isDuplicateManagedTag(name, input.scope, workspaceId)) return null;
 
-      const newTag: ManagedTag = {
-        id: `tag-${Date.now()}`,
-        name,
-        scope: input.scope,
-        workspaceId,
-        color: tagScopeColors[input.scope],
-        createdAt: new Date().toISOString(),
-      };
+      try {
+        const { apiClient } = await import('../api/client');
+        const token = localStorage.getItem('token');
+        const response = await apiClient.post<any>('/tags', {
+          name,
+          scope: input.scope,
+          workspaceId,
+          parentId: input.parentId,
+          color: tagScopeColors[input.scope],
+        }, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const resData = response.data || response;
 
-      setManagedTags((prev) => [...prev, newTag]);
-      return newTag;
+        const newTag: ManagedTag = {
+          id: resData.id,
+          name: resData.name,
+          scope: resData.scope,
+          workspaceId: resData.workspaceId,
+          color: resData.color || tagScopeColors[input.scope],
+          parentId: resData.parentId,
+          parentName: resData.parent?.name,
+          ancestors: resData.ancestors || [],
+          createdAt: resData.createdAt || new Date().toISOString(),
+        };
+
+        setManagedTags((prev) => [...prev, newTag]);
+        return newTag;
+      } catch (err) {
+        console.error('Failed to create tag:', err);
+        return null;
+      }
     },
     [isDuplicateManagedTag, tagScopeColors],
   );
 
   const updateManagedTag = useCallback(
-    (id: string, updates: { name?: string }) => {
+    async (id: string, updates: { name?: string; parentId?: string | null }): Promise<boolean> => {
       const existing = managedTags.find((tag) => tag.id === id);
       if (!existing) return false;
 
@@ -1296,51 +1350,81 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       const previousName = existing.name;
 
-      setManagedTags((prev) =>
-        prev.map((tag) =>
-          tag.id === id
-            ? {
-              ...tag,
-              name: nextName,
-            }
-            : tag,
-        ),
-      );
+      try {
+        const { apiClient } = await import('../api/client');
+        const token = localStorage.getItem('token');
+        
+        const payload: any = {};
+        if (updates.name) payload.name = nextName;
+        if (updates.parentId !== undefined) payload.parentId = updates.parentId;
+        
+        const response = await apiClient.patch<any>(`/tags/${id}`, payload, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const resData = response.data || response;
 
-      if (previousName !== nextName) {
-        setMediaItems((prev) =>
-          prev.map((item) => {
-            if (!item.tags?.includes(previousName)) return item;
-
-            return {
-              ...item,
-              tags: item.tags.map((tag) => (tag === previousName ? nextName : tag)),
-            };
-          }),
+        setManagedTags((prev) =>
+          prev.map((tag) =>
+            tag.id === id
+              ? {
+                  ...tag,
+                  name: resData.name || nextName,
+                  parentId: resData.parentId,
+                  parentName: resData.parent?.name,
+                  ancestors: resData.ancestors || [],
+                }
+              : tag,
+          ),
         );
-      }
 
-      return true;
+        if (previousName !== nextName) {
+          setMediaItems((prev) =>
+            prev.map((item) => {
+              if (!item.tags?.includes(previousName)) return item;
+
+              return {
+                ...item,
+                tags: item.tags.map((tag) => (tag === previousName ? nextName : tag)),
+              };
+            }),
+          );
+        }
+
+        return true;
+      } catch (err) {
+        console.error('Failed to update tag:', err);
+        return false;
+      }
     },
     [isDuplicateManagedTag, managedTags],
   );
 
   const deleteManagedTag = useCallback(
-    (id: string) => {
+    async (id: string) => {
       const existing = managedTags.find((tag) => tag.id === id);
       if (!existing) return;
 
-      setManagedTags((prev) => prev.filter((tag) => tag.id !== id));
-      setMediaItems((prev) =>
-        prev.map((item) => {
-          if (!item.tags?.includes(existing.name)) return item;
+      try {
+        const { apiClient } = await import('../api/client');
+        const token = localStorage.getItem('token');
+        await apiClient.delete(`/tags/${id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
 
-          return {
-            ...item,
-            tags: item.tags.filter((tag) => tag !== existing.name),
-          };
-        }),
-      );
+        setManagedTags((prev) => prev.filter((tag) => tag.id !== id));
+        setMediaItems((prev) =>
+          prev.map((item) => {
+            if (!item.tags?.includes(existing.name)) return item;
+
+            return {
+              ...item,
+              tags: item.tags.filter((tag) => tag !== existing.name),
+            };
+          }),
+        );
+      } catch (err) {
+        console.error('Failed to delete tag:', err);
+      }
     },
     [managedTags],
   );
@@ -1747,6 +1831,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             ownerId,
             linkedProjectId: linkedProjectId || undefined,
             folderId: details.folderId || undefined,
+            tagIds: details.tagIds,
             technicalSpecs: fullTechSpecs,
           },
           onProgress,
@@ -1768,7 +1853,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         storageProvider: uploadedAssetDto ? 'b2' : 'local',
         uploadedBy: (uploadedAssetDto as any)?.uploadedBy?.name || CURRENT_USER.name,
         originallyCreatedAt: new Date(current.file.lastModified).toISOString(),
-        tags: details.tags,
+        tags: details.tagIds.map(id => managedTags.find(t => t.id === id)?.name || id),
         ...(parentFolderId ? { parentFolderId } : {}),
         linkedProjectIds: linkedProjectId ? [linkedProjectId] : [],
         location: details.folderId

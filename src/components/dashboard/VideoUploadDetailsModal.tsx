@@ -384,13 +384,13 @@ function TagPickerDropdown({
   );
 }
 
-export default function MediaUploadDetailsModal({
+export default function VideoUploadDetailsModal({
   open,
   pendingUpload,
   queueCount,
   onClose,
   onUpload,
-}: MediaUploadDetailsModalProps) {
+}: VideoUploadDetailsModalProps) {
   const {
     activeWorkspace,
     activeWorkspaceId,
@@ -399,6 +399,7 @@ export default function MediaUploadDetailsModal({
     createManagedTag,
     getAssignableTags,
     tagScopeColors,
+    managedTags,
   } = useDashboard();
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
 
@@ -532,12 +533,13 @@ export default function MediaUploadDetailsModal({
   const selectedFolderLabel =
     folderOptions.find((folder) => folder.id === folderId)?.label ?? rootFolderLabel;
 
-  const handleCreateTag = (input: {
+  const handleCreateTag = async (input: {
     name: string;
     scope: TagScope;
     workspaceId: string | null;
+    parentId?: string | null;
   }) => {
-    const created = createManagedTag(input);
+    const created = await createManagedTag(input);
     if (created) {
       setSelectedTags((prev) =>
         prev.some((tag) => tag.id === created.id) ? prev : [...prev, created],
@@ -560,7 +562,7 @@ export default function MediaUploadDetailsModal({
       title: title.trim(),
       ...(trimmedSummary ? { summary: trimmedSummary } : {}),
       ...(thumbnail ? { thumbnail } : {}),
-      tags: selectedTags.map((tag) => tag.name),
+      tagIds: selectedTags.map((tag) => tag.id),
       folderId: folderId || null,
       ...(duration ? { duration } : {}),
     });
@@ -1042,6 +1044,7 @@ export default function MediaUploadDetailsModal({
         mode="create"
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
+        availableTags={managedTags}
         onClose={() => setCreateTagOpen(false)}
         onCreate={handleCreateTag}
         onUpdate={() => false}

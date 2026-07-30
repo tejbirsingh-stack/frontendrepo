@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
@@ -27,13 +27,15 @@ interface CreateTagModalProps {
   workspaces: Workspace[];
   activeWorkspaceId: string;
   editingTag?: ManagedTag | null;
+  availableTags?: ManagedTag[];
   onClose: () => void;
   onCreate: (input: {
     name: string;
     scope: TagScope;
     workspaceId: string | null;
-  }) => boolean;
-  onUpdate: (id: string, updates: { name?: string }) => boolean;
+    parentId?: string | null;
+  }) => boolean | Promise<boolean>;
+  onUpdate: (id: string, updates: { name?: string; parentId?: string | null }) => boolean | Promise<boolean>;
 }
 
 const dialogPaperSx = {
@@ -57,6 +59,7 @@ export default function CreateTagModal({
   workspaces,
   activeWorkspaceId,
   editingTag,
+  availableTags = [],
   onClose,
   onCreate,
   onUpdate,
@@ -64,7 +67,26 @@ export default function CreateTagModal({
   const [name, setName] = useState('');
   const [scope, setScope] = useState<TagScope>('personal');
   const [workspaceId, setWorkspaceId] = useState(activeWorkspaceId);
+  const [parentId, setParentId] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  // Compute all descendant IDs of the tag being edited.
+  // These must be excluded from the parent picker to prevent circular references.
+  // Uses BFS over the flat availableTags list (each tag has a parentId).
+  const descendantIds = useMemo<Set<string>>(() => {
+    if (!editingTag) return new Set();
+    const result = new Set<string>();
+    const queue = [editingTag.id];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const children = availableTags.filter((t) => t.parentId === current);
+      for (const child of children) {
+        result.add(child.id);
+        queue.push(child.id);
+      }
+    }
+    return result;
+  }, [editingTag, availableTags]);
 
   useEffect(() => {
     if (!open) return;
@@ -73,15 +95,17 @@ export default function CreateTagModal({
       setName(editingTag.name);
       setScope(editingTag.scope);
       setWorkspaceId(editingTag.workspaceId ?? activeWorkspaceId);
+      setParentId(editingTag.parentId ?? null);
     } else {
       setName('');
       setScope('personal');
       setWorkspaceId(activeWorkspaceId);
+      setParentId(null);
     }
     setError('');
   }, [activeWorkspaceId, editingTag, mode, open]);
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) {
@@ -96,11 +120,12 @@ export default function CreateTagModal({
 
     const success =
       mode === 'edit' && editingTag
-        ? onUpdate(editingTag.id, { name: trimmed })
-        : onCreate({
+        ? await onUpdate(editingTag.id, { name: trimmed, parentId })
+        : await onCreate({
             name: trimmed,
             scope,
             workspaceId: scope === 'project' ? workspaceId : null,
+            parentId,
           });
 
     if (!success) {
@@ -176,6 +201,7 @@ export default function CreateTagModal({
                   value={scope}
                   onChange={(event) => {
                     setScope(event.target.value as TagScope);
+                    setParentId(null); // reset parent when scope changes
                     setError('');
                   }}
                 >
@@ -255,6 +281,57 @@ export default function CreateTagModal({
                   </Select>
                 </FormControl>
               ) : null}
+
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: cv.textPrimary, mb: 1 }}>
+                  Parent tag (optional)
+                </Typography>
+                <Select
+                  value={parentId ?? 'none'}
+                  onChange={(event: SelectChangeEvent) => {
+                    const val = event.target.value;
+                    setParentId(val === 'none' ? null : val);
+                    setError('');
+                  }}
+                  MenuProps={dropdownMenuProps}
+                  sx={{
+                    borderRadius: '10px',
+                    fontSize: '0.875rem',
+                    color: parentId ? cv.textPrimary : cv.textSecondary,
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: cv.border },
+                  }}
+                >
+                  <MenuItem value="none" sx={{ fontSize: '0.875rem', color: cv.textSecondary }}>
+                    None (top-level tag)
+                  </MenuItem>
+                  {availableTags
+                    .filter((t) => {
+                      if (t.id === editingTag?.id) return false;
+                      if (descendantIds.has(t.id)) return false; // block descendants (cycle prevention)
+                      if (scope === 'personal') return t.scope === 'personal';
+                      if (scope === 'company') return t.scope === 'company';
+                      if (scope === 'project') {
+                        return t.scope === 'company' || (t.scope === 'project' && t.workspaceId === workspaceId);
+                      }
+                      return false;
+                    })
+                    .map((tag) => (
+                    <MenuItem
+                      key={tag.id}
+                      value={tag.id}
+                      sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
+                    >
+                      {tag.scope === 'company' && scope === 'project' ? (
+                        <Box component="span" sx={{ fontSize: '0.7rem', opacity: 0.6, mr: 0.5 }}>[Company]</Box>
+                      ) : null}
+                      {tag.parentName ? `${tag.parentName} › ` : ''}{tag.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+                <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.5 }}>
+                  Assigning this tag will automatically apply its parent tags.
+                </Typography>
+              </FormControl>
             </>
           ) : editingTag ? (
             <Box
@@ -281,6 +358,56 @@ export default function CreateTagModal({
                       }`}
               </Typography>
             </Box>
+          ) : null}
+
+          {mode === 'edit' && editingTag ? (
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: cv.textPrimary, mb: 1 }}>
+                Parent tag (optional)
+              </Typography>
+              <Select
+                value={parentId ?? 'none'}
+                onChange={(event: SelectChangeEvent) => {
+                  const val = event.target.value;
+                  setParentId(val === 'none' ? null : val);
+                  setError('');
+                }}
+                MenuProps={dropdownMenuProps}
+                sx={{
+                  borderRadius: '10px',
+                  fontSize: '0.875rem',
+                  color: parentId ? cv.textPrimary : cv.textSecondary,
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: cv.border },
+                }}
+              >
+                <MenuItem value="none" sx={{ fontSize: '0.875rem', color: cv.textSecondary }}>
+                  None (top-level tag)
+                </MenuItem>
+                {availableTags
+                  .filter((t) => {
+                    if (t.id === editingTag?.id) return false;
+                    if (descendantIds.has(t.id)) return false; // block descendants (cycle prevention)
+                    if (scope === 'personal') return t.scope === 'personal';
+                    if (scope === 'company') return t.scope === 'company';
+                    if (scope === 'project') {
+                      return t.scope === 'company' || (t.scope === 'project' && t.workspaceId === workspaceId);
+                    }
+                    return false;
+                  })
+                  .map((tag) => (
+                  <MenuItem
+                    key={tag.id}
+                    value={tag.id}
+                    sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
+                  >
+                    {tag.parentName ? `${tag.parentName} › ` : ''}{tag.name}
+                  </MenuItem>
+                ))}
+              </Select>
+              <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.5 }}>
+                Assigning this tag will automatically apply its parent tags.
+              </Typography>
+            </FormControl>
           ) : null}
 
           {error ? (
