@@ -685,8 +685,8 @@ export default function DashboardPage({
     createRootMediaFolder(name, color, parentId, location);
   };
 
-  const handleCreateProject = (name: string) => {
-    createProject(name, folderMedia?.id ?? null);
+  const handleCreateProject = (name: string, tagIds: string[] = []) => {
+    createProject(name, folderMedia?.id ?? null, tagIds);
   };
 
   const clearPanelFilters = () => {

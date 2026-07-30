@@ -131,6 +131,7 @@ interface DashboardContextValue {
   createProject: (
     name: string,
     parentFolderId?: string | null,
+    defaultTagIds?: string[],
   ) => Promise<void>;
   updateMediaProjectLocation: (mediaId: string, projectLocation: MediaLocation | null, itemType?: string) => void;
   trashedIds: Set<string>;
@@ -1910,6 +1911,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     async (
       name: string,
       parentFolderId?: string | null,
+      defaultTagIds?: string[],
     ) => {
       const trimmed = name.trim();
       if (!trimmed) return;
@@ -1919,6 +1921,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         const response = await apiClient.post<any>(`/workspaces/project/add/${activeWorkspaceId}`, {
           name: trimmed,
           folderId: parentFolderId || null,
+          ...(defaultTagIds && defaultTagIds.length > 0 ? { defaultTagIds } : {}),
         }, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
