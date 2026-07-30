@@ -21,6 +21,7 @@ interface ShareLinksSectionProps {
   onShareLinkDelete?: (link: ShareLink) => void;
   onShareLinkCopy?: (link: ShareLink) => void;
   scrollable?: boolean;
+  disabled?: boolean;
 }
 
 export default function ShareLinksSection({
@@ -33,6 +34,7 @@ export default function ShareLinksSection({
   onShareLinkDelete,
   onShareLinkCopy,
   scrollable = false,
+  disabled = false,
 }: ShareLinksSectionProps) {
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const hasExistingLinks = shareLinks.length > 0;
@@ -68,6 +70,7 @@ export default function ShareLinksSection({
         variant="contained"
         startIcon={<AddOutlinedIcon />}
         onClick={onNewShareLink}
+        disabled={disabled}
         sx={{
           borderRadius: '10px',
           py: 1.1,
@@ -103,6 +106,8 @@ export default function ShareLinksSection({
               display: 'flex',
               flexDirection: 'column',
               gap: 0.35,
+              opacity: disabled ? 0.45 : 1,
+              pointerEvents: disabled ? 'none' : undefined,
               ...(scrollable
                 ? {
                     maxHeight: { md: 300 },

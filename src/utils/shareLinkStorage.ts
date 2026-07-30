@@ -1,22 +1,38 @@
 import type { ShareLink } from '../types/shareLink';
 import { getShareLinksApi, createShareLinkApi, deleteShareLinkApi } from '../api/share.service';
 
-export function buildShareLinkUrl(token: string): string {
+import { env } from '../config/env';
+
+export function buildShareLinkUrl(token: string, visibility: string = 'public'): string {
   const appBase = window.location.origin;
+  if (visibility === 'public') {
+    let apiBase = env.apiBaseUrl || '';
+    if (!apiBase.startsWith('http')) {
+      apiBase = `${appBase}${apiBase.startsWith('/') ? '' : '/'}${apiBase}`;
+    }
+    apiBase = apiBase.replace(/\/$/, '');
+    
+    if (apiBase.endsWith('/api')) {
+      return `${apiBase}/share/${token}/stream`;
+    }
+    return `${apiBase}/api/share/${token}/stream`;
+  }
   return `${appBase}/s/${token}`;
 }
 
 export async function fetchShareLinks(mediaId: string): Promise<ShareLink[]> {
-  if (!mediaId) return [];
   try {
     const res = await getShareLinksApi(mediaId);
-    if (!res || !res.data) return [];
-    return res.data.map((item) => ({
+    // apiRequest automatically unwraps payload.data, so res is the array itself
+    const data = Array.isArray(res) ? res : (res as any)?.data;
+    if (!data || !Array.isArray(data)) return [];
+    
+    return data.map((item: any) => ({
       id: item.id,
       mediaId: item.assetId,
-      name: item.token ? `share-${item.token.slice(0, 6)}` : 'Share Link',
-      url: item.url || buildShareLinkUrl(item.token),
-      visibility: 'public',
+      name: item.name || (item.token ? `share-${item.token.slice(0, 6)}` : 'Share Link'),
+      url: buildShareLinkUrl(item.token, item.visibility),
+      visibility: (item.visibility as 'public' | 'private') || 'public',
       createdAt: new Date(item.createdAt).getTime(),
       expiresAt: item.expiresAt,
       permissions: item.permissions,
@@ -32,6 +48,8 @@ export async function fetchShareLinks(mediaId: string): Promise<ShareLink[]> {
 export async function createShareLinkAsync(
   mediaId: string,
   options?: {
+    name?: string;
+    visibility?: any;
     email?: string;
     password?: string;
     expiresInDays?: number;
@@ -42,6 +60,8 @@ export async function createShareLinkAsync(
   try {
     const res = await createShareLinkApi(mediaId, {
       mode: options?.email ? 'email' : 'link',
+      name: options?.name,
+      visibility: options?.visibility,
       email: options?.email,
       password: options?.password,
       expiresInDays: options?.expiresInDays,
@@ -53,9 +73,9 @@ export async function createShareLinkAsync(
     return {
       id: item.id,
       mediaId: item.assetId,
-      name: item.token ? `share-${item.token.slice(0, 6)}` : 'Share Link',
-      url: item.url || buildShareLinkUrl(item.token),
-      visibility: 'public',
+      name: item.name || (item.token ? `share-${item.token.slice(0, 6)}` : 'Share Link'),
+      url: buildShareLinkUrl(item.token, item.visibility || options?.visibility),
+      visibility: (item.visibility as 'public' | 'private') || 'public',
       createdAt: new Date().getTime(),
       expiresAt: item.expiresAt,
       permissions: item.permissions,
@@ -70,6 +90,19 @@ export async function createShareLinkAsync(
 export async function revokeShareLinkAsync(linkId: string): Promise<boolean> {
   try {
     const res = await deleteShareLinkApi(linkId);
+    return Boolean(res?.success);
+  } catch {
+    return false;
+  }
+}
+
+export async function updateShareLinkAsync(
+  linkId: string,
+  patch: Partial<{ name: string; visibility: string }>
+): Promise<boolean> {
+  try {
+    const { updateShareLinkApi } = await import('../api/share.service');
+    const res = await updateShareLinkApi(linkId, patch);
     return Boolean(res?.success);
   } catch {
     return false;
@@ -139,7 +172,7 @@ export function createShareLinkForMedia(
     id: token,
     mediaId,
     name,
-    url: buildShareLinkUrl(token),
+    url: buildShareLinkUrl(token, 'private'),
     visibility,
     createdAt: Date.now(),
   };

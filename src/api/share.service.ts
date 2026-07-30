@@ -2,6 +2,8 @@ import { apiRequest } from './client';
 
 export interface CreateSharePayload {
   mode?: 'email' | 'link';
+  name?: string;
+  visibility?: string;
   email?: string;
   password?: string;
   expiresInDays?: number;
@@ -18,6 +20,8 @@ export interface BackendShareLink {
   id: string;
   assetId: string;
   token: string;
+  name?: string;
+  visibility?: string;
   mode: 'email' | 'link';
   expiresAt: string;
   permissions: {
@@ -61,6 +65,16 @@ export async function deleteShareLinkApi(shareLinkId: string) {
   });
 }
 
+export async function updateShareLinkApi(shareLinkId: string, payload: { name?: string; visibility?: string }) {
+  return apiRequest<{ success: boolean; message: string; shareLink: BackendShareLink }>(
+    `/api/share-links/${shareLinkId}`,
+    {
+      method: 'PATCH',
+      body: payload,
+    }
+  );
+}
+
 export async function resendShareInviteApi(shareLinkId: string) {
   return apiRequest<{ success: boolean; message: string }>(`/api/share-links/${shareLinkId}/resend`, {
     method: 'POST',
@@ -78,6 +92,8 @@ export async function validateShareTokenApi(token: string) {
       downloadProxy: boolean;
     };
     expiresAt: string;
+    visibility?: string;
+    mode?: string;
     assetMeta: {
       id: string;
       title: string;

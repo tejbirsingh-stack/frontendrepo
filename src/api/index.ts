@@ -13,7 +13,11 @@ export {
   getMediaAssetByIdRequest,
   updateAssetTagsRequest,
   deleteMediaFileRequest,
-  retryTranscodeRequest
+  retryTranscodeRequest,
+  getAssetAccessOverrides,
+  updateAssetAccessOverride,
+  removeAssetAccessOverride,
+  getSharedMediaAssetsRequest
 } from './media.service';
 export type { MediaAssetResponseDto, UploadMediaProgress } from './media.service';
 export {
@@ -30,3 +34,9 @@ export type {
   LoginResponseDto,
   SignUpRequestDto,
 } from './types';
+export {
+  getCompanyInfoRequest,
+  updateCompanyInfoRequest,
+  uploadCompanyLogoRequest,
+} from './organizations.service';
+export type { UpdateCompanyInfoDto, UploadCompanyLogoResponse } from './organizations.service';

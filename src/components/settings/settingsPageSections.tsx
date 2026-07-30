@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import toast from 'react-hot-toast';
+import { getCompanyInfoRequest, updateCompanyInfoRequest, uploadCompanyLogoRequest } from '../../api';
 import { cv } from '../../theme/cssVars';
 import {
   Avatar,
@@ -442,16 +444,122 @@ export function PrivacySettingsSection() {
 }
 
 export function CompanySettingsSection() {
+  const [org, setOrg] = useState<any>(null);
+  const [name, setName] = useState('MTX B2B');
+  const [website, setWebsite] = useState('https://mtxb2b.com');
+  const [industry, setIndustry] = useState('Media & Technology');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const data = await getCompanyInfoRequest('current');
+        setOrg(data);
+        setName(data.name || '');
+        const meta = typeof data.metadata === 'string' ? JSON.parse(data.metadata) : (data.metadata || {});
+        setWebsite(meta.website || '');
+        setIndustry(meta.industry || '');
+        setLogoUrl(meta.logoUrl || '');
+      } catch (err) {
+        toast.error('Failed to load company info');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateCompanyInfoRequest({ name, website, industry, logoUrl });
+      toast.success('Company info saved');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save company info');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      toast.loading('Uploading logo...', { id: 'upload-logo' });
+      const res = await uploadCompanyLogoRequest(file, org?.id);
+      if (res.success && res.logoUrl) {
+        setLogoUrl(res.logoUrl);
+        await updateCompanyInfoRequest({ logoUrl: res.logoUrl, logoKey: res.b2Key }); // Auto-save logo
+        toast.success('Logo uploaded successfully', { id: 'upload-logo' });
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload logo', { id: 'upload-logo' });
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <SettingsFormContainer>
     <SettingsSectionCard title="Company Info" description="Organization details for your account.">
       <Box sx={{ px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <TextField label="Company name" defaultValue="MTX B2B" fullWidth size="small" />
-        <TextField label="Company website" defaultValue="https://mtxb2b.com" fullWidth size="small" />
-        <TextField label="Industry" defaultValue="Media & Technology" fullWidth size="small" />
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <Button variant="contained" sx={containedButtonSx}>
-            Save company details
+        
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+          <Avatar
+            src={logoUrl}
+            sx={{ width: 64, height: 64, background: logoUrl ? 'transparent' : cv.brandGradient }}
+          >
+            {!logoUrl ? name.charAt(0).toUpperCase() : null}
+          </Avatar>
+          <Box>
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+            />
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<UploadOutlinedIcon />}
+              sx={outlineButtonSx}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Upload company logo
+            </Button>
+            <Typography sx={{ mt: 0.75, fontSize: '0.75rem', color: cv.textMuted }}>
+              PNG, JPG, or SVG. Used for branding on shared media links.
+            </Typography>
+          </Box>
+        </Box>
+
+        <TextField 
+          label="Company name" 
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          fullWidth size="small" 
+        />
+        <TextField 
+          label="Company website" 
+          value={website}
+          onChange={(e) => setWebsite(e.target.value)}
+          fullWidth size="small" 
+        />
+        <TextField 
+          label="Industry" 
+          value={industry}
+          onChange={(e) => setIndustry(e.target.value)}
+          fullWidth size="small" 
+        />
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+          <Button variant="contained" sx={containedButtonSx} onClick={handleSave} disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Save company details'}
           </Button>
         </Box>
       </Box>

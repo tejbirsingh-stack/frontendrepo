@@ -305,6 +305,16 @@ export async function getMediaAssetsRequest(workspaceId: string): Promise<MediaA
 }
 
 /**
+ * Fetch all media assets that have been explicitly shared with the current user.
+ */
+export async function getSharedMediaAssetsRequest(): Promise<MediaAssetResponseDto[]> {
+  const res = await apiClient.get<{ success: boolean; assets: MediaAssetResponseDto[] }>(
+    `/media/shared-with-me`,
+  );
+  return res.assets || [];
+}
+
+/**
  * Delete a media asset by filename or ID.
  */
 export async function deleteMediaFileRequest(filenameOrId: string): Promise<void> {
@@ -333,4 +343,33 @@ export async function updateAssetTagsRequest(id: string, tags: string[]): Promis
  */
 export async function retryTranscodeRequest(id: string): Promise<void> {
   await apiClient.post(`/media/${encodeURIComponent(id)}/retry-transcode`);
+}
+
+/**
+ * Fetch asset-specific role overrides (direct access users).
+ */
+export async function getAssetAccessOverrides(id: string): Promise<any[]> {
+  const res = await apiClient.get<{ success: boolean; overrides: any[] }>(
+    `/media/${encodeURIComponent(id)}/access`,
+  );
+  return res.overrides || [];
+}
+
+/**
+ * Update an asset-specific role override (direct access user).
+ */
+export async function updateAssetAccessOverride(id: string, userId: string, accessLevel: string): Promise<void> {
+  await apiClient.patch(
+    `/media/${encodeURIComponent(id)}/access/${encodeURIComponent(userId)}`,
+    { accessLevel },
+  );
+}
+
+/**
+ * Remove an asset-specific role override (direct access user).
+ */
+export async function removeAssetAccessOverride(id: string, userId: string): Promise<void> {
+  await apiClient.delete(
+    `/media/${encodeURIComponent(id)}/access/${encodeURIComponent(userId)}`,
+  );
 }

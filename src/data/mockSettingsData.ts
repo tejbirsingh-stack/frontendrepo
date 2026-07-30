@@ -47,6 +47,7 @@ export interface WorkspaceTeamMember {
   memberType?: WorkspaceMemberType;
   groupId?: string;
   isCurrentUser?: boolean;
+  hasOverride?: boolean;
 }
 
 export type WorkspaceMemberAccess = 'Full Access' | 'Can edit' | 'Can view';

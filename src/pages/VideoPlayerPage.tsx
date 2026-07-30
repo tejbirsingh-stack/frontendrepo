@@ -56,12 +56,10 @@ import {
   type WorkspaceTeamMember,
 } from '../data/mockSettingsData';
 import {
-  addShareLink,
-  createShareLinkForMedia,
-  loadShareLinks,
   fetchShareLinks,
-  removeShareLink,
-  updateShareLink,
+  createShareLinkAsync,
+  updateShareLinkAsync,
+  revokeShareLinkAsync,
 } from '../utils/shareLinkStorage';
 import { getMediaFileName } from '../utils/mediaFileName';
 import {
@@ -161,20 +159,32 @@ import {
 } from '../utils/playerToolUtils';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
-import { getMediaAssetByIdRequest, updateAssetTagsRequest, retryTranscodeRequest } from '../api';
+import { getMediaAssetByIdRequest, updateAssetTagsRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride } from '../api';
 import type { MediaItem, MediaType } from '../data/mockMedia';
 
 function collaboratorsToTeamMembers(collaborators: MediaCollaborator[]): WorkspaceTeamMember[] {
-  return collaborators.map((collaborator) => ({
-    id: collaborator.id,
-    name: collaborator.name,
-    initials: collaborator.initials,
-    email: collaborator.email,
-    avatarUrl: collaborator.avatarUrl,
-    access: 'Full Access',
-    memberType: 'Member',
-    isCurrentUser: collaborator.isCurrentUser,
-  }));
+  return collaborators.map((collaborator) => {
+    // Map the backend role to the frontend dropdown options
+    let access: WorkspaceMemberAccess = 'Full Access';
+    if (collaborator.role) {
+      const normalizedRole = collaborator.role.toLowerCase();
+      if (normalizedRole.includes('viewer')) access = 'Can view';
+      else if (normalizedRole.includes('collaborator')) access = 'Can edit';
+      else if (normalizedRole.includes('editor')) access = 'Can edit';
+    }
+
+    return {
+      id: collaborator.id,
+      name: collaborator.name,
+      initials: collaborator.initials,
+      email: collaborator.email,
+      avatarUrl: collaborator.avatarUrl,
+      access,
+      memberType: 'Member',
+      isCurrentUser: collaborator.isCurrentUser,
+      hasOverride: collaborator.hasOverride,
+    };
+  });
 }
 
 function slugifyShareLinkName(value: string): string {
@@ -226,6 +236,8 @@ export interface VideoPlayerPageProps {
     fileType: string;
     mimeType: string;
     fileSize: number;
+    logoUrl?: string | null;
+    organizationName?: string | null;
   };
   guestExpiresAt?: string | null;
 }
@@ -244,9 +256,7 @@ export default function VideoPlayerPage({
   } catch {
     user = null;
   }
-  const isViewer = isGuestMode
-    ? !guestPermissions?.comment
-    : !user?.permissions?.includes('timeline_annotations');
+
   const { mediaId } = useParams<{ mediaId: string }>();
   const activeUser = useActiveUser();
   const navigate = useNavigate();
@@ -482,6 +492,14 @@ export default function VideoPlayerPage({
     DEFAULT_DRAW_STROKE_THICKNESS,
   );
   const [collaborators, setCollaborators] = useState<MediaCollaborator[]>([]);
+  const isViewer = useMemo(() => {
+    if (isGuestMode) {
+      return !guestPermissions?.comment;
+    }
+    const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
+    const isAssetViewer = currentUserCollab?.role === 'Viewer';
+    return isAssetViewer || !user?.permissions?.includes('timeline_annotations');
+  }, [isGuestMode, guestPermissions?.comment, collaborators, user?.permissions]);
   const [comments, setComments] = useState<VideoComment[]>([]);
   const [drawings, setDrawings] = useState<VideoDrawingStroke[]>([]);
   const [shapes, setShapes] = useState<VideoShape[]>([]);
@@ -878,14 +896,25 @@ export default function VideoPlayerPage({
   );
 
   const canSeeAnnotation = useCallback(
-    (ann: { visibility?: AnnotationVisibility; author?: any }) => {
+    (ann: { visibility?: AnnotationVisibility; groupId?: string; author?: any }) => {
       if (ann.visibility === 'private') {
         const authorName = ann.author?.name;
         if (authorName && authorName !== activeUser.name) return false;
       }
+      if (ann.visibility === 'group' && ann.groupId) {
+        const group = annotationGroups.find((g) => g.id === ann.groupId);
+        if (group) {
+          const authorName = ann.author?.name;
+          const isAuthor = authorName && authorName === activeUser.name;
+          const isMember = user?.id && group.memberIds.includes(user.id);
+          if (!isAuthor && !isMember) {
+            return false;
+          }
+        }
+      }
       return true;
     },
-    [activeUser.name],
+    [activeUser.name, annotationGroups, user],
   );
 
   const timelineItems = useMemo(
@@ -1428,11 +1457,7 @@ export default function VideoPlayerPage({
       return;
     }
     fetchShareLinks(mediaId).then((links) => {
-      if (links && links.length > 0) {
-        setShareLinks(links);
-      } else {
-        setShareLinks(loadShareLinks(mediaId));
-      }
+      setShareLinks(links || []);
     });
   }, [mediaId]);
 
@@ -1443,9 +1468,14 @@ export default function VideoPlayerPage({
     }
     const fetchOrgUsers = async () => {
       try {
-        const users = await fetchOrganizationUsers();
+        const [users, overrides] = await Promise.all([
+          fetchOrganizationUsers(),
+          getAssetAccessOverrides(mediaId).catch(() => [])
+        ]);
+
         if (users && users.length > 0) {
-          const mapped: MediaCollaborator[] = users.map((u) => {
+          const activeUsers = users.filter((u) => u.status?.toLowerCase() === 'active');
+          const mapped: MediaCollaborator[] = activeUsers.map((u) => {
             const displayName = u.name || u.email.split('@')[0] || 'User';
             const initials = displayName
               .split(/\s+/)
@@ -1454,12 +1484,28 @@ export default function VideoPlayerPage({
               .map((part) => part[0]?.toUpperCase() ?? '')
               .join('') || u.email[0]?.toUpperCase() || 'U';
 
+            // Check if there is an explicit role override for this asset
+            const override = overrides.find((o) => o.userId === u.id);
+            let finalRole = u.role || u.roleRelation?.name;
+            
+            if (override && override.accessLevel) {
+               if (override.accessLevel === 'Can edit') {
+                 finalRole = 'Editor';
+               } else if (override.accessLevel === 'Can view') {
+                 finalRole = 'Viewer';
+               } else if (override.accessLevel === 'Full Access') {
+                 finalRole = 'Admin';
+               }
+            }
+
             return {
               id: u.id,
               name: displayName,
               email: u.email,
               initials,
               isCurrentUser: u.email === user?.email,
+              hasOverride: !!override,
+              role: finalRole,
             };
           });
           setCollaborators(mapped);
@@ -2082,19 +2128,11 @@ export default function VideoPlayerPage({
     setShareInviteVisibility(link.visibility);
   }, []);
 
-  const handleOpenShareDialog = useCallback(() => {
+  const handleOpenShareDialog = useCallback(async () => {
     if (!item || !mediaId) return;
 
-    let links = shareLinks;
-    if (links.length === 0) {
-      const defaultName = slugifyShareLinkName(getMediaFileName(item));
-      const newLink = createShareLinkForMedia(mediaId, defaultName, 'public');
-      links = addShareLink(mediaId, newLink);
-      setShareLinks(links);
-      applyActiveShareLink(newLink);
-    } else {
-      const activeLink =
-        links.find((link) => link.id === activeShareLinkId) ?? links[0];
+    if (shareLinks.length > 0) {
+      const activeLink = shareLinks.find((link) => link.id === activeShareLinkId) ?? shareLinks[0];
       applyActiveShareLink(activeLink);
     }
 
@@ -2110,24 +2148,40 @@ export default function VideoPlayerPage({
   ]);
 
   const handleNewShareLink = useCallback(
-    ({ name, visibility }: { name: string; visibility: ProjectVisibility }) => {
+    async ({ name, visibility }: { name: string; visibility: ProjectVisibility }) => {
       if (!item || !mediaId) return;
+
       const defaultName = slugifyShareLinkName(getMediaFileName(item));
       const finalName =
         name.trim() || `${defaultName}${shareLinks.length > 0 ? `-${shareLinks.length + 1}` : ''}`;
-      const newLink = createShareLinkForMedia(mediaId, finalName, visibility);
-      const next = addShareLink(mediaId, newLink);
-      setShareLinks(next);
-      applyActiveShareLink(newLink);
-      setFocusLinkNameCounter((current) => current + 1);
+
+      const newLink = await createShareLinkAsync(mediaId, { name: finalName, visibility });
+      if (newLink) {
+        const nextLinks = await fetchShareLinks(mediaId);
+        setShareLinks(nextLinks);
+        applyActiveShareLink(newLink);
+        setFocusLinkNameCounter((current) => current + 1);
+      }
     },
-    [applyActiveShareLink, item, mediaId, shareLinks.length],
+    [applyActiveShareLink, item, mediaId, shareLinks],
   );
 
   const handleShareLinkNameChange = useCallback(
-    (linkId: string, name: string) => {
+    async (linkId: string, name: string) => {
       if (!mediaId) return;
-      setShareLinks(updateShareLink(mediaId, linkId, { name }));
+      await updateShareLinkAsync(linkId, { name });
+      const nextLinks = await fetchShareLinks(mediaId);
+      setShareLinks(nextLinks);
+    },
+    [mediaId],
+  );
+
+  const handleShareLinkPermissionsChange = useCallback(
+    async (linkId: string, permissions: any) => {
+      if (!mediaId) return;
+      await updateShareLinkAsync(linkId, { permissions });
+      const nextLinks = await fetchShareLinks(mediaId);
+      setShareLinks(nextLinks);
     },
     [mediaId],
   );
@@ -2156,25 +2210,28 @@ export default function VideoPlayerPage({
   );
 
   const handleShareLinkDelete = useCallback(
-    (link: ShareLink) => {
+    async (link: ShareLink) => {
       if (!mediaId) return;
-      const next = removeShareLink(mediaId, link.id);
-      setShareLinks(next);
+      const success = await revokeShareLinkAsync(link.id);
+      if (success) {
+        const next = await fetchShareLinks(mediaId);
+        setShareLinks(next);
 
-      if (activeShareLinkId === link.id) {
-        const fallback = next[0];
-        if (fallback) {
-          applyActiveShareLink(fallback);
-        } else {
-          setActiveShareLinkId(null);
+        if (activeShareLinkId === link.id) {
+          const fallback = next[0];
+          if (fallback) {
+            applyActiveShareLink(fallback);
+          } else {
+            setActiveShareLinkId(null);
+          }
         }
-      }
 
       setStatusToast({
         open: true,
         message: `Share link "${link.name}" deleted`,
         variant: 'reopen',
       });
+      }
     },
     [activeShareLinkId, applyActiveShareLink, mediaId],
   );
@@ -2473,10 +2530,47 @@ export default function VideoPlayerPage({
 
   const handleShareInviteMember = useCallback(
     (payload: WorkspaceInvitePayload) => {
-      const newMember = resolveWorkspaceInvite(payload, shareTeamMembers);
+      const email = payload.email?.toLowerCase();
+      if (!email) return false;
+
+      const existingMember = shareTeamMembers.find(m => m.email?.toLowerCase() === email);
+      
+      if (existingMember) {
+        if (existingMember.hasOverride || existingMember.isCurrentUser) {
+           return false; // Already a member with direct access
+        }
+        
+        // Update in state
+        setShareTeamMembers(current => 
+          current.map(m => m.id === existingMember.id ? { ...m, hasOverride: true, access: payload.access } : m)
+        );
+
+        // Update collaborators state to match
+        setCollaborators(current => 
+          current.map(c => c.id === existingMember.id ? { ...c, hasOverride: true, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' } : c)
+        );
+        
+        // Call backend
+        if (mediaId) {
+          updateAssetAccessOverride(mediaId, existingMember.id, payload.access).catch(err => {
+             console.error("Failed to add override", err);
+          });
+        }
+        
+        setStatusToast({
+          open: true,
+          message: `Invite sent to ${existingMember.name}`,
+          variant: 'resolved',
+        });
+        return true;
+      }
+      
+      // Fallback for mock groups or totally external people
+      const activeMembers = shareTeamMembers.filter(m => m.hasOverride || m.isCurrentUser);
+      const newMember = resolveWorkspaceInvite(payload, activeMembers);
       if (!newMember) return false;
 
-      setShareTeamMembers((current) => [...current, newMember]);
+      setShareTeamMembers((current) => [...current, { ...newMember, hasOverride: true }]);
       if (newMember.memberType !== 'Group' && newMember.email) {
         setCollaborators((current) => [
           ...current,
@@ -2493,20 +2587,38 @@ export default function VideoPlayerPage({
       });
       return true;
     },
-    [shareTeamMembers],
+    [shareTeamMembers, mediaId],
   );
 
   const handleShareUpdateMemberAccess = useCallback(
-    (memberId: string, access: WorkspaceMemberAccess) => {
+    async (memberId: string, access: WorkspaceMemberAccess) => {
       setShareTeamMembers((current) =>
         current.map((member) => (member.id === memberId ? { ...member, access } : member)),
       );
+      
+      if (!mediaId) return;
+
+      try {
+        await updateAssetAccessOverride(mediaId, memberId, access);
+        setStatusToast({
+          open: true,
+          message: `Access updated for member`,
+          variant: 'resolved',
+        });
+      } catch (err: any) {
+        console.error('Failed to update asset access override:', err);
+        setStatusToast({
+          open: true,
+          message: err.message || 'Failed to update access. Only the video owner can do this.',
+          variant: 'error',
+        });
+      }
     },
-    [],
+    [mediaId],
   );
 
   const handleShareRemoveMember = useCallback(
-    (memberId: string) => {
+    async (memberId: string) => {
       setShareTeamMembers((current) => {
         const removed = current.find((member) => member.id === memberId);
         if (removed?.email) {
@@ -2519,22 +2631,33 @@ export default function VideoPlayerPage({
         }
         return current.filter((member) => member.id !== memberId);
       });
-      setStatusToast({
-        open: true,
-        message: 'Member removed from share',
-        variant: 'reopen',
-      });
+      
+      if (!mediaId) return;
+
+      try {
+        await removeAssetAccessOverride(mediaId, memberId);
+        setStatusToast({
+          open: true,
+          message: 'Member removed from project',
+          variant: 'reopen',
+        });
+      } catch (err: any) {
+        console.error('Failed to remove asset access override:', err);
+        setStatusToast({
+          open: true,
+          message: err.message || 'Failed to remove access. Only the video owner can do this.',
+          variant: 'error',
+        });
+      }
     },
-    [],
+    [mediaId],
   );
 
   const handleShareVisibilityChange = useCallback(
     (visibility: ProjectVisibility) => {
       setShareInviteVisibility(visibility);
-      if (!mediaId || !activeShareLinkId) return;
-      setShareLinks(updateShareLink(mediaId, activeShareLinkId, { visibility }));
     },
-    [activeShareLinkId, mediaId],
+    [],
   );
 
   const applyAnnotationVisibility = useCallback(
@@ -3259,8 +3382,9 @@ export default function VideoPlayerPage({
           open={shareDialogOpen}
           resourceId={mediaId || item.id}
           workspaceName={item.title}
-          members={shareTeamMembers}
-          suggestedUsers={MOCK_SETTINGS_USERS}
+          members={shareTeamMembers.filter(m => m.hasOverride || m.isCurrentUser)}
+          suggestedUsers={shareTeamMembers}
+          organizationUsers={shareTeamMembers}
           suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
           resourceType="project"
           visibility={shareInviteVisibility}
@@ -3272,13 +3396,23 @@ export default function VideoPlayerPage({
           onShareLinkDelete={handleShareLinkDelete}
           onShareLinkCopy={handleShareLinkCopy}
           onShareLinkNameChange={handleShareLinkNameChange}
+          onShareLinkPermissionsChange={handleShareLinkPermissionsChange}
           onShareLinkSettingsSaved={handleShareLinkSettingsSaved}
           onClose={() => setShareDialogOpen(false)}
           onInvite={handleShareInviteMember}
           onUpdateMemberAccess={handleShareUpdateMemberAccess}
           onRemoveMember={handleShareRemoveMember}
           onRestrictedChange={() => { }}
-          onVisibilityChange={handleShareVisibilityChange}
+          onVisibilityChange={(visibility) => {
+            handleShareVisibilityChange(visibility);
+            if (activeShareLinkId) {
+              updateShareLinkAsync(activeShareLinkId, { visibility }).then(() => {
+                if (mediaId) {
+                  fetchShareLinks(mediaId).then(setShareLinks);
+                }
+              });
+            }
+          }}
         />
       ) : null}
 
@@ -3651,6 +3785,26 @@ export default function VideoPlayerPage({
                         }}
                       />
                     ))}
+                  </Box>
+                ) : null}
+
+                {isGuestMode && guestAssetMeta?.logoUrl ? (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 16,
+                      right: 16,
+                      zIndex: 10,
+                      opacity: 0.7, // Subtle watermark look
+                      pointerEvents: 'none',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <img 
+                      src={guestAssetMeta.logoUrl} 
+                      alt={guestAssetMeta.organizationName || 'Company Watermark'} 
+                      style={{ maxHeight: '48px', maxWidth: '120px', objectFit: 'contain' }}
+                    />
                   </Box>
                 ) : null}
 

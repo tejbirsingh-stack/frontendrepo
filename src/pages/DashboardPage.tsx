@@ -248,11 +248,13 @@ export default function DashboardPage({
   const isFavoritesView = libraryView === 'favorites';
   const isDuplicatesView = libraryView === 'duplicates';
   const isProjectsView = libraryView === 'projects';
+  const isSharedView = libraryView === 'shared';
   const isFolderView = Boolean(folderMedia);
 
   const {
     favoriteMediaItems,
     duplicateMediaItems,
+    sharedMediaItems,
     mediaItems,
     workspaces,
     activeWorkspaceId,
@@ -290,7 +292,9 @@ export default function DashboardPage({
         ? 'Duplicates'
         : isProjectsView
           ? 'Projects'
-          : selectionTitle ?? 'All media';
+          : isSharedView
+            ? 'Shared'
+            : selectionTitle ?? 'All media';
   const folderAccent = folderMedia
     ? resolveLibraryFolderColor({
         folderColor: folderMedia.folderColor,
@@ -470,6 +474,7 @@ export default function DashboardPage({
   const librarySourceItems = useMemo(() => {
     if (isFavoritesView) return favoriteMediaItems;
     if (isDuplicatesView) return duplicateMediaItems;
+    if (isSharedView) return sharedMediaItems;
     if (isProjectsView) {
       return mediaItems.filter(
         (item) => item.workspaceId === activeWorkspaceId && item.isProject && !trashedIds.has(item.id)
@@ -507,8 +512,10 @@ export default function DashboardPage({
   }, [
     isFavoritesView,
     isDuplicatesView,
+    isSharedView,
     favoriteMediaItems,
     duplicateMediaItems,
+    sharedMediaItems,
     folderMedia,
     mediaItems,
     activeWorkspaceId,
@@ -523,12 +530,14 @@ export default function DashboardPage({
       ? favoriteMediaItems
       : isDuplicatesView
         ? duplicateMediaItems
-        : isProjectsView
-          ? librarySourceItems
-          : mediaItems.filter(
-            (item) =>
-              item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
-          );
+        : isSharedView
+          ? sharedMediaItems
+          : isProjectsView
+            ? librarySourceItems
+            : mediaItems.filter(
+              (item) =>
+                item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
+            );
     const sourceItems = query ? searchableItems : librarySourceItems;
 
     const filtered = sourceItems.filter((item) => {
@@ -574,8 +583,10 @@ export default function DashboardPage({
     librarySourceItems,
     favoriteMediaItems,
     duplicateMediaItems,
+    sharedMediaItems,
     isFavoritesView,
     isDuplicatesView,
+    isSharedView,
     mediaItems,
     activeWorkspaceId,
     globalSearchQuery,
