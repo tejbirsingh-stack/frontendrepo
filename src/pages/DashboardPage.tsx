@@ -279,6 +279,7 @@ export default function DashboardPage({
     createProject,
     sidebarSelection,
     activeWorkspace,
+    fetchWorkspaceData,
   } = useDashboard();
 
   const selectionTitle = getSidebarSelectionTitle(sidebarSelection);
@@ -342,6 +343,15 @@ export default function DashboardPage({
   const { getShortcut } = useResolvedKeyboardShortcuts();
   const helpMenuShortcut =
     getShortcut('dashboard-open-help-menu') ?? getHelpMenuShortcutLabel();
+
+  const initialTagsMount = useRef(true);
+  useEffect(() => {
+    if (initialTagsMount.current) {
+      initialTagsMount.current = false;
+      return;
+    }
+    fetchWorkspaceData(Array.from(selectedTags));
+  }, [selectedTags, fetchWorkspaceData]);
 
   useEffect(() => {
     let mounted = true;
@@ -541,12 +551,7 @@ export default function DashboardPage({
       }
       if (!matchesMediaTypeFilter(item, mediaTypeFilter)) return false;
       if (!matchesDateRange(item.createdAt, dateRangeFilter)) return false;
-      if (
-        selectedTags.size > 0 &&
-        !item.tags?.some((tag) => selectedTags.has(tag))
-      ) {
-        return false;
-      }
+      // Tag filtering is now handled exclusively by the backend API via fetchWorkspaceData
       if (
         selectedAiTags.size > 0 &&
         !item.aiTags?.some((tag) => selectedAiTags.has(tag))

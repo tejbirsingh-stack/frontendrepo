@@ -146,7 +146,7 @@ interface DashboardContextValue {
   sidebarSelection: SidebarSelection | null;
   setSidebarSelection: (selection: SidebarSelection) => void;
   clearSidebarSelection: () => void;
-  fetchWorkspaceData: () => Promise<void>;
+  fetchWorkspaceData: (tagIds?: string[]) => Promise<void>;
   fetchFolderData: (folderId: string) => Promise<string[]>;
   fetchProjectData: (projectId: string) => Promise<void>;
 }
@@ -196,10 +196,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     fetchTimezone();
   }, []);
 
-  const fetchWorkspaceData = useCallback(async () => {
+  const fetchWorkspaceData = useCallback(async (tagIds?: string[]) => {
     try {
       const { apiClient } = await import('../api/client');
-      const response = await apiClient.get<any>(`/workspaces/find-all-data/${activeWorkspaceId}`, {
+      const query = tagIds && tagIds.length > 0 ? `?tagIds=${tagIds.join(',')}` : '';
+      const response = await apiClient.get<any>(`/workspaces/find-all-data/${activeWorkspaceId}${query}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -208,28 +209,30 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       if (actualData && (Array.isArray(actualData.folders) || Array.isArray(actualData.projects) || Array.isArray(actualData.media))) {
         const { folders, projects, allProjects, media } = actualData;
 
-        const sidebarFolders: SidebarFolder[] = (folders || [])
-          .filter((f: any) => !f.parentId)
-          .map((f: any) => ({
-            id: f.id,
-            label: f.name,
-            color: f.color || undefined,
-            children: []
-          }));
+        if (!tagIds || tagIds.length === 0) {
+          const sidebarFolders: SidebarFolder[] = (folders || [])
+            .filter((f: any) => !f.parentId)
+            .map((f: any) => ({
+              id: f.id,
+              label: f.name,
+              color: f.color || undefined,
+              children: []
+            }));
 
-        const sidebarProjects: SidebarFolder[] = (allProjects || projects || [])
-          .map((p: any) => ({
-            id: p.id,
-            label: p.name,
-          }));
+          const sidebarProjects: SidebarFolder[] = (allProjects || projects || [])
+            .map((p: any) => ({
+              id: p.id,
+              label: p.name,
+            }));
 
-        setWorkspaces((prev) =>
-          prev.map(w => w.id === activeWorkspaceId ? {
-            ...w,
-            folders: sidebarFolders,
-            projectFolders: sidebarProjects
-          } : w)
-        );
+          setWorkspaces((prev) =>
+            prev.map(w => w.id === activeWorkspaceId ? {
+              ...w,
+              folders: sidebarFolders,
+              projectFolders: sidebarProjects
+            } : w)
+          );
+        }
 
         const projectMediaItems: MediaItem[] = (allProjects || projects || []).map((p: any) => ({
           id: p.id,
