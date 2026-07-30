@@ -31,6 +31,7 @@ interface MoveItemsModalProps {
   itemCount: number;
   /** Item being moved — used to exclude itself from folder destinations. */
   excludeItemId?: string;
+  sourceItemIds?: string[];
   mediaItems: MediaItem[];
   workspaces: Workspace[];
   activeWorkspaceId: string;
@@ -124,6 +125,7 @@ function destinationProjects(
   workspaceId: string,
   trashedIds: Set<string>,
   excludeItemId?: string,
+  excludeProjectIds: Set<string> = new Set()
 ): MediaItem[] {
   return mediaItems
     .filter(
@@ -131,7 +133,8 @@ function destinationProjects(
         item.workspaceId === workspaceId &&
         item.isProject &&
         !trashedIds.has(item.id) &&
-        item.id !== excludeItemId,
+        item.id !== excludeItemId &&
+        !excludeProjectIds.has(item.id),
     )
     .sort((a, b) => a.title.localeCompare(b.title));
 }
@@ -167,8 +170,9 @@ function destinationProjectsForWorkspace(
   mediaItems: MediaItem[],
   trashedIds: Set<string>,
   excludeItemId?: string,
+  excludeProjectIds: Set<string> = new Set()
 ): Array<{ id: string; title: string }> {
-  const fromMedia = destinationProjects(mediaItems, workspace.id, trashedIds, excludeItemId);
+  const fromMedia = destinationProjects(mediaItems, workspace.id, trashedIds, excludeItemId, excludeProjectIds);
   if (fromMedia.length > 0) {
     return fromMedia.map((item) => ({
       id: item.id,
@@ -177,7 +181,7 @@ function destinationProjectsForWorkspace(
   }
 
   return (workspace.projectFolders || [])
-    .filter((project) => project.id !== excludeItemId)
+    .filter((project) => project.id !== excludeItemId && !excludeProjectIds.has(project.id))
     .map((project) => ({
       id: project.id,
       title: project.label,
@@ -189,6 +193,7 @@ export default function MoveItemsModal({
   open,
   itemCount,
   excludeItemId,
+  sourceItemIds,
   mediaItems,
   workspaces,
   activeWorkspaceId,
@@ -225,12 +230,22 @@ export default function MoveItemsModal({
     [excludeItemId, mediaItems, selectedWorkspace, trashedIds],
   );
 
+  const alreadyAssignedProjectIds = useMemo(() => {
+    const ids = sourceItemIds || (excludeItemId ? [excludeItemId] : []);
+    const movingItems = mediaItems.filter(item => ids.includes(item.id));
+    const projectIds = new Set<string>();
+    movingItems.forEach(item => {
+      (item.linkedProjectIds || []).forEach(pid => projectIds.add(pid));
+    });
+    return projectIds;
+  }, [mediaItems, sourceItemIds, excludeItemId]);
+
   const workspaceProjects = useMemo(
     () =>
       selectedWorkspace
-        ? destinationProjectsForWorkspace(selectedWorkspace, mediaItems, trashedIds, excludeItemId)
+        ? destinationProjectsForWorkspace(selectedWorkspace, mediaItems, trashedIds, excludeItemId, alreadyAssignedProjectIds)
         : [],
-    [excludeItemId, mediaItems, selectedWorkspace, trashedIds],
+    [excludeItemId, mediaItems, selectedWorkspace, trashedIds, alreadyAssignedProjectIds],
   );
 
   const canMove =
@@ -306,12 +321,15 @@ export default function MoveItemsModal({
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2.5 }}>
             {workspaces.map((workspace) => {
               const selected = selectedWorkspaceId === workspace.id;
+              const isLocked = workspace.id !== activeWorkspaceId;
               return (
                 <Box
                   key={workspace.id}
                   component="button"
                   type="button"
+                  disabled={isLocked}
                   onClick={() => {
+                    if (isLocked) return;
                     setSelectedWorkspaceId(workspace.id);
                     setSelectedFolderId(null);
                     setSelectedProjectId(null);
@@ -320,6 +338,8 @@ export default function MoveItemsModal({
                     ...listButtonSx(selected),
                     alignItems: 'flex-start',
                     mb: 0,
+                    opacity: isLocked ? 0.5 : 1,
+                    cursor: isLocked ? 'not-allowed' : 'pointer',
                     border: selected
                       ? `1px solid ${cv.purpleFocusBorder}`
                       : `1px solid ${cv.border}`,
@@ -370,7 +390,7 @@ export default function MoveItemsModal({
               mb: 1,
             }}
           >
-            2. Move into folder or project
+            2. Move into folder or assign to project
           </Typography>
 
           <Box sx={tabRowSx} role="tablist" aria-label="Move into folder or project">
@@ -495,7 +515,7 @@ export default function MoveItemsModal({
               },
             }}
           >
-            Move
+            {destinationSubTab === 'project' ? 'Assign' : 'Move'}
           </Button>
         </DialogActions>
       </Box>

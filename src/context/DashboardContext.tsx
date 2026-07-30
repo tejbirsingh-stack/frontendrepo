@@ -207,17 +207,20 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       if (actualData && (Array.isArray(actualData.folders) || Array.isArray(actualData.projects) || Array.isArray(actualData.media))) {
         const { folders, projects, allProjects, media } = actualData;
 
-        const sidebarFolders: SidebarFolder[] = (folders || []).map((f: any) => ({
-          id: f.id,
-          label: f.name,
-          color: f.color || undefined,
-          children: []
-        }));
+        const sidebarFolders: SidebarFolder[] = (folders || [])
+          .filter((f: any) => !f.parentId)
+          .map((f: any) => ({
+            id: f.id,
+            label: f.name,
+            color: f.color || undefined,
+            children: []
+          }));
 
-        const sidebarProjects: SidebarFolder[] = (allProjects || projects || []).map((p: any) => ({
-          id: p.id,
-          label: p.name,
-        }));
+        const sidebarProjects: SidebarFolder[] = (allProjects || projects || [])
+          .map((p: any) => ({
+            id: p.id,
+            label: p.name,
+          }));
 
         setWorkspaces((prev) =>
           prev.map(w => w.id === activeWorkspaceId ? {
@@ -274,7 +277,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             title: a.title || 'Untitled',
             type,
             workspaceId: activeWorkspaceId,
-            parentFolderId: a.folderId || a.parentFolderId || undefined,
+            parentFolderId: (a.ownerType === 'FOLDER' || a.ownerType === 'PROJECT') ? a.ownerId : undefined,
             createdAt: a.createdAt || a.uploadDate || new Date().toISOString(),
             sizeBytes: Number(a.files?.[0]?.sizeBytes || a.size || 0),
             storageProvider: 'b2',
@@ -297,10 +300,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           return [...otherWorkspaces, ...folderMediaItems, ...projectMediaItems, ...assetMediaItems];
         });
 
-        // Nested files/folders only arrive via folder endpoints — prefetch the tree so
-        // All media is complete without requiring sidebar expansion first.
-        const folderIdsToPrefetch = folderMediaItems.map((folder) => folder.id);
-        void prefetchFolderTreesRef.current(folderIdsToPrefetch);
+        // Nested files/folders now arrive directly with the workspace endpoint.
+        // We no longer need to manually prefetch folder trees!
+        // const folderIdsToPrefetch = folderMediaItems.map((folder) => folder.id);
+        // void prefetchFolderTreesRef.current(folderIdsToPrefetch);
       }
     } catch (err) {
       console.error('Failed to load workspace data:', err);

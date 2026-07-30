@@ -500,7 +500,7 @@ export default function DashboardPage({
 
     // All media: every project, folder, and file — hide organizational year/month folders.
     if (!sidebarSelection) {
-      return workspaceItems.filter((item) => !isYearOrMonthFolder(item));
+      return workspaceItems;
     }
 
     return filterMediaBySidebarSelection(workspaceItems, sidebarSelection, mediaItems);
@@ -1327,6 +1327,7 @@ export default function DashboardPage({
       <MoveItemsModal
         open={bulkMoveOpen}
         itemCount={selectedMediaIds.size}
+        sourceItemIds={Array.from(selectedMediaIds)}
         mediaItems={mediaItems}
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
