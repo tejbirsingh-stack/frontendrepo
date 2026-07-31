@@ -161,6 +161,7 @@ interface WorkspaceMembersDialogProps {
   onShareLinkDelete?: (link: ShareLink) => void;
   onShareLinkCopy?: (link: ShareLink) => void;
   onShareLinkNameChange?: (linkId: string, name: string) => void;
+  onShareLinkPermissionsChange?: (linkId: string, permissions: any) => void;
   onShareLinkSettingsSaved?: () => void;
   /** Resource id for invite-only modals (no share links panel) — enables header copy link. */
   resourceId?: string;
@@ -214,6 +215,7 @@ export default function WorkspaceMembersDialog({
   onShareLinkDelete,
   onShareLinkCopy,
   onShareLinkNameChange,
+  onShareLinkPermissionsChange,
   onShareLinkSettingsSaved,
   resourceId,
   onCopyLink,
@@ -240,6 +242,7 @@ export default function WorkspaceMembersDialog({
   const [sharePermComment, setSharePermComment] = useState(false);
   const [sharePermDownload, setSharePermDownload] = useState(false);
   const [sharePermDownloadProxy, setSharePermDownloadProxy] = useState(false);
+  const [sharePermWatermark, setSharePermWatermark] = useState(true);
   const [shareRequirePassword, setShareRequirePassword] = useState(false);
   const [sharePassword, setSharePassword] = useState('');
   const [sharePasswordVisible, setSharePasswordVisible] = useState(false);
@@ -683,8 +686,13 @@ export default function WorkspaceMembersDialog({
   const handleCreateShareLink = () => {
     if (!onNewShareLink) return;
     const trimmed = linkNameInput.trim();
-    const isCustomName = Boolean(isEditingShareLink && trimmed && trimmed !== activeShareLink?.name);
-    const nextVisibility = isEditingShareLink ? draftVisibility : visibility;
+    
+    // If they typed a name different from the currently selected link,
+    // they intended to use it for the NEW link they are creating.
+    const isCustomName = Boolean(trimmed && trimmed !== activeShareLink?.name);
+    
+    const nextVisibility = isCustomName ? draftVisibility : visibility;
+    
     setIsEditingShareLink(false);
     onNewShareLink({
       name: isCustomName ? trimmed : '',
@@ -723,6 +731,24 @@ export default function WorkspaceMembersDialog({
           publicDescription="Anyone with the link can view this project."
           privateDescription="Only you and invited members can access this project."
         />
+        <FormControlLabel
+          sx={{ mt: -1 }}
+          control={
+            <Switch
+              size="small"
+              checked={activeShareLink?.permissions?.watermark !== false}
+              onChange={(e) => {
+                if (activeShareLinkId && onShareLinkPermissionsChange) {
+                  onShareLinkPermissionsChange(activeShareLinkId, {
+                    ...activeShareLink?.permissions,
+                    watermark: e.target.checked
+                  });
+                }
+              }}
+            />
+          }
+          label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Show company watermark</Typography>}
+        />
       </Box>
     ) : null;
 
@@ -758,6 +784,8 @@ export default function WorkspaceMembersDialog({
     setPendingShareLinkDelete(null);
   };
 
+  const isPrivateMode = draftVisibility === 'private';
+
   const shareLinksPanel = showShareLinks ? (
     <ShareLinksSection
       shareLinks={shareLinks}
@@ -768,6 +796,7 @@ export default function WorkspaceMembersDialog({
       onShareLinkEdit={handleShareLinkEdit}
       onShareLinkDelete={beginShareLinkDelete}
       onShareLinkCopy={onShareLinkCopy}
+      disabled={isPrivateMode}
       scrollable
     />
   ) : null;
@@ -1377,7 +1406,7 @@ export default function WorkspaceMembersDialog({
       {dialogHeader}
       {!hasShareLinks ? (
         <Box sx={{ px: 2.5, py: 2 }}>
-          <ShareLinksEmptyState onNewShareLink={handleCreateShareLink} />
+          <ShareLinksEmptyState onNewShareLink={isPrivateMode ? undefined : handleCreateShareLink} />
         </Box>
       ) : (
         <Box sx={{ ...shareDialogBodySx, minHeight: { md: 460 } }}>
@@ -1530,6 +1559,16 @@ export default function WorkspaceMembersDialog({
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Download proxy</Typography>}
               />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={sharePermWatermark}
+                    onChange={(e) => setSharePermWatermark(e.target.checked)}
+                  />
+                }
+                label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Show company watermark</Typography>}
+              />
             </Box>
           </Box>
 
@@ -1628,6 +1667,7 @@ export default function WorkspaceMembersDialog({
                   comment: sharePermComment,
                   download: sharePermDownload,
                   downloadProxy: sharePermDownloadProxy,
+                  watermark: sharePermWatermark,
                 },
                 password: shareRequirePassword ? sharePassword : undefined,
               };

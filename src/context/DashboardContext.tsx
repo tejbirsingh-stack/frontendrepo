@@ -65,6 +65,7 @@ interface DashboardContextValue {
   rootMediaItems: MediaItem[];
   favoriteMediaItems: MediaItem[];
   duplicateMediaItems: MediaItem[];
+  sharedMediaItems: MediaItem[];
   favorites: Set<string>;
   toggleFavorite: (id: string, type?: 'asset' | 'folder' | 'project') => void;
   moveMediaToFolder: (mediaId: string, folderId: string, childLabel?: string) => void;
@@ -162,6 +163,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaces[0]?.id || '');
   const [systemTimezone, setSystemTimezone] = useState<string>('Europe/London');
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(initialMediaItems);
+  const [sharedMediaItems, setSharedMediaItems] = useState<MediaItem[]>([]);
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavoriteMediaIds());
   const [draggingMediaIds, setDraggingMediaIdsState] = useState<Set<string>>(new Set());
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
@@ -271,14 +273,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
         const assetMediaItems: MediaItem[] = (media || []).map((a: any) => {
           const imageExtRegex = /\.(jpg|jpeg|png|webp|gif|svg|exr|openexr|dpx|cin|tiff|tif|psd|psb|ai|eps|pcx|jpf|bmp|mpo)$/i;
-          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv|flv|wmv|m4v)$/i.test(a.title || '');
-          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a|flac|alac)$/i.test(a.title || '');
-          const isImage = a.type === 'image' || imageExtRegex.test(a.title || '');
+          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv|flv|wmv|m4v)$/i.test(a.title || a.name || '');
+          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a|flac|alac)$/i.test(a.title || a.name || '');
+          const isImage = a.type === 'image' || imageExtRegex.test(a.title || a.name || '');
           const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : (a.type || 'video');
 
+          const rawDuration = a.metadata?.duration ?? a.metadata?.technicalSpecs?.durationSeconds;
           return {
             id: a.id,
-            title: a.title || 'Untitled',
+            title: a.name || a.title || 'Untitled',
             type,
             workspaceId: activeWorkspaceId,
             parentFolderId: (a.ownerType === 'FOLDER' || a.ownerType === 'PROJECT') ? a.ownerId : undefined,
@@ -288,7 +291,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             uploadedBy: CURRENT_USER.name,
             thumbnail: a.thumbnail || (a.id ? `/api/media/${encodeURIComponent(a.id)}/thumbnail` : undefined),
             videoSrc: a.files?.[0]?.fileUrl || a.url || (a.id ? `/api/media/${encodeURIComponent(a.id)}/stream` : undefined),
-            duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
+            duration: typeof rawDuration === 'number'
+              ? `${Math.floor(rawDuration / 60)}:${Math.floor(rawDuration % 60).toString().padStart(2, '0')}`
+              : (typeof rawDuration === 'string' ? rawDuration : undefined),
             tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
             location: null,
             linkedProjectIds: a.sources?.map((s: any) => s.projectId) || [],
@@ -769,9 +774,54 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     fetchFavorites();
   }, [activeWorkspaceId]);
 
-  // Deprecated, we don't save to localStorage anymore
+  // Fetch shared media items (assets shared directly with the current user)
   useEffect(() => {
-    // saveManagedTags(managedTags);
+    const fetchSharedItems = async () => {
+      try {
+        const { getSharedMediaAssetsRequest } = await import('../api/media.service');
+        const res = await getSharedMediaAssetsRequest();
+        if (Array.isArray(res)) {
+          const mappedShared: MediaItem[] = res.map((a: any) => {
+            const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.name || a.title || '');
+            const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.name || a.title || '');
+            const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.name || a.title || '');
+            const type = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
+
+            return {
+              id: a.id,
+              title: a.name || a.title || 'Untitled',
+              type: type as any,
+              workspaceId: activeWorkspaceId,
+              parentFolderId: undefined,
+              createdAt: a.uploadDate || a.createdAt || new Date().toISOString(),
+              sizeBytes: Number(a.size || 0),
+              storageProvider: 'b2',
+              uploadedBy: a.uploadedBy?.name || CURRENT_USER.name,
+              thumbnail: a.thumbnail || undefined,
+              videoSrc: a.url || undefined,
+              duration: typeof a.metadata?.duration === 'number'
+                ? `${Math.floor(a.metadata.duration / 60)}:${Math.floor(a.metadata.duration % 60).toString().padStart(2, '0')}`
+                : (typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined),
+              tags: Array.isArray(a.tags) ? a.tags : [],
+              location: null,
+              linkedProjectIds: [],
+              projectLocations: [],
+              compressionStatus: a.transcodingStatus || 'completed',
+              customMetadata: a.customMetadata,
+              status: 'active',
+            };
+          });
+          setSharedMediaItems(mappedShared);
+        }
+      } catch (err) {
+        console.error('Failed to fetch shared media', err);
+      }
+    };
+    fetchSharedItems();
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    saveManagedTags(managedTags);
   }, [managedTags]);
 
   useEffect(() => {
@@ -2156,6 +2206,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       fetchedFavorites,
       favoriteMediaItems,
       duplicateMediaItems,
+      sharedMediaItems,
       favorites,
       toggleFavorite,
       moveMediaToFolder,
@@ -2229,6 +2280,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       fetchedFavorites,
       favoriteMediaItems,
       duplicateMediaItems,
+      sharedMediaItems,
       favorites,
       toggleFavorite,
       moveMediaToFolder,

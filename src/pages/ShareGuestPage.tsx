@@ -27,16 +27,20 @@ import {
   getShareAnnotationsApi,
   createShareAnnotationApi,
 } from '../api/share.service';
+import { env } from '../config/env';
 import VideoPlayerPage from './VideoPlayerPage';
 
 export default function ShareGuestPage() {
   const { token } = useParams<{ token: string }>();
+  const streamUrl = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${token}/stream`;
 
   const [status, setStatus] = useState<'loading' | 'password' | 'unlocked' | 'expired' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [assetMeta, setAssetMeta] = useState<any>(null);
   const [permissions, setPermissions] = useState({ view: true, comment: false, download: false, downloadProxy: false });
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [visibility, setVisibility] = useState<string>('public');
+  const [mode, setMode] = useState<string>('link');
 
   // Password unlock state
   const [password, setPassword] = useState('');
@@ -67,6 +71,8 @@ export default function ShareGuestPage() {
         setAssetMeta(res.assetMeta);
         setPermissions(res.permissions || { view: true, comment: false, download: false, downloadProxy: false });
         setExpiresAt(res.expiresAt);
+        if (res.visibility) setVisibility(res.visibility);
+        if (res.mode) setMode(res.mode);
 
         if (res.requiresPassword) {
           setStatus('password');
@@ -144,7 +150,9 @@ export default function ShareGuestPage() {
     }
   };
 
-  if (status === 'unlocked' && token) {
+  const isPrivateShare = visibility === 'private' || mode === 'email';
+
+  if (status === 'unlocked' && token && isPrivateShare) {
     return (
       <VideoPlayerPage
         isGuestMode={true}
@@ -363,6 +371,25 @@ export default function ShareGuestPage() {
                   autoPlay
                   style={{ width: '100%', maxHeight: '65vh', display: 'block' }}
                 />
+                {assetMeta?.logoUrl ? (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 16,
+                      right: 16,
+                      zIndex: 10,
+                      opacity: 0.7,
+                      pointerEvents: 'none',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <img 
+                      src={assetMeta.logoUrl} 
+                      alt={assetMeta.organizationName || 'Company Watermark'} 
+                      style={{ maxHeight: '48px', maxWidth: '120px', objectFit: 'contain' }}
+                    />
+                  </Box>
+                ) : null}
               </Box>
 
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
