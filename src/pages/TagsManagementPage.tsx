@@ -193,14 +193,15 @@ export default function TagsManagementPage() {
     setTagModalOpen(true);
   };
 
-  const handleCreateTag = (input: {
+  const handleCreateTag = async (input: {
     name: string;
     scope: TagScope;
     workspaceId: string | null;
-  }) => Boolean(createManagedTag(input));
+    parentId?: string | null;
+  }) => Boolean(await createManagedTag(input));
 
-  const handleUpdateTag = (id: string, updates: { name?: string }) =>
-    updateManagedTag(id, updates);
+  const handleUpdateTag = async (id: string, updates: { name?: string; parentId?: string | null }) =>
+    await updateManagedTag(id, updates);
 
   const confirmDeleteTag = () => {
     if (!deleteTarget) return;
@@ -480,6 +481,7 @@ export default function TagsManagementPage() {
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
         editingTag={editingTag}
+        availableTags={managedTags}
         onClose={() => setTagModalOpen(false)}
         onCreate={handleCreateTag}
         onUpdate={handleUpdateTag}

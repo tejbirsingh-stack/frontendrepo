@@ -23,7 +23,7 @@ export interface MediaUploadDetails {
   title: string;
   summary?: string;
   thumbnail?: string;
-  tags: string[];
+  tagIds: string[];
   folderId: string | null;
   duration?: string;
 }

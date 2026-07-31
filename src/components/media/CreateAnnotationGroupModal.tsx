@@ -115,6 +115,7 @@ export default function CreateAnnotationGroupModal({
   const [name, setName] = useState(groupToEdit?.name || '');
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const currentUserId = useMemo(
     () => collaborators.find((person) => person.isCurrentUser)?.id,
@@ -133,7 +134,17 @@ export default function CreateAnnotationGroupModal({
     }
     
     setError('');
+    setSearchQuery('');
   }, [open, currentUserId, groupToEdit]);
+
+  const filteredCollaborators = useMemo(() => {
+    if (!searchQuery.trim()) return collaborators;
+    const lowerQuery = searchQuery.toLowerCase();
+    return collaborators.filter((c) => 
+      c.name.toLowerCase().includes(lowerQuery) || 
+      (c.email && c.email.toLowerCase().includes(lowerQuery))
+    );
+  }, [collaborators, searchQuery]);
 
   const toggleMember = (memberId: string) => {
     setSelectedMemberIds((current) =>
@@ -227,6 +238,15 @@ export default function CreateAnnotationGroupModal({
             Group members
           </Typography>
 
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search members by name or email"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            sx={{ mb: 1 }}
+          />
+
           <Box
             sx={{
               maxHeight: 220,
@@ -241,8 +261,12 @@ export default function CreateAnnotationGroupModal({
               <Typography sx={{ px: 1.5, py: 2, fontSize: '0.8125rem', color: cv.textMuted }}>
                 No collaborators on this file yet.
               </Typography>
+            ) : filteredCollaborators.length === 0 ? (
+              <Typography sx={{ px: 1.5, py: 2, fontSize: '0.8125rem', color: cv.textMuted }}>
+                No members found matching your search.
+              </Typography>
             ) : (
-              collaborators.map((person) => (
+              filteredCollaborators.map((person) => (
                 <CollaboratorRow
                   key={person.id}
                   person={person}

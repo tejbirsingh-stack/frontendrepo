@@ -6,4 +6,6 @@ export interface MediaCollaborator {
   avatarUrl?: string;
   avatarColor?: string;
   isCurrentUser?: boolean;
+  role?: string;
+  hasOverride?: boolean;
 }

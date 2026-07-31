@@ -248,11 +248,13 @@ export default function DashboardPage({
   const isFavoritesView = libraryView === 'favorites';
   const isDuplicatesView = libraryView === 'duplicates';
   const isProjectsView = libraryView === 'projects';
+  const isSharedView = libraryView === 'shared';
   const isFolderView = Boolean(folderMedia);
 
   const {
     favoriteMediaItems,
     duplicateMediaItems,
+    sharedMediaItems,
     mediaItems,
     workspaces,
     activeWorkspaceId,
@@ -279,6 +281,7 @@ export default function DashboardPage({
     createProject,
     sidebarSelection,
     activeWorkspace,
+    fetchWorkspaceData,
   } = useDashboard();
 
   const selectionTitle = getSidebarSelectionTitle(sidebarSelection);
@@ -290,7 +293,9 @@ export default function DashboardPage({
         ? 'Duplicates'
         : isProjectsView
           ? 'Projects'
-          : selectionTitle ?? 'All media';
+          : isSharedView
+            ? 'Shared'
+            : selectionTitle ?? 'All media';
   const folderAccent = folderMedia
     ? resolveLibraryFolderColor({
         folderColor: folderMedia.folderColor,
@@ -342,6 +347,15 @@ export default function DashboardPage({
   const { getShortcut } = useResolvedKeyboardShortcuts();
   const helpMenuShortcut =
     getShortcut('dashboard-open-help-menu') ?? getHelpMenuShortcutLabel();
+
+  const initialTagsMount = useRef(true);
+  useEffect(() => {
+    if (initialTagsMount.current) {
+      initialTagsMount.current = false;
+      return;
+    }
+    fetchWorkspaceData(Array.from(selectedTags));
+  }, [selectedTags, fetchWorkspaceData]);
 
   useEffect(() => {
     let mounted = true;
@@ -470,6 +484,7 @@ export default function DashboardPage({
   const librarySourceItems = useMemo(() => {
     if (isFavoritesView) return favoriteMediaItems;
     if (isDuplicatesView) return duplicateMediaItems;
+    if (isSharedView) return sharedMediaItems;
     if (isProjectsView) {
       return mediaItems.filter(
         (item) => item.workspaceId === activeWorkspaceId && item.isProject && !trashedIds.has(item.id)
@@ -507,8 +522,10 @@ export default function DashboardPage({
   }, [
     isFavoritesView,
     isDuplicatesView,
+    isSharedView,
     favoriteMediaItems,
     duplicateMediaItems,
+    sharedMediaItems,
     folderMedia,
     mediaItems,
     activeWorkspaceId,
@@ -523,12 +540,14 @@ export default function DashboardPage({
       ? favoriteMediaItems
       : isDuplicatesView
         ? duplicateMediaItems
-        : isProjectsView
-          ? librarySourceItems
-          : mediaItems.filter(
-            (item) =>
-              item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
-          );
+        : isSharedView
+          ? sharedMediaItems
+          : isProjectsView
+            ? librarySourceItems
+            : mediaItems.filter(
+              (item) =>
+                item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
+            );
     const sourceItems = query ? searchableItems : librarySourceItems;
 
     const filtered = sourceItems.filter((item) => {
@@ -541,12 +560,7 @@ export default function DashboardPage({
       }
       if (!matchesMediaTypeFilter(item, mediaTypeFilter)) return false;
       if (!matchesDateRange(item.createdAt, dateRangeFilter)) return false;
-      if (
-        selectedTags.size > 0 &&
-        !item.tags?.some((tag) => selectedTags.has(tag))
-      ) {
-        return false;
-      }
+      // Tag filtering is now handled exclusively by the backend API via fetchWorkspaceData
       if (
         selectedAiTags.size > 0 &&
         !item.aiTags?.some((tag) => selectedAiTags.has(tag))
@@ -574,8 +588,10 @@ export default function DashboardPage({
     librarySourceItems,
     favoriteMediaItems,
     duplicateMediaItems,
+    sharedMediaItems,
     isFavoritesView,
     isDuplicatesView,
+    isSharedView,
     mediaItems,
     activeWorkspaceId,
     globalSearchQuery,
@@ -685,8 +701,8 @@ export default function DashboardPage({
     createRootMediaFolder(name, color, parentId, location);
   };
 
-  const handleCreateProject = (name: string) => {
-    createProject(name, folderMedia?.id ?? null);
+  const handleCreateProject = (name: string, tagIds: string[] = []) => {
+    createProject(name, folderMedia?.id ?? null, tagIds);
   };
 
   const clearPanelFilters = () => {

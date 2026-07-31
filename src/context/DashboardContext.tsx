@@ -65,6 +65,7 @@ interface DashboardContextValue {
   rootMediaItems: MediaItem[];
   favoriteMediaItems: MediaItem[];
   duplicateMediaItems: MediaItem[];
+  sharedMediaItems: MediaItem[];
   favorites: Set<string>;
   toggleFavorite: (id: string, type?: 'asset' | 'folder' | 'project') => void;
   moveMediaToFolder: (mediaId: string, folderId: string, childLabel?: string) => void;
@@ -90,9 +91,9 @@ interface DashboardContextValue {
   managedTags: ManagedTag[];
   tagScopeColors: TagScopeColors;
   updateTagScopeColor: (scope: TagScope, color: string) => void;
-  createManagedTag: (input: CreateManagedTagInput) => ManagedTag | null;
-  updateManagedTag: (id: string, updates: { name?: string }) => boolean;
-  deleteManagedTag: (id: string) => void;
+  createManagedTag: (input: CreateManagedTagInput) => Promise<ManagedTag | null>;
+  updateManagedTag: (id: string, updates: { name?: string; parentId?: string | null }) => Promise<boolean>;
+  deleteManagedTag: (id: string) => Promise<void>;
   getTagUsageCount: (tagName: string) => number;
   getAssignableTags: (workspaceId: string) => ManagedTag[];
   addWorkspaceFolder: (name: string, color?: string) => Promise<string>;
@@ -131,6 +132,7 @@ interface DashboardContextValue {
   createProject: (
     name: string,
     parentFolderId?: string | null,
+    defaultTagIds?: string[],
   ) => Promise<void>;
   updateMediaProjectLocation: (mediaId: string, projectLocation: MediaLocation | null, itemType?: string) => void;
   trashedIds: Set<string>;
@@ -145,7 +147,7 @@ interface DashboardContextValue {
   sidebarSelection: SidebarSelection | null;
   setSidebarSelection: (selection: SidebarSelection) => void;
   clearSidebarSelection: () => void;
-  fetchWorkspaceData: () => Promise<void>;
+  fetchWorkspaceData: (tagIds?: string[]) => Promise<void>;
   fetchFolderData: (folderId: string) => Promise<string[]>;
   fetchProjectData: (projectId: string) => Promise<void>;
 }
@@ -161,6 +163,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaces[0]?.id || '');
   const [systemTimezone, setSystemTimezone] = useState<string>('Europe/London');
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(initialMediaItems);
+  const [sharedMediaItems, setSharedMediaItems] = useState<MediaItem[]>([]);
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavoriteMediaIds());
   const [draggingMediaIds, setDraggingMediaIdsState] = useState<Set<string>>(new Set());
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
@@ -195,10 +198,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     fetchTimezone();
   }, []);
 
-  const fetchWorkspaceData = useCallback(async () => {
+  const fetchWorkspaceData = useCallback(async (tagIds?: string[]) => {
     try {
       const { apiClient } = await import('../api/client');
-      const response = await apiClient.get<any>(`/workspaces/find-all-data/${activeWorkspaceId}`, {
+      const query = tagIds && tagIds.length > 0 ? `?tagIds=${tagIds.join(',')}` : '';
+      const response = await apiClient.get<any>(`/workspaces/find-all-data/${activeWorkspaceId}${query}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -207,28 +211,30 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       if (actualData && (Array.isArray(actualData.folders) || Array.isArray(actualData.projects) || Array.isArray(actualData.media))) {
         const { folders, projects, allProjects, media } = actualData;
 
-        const sidebarFolders: SidebarFolder[] = (folders || [])
-          .filter((f: any) => !f.parentId)
-          .map((f: any) => ({
-            id: f.id,
-            label: f.name,
-            color: f.color || undefined,
-            children: []
-          }));
+        if (!tagIds || tagIds.length === 0) {
+          const sidebarFolders: SidebarFolder[] = (folders || [])
+            .filter((f: any) => !f.parentId)
+            .map((f: any) => ({
+              id: f.id,
+              label: f.name,
+              color: f.color || undefined,
+              children: []
+            }));
 
-        const sidebarProjects: SidebarFolder[] = (allProjects || projects || [])
-          .map((p: any) => ({
-            id: p.id,
-            label: p.name,
-          }));
+          const sidebarProjects: SidebarFolder[] = (allProjects || projects || [])
+            .map((p: any) => ({
+              id: p.id,
+              label: p.name,
+            }));
 
-        setWorkspaces((prev) =>
-          prev.map(w => w.id === activeWorkspaceId ? {
-            ...w,
-            folders: sidebarFolders,
-            projectFolders: sidebarProjects
-          } : w)
-        );
+          setWorkspaces((prev) =>
+            prev.map(w => w.id === activeWorkspaceId ? {
+              ...w,
+              folders: sidebarFolders,
+              projectFolders: sidebarProjects
+            } : w)
+          );
+        }
 
         const projectMediaItems: MediaItem[] = (allProjects || projects || []).map((p: any) => ({
           id: p.id,
@@ -267,14 +273,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
         const assetMediaItems: MediaItem[] = (media || []).map((a: any) => {
           const imageExtRegex = /\.(jpg|jpeg|png|webp|gif|svg|exr|openexr|dpx|cin|tiff|tif|psd|psb|ai|eps|pcx|jpf|bmp|mpo)$/i;
-          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv|flv|wmv|m4v)$/i.test(a.title || '');
-          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a|flac|alac)$/i.test(a.title || '');
-          const isImage = a.type === 'image' || imageExtRegex.test(a.title || '');
+          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv|flv|wmv|m4v)$/i.test(a.title || a.name || '');
+          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a|flac|alac)$/i.test(a.title || a.name || '');
+          const isImage = a.type === 'image' || imageExtRegex.test(a.title || a.name || '');
           const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : (a.type || 'video');
 
+          const rawDuration = a.metadata?.duration ?? a.metadata?.technicalSpecs?.durationSeconds;
           return {
             id: a.id,
-            title: a.title || 'Untitled',
+            title: a.name || a.title || 'Untitled',
             type,
             workspaceId: activeWorkspaceId,
             parentFolderId: (a.ownerType === 'FOLDER' || a.ownerType === 'PROJECT') ? a.ownerId : undefined,
@@ -284,7 +291,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             uploadedBy: CURRENT_USER.name,
             thumbnail: a.thumbnail || (a.id ? `/api/media/${encodeURIComponent(a.id)}/thumbnail` : undefined),
             videoSrc: a.files?.[0]?.fileUrl || a.url || (a.id ? `/api/media/${encodeURIComponent(a.id)}/stream` : undefined),
-            duration: typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined,
+            duration: typeof rawDuration === 'number'
+              ? `${Math.floor(rawDuration / 60)}:${Math.floor(rawDuration % 60).toString().padStart(2, '0')}`
+              : (typeof rawDuration === 'string' ? rawDuration : undefined),
             tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
             location: null,
             linkedProjectIds: a.sources?.map((s: any) => s.projectId) || [],
@@ -554,7 +563,39 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   // No-op: purge is handled by the backend cron job now
   const purgeExpiredTrash = useCallback(() => { }, []);
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
-  const [managedTags, setManagedTags] = useState<ManagedTag[]>(() => loadManagedTags());
+  const [managedTags, setManagedTags] = useState<ManagedTag[]>([]);
+  
+  useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        const { apiClient } = await import('../api/client');
+        const token = localStorage.getItem('token');
+        const response = await apiClient.get<any>('/tags', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = response.data || response;
+        if (Array.isArray(data)) {
+          const tags = data.map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            scope: t.scope,
+            workspaceId: t.workspaceId,
+            color: t.color || '#9333ea', // Fallback color
+            parentId: t.parentId,
+            parentName: t.parent?.name,
+            ancestors: t.ancestors || [],
+            createdAt: t.createdAt || new Date().toISOString()
+          }));
+          setManagedTags(tags);
+        }
+      } catch (err) {
+        console.error('Failed to fetch tags from backend:', err);
+        setManagedTags([]);
+      }
+    };
+    fetchTags();
+  }, []);
+
   const [tagScopeColors, setTagScopeColors] = useState<TagScopeColors>(() => loadTagScopeColors());
   const [pendingMediaQueue, setPendingMediaQueue] = useState<PendingMediaUpload[]>([]);
   const pendingMediaQueueRef = useRef(pendingMediaQueue);
@@ -731,6 +772,52 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       }
     };
     fetchFavorites();
+  }, [activeWorkspaceId]);
+
+  // Fetch shared media items (assets shared directly with the current user)
+  useEffect(() => {
+    const fetchSharedItems = async () => {
+      try {
+        const { getSharedMediaAssetsRequest } = await import('../api/media.service');
+        const res = await getSharedMediaAssetsRequest();
+        if (Array.isArray(res)) {
+          const mappedShared: MediaItem[] = res.map((a: any) => {
+            const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv)$/i.test(a.name || a.title || '');
+            const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a)$/i.test(a.name || a.title || '');
+            const isImage = a.type === 'image' || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(a.name || a.title || '');
+            const type = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : 'video';
+
+            return {
+              id: a.id,
+              title: a.name || a.title || 'Untitled',
+              type: type as any,
+              workspaceId: activeWorkspaceId,
+              parentFolderId: undefined,
+              createdAt: a.uploadDate || a.createdAt || new Date().toISOString(),
+              sizeBytes: Number(a.size || 0),
+              storageProvider: 'b2',
+              uploadedBy: a.uploadedBy?.name || CURRENT_USER.name,
+              thumbnail: a.thumbnail || undefined,
+              videoSrc: a.url || undefined,
+              duration: typeof a.metadata?.duration === 'number'
+                ? `${Math.floor(a.metadata.duration / 60)}:${Math.floor(a.metadata.duration % 60).toString().padStart(2, '0')}`
+                : (typeof a.metadata?.duration === 'string' ? a.metadata.duration : undefined),
+              tags: Array.isArray(a.tags) ? a.tags : [],
+              location: null,
+              linkedProjectIds: [],
+              projectLocations: [],
+              compressionStatus: a.transcodingStatus || 'completed',
+              customMetadata: a.customMetadata,
+              status: 'active',
+            };
+          });
+          setSharedMediaItems(mappedShared);
+        }
+      } catch (err) {
+        console.error('Failed to fetch shared media', err);
+      }
+    };
+    fetchSharedItems();
   }, [activeWorkspaceId]);
 
   useEffect(() => {
@@ -1254,7 +1341,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createManagedTag = useCallback(
-    (input: CreateManagedTagInput): ManagedTag | null => {
+    async (input: CreateManagedTagInput): Promise<ManagedTag | null> => {
       const name = normalizeTagName(input.name);
       if (!name) return null;
 
@@ -1263,23 +1350,44 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       if (isDuplicateManagedTag(name, input.scope, workspaceId)) return null;
 
-      const newTag: ManagedTag = {
-        id: `tag-${Date.now()}`,
-        name,
-        scope: input.scope,
-        workspaceId,
-        color: tagScopeColors[input.scope],
-        createdAt: new Date().toISOString(),
-      };
+      try {
+        const { apiClient } = await import('../api/client');
+        const token = localStorage.getItem('token');
+        const response = await apiClient.post<any>('/tags', {
+          name,
+          scope: input.scope,
+          workspaceId,
+          parentId: input.parentId,
+          color: tagScopeColors[input.scope],
+        }, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const resData = response.data || response;
 
-      setManagedTags((prev) => [...prev, newTag]);
-      return newTag;
+        const newTag: ManagedTag = {
+          id: resData.id,
+          name: resData.name,
+          scope: resData.scope,
+          workspaceId: resData.workspaceId,
+          color: resData.color || tagScopeColors[input.scope],
+          parentId: resData.parentId,
+          parentName: resData.parent?.name,
+          ancestors: resData.ancestors || [],
+          createdAt: resData.createdAt || new Date().toISOString(),
+        };
+
+        setManagedTags((prev) => [...prev, newTag]);
+        return newTag;
+      } catch (err) {
+        console.error('Failed to create tag:', err);
+        return null;
+      }
     },
     [isDuplicateManagedTag, tagScopeColors],
   );
 
   const updateManagedTag = useCallback(
-    (id: string, updates: { name?: string }) => {
+    async (id: string, updates: { name?: string; parentId?: string | null }): Promise<boolean> => {
       const existing = managedTags.find((tag) => tag.id === id);
       if (!existing) return false;
 
@@ -1295,51 +1403,81 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       const previousName = existing.name;
 
-      setManagedTags((prev) =>
-        prev.map((tag) =>
-          tag.id === id
-            ? {
-              ...tag,
-              name: nextName,
-            }
-            : tag,
-        ),
-      );
+      try {
+        const { apiClient } = await import('../api/client');
+        const token = localStorage.getItem('token');
+        
+        const payload: any = {};
+        if (updates.name) payload.name = nextName;
+        if (updates.parentId !== undefined) payload.parentId = updates.parentId;
+        
+        const response = await apiClient.patch<any>(`/tags/${id}`, payload, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const resData = response.data || response;
 
-      if (previousName !== nextName) {
-        setMediaItems((prev) =>
-          prev.map((item) => {
-            if (!item.tags?.includes(previousName)) return item;
-
-            return {
-              ...item,
-              tags: item.tags.map((tag) => (tag === previousName ? nextName : tag)),
-            };
-          }),
+        setManagedTags((prev) =>
+          prev.map((tag) =>
+            tag.id === id
+              ? {
+                  ...tag,
+                  name: resData.name || nextName,
+                  parentId: resData.parentId,
+                  parentName: resData.parent?.name,
+                  ancestors: resData.ancestors || [],
+                }
+              : tag,
+          ),
         );
-      }
 
-      return true;
+        if (previousName !== nextName) {
+          setMediaItems((prev) =>
+            prev.map((item) => {
+              if (!item.tags?.includes(previousName)) return item;
+
+              return {
+                ...item,
+                tags: item.tags.map((tag) => (tag === previousName ? nextName : tag)),
+              };
+            }),
+          );
+        }
+
+        return true;
+      } catch (err) {
+        console.error('Failed to update tag:', err);
+        return false;
+      }
     },
     [isDuplicateManagedTag, managedTags],
   );
 
   const deleteManagedTag = useCallback(
-    (id: string) => {
+    async (id: string) => {
       const existing = managedTags.find((tag) => tag.id === id);
       if (!existing) return;
 
-      setManagedTags((prev) => prev.filter((tag) => tag.id !== id));
-      setMediaItems((prev) =>
-        prev.map((item) => {
-          if (!item.tags?.includes(existing.name)) return item;
+      try {
+        const { apiClient } = await import('../api/client');
+        const token = localStorage.getItem('token');
+        await apiClient.delete(`/tags/${id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
 
-          return {
-            ...item,
-            tags: item.tags.filter((tag) => tag !== existing.name),
-          };
-        }),
-      );
+        setManagedTags((prev) => prev.filter((tag) => tag.id !== id));
+        setMediaItems((prev) =>
+          prev.map((item) => {
+            if (!item.tags?.includes(existing.name)) return item;
+
+            return {
+              ...item,
+              tags: item.tags.filter((tag) => tag !== existing.name),
+            };
+          }),
+        );
+      } catch (err) {
+        console.error('Failed to delete tag:', err);
+      }
     },
     [managedTags],
   );
@@ -1746,6 +1884,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             ownerId,
             linkedProjectId: linkedProjectId || undefined,
             folderId: details.folderId || undefined,
+            tagIds: details.tagIds,
             technicalSpecs: fullTechSpecs,
           },
           onProgress,
@@ -1767,7 +1906,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         storageProvider: uploadedAssetDto ? 'b2' : 'local',
         uploadedBy: (uploadedAssetDto as any)?.uploadedBy?.name || CURRENT_USER.name,
         originallyCreatedAt: new Date(current.file.lastModified).toISOString(),
-        tags: details.tags,
+        tags: details.tagIds.map(id => managedTags.find(t => t.id === id)?.name || id),
         ...(parentFolderId ? { parentFolderId } : {}),
         linkedProjectIds: linkedProjectId ? [linkedProjectId] : [],
         location: details.folderId
@@ -1910,6 +2049,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     async (
       name: string,
       parentFolderId?: string | null,
+      defaultTagIds?: string[],
     ) => {
       const trimmed = name.trim();
       if (!trimmed) return;
@@ -1919,6 +2059,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         const response = await apiClient.post<any>(`/workspaces/project/add/${activeWorkspaceId}`, {
           name: trimmed,
           folderId: parentFolderId || null,
+          ...(defaultTagIds && defaultTagIds.length > 0 ? { defaultTagIds } : {}),
         }, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -2065,6 +2206,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       fetchedFavorites,
       favoriteMediaItems,
       duplicateMediaItems,
+      sharedMediaItems,
       favorites,
       toggleFavorite,
       moveMediaToFolder,
@@ -2138,6 +2280,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       fetchedFavorites,
       favoriteMediaItems,
       duplicateMediaItems,
+      sharedMediaItems,
       favorites,
       toggleFavorite,
       moveMediaToFolder,

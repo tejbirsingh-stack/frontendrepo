@@ -34,6 +34,8 @@ import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import { dropdownMenuPaperSx, dropdownMenuProps } from '../../constants/dropdownMenu';
 import CreateTagModal from './CreateTagModal';
 import NewFolderModal from './NewFolderModal';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import { useProjectDefaultTags } from '../../hooks/useProjectDefaultTags';
 import { useDashboard } from '../../context/DashboardContext';
 import type { ManagedTag, TagScope } from '../../types/managedTag';
 import { getManagedTagChipSx } from '../../utils/managedTagStyles';
@@ -403,6 +405,7 @@ export default function MediaUploadDetailsModal({
     createManagedTag,
     getAssignableTags,
     tagScopeColors,
+    managedTags,
   } = useDashboard();
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
 
@@ -422,6 +425,13 @@ export default function MediaUploadDetailsModal({
     () => getAssignableTags(activeWorkspace.id),
     [activeWorkspace.id, getAssignableTags],
   );
+
+  const { defaultTags, loading: defaultTagsLoading } = useProjectDefaultTags(pendingUpload?.linkedProjectId);
+
+  const filteredAssignableTags = useMemo(() => {
+    const defaultTagIds = new Set(defaultTags.map(t => t.id));
+    return assignableTags.filter(t => !defaultTagIds.has(t.id));
+  }, [assignableTags, defaultTags]);
 
   const folderOptions = activeWorkspace.folders;
   const mediaType = pendingUpload?.type ?? 'video';
@@ -543,12 +553,13 @@ export default function MediaUploadDetailsModal({
   const selectedFolderLabel =
     folderOptions.find((folder) => folder.id === folderId)?.label ?? rootFolderLabel;
 
-  const handleCreateTag = (input: {
+  const handleCreateTag = async (input: {
     name: string;
     scope: TagScope;
     workspaceId: string | null;
+    parentId?: string | null;
   }) => {
-    const created = createManagedTag(input);
+    const created = await createManagedTag(input);
     if (created) {
       setSelectedTags((prev) =>
         prev.some((tag) => tag.id === created.id) ? prev : [...prev, created],
@@ -574,7 +585,7 @@ export default function MediaUploadDetailsModal({
           title: title.trim(),
           ...(trimmedSummary ? { summary: trimmedSummary } : {}),
           ...(thumbnail ? { thumbnail } : {}),
-          tags: selectedTags.map((tag) => tag.name),
+          tagIds: selectedTags.map((tag) => tag.id),
           folderId: folderId || null,
           ...(duration ? { duration } : {}),
         },
@@ -826,13 +837,43 @@ export default function MediaUploadDetailsModal({
                 </Button>
               </Box>
 
-              {assignableTags.length === 0 ? (
+              {defaultTagsLoading ? (
+                <Typography variant="body2" sx={{ color: cv.textMuted, fontSize: '0.8125rem', mb: 1 }}>
+                  Loading auto-applied tags...
+                </Typography>
+              ) : defaultTags.length > 0 ? (
+                <Box sx={{ mb: 1.5 }}>
+                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: cv.textMuted, mb: 0.75, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Auto-applied from project
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                    {defaultTags.map((tag) => (
+                      <Chip
+                        key={`default-${tag.id}`}
+                        label={tag.name}
+                        size="small"
+                        icon={<LockOutlinedIcon sx={{ fontSize: '0.875rem !important' }} />}
+                        sx={{
+                          height: 24,
+                          fontSize: '0.75rem',
+                          backgroundColor: cv.surfaceHover,
+                          color: cv.textSecondary,
+                          border: `1px solid ${cv.border}`,
+                          '& .MuiChip-icon': { color: cv.textMuted },
+                        }}
+                      />
+                    ))}
+                  </Box>
+                </Box>
+              ) : null}
+
+              {filteredAssignableTags.length === 0 ? (
                 <Typography variant="body2" sx={{ color: cv.textMuted, fontSize: '0.8125rem' }}>
-                  No tags yet. Create one to continue.
+                  No extra tags available. Create one to continue.
                 </Typography>
               ) : (
                 <TagPickerDropdown
-                  assignableTags={assignableTags}
+                  assignableTags={filteredAssignableTags}
                   selectedTags={selectedTags}
                   onChange={setSelectedTags}
                   tagScopeColors={tagScopeColors}
@@ -1113,6 +1154,7 @@ export default function MediaUploadDetailsModal({
         mode="create"
         workspaces={workspaces}
         activeWorkspaceId={activeWorkspaceId}
+        availableTags={managedTags}
         onClose={() => setCreateTagOpen(false)}
         onCreate={handleCreateTag}
         onUpdate={() => false}

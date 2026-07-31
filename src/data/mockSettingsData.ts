@@ -47,6 +47,7 @@ export interface WorkspaceTeamMember {
   memberType?: WorkspaceMemberType;
   groupId?: string;
   isCurrentUser?: boolean;
+  hasOverride?: boolean;
 }
 
 export type WorkspaceMemberAccess = 'Full Access' | 'Can edit' | 'Can view';
@@ -446,24 +447,7 @@ export interface SettingsUserGroup {
   createdBy: string;
 }
 
-export const MOCK_SETTINGS_USER_GROUPS: SettingsUserGroup[] = [
-  {
-    id: 'g1',
-    name: 'Creative Team',
-    description: 'Editors and collaborators on client deliverables',
-    memberIds: ['u1', 'u2', 'u3'],
-    createdDate: 'Jan 12, 2024',
-    createdBy: 'Aviral Kataria',
-  },
-  {
-    id: 'g2',
-    name: 'Client Reviewers',
-    description: 'View-only access for stakeholder feedback',
-    memberIds: ['u4', 'u5'],
-    createdDate: 'Mar 4, 2024',
-    createdBy: 'Priya Sharma',
-  },
-];
+export const MOCK_SETTINGS_USER_GROUPS: SettingsUserGroup[] = [];
 
 let userGroupCounter = 0;
 
