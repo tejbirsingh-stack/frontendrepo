@@ -96,8 +96,9 @@ export default function ShareGuestPage() {
   const loadAnnotations = async (shareToken: string) => {
     try {
       const res = await getShareAnnotationsApi(shareToken);
-      if (res && res.data) {
-        setAnnotations(res.data);
+      const raw = Array.isArray(res) ? res : (res as any)?.data;
+      if (raw && Array.isArray(raw)) {
+        setAnnotations(raw);
       }
     } catch {
       // ignore
@@ -150,9 +151,7 @@ export default function ShareGuestPage() {
     }
   };
 
-  const isPrivateShare = visibility === 'private' || mode === 'email';
-
-  if (status === 'unlocked' && token && isPrivateShare) {
+  if (status === 'unlocked' && token) {
     return (
       <VideoPlayerPage
         isGuestMode={true}

@@ -237,14 +237,18 @@ function StrokePath({
 }: {
   stroke: Pick<VideoDrawingStroke, 'points' | 'color' | 'width' | 'opacity' | 'rainbow'>;
 }) {
+  let resolvedColor = stroke.color;
+  if (resolvedColor === 'var(--noah-palette-black)') resolvedColor = '#000000';
+  if (resolvedColor === 'var(--noah-palette-white)') resolvedColor = '#ffffff';
+
   if (stroke.rainbow) {
     return (
       <path
         d={stroke.points}
         fill="none"
         stroke="url(#draw-rainbow-gradient)"
-        strokeWidth={stroke.width}
-        strokeOpacity={stroke.opacity}
+        strokeWidth={stroke.width || 3}
+        strokeOpacity={stroke.opacity ?? 1}
         strokeLinecap="round"
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
@@ -256,9 +260,9 @@ function StrokePath({
     <path
       d={stroke.points}
       fill="none"
-      stroke={stroke.color}
-      strokeWidth={stroke.width}
-      strokeOpacity={stroke.opacity}
+      stroke={resolvedColor || '#a855f7'}
+      strokeWidth={stroke.width || 3}
+      strokeOpacity={stroke.opacity ?? 1}
       strokeLinecap="round"
       strokeLinejoin="round"
       vectorEffect="non-scaling-stroke"
@@ -351,48 +355,48 @@ export default function VideoAnnotationSurface({
     () =>
       strokes.filter((stroke) =>
         !stroke.erasedAt &&
-        !(stroke.visibility === 'private' && stroke.author?.name !== activeUser.name) &&
+        !(stroke.visibility === 'private' && stroke.author?.name !== activeUser?.name && !stroke.author?.isGuest) &&
         isOverlayAnnotationVisible(
           getDrawingHistoryEntryId(stroke.id),
-          stroke.videoTimestamp,
+          stroke.videoTimestamp ?? 0,
           currentVideoTime,
           resolvedOverlayEntryIds,
           stroke.endTimestamp,
         ),
       ),
-    [strokes, currentVideoTime, resolvedOverlayEntryIds],
+    [strokes, currentVideoTime, resolvedOverlayEntryIds, activeUser?.name],
   );
 
   const visibleShapes = useMemo(
     () =>
       shapes.filter((shape) =>
         !shape.erasedAt &&
-        !(shape.visibility === 'private' && shape.author?.name !== activeUser.name) &&
+        !(shape.visibility === 'private' && shape.author?.name !== activeUser?.name && !shape.author?.isGuest) &&
         isOverlayAnnotationVisible(
           getShapeHistoryEntryId(shape.id),
-          shape.videoTimestamp,
+          shape.videoTimestamp ?? 0,
           currentVideoTime,
           resolvedOverlayEntryIds,
           shape.endTimestamp,
         ),
       ),
-    [shapes, currentVideoTime, resolvedOverlayEntryIds],
+    [shapes, currentVideoTime, resolvedOverlayEntryIds, activeUser?.name],
   );
 
   const visibleStamps = useMemo(
     () =>
       stamps.filter((stamp) =>
         !stamp.erasedAt &&
-        !(stamp.visibility === 'private' && stamp.author?.name !== activeUser.name) &&
+        !(stamp.visibility === 'private' && stamp.author?.name !== activeUser?.name && !stamp.author?.isGuest) &&
         isOverlayAnnotationVisible(
           getStampHistoryEntryId(stamp.id),
-          stamp.videoTimestamp,
+          stamp.videoTimestamp ?? 0,
           currentVideoTime,
           resolvedOverlayEntryIds,
           stamp.endTimestamp,
         ),
       ),
-    [stamps, currentVideoTime, resolvedOverlayEntryIds],
+    [stamps, currentVideoTime, resolvedOverlayEntryIds, activeUser?.name],
   );
 
   useEffect(() => {

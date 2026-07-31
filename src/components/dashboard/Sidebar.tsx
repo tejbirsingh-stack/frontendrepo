@@ -1859,9 +1859,9 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
               navigateAndClose('/home/duplicates');
             }}
           />
-          <NavItem 
-            icon={<ShareOutlinedIcon />} 
-            label="Shared" 
+          <NavItem
+            icon={<ShareOutlinedIcon />}
+            label="Shared"
             active={location.pathname === '/home/shared'}
             onClick={() => {
               clearSidebarSelection();

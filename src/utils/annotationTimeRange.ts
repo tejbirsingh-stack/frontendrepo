@@ -1,14 +1,18 @@
 export const MIN_ANNOTATION_DURATION = 0.25;
 
+export const DEFAULT_ANNOTATION_DURATION = 4.0;
+
 export function getAnnotationEndTime(
   videoTimestamp: number,
   endTimestamp?: number,
 ): number {
-  if (endTimestamp !== undefined) {
-    return Math.max(endTimestamp, videoTimestamp + MIN_ANNOTATION_DURATION);
+  const start = Number(videoTimestamp) || 0;
+  const rawEnd = endTimestamp !== undefined ? Number(endTimestamp) : undefined;
+  if (rawEnd !== undefined && !isNaN(rawEnd) && rawEnd > start + MIN_ANNOTATION_DURATION) {
+    return Math.max(rawEnd, start + MIN_ANNOTATION_DURATION);
   }
 
-  return Math.floor(videoTimestamp) + 1;
+  return start + DEFAULT_ANNOTATION_DURATION;
 }
 
 export function isAnnotationVisibleInRange(
@@ -16,9 +20,10 @@ export function isAnnotationVisibleInRange(
   currentTime: number,
   endTimestamp?: number,
 ): boolean {
-  const start = videoTimestamp;
-  const end = getAnnotationEndTime(videoTimestamp, endTimestamp);
-  return currentTime >= start && currentTime < end;
+  const start = Number(videoTimestamp) || 0;
+  const current = Number(currentTime) || 0;
+  const end = getAnnotationEndTime(start, endTimestamp);
+  return current >= start && current < end;
 }
 
 export function clampAnnotationRange(
@@ -39,7 +44,7 @@ export function clampAnnotationRange(
 }
 
 export function createDefaultAnnotationEndTime(videoTimestamp: number): number {
-  return Math.floor(videoTimestamp) + 1;
+  return videoTimestamp + DEFAULT_ANNOTATION_DURATION;
 }
 
 export function getEffectiveTimelineDuration(

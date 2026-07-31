@@ -1235,13 +1235,15 @@ export default function VideoPlayerPage({
       const loadGuestApiAnnotations = async () => {
         try {
           const res = await getShareAnnotationsApi(shareToken);
-          if (res && res.data) {
-            const raw = res.data;
+          const raw = Array.isArray(res) ? res : (res as any)?.data;
+          if (raw && Array.isArray(raw)) {
             const mapAnnotationData = <T extends any>(a: any): T => {
+              const rawTimestamp = a.videoTimestamp !== null && a.videoTimestamp !== undefined ? a.videoTimestamp : a.data?.videoTimestamp;
+              const parsedTimestamp = rawTimestamp !== null && rawTimestamp !== undefined && !isNaN(Number(rawTimestamp)) ? Number(rawTimestamp) : 0;
               return {
                 ...a.data,
-                id: a.id,
-                videoTimestamp: a.videoTimestamp !== null ? a.videoTimestamp : a.data?.videoTimestamp,
+                id: a.data?.id || a.id,
+                videoTimestamp: parsedTimestamp,
                 resolved: a.resolved ?? a.data?.resolved,
                 author: a.author || {
                   name: a.guestName ? (a.guestEmail ? `${a.guestName} (${a.guestEmail})` : a.guestName) : (a.guestEmail || 'Guest User'),
@@ -1268,6 +1270,104 @@ export default function VideoPlayerPage({
             prevShapesRef.current = shapesData;
             prevDrawingsRef.current = drawingsData;
             prevStampsRef.current = stampsData;
+
+            const newHistory: AnnotationHistoryEntry[] = [];
+            let index = 1;
+
+            raw.forEach((ann: any) => {
+              const createdAt = new Date(ann.createdAt).getTime();
+              const author = ann.author || {
+                name: ann.guestName ? (ann.guestEmail ? `${ann.guestName} (${ann.guestEmail})` : ann.guestName) : (ann.guestEmail || 'Guest User'),
+                initials: ((ann.guestName || ann.guestEmail || 'G')[0] || 'G').toUpperCase(),
+                isGuest: true,
+              };
+
+              if (ann.type === 'comment') {
+                const c = mapAnnotationData<VideoComment>(ann);
+                const entryId = `comment-${c.id}`;
+                newHistory.push({
+                  id: entryId,
+                  index: index++,
+                  type: 'comment',
+                  author,
+                  createdAt,
+                  videoTimestamp: c.videoTimestamp ?? 0,
+                  summary: 'Comment added',
+                  detail: c.text,
+                  resolved: ann.resolved || c.resolved || false,
+                  resolvedAt: c.resolvedAt,
+                  resolvedBy: c.resolvedBy,
+                  unread: false,
+                  sourceCommentId: c.id,
+                  replyCount: c.replies?.length || 0,
+                  visibility: c.visibility ?? DEFAULT_ANNOTATION_VISIBILITY,
+                  groupId: c.groupId,
+                  linkedDrawingId: c.linkedDrawingId,
+                  linkedShapeId: c.linkedShapeId,
+                  pinned: c.pinned ?? false,
+                  erasedAt: c.erasedAt,
+                  erasedBy: c.erasedBy,
+                });
+              } else if (ann.type === 'shape') {
+                const s = mapAnnotationData<VideoShape>(ann);
+                const entryId = getShapeHistoryEntryId(s.id);
+                newHistory.push({
+                  id: entryId,
+                  index: index++,
+                  type: 'shape',
+                  author,
+                  createdAt,
+                  videoTimestamp: s.videoTimestamp ?? 0,
+                  summary: shapeSummary(s.type),
+                  resolved: ann.resolved || false,
+                  unread: false,
+                  pinned: s.pinned ?? false,
+                  erasedAt: s.erasedAt,
+                  erasedBy: s.erasedBy,
+                });
+              } else if (ann.type === 'drawing') {
+                const d = mapAnnotationData<VideoDrawingStroke>(ann);
+                const entryId = getDrawingHistoryEntryId(d.id);
+                const summaryStr = d.tool === 'highlighter' ? 'Highlighter stroke added' : d.tool === 'grid' ? 'Grid line added' : d.tool === 'eraser' ? 'Drawing erased' : 'Drawing added';
+                newHistory.push({
+                  id: entryId,
+                  index: index++,
+                  type: 'drawing',
+                  author,
+                  createdAt,
+                  videoTimestamp: d.videoTimestamp ?? 0,
+                  summary: summaryStr,
+                  resolved: ann.resolved || false,
+                  unread: false,
+                  pinned: d.pinned ?? false,
+                  erasedAt: d.erasedAt,
+                  erasedBy: d.erasedBy,
+                });
+              } else if (ann.type === 'stamp') {
+                const st = mapAnnotationData<VideoStamp>(ann);
+                const entryId = getStampHistoryEntryId(st.id);
+                newHistory.push({
+                  id: entryId,
+                  index: index++,
+                  type: 'stamp',
+                  author,
+                  createdAt,
+                  videoTimestamp: st.videoTimestamp ?? 0,
+                  summary: getStampSummary(st.stampId, customStamp, st.customEmoji),
+                  resolved: ann.resolved || false,
+                  unread: false,
+                  pinned: st.pinned ?? false,
+                  erasedAt: st.erasedAt,
+                  erasedBy: st.erasedBy,
+                });
+              }
+            });
+
+            const mergedHistory = mergeLinkedAnnotationHistory(newHistory, commentsData);
+            mergedHistory.sort((a: any, b: any) => a.videoTimestamp - b.videoTimestamp);
+            mergedHistory.forEach((h: any, i: number) => (h.index = i + 1));
+
+            setHistory(mergedHistory);
             setInitialLoadComplete(true);
           } else {
             setInitialLoadComplete(true);
@@ -1287,10 +1387,12 @@ export default function VideoPlayerPage({
         const { annotations } = await getMediaAnnotationsRequest(mediaId);
 
         const mapAnnotationData = <T extends any>(a: any): T => {
+          const rawTimestamp = a.videoTimestamp !== null && a.videoTimestamp !== undefined ? a.videoTimestamp : a.data?.videoTimestamp;
+          const parsedTimestamp = rawTimestamp !== null && rawTimestamp !== undefined && !isNaN(Number(rawTimestamp)) ? Number(rawTimestamp) : 0;
           return {
             ...a.data,
-            id: a.id,
-            videoTimestamp: a.videoTimestamp !== null ? a.videoTimestamp : a.data?.videoTimestamp,
+            id: a.data?.id || a.id,
+            videoTimestamp: parsedTimestamp,
             resolved: a.resolved ?? a.data?.resolved,
             author: a.author ?? a.data?.author,
             userId: a.userId,
