@@ -58,14 +58,12 @@ export default function Header({
         setNotificationItems(data);
       }
     };
-    
+
     if (user) {
       loadNotifications();
-      // Poll every 15 seconds
-      const interval = setInterval(loadNotifications, 15000);
-      return () => clearInterval(interval);
     }
   }, [user]);
+
 
   // Real-time WebSocket Notifications Listener
   useEffect(() => {
@@ -73,7 +71,7 @@ export default function Header({
 
     const defaultBase = typeof window !== 'undefined' ? `${window.location.origin}/api` : 'http://localhost:3000/api';
     const baseUrl = env.apiBaseUrl || defaultBase;
-    
+
     let wsBase = baseUrl.replace(/^http/, 'ws');
     if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
       wsBase = wsBase.replace(/^ws:\/\//, 'wss://');

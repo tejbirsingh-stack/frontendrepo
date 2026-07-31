@@ -1232,13 +1232,11 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     };
 
     void loadPendingDeletionCount();
-    const intervalId = window.setInterval(() => {
-      void loadPendingDeletionCount();
-    }, 60_000);
+
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+
     };
   }, [canManageDeletions, location.pathname]);
 
