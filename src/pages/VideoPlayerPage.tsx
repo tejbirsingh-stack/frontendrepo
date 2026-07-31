@@ -159,7 +159,7 @@ import {
 } from '../utils/playerToolUtils';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
-import { getMediaAssetByIdRequest, updateAssetTagsRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride } from '../api';
+import { getMediaAssetByIdRequest, updateAssetTagsRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride, getCompanyInfoRequest } from '../api';
 import type { MediaItem, MediaType } from '../data/mockMedia';
 
 function collaboratorsToTeamMembers(collaborators: MediaCollaborator[]): WorkspaceTeamMember[] {
@@ -272,7 +272,7 @@ export default function VideoPlayerPage({
   } catch {
     // Guest mode outside DashboardProvider
   }
-  const { mediaItems = [], updateMediaTags = () => {}, favorites, toggleFavorite = () => {} } = dashboardData;
+  const { mediaItems = [], sharedMediaItems = [], updateMediaTags = () => {}, favorites, toggleFavorite = () => {} } = dashboardData;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoStageRef = useRef<HTMLDivElement>(null);
@@ -454,6 +454,19 @@ export default function VideoPlayerPage({
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const [selectedStampId, setSelectedStampId] = useState<string | null>(null);
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
+  const [internalLogoUrl, setInternalLogoUrl] = useState<string | null>(null);
+
+  const isSharedWithUser = !isGuestMode && sharedMediaItems.some((m: MediaItem) => m.id === mediaId);
+
+  useEffect(() => {
+    if (!isGuestMode) {
+      getCompanyInfoRequest()
+        .then((res) => {
+          setInternalLogoUrl(res?.metadata?.logoUrl || null);
+        })
+        .catch((err) => console.error('Failed to load company logo:', err));
+    }
+  }, [isGuestMode]);
 
   const handleAnnotationClick = useCallback((id: string, type: TimelineAnnotationType) => {
     setSelectedShapeId(null);
@@ -3388,63 +3401,65 @@ export default function VideoPlayerPage({
                 }
               />
 
-              <Tooltip title="Share video" arrow placement="bottom">
-                <Box sx={{ display: 'inline-flex' }}>
-                  <IconButton
-                    type="button"
-                    size="small"
-                    aria-haspopup="dialog"
-                    aria-expanded={shareDialogOpen}
-                    aria-label="Share video"
-                    onClick={handleOpenShareDialog}
-                    sx={{
-                      display: { xs: 'inline-flex', lg: 'none' },
-                      width: 36,
-                      height: 36,
-                      borderRadius: '10px',
-                      color: cv.textPrimary,
-                      background: cv.brandGradient,
-                      boxShadow: cv.brandShadowSoft,
-                      '&:hover': {
+              {!isSharedWithUser && (
+                <Tooltip title="Share video" arrow placement="bottom">
+                  <Box sx={{ display: 'inline-flex' }}>
+                    <IconButton
+                      type="button"
+                      size="small"
+                      aria-haspopup="dialog"
+                      aria-expanded={shareDialogOpen}
+                      aria-label="Share video"
+                      onClick={handleOpenShareDialog}
+                      sx={{
+                        display: { xs: 'inline-flex', lg: 'none' },
+                        width: 36,
+                        height: 36,
+                        borderRadius: '10px',
+                        color: cv.textPrimary,
                         background: cv.brandGradient,
-                        filter: 'brightness(1.08)',
-                      },
-                    }}
-                  >
-                    <ShareOutlinedIcon sx={{ fontSize: 18 }} />
-                  </IconButton>
-                  <Button
-                    type="button"
-                    size="small"
-                    variant="contained"
-                    aria-haspopup="dialog"
-                    aria-expanded={shareDialogOpen}
-                    startIcon={<ShareOutlinedIcon sx={{ fontSize: 16 }} />}
-                    onClick={handleOpenShareDialog}
-                    sx={{
-                      display: { xs: 'none', lg: 'inline-flex' },
-                      minHeight: 36,
-                      height: 36,
-                      py: 0,
-                      px: 1.5,
-                      borderRadius: '10px',
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      fontSize: '0.8125rem',
-                      letterSpacing: '0.01em',
-                      color: cv.textPrimary,
-                      background: cv.brandGradient,
-                      boxShadow: cv.brandShadowSoft,
-                      '&:hover': {
+                        boxShadow: cv.brandShadowSoft,
+                        '&:hover': {
+                          background: cv.brandGradient,
+                          filter: 'brightness(1.08)',
+                        },
+                      }}
+                    >
+                      <ShareOutlinedIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                    <Button
+                      type="button"
+                      size="small"
+                      variant="contained"
+                      aria-haspopup="dialog"
+                      aria-expanded={shareDialogOpen}
+                      startIcon={<ShareOutlinedIcon sx={{ fontSize: 16 }} />}
+                      onClick={handleOpenShareDialog}
+                      sx={{
+                        display: { xs: 'none', lg: 'inline-flex' },
+                        minHeight: 36,
+                        height: 36,
+                        py: 0,
+                        px: 1.5,
+                        borderRadius: '10px',
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.8125rem',
+                        letterSpacing: '0.01em',
+                        color: cv.textPrimary,
                         background: cv.brandGradient,
-                        filter: 'brightness(1.08)',
-                      },
-                    }}
-                  >
-                    Share
-                  </Button>
-                </Box>
-              </Tooltip>
+                        boxShadow: cv.brandShadowSoft,
+                        '&:hover': {
+                          background: cv.brandGradient,
+                          filter: 'brightness(1.08)',
+                        },
+                      }}
+                    >
+                      Share
+                    </Button>
+                  </Box>
+                </Tooltip>
+              )}
             </>
           )}
 
@@ -3890,21 +3905,21 @@ export default function VideoPlayerPage({
                   </Box>
                 ) : null}
 
-                {isGuestMode && guestAssetMeta?.logoUrl ? (
+                {(isGuestMode && guestAssetMeta?.logoUrl) || (isSharedWithUser && internalLogoUrl) ? (
                   <Box
                     sx={{
                       position: 'absolute',
                       top: 16,
-                      right: 16,
+                      left: 16,
                       zIndex: 10,
-                      opacity: 0.7, // Subtle watermark look
+                      opacity: 0.7,
                       pointerEvents: 'none',
                       userSelect: 'none',
                     }}
                   >
                     <img 
-                      src={guestAssetMeta.logoUrl} 
-                      alt={guestAssetMeta.organizationName || 'Company Watermark'} 
+                      src={(isGuestMode ? guestAssetMeta?.logoUrl : internalLogoUrl) || ''} 
+                      alt="Company Watermark" 
                       style={{ maxHeight: '48px', maxWidth: '120px', objectFit: 'contain' }}
                     />
                   </Box>

@@ -98,7 +98,7 @@ export async function revokeShareLinkAsync(linkId: string): Promise<boolean> {
 
 export async function updateShareLinkAsync(
   linkId: string,
-  patch: Partial<{ name: string; visibility: string }>
+  patch: Partial<{ name: string; visibility: string; permissions: Record<string, any> }>
 ): Promise<boolean> {
   try {
     const { updateShareLinkApi } = await import('../api/share.service');
