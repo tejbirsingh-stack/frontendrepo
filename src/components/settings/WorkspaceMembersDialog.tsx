@@ -736,7 +736,8 @@ export default function WorkspaceMembersDialog({
           control={
             <Switch
               size="small"
-              checked={activeShareLink?.permissions?.watermark !== false}
+              checked={draftVisibility === 'public' ? false : activeShareLink?.permissions?.watermark !== false}
+              disabled={draftVisibility === 'public'}
               onChange={(e) => {
                 if (activeShareLinkId && onShareLinkPermissionsChange) {
                   onShareLinkPermissionsChange(activeShareLinkId, {
@@ -805,7 +806,7 @@ export default function WorkspaceMembersDialog({
     onUpdateMemberAccess(member.id, value as WorkspaceMemberAccess);
   };
 
-  const inviteFormSection = showMemberInvitePanel ? (
+  const inviteFormSection = (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
       <Box sx={{ position: 'relative', flex: 1, minWidth: 0 }}>
         <TextField
@@ -1015,9 +1016,9 @@ export default function WorkspaceMembersDialog({
         Invite
       </Button>
     </Box>
-  ) : null;
+  );
 
-  const directAccessSection = showMemberInvitePanel ? (
+  const directAccessSection = (
     <>
       {!isProject ? (
         <Box
@@ -1295,13 +1296,15 @@ export default function WorkspaceMembersDialog({
         </Box>
       </Box>
     </>
-  ) : null;
+  );
 
   const memberAccessPanel = (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {inviteFormSection}
-      {directAccessSection}
-    </Box>
+    <Collapse in={showMemberInvitePanel}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {inviteFormSection}
+        {directAccessSection}
+      </Box>
+    </Collapse>
   );
 
   const footerMembersSummary = (

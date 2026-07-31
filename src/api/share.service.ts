@@ -65,7 +65,7 @@ export async function deleteShareLinkApi(shareLinkId: string) {
   });
 }
 
-export async function updateShareLinkApi(shareLinkId: string, payload: { name?: string; visibility?: string }) {
+export async function updateShareLinkApi(shareLinkId: string, payload: { name?: string; visibility?: string; permissions?: Record<string, any> }) {
   return apiRequest<{ success: boolean; message: string; shareLink: BackendShareLink }>(
     `/api/share-links/${shareLinkId}`,
     {
@@ -100,6 +100,8 @@ export async function validateShareTokenApi(token: string) {
       fileType: string;
       mimeType: string;
       fileSize: number;
+      logoUrl?: string | null;
+      organizationName?: string | null;
     };
   }>(`/api/share/${token}`, {
     method: 'GET',

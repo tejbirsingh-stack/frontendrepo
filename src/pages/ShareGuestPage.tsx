@@ -365,18 +365,31 @@ export default function ShareGuestPage() {
                   border: '1px solid rgba(255,255,255,0.08)',
                 }}
               >
-                <video
-                  src={streamUrl}
-                  controls
-                  autoPlay
-                  style={{ width: '100%', maxHeight: '65vh', display: 'block' }}
-                />
+                <Box sx={{
+                  width: '100%',
+                  maxHeight: '65vh',
+                  '& video::-webkit-media-controls-enclosure': {
+                    overflow: 'hidden',
+                  },
+                  '& video::-webkit-media-controls-panel': {
+                    width: 'calc(100% + 30px)', // Push the overflow menu button off-screen
+                  },
+                }}>
+                  <video
+                    src={streamUrl}
+                    controls
+                    controlsList="nodownload"
+                    onContextMenu={(e) => e.preventDefault()}
+                    autoPlay
+                    style={{ width: '100%', maxHeight: '65vh', display: 'block' }}
+                  />
+                </Box>
                 {assetMeta?.logoUrl ? (
                   <Box
                     sx={{
                       position: 'absolute',
                       top: 16,
-                      right: 16,
+                      left: 16,
                       zIndex: 10,
                       opacity: 0.7,
                       pointerEvents: 'none',
@@ -397,24 +410,7 @@ export default function ShareGuestPage() {
                   {assetMeta?.title || 'Shared Media Asset'}
                 </Typography>
 
-                {permissions.download || permissions.downloadProxy ? (
-                  <Button
-                    variant="outlined"
-                    startIcon={<DownloadOutlinedIcon />}
-                    component="a"
-                    href={`${streamUrl}?download=true`}
-                    download
-                    sx={{
-                      borderRadius: '10px',
-                      textTransform: 'none',
-                      borderColor: 'rgba(255,255,255,0.2)',
-                      color: '#f1f5f9',
-                      '&:hover': { borderColor: cv.brandPurple, backgroundColor: 'rgba(168,85,247,0.1)' },
-                    }}
-                  >
-                    Download File
-                  </Button>
-                ) : null}
+                {/* Download button removed to prevent downloading of watermarked videos */}
               </Box>
             </Box>
 
