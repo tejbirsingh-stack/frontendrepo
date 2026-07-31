@@ -3,6 +3,8 @@ import {
   Box,
   Button,
   CircularProgress,
+  Tab,
+  Tabs,
   Typography,
 } from '@mui/material';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
@@ -215,6 +217,7 @@ export default function DeletionRequestsPage() {
   const [requests, setRequests] = useState<PendingDeletion[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<number>(0);
 
   const isSuperAdmin =
     user?.role === 'Super Admin' || user?.roleId === ROLE_IDS.SUPER_ADMIN;
@@ -222,6 +225,31 @@ export default function DeletionRequestsPage() {
     isSuperAdmin ||
     user?.role === 'Admin' ||
     user?.roleId === ROLE_IDS.ADMIN;
+
+  const tabSx = {
+    minHeight: 40,
+    mb: 3,
+    borderBottom: `1px solid ${cv.border}`,
+    '& .MuiTab-root': {
+      minHeight: 40,
+      py: 1,
+      px: 0,
+      mr: 3,
+      fontSize: '0.9375rem',
+      fontWeight: 600,
+      color: cv.textSecondary,
+      textTransform: 'none',
+      minWidth: 'auto',
+    },
+    '& .Mui-selected': {
+      color: `${cv.textPrimary} !important`,
+    },
+    '& .MuiTabs-indicator': {
+      backgroundColor: cv.brandBlue,
+      height: 3,
+      borderRadius: '3px 3px 0 0',
+    },
+  };
 
   const fetchRequests = useCallback(async () => {
     try {
@@ -437,18 +465,22 @@ export default function DeletionRequestsPage() {
     items,
     emptyLabel,
     stage,
+    showTitle = true,
   }: {
     title: string;
     description: string;
     items: PendingDeletion[];
     emptyLabel: string;
     stage: 'admin' | 'super-admin';
+    showTitle?: boolean;
   }) => (
     <Box sx={{ mb: 4 }}>
-      <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: cv.textPrimary, mb: 0.5 }}>
-        {title} ({items.length})
-      </Typography>
-      <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, mb: 1.75 }}>
+      {showTitle && (
+        <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: cv.textPrimary, mb: 0.5 }}>
+          {title} ({items.length})
+        </Typography>
+      )}
+      <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, mb: 2 }}>
         {description}
       </Typography>
 
@@ -500,25 +532,48 @@ export default function DeletionRequestsPage() {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
         </Box>
-      ) : (
+      ) : isSuperAdmin ? (
         <>
-          {renderSection({
-            title: 'Pending Admin review',
-            description:
-              'Items deleted by editors and other roles. Restore them, or delete to escalate to Super Admin.',
-            items: adminPending,
-            emptyLabel: 'No deletions waiting for Admin review.',
-            stage: 'admin',
-          })}
-          {renderSection({
-            title: 'Pending Super Admin review',
-            description: 'Items approved for deletion by an Admin. Restore them, or permanently delete.',
-            items: superAdminPending,
-            emptyLabel: 'No deletions waiting for Super Admin review.',
-            stage: 'super-admin',
-          })}
+          <Tabs value={activeTab} onChange={(_, value: number) => setActiveTab(value)} sx={tabSx}>
+            <Tab label={`Pending Admin review (${adminPending.length})`} />
+            <Tab label={`Pending Super Admin review (${superAdminPending.length})`} />
+          </Tabs>
+
+          {activeTab === 0 &&
+            renderSection({
+              title: 'Pending Admin review',
+              description:
+                'Items deleted by editors and other roles. Restore them, or delete to escalate to Super Admin.',
+              items: adminPending,
+              emptyLabel: 'No deletions waiting for Admin review.',
+              stage: 'admin',
+              showTitle: false,
+            })}
+
+          {activeTab === 1 &&
+            renderSection({
+              title: 'Pending Super Admin review',
+              description:
+                'Items approved for deletion by an Admin. Restore them, or permanently delete.',
+              items: superAdminPending,
+              emptyLabel: 'No deletions waiting for Super Admin review.',
+              stage: 'super-admin',
+              showTitle: false,
+            })}
         </>
+      ) : (
+        renderSection({
+          title: 'Pending Admin review',
+          description:
+            'Items deleted by editors and other roles. Restore them, or delete to escalate to Super Admin.',
+          items: adminPending,
+          emptyLabel: 'No deletions waiting for Admin review.',
+          stage: 'admin',
+          showTitle: true,
+        })
       )}
     </Box>
   );
 }
+
+

@@ -1202,44 +1202,163 @@ export default function VideoPlayerPage({
   );
 
   useEffect(() => {
+    const processRawAnnotations = (annotationsList: any[], containerId: string) => {
+      const mapAnnotationData = <T extends any>(a: any): T => {
+        const rawTs = a.videoTimestamp !== undefined && a.videoTimestamp !== null ? a.videoTimestamp : a.data?.videoTimestamp;
+        const numTs = typeof rawTs === 'number' ? rawTs : (rawTs ? Number(rawTs) : 0);
+        return {
+          ...a.data,
+          id: a.data?.id || a.id,
+          dbId: a.id,
+          videoTimestamp: Number.isNaN(numTs) ? 0 : numTs,
+          resolved: a.resolved ?? a.data?.resolved,
+          author: a.author ?? a.data?.author ?? {
+            name: a.guestName ? (a.guestEmail ? `${a.guestName} (${a.guestEmail})` : a.guestName) : (a.guestEmail || 'Guest User'),
+            initials: ((a.guestName || a.guestEmail || 'G')[0] || 'G').toUpperCase(),
+          },
+          userId: a.userId,
+          createdAt: a.createdAt,
+          text: a.data?.text || a.text || '',
+          replies: a.data?.replies || [],
+          pinned: a.pinned ?? a.data?.pinned ?? false,
+          erasedAt: a.data?.erasedAt,
+          erasedBy: a.data?.erasedBy,
+        } as T;
+      };
+
+      const commentsData = annotationsList.filter(a => a.type === 'comment').map(a => mapAnnotationData<VideoComment>(a));
+      const shapesData = annotationsList.filter(a => a.type === 'shape').map(a => mapAnnotationData<VideoShape>(a));
+      const drawingsData = annotationsList.filter(a => a.type === 'drawing').map(a => mapAnnotationData<VideoDrawingStroke>(a));
+      const stampsData = annotationsList.filter(a => a.type === 'stamp').map(a => mapAnnotationData<VideoStamp>(a));
+
+      setComments(commentsData);
+      setShapes(shapesData);
+      setDrawings(drawingsData);
+      setStamps(stampsData);
+
+      prevCommentsRef.current = commentsData;
+      prevShapesRef.current = shapesData;
+      prevDrawingsRef.current = drawingsData;
+      prevStampsRef.current = stampsData;
+
+      const readIds = new Set<string>();
+      try {
+        const stored = localStorage.getItem(`read_annotations_${containerId}`);
+        if (stored) JSON.parse(stored).forEach((id: string) => readIds.add(id));
+      } catch { }
+
+      const getAuthor = (ann: any) => ann.author || ann.data?.author || {
+        name: ann.guestName ? (ann.guestEmail ? `${ann.guestName} (${ann.guestEmail})` : ann.guestName) : (ann.guestEmail || activeUser.name || 'Guest User'),
+        avatarUrl: activeUser.avatarUrl,
+        initials: ((ann.guestName || ann.guestEmail || activeUser.initials || 'G')[0] || 'G').toUpperCase()
+      };
+      const checkUnread = (ann: any, entryId: string) => {
+        if (!ann.userId || !user?.id) return false;
+        return ann.userId !== user.id && !readIds.has(entryId);
+      };
+
+      const newHistory: AnnotationHistoryEntry[] = [];
+      let index = 1;
+
+      annotationsList.forEach(ann => {
+        const createdAt = new Date(ann.createdAt).getTime();
+
+        if (ann.type === 'comment') {
+          const c = mapAnnotationData<VideoComment>(ann);
+          const entryId = `comment-${c.id}`;
+          newHistory.push({
+            id: entryId,
+            index: index++,
+            type: 'comment',
+            author: getAuthor(ann),
+            createdAt,
+            videoTimestamp: c.videoTimestamp ?? 0,
+            summary: 'Comment added',
+            detail: c.text,
+            resolved: ann.resolved || c.resolved || false,
+            resolvedAt: c.resolvedAt,
+            resolvedBy: c.resolvedBy,
+            unread: checkUnread(ann, entryId),
+            sourceCommentId: c.id,
+            replyCount: c.replies?.length || 0,
+            visibility: c.visibility ?? DEFAULT_ANNOTATION_VISIBILITY,
+            groupId: c.groupId,
+            linkedDrawingId: c.linkedDrawingId,
+            linkedShapeId: c.linkedShapeId,
+            pinned: c.pinned ?? false,
+            erasedAt: c.erasedAt,
+            erasedBy: c.erasedBy,
+          });
+        } else if (ann.type === 'shape') {
+          const s = mapAnnotationData<VideoShape>(ann);
+          const entryId = getShapeHistoryEntryId(s.id);
+          newHistory.push({
+            id: entryId,
+            index: index++,
+            type: 'shape',
+            author: getAuthor(ann),
+            createdAt,
+            videoTimestamp: s.videoTimestamp ?? 0,
+            summary: shapeSummary(s.type),
+            resolved: ann.resolved || false,
+            unread: checkUnread(ann, entryId),
+            pinned: s.pinned ?? false,
+            erasedAt: s.erasedAt,
+            erasedBy: s.erasedBy,
+          });
+        } else if (ann.type === 'drawing') {
+          const d = mapAnnotationData<VideoDrawingStroke>(ann);
+          const entryId = getDrawingHistoryEntryId(d.id);
+          const summaryStr = d.tool === 'highlighter' ? 'Highlighter stroke added' : d.tool === 'grid' ? 'Grid line added' : d.tool === 'eraser' ? 'Drawing erased' : 'Drawing added';
+          newHistory.push({
+            id: entryId,
+            index: index++,
+            type: 'drawing',
+            author: getAuthor(ann),
+            createdAt,
+            videoTimestamp: d.videoTimestamp ?? 0,
+            summary: summaryStr,
+            resolved: ann.resolved || false,
+            unread: checkUnread(ann, entryId),
+            pinned: d.pinned ?? false,
+            erasedAt: d.erasedAt,
+            erasedBy: d.erasedBy,
+          });
+        } else if (ann.type === 'stamp') {
+          const st = mapAnnotationData<VideoStamp>(ann);
+          const entryId = getStampHistoryEntryId(st.id);
+          newHistory.push({
+            id: entryId,
+            index: index++,
+            type: 'stamp',
+            author: getAuthor(ann),
+            createdAt,
+            videoTimestamp: st.videoTimestamp ?? 0,
+            summary: getStampSummary(st.stampId, customStamp, st.customEmoji),
+            resolved: ann.resolved || false,
+            unread: checkUnread(ann, entryId),
+            pinned: st.pinned ?? false,
+            erasedAt: st.erasedAt,
+            erasedBy: st.erasedBy,
+          });
+        }
+      });
+
+      const mergedHistory = mergeLinkedAnnotationHistory(newHistory, commentsData);
+      mergedHistory.sort((a, b) => a.videoTimestamp - b.videoTimestamp);
+      mergedHistory.forEach((h, i) => h.index = i + 1);
+
+      setHistory(mergedHistory);
+      setInitialLoadComplete(true);
+    };
+
     if (isGuestMode && shareToken) {
       const loadGuestApiAnnotations = async () => {
         try {
           const res = await getShareAnnotationsApi(shareToken);
-          if (res && res.data) {
-            const raw = res.data;
-            const mapAnnotationData = <T extends any>(a: any): T => {
-              return {
-                ...a.data,
-                id: a.id,
-                videoTimestamp: a.videoTimestamp !== null ? a.videoTimestamp : a.data?.videoTimestamp,
-                resolved: a.resolved ?? a.data?.resolved,
-                author: a.author || {
-                  name: a.guestName ? (a.guestEmail ? `${a.guestName} (${a.guestEmail})` : a.guestName) : (a.guestEmail || 'Guest User'),
-                  initials: (a.guestName || a.guestEmail || 'G')[0]?.toUpperCase(),
-                },
-                userId: a.userId,
-                createdAt: a.createdAt,
-                text: a.data?.text || a.text || '',
-                replies: a.data?.replies || [],
-              } as T;
-            };
-
-            const commentsData = raw.filter((a: any) => a.type === 'comment').map((a: any) => mapAnnotationData<VideoComment>(a));
-            const shapesData = raw.filter((a: any) => a.type === 'shape').map((a: any) => mapAnnotationData<VideoShape>(a));
-            const drawingsData = raw.filter((a: any) => a.type === 'drawing').map((a: any) => mapAnnotationData<VideoDrawingStroke>(a));
-            const stampsData = raw.filter((a: any) => a.type === 'stamp').map((a: any) => mapAnnotationData<VideoStamp>(a));
-
-            setComments(commentsData);
-            setShapes(shapesData);
-            setDrawings(drawingsData);
-            setStamps(stampsData);
-
-            prevCommentsRef.current = commentsData;
-            prevShapesRef.current = shapesData;
-            prevDrawingsRef.current = drawingsData;
-            prevStampsRef.current = stampsData;
-            setInitialLoadComplete(true);
+          const list = Array.isArray(res) ? res : (res && (res as any).data ? (res as any).data : []);
+          if (list) {
+            processRawAnnotations(list, shareToken);
           } else {
             setInitialLoadComplete(true);
           }
@@ -1256,144 +1375,11 @@ export default function VideoPlayerPage({
     const loadApiAnnotations = async () => {
       try {
         const { annotations } = await getMediaAnnotationsRequest(mediaId);
-
-        const mapAnnotationData = <T extends any>(a: any): T => {
-          return {
-            ...a.data,
-            id: a.id,
-            videoTimestamp: a.videoTimestamp !== null ? a.videoTimestamp : a.data?.videoTimestamp,
-            resolved: a.resolved ?? a.data?.resolved,
-            author: a.author ?? a.data?.author,
-            userId: a.userId,
-            createdAt: a.createdAt,
-            text: a.data?.text || '',
-            replies: a.data?.replies || [],
-            pinned: a.pinned ?? a.data?.pinned ?? false,
-            erasedAt: a.data?.erasedAt,
-            erasedBy: a.data?.erasedBy,
-          } as T;
-        };
-
-        const commentsData = annotations.filter(a => a.type === 'comment').map(a => mapAnnotationData<VideoComment>(a));
-        const shapesData = annotations.filter(a => a.type === 'shape').map(a => mapAnnotationData<VideoShape>(a));
-        const drawingsData = annotations.filter(a => a.type === 'drawing').map(a => mapAnnotationData<VideoDrawingStroke>(a));
-        const stampsData = annotations.filter(a => a.type === 'stamp').map(a => mapAnnotationData<VideoStamp>(a));
-
-        setComments(commentsData);
-        setShapes(shapesData);
-        setDrawings(drawingsData);
-        setStamps(stampsData);
-
-        prevCommentsRef.current = commentsData;
-        prevShapesRef.current = shapesData;
-        prevDrawingsRef.current = drawingsData;
-        prevStampsRef.current = stampsData;
-
-        const readIds = new Set<string>();
-        try {
-          const stored = localStorage.getItem(`read_annotations_${mediaId}`);
-          if (stored) JSON.parse(stored).forEach((id: string) => readIds.add(id));
-        } catch { }
-
-        const getAuthor = (ann: any) => ann.author || { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials };
-        const checkUnread = (ann: any, entryId: string) => {
-          if (!ann.userId || !user?.id) return false;
-          return ann.userId !== user.id && !readIds.has(entryId);
-        };
-
-        const newHistory: AnnotationHistoryEntry[] = [];
-        let index = 1;
-
-        annotations.forEach(ann => {
-          const createdAt = new Date(ann.createdAt).getTime();
-
-          if (ann.type === 'comment') {
-            const c = ann.data as VideoComment;
-            const entryId = `comment-${c.id}`;
-            newHistory.push({
-              id: entryId,
-              index: index++,
-              type: 'comment',
-              author: getAuthor(ann),
-              createdAt,
-              videoTimestamp: c.videoTimestamp ?? 0,
-              summary: 'Comment added',
-              detail: c.text,
-              resolved: ann.resolved || c.resolved || false,
-              resolvedAt: c.resolvedAt,
-              resolvedBy: c.resolvedBy,
-              unread: checkUnread(ann, entryId),
-              sourceCommentId: c.id,
-              replyCount: c.replies?.length || 0,
-              visibility: c.visibility ?? DEFAULT_ANNOTATION_VISIBILITY,
-              groupId: c.groupId,
-              linkedDrawingId: c.linkedDrawingId,
-              linkedShapeId: c.linkedShapeId,
-              pinned: c.pinned ?? false,
-              erasedAt: c.erasedAt,
-              erasedBy: c.erasedBy,
-            });
-          } else if (ann.type === 'shape') {
-            const s = ann.data as VideoShape;
-            const entryId = getShapeHistoryEntryId(s.id);
-            newHistory.push({
-              id: entryId,
-              index: index++,
-              type: 'shape',
-              author: getAuthor(ann),
-              createdAt,
-              videoTimestamp: s.videoTimestamp ?? 0,
-              summary: shapeSummary(s.type),
-              resolved: ann.resolved || false,
-              unread: checkUnread(ann, entryId),
-              pinned: s.pinned ?? false,
-              erasedAt: s.erasedAt,
-              erasedBy: s.erasedBy,
-            });
-          } else if (ann.type === 'drawing') {
-            const d = ann.data as VideoDrawingStroke;
-            const entryId = getDrawingHistoryEntryId(d.id);
-            const summaryStr = d.tool === 'highlighter' ? 'Highlighter stroke added' : d.tool === 'grid' ? 'Grid line added' : d.tool === 'eraser' ? 'Drawing erased' : 'Drawing added';
-            newHistory.push({
-              id: entryId,
-              index: index++,
-              type: 'drawing',
-              author: getAuthor(ann),
-              createdAt,
-              videoTimestamp: d.videoTimestamp ?? 0,
-              summary: summaryStr,
-              resolved: ann.resolved || false,
-              unread: checkUnread(ann, entryId),
-              pinned: d.pinned ?? false,
-              erasedAt: d.erasedAt,
-              erasedBy: d.erasedBy,
-            });
-          } else if (ann.type === 'stamp') {
-            const st = ann.data as VideoStamp;
-            const entryId = getStampHistoryEntryId(st.id);
-            newHistory.push({
-              id: entryId,
-              index: index++,
-              type: 'stamp',
-              author: getAuthor(ann),
-              createdAt,
-              videoTimestamp: st.videoTimestamp ?? 0,
-              summary: getStampSummary(st.stampId, customStamp, st.customEmoji),
-              resolved: ann.resolved || false,
-              unread: checkUnread(ann, entryId),
-              pinned: st.pinned ?? false,
-              erasedAt: st.erasedAt,
-              erasedBy: st.erasedBy,
-            });
-          }
-        });
-
-        const mergedHistory = mergeLinkedAnnotationHistory(newHistory, commentsData);
-        mergedHistory.sort((a, b) => a.videoTimestamp - b.videoTimestamp);
-        mergedHistory.forEach((h, i) => h.index = i + 1);
-
-        setHistory(mergedHistory);
-        setInitialLoadComplete(true);
+        if (annotations) {
+          processRawAnnotations(annotations, mediaId);
+        } else {
+          setInitialLoadComplete(true);
+        }
       } catch (err) {
         console.error('Failed to load annotations from API', err);
         setInitialLoadComplete(true);
