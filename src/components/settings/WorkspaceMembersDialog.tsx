@@ -227,7 +227,7 @@ export default function WorkspaceMembersDialog({
   onVisibilityChange,
 }: WorkspaceMembersDialogProps) {
   const [query, setQuery] = useState('');
-  const [access, setAccess] = useState<WorkspaceMemberAccess>('Full Access');
+  const [access, setAccess] = useState<WorkspaceMemberAccess>('Can view');
   const [error, setError] = useState('');
   const [typeaheadOpen, setTypeaheadOpen] = useState(false);
   // External email — single recipient for secure share
@@ -382,7 +382,7 @@ export default function WorkspaceMembersDialog({
   useEffect(() => {
     if (!open) {
       setQuery('');
-      setAccess('Full Access');
+      setAccess('Can view');
       setError('');
       setTypeaheadOpen(false);
       setPendingExternalEmail(null);
@@ -1151,6 +1151,18 @@ export default function WorkspaceMembersDialog({
                   }}
                 >
                   Guest Access
+                </Typography>
+              ) : isCurrentMember ? (
+                <Typography
+                  sx={{
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    color: cv.textSecondary,
+                    px: 1.5,
+                    py: 0.5,
+                  }}
+                >
+                  Owner
                 </Typography>
               ) : (
                 <FormControl size="small">
