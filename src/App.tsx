@@ -17,7 +17,7 @@ import {
   SignUpPage,
   SettingsSectionPage,
   TagsManagementPage,
-  UserActivitiesPage,
+  UserActivitiesPage,   
   TrashPage,
   VideoPlayerPage,
   MfaAuthPage,
