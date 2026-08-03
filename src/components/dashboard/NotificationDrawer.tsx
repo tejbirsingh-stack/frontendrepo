@@ -22,7 +22,7 @@ import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNone
 import SearchIcon from '@mui/icons-material/Search';
 import { NOTIFICATION_DRAWER_WIDTH } from '../../constants/layout';
 import type { Notification } from '../../data/mockNotifications';
-import { markNotificationAsRead } from '../../api/notification.service';
+import { markNotificationAsRead, deleteNotificationApi } from '../../api/notification.service';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutlined';
 import { useNavigate } from 'react-router-dom';
 
@@ -106,8 +106,10 @@ export default function NotificationDrawer({
   };
 
   const deleteNotification = (id: string) => {
+    deleteNotificationApi(id).catch(console.error);
     onItemsChange(items.filter((notification) => notification.id !== id));
   };
+
 
   const markAllAsRead = () => {
     markNotificationAsRead('all').catch(console.error);

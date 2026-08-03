@@ -31,3 +31,14 @@ export const markNotificationAsRead = async (id: string): Promise<boolean> => {
     return false;
   }
 };
+
+export const deleteNotificationApi = async (id: string): Promise<boolean> => {
+  try {
+    await apiClient.delete(`/notifications/${id}`);
+    return true;
+  } catch (error) {
+    console.error(`Failed to delete notification ${id}`, error);
+    return false;
+  }
+};
+
