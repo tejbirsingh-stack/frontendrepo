@@ -59,12 +59,16 @@ const annotationShortcutRows = [
   { label: 'Redo', shortcut: getRedoShortcutLabel() },
 ];
 
-const playerToolShortcutRows = PLAYER_TOOL_SECTIONS.flat()
-  .filter((tool) => Boolean(tool.shortcut))
-  .map((tool) => ({
-    label: tool.label,
-    shortcut: tool.shortcut!,
-  }));
+const playerToolShortcutRows = [
+  { label: 'Previous frame', shortcut: 'Shift+← or ,' },
+  { label: 'Next frame', shortcut: 'Shift+→ or .' },
+  ...PLAYER_TOOL_SECTIONS.flat()
+    .filter((tool) => Boolean(tool.shortcut))
+    .map((tool) => ({
+      label: tool.label,
+      shortcut: tool.shortcut!,
+    })),
+];
 
 function ShortcutList({ rows }: { rows: { label: string; shortcut: string }[] }) {
   return (

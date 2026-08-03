@@ -379,9 +379,8 @@ export default function MediaItemCard({
   // We'll use `item.videoSrc` as the generic raw asset URL fallback, or perhaps `item.customMetadata?.url`.
   // Wait, the API sends `filePath`, we might need to rely on the backend signing logic.
   // The frontend `MediaItem` has `videoSrc` mapped to the raw asset if it's not a video? Yes, it's mapped in `apiToFrontendMedia`.
-  // I will use `item.videoSrc` as the generic URL for documents.
-  const documentUrl = item.videoSrc;
-  const isClickable = (openPath || (item.type === 'document' && documentUrl)) && !selectionActive;
+  const documentUrl = item.videoSrc || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : undefined);
+  const isClickable = (Boolean(openPath) || (item.type === 'document' && Boolean(documentUrl))) && !selectionActive;
 
   const handleOpen = () => {
     if (!isClickable) return;

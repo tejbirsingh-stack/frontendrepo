@@ -12,7 +12,10 @@ import {
   ListItemIcon,
   Menu,
   MenuItem,
+  Pagination,
   Select,
+  Tab,
+  Tabs,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -283,6 +286,20 @@ export default function DashboardPage({
     activeWorkspace,
     fetchWorkspaceData,
   } = useDashboard();
+
+  // Duplicates pagination and tabs state
+  const [duplicateTab, setDuplicateTab] = useState<MediaType>('video');
+  const [duplicatePage, setDuplicatePage] = useState<number>(1);
+  const DUPLICATES_PER_PAGE = 10;
+
+  const handleDuplicateTabChange = (event: React.SyntheticEvent, newValue: MediaType) => {
+    setDuplicateTab(newValue);
+    setDuplicatePage(1); // Reset page on tab change
+  };
+
+  const handleDuplicatePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
+    setDuplicatePage(value);
+  };
 
   const selectionTitle = getSidebarSelectionTitle(sidebarSelection);
   const pageTitle = folderMedia
@@ -1434,36 +1451,123 @@ export default function DashboardPage({
               No duplicates found.
             </Typography>
           ) : (
-            duplicateClusters.map((cluster) => (
-              <Box key={cluster.originalId}>
-                <Typography
-                  variant="subtitle2"
-                  sx={{
-                    mb: 1.5,
-                    fontWeight: 600,
-                    color: cv.textSecondary,
-                    fontSize: '0.8125rem',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                  }}
-                >
-                  Original: {cluster.originalItem?.title || 'Unknown Video'} & its Duplicates
-                </Typography>
-                <Box
-                  sx={{
-                    display: 'grid',
-                    gridTemplateColumns: {
-                      xs: '1fr',
-                      sm: 'repeat(auto-fill, minmax(280px, 1fr))',
-                    },
-                    gap: { xs: 2, sm: 2.5 },
-                  }}
-                >
-                  {cluster.originalItem && renderMediaItem(cluster.originalItem)}
-                  {cluster.duplicates.map((dup) => renderMediaItem(dup))}
+            (() => {
+              const tabSx = {
+                minHeight: 40,
+                mb: 3,
+                borderBottom: `1px solid ${cv.border}`,
+                '& .MuiTab-root': {
+                  minHeight: 40,
+                  py: 1,
+                  px: 0,
+                  mr: 3,
+                  fontSize: '0.9375rem',
+                  fontWeight: 600,
+                  color: cv.textSecondary,
+                  textTransform: 'none',
+                  minWidth: 'auto',
+                },
+                '& .Mui-selected': {
+                  color: `${cv.textPrimary} !important`,
+                },
+                '& .MuiTabs-indicator': {
+                  backgroundColor: cv.brandBlue,
+                  height: 3,
+                  borderRadius: '3px 3px 0 0',
+                },
+              };
+
+              const duplicateTypes: MediaType[] = ['video', 'image', 'audio', 'document'];
+              
+              // Filter clusters by current tab
+              const currentTabClusters = duplicateClusters.filter(c => c.originalItem?.type === duplicateTab);
+              
+              // Calculate pagination
+              const totalPages = Math.ceil(currentTabClusters.length / DUPLICATES_PER_PAGE);
+              const paginatedClusters = currentTabClusters.slice(
+                (duplicatePage - 1) * DUPLICATES_PER_PAGE,
+                duplicatePage * DUPLICATES_PER_PAGE
+              );
+
+              return (
+                <Box>
+                  <Tabs value={duplicateTab} onChange={handleDuplicateTabChange} sx={tabSx}>
+                    {duplicateTypes.map(type => {
+                      const count = duplicateClusters.filter(c => c.originalItem?.type === type).length;
+                      return (
+                        <Tab 
+                          key={type} 
+                          value={type} 
+                          label={`${typeGroupLabels[type]} (${count})`} 
+                        />
+                      );
+                    })}
+                  </Tabs>
+
+                  {currentTabClusters.length === 0 ? (
+                    <Box
+                      sx={{
+                        borderRadius: '12px',
+                        border: `1px dashed ${cv.border}`,
+                        backgroundColor: cv.surface,
+                        px: 2,
+                        py: 5,
+                        textAlign: 'center',
+                      }}
+                    >
+                      <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted }}>
+                        No {typeGroupLabels[duplicateTab].toLowerCase()} duplicates found.
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {paginatedClusters.map((cluster) => (
+                        <Box key={cluster.originalId}>
+                          <Typography
+                            variant="subtitle2"
+                            sx={{
+                              mb: 1.5,
+                              fontWeight: 600,
+                              color: cv.textSecondary,
+                              fontSize: '0.8125rem',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.06em',
+                            }}
+                          >
+                            Original: {cluster.originalItem?.title || 'Unknown Asset'} & its Duplicates
+                          </Typography>
+                          <Box
+                            sx={{
+                              display: 'grid',
+                              gridTemplateColumns: {
+                                xs: '1fr',
+                                sm: 'repeat(auto-fill, minmax(280px, 1fr))',
+                              },
+                              gap: { xs: 2, sm: 2.5 },
+                            }}
+                          >
+                            {cluster.originalItem && renderMediaItem(cluster.originalItem)}
+                            {cluster.duplicates.map((dup) => renderMediaItem(dup))}
+                          </Box>
+                        </Box>
+                      ))}
+
+                      {totalPages > 1 && (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2, mb: 4 }}>
+                          <Pagination 
+                            count={totalPages} 
+                            page={duplicatePage} 
+                            onChange={handleDuplicatePageChange} 
+                            color="primary"
+                            size="large"
+                          />
+                        </Box>
+                      )}
+                    </Box>
+                  )}
                 </Box>
-              </Box>
-            ))
+              );
+            })()
           )}
         </Box>
       ) : viewMode === 'folder' ? (
