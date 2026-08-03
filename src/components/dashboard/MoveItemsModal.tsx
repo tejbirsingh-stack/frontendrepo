@@ -12,9 +12,11 @@ import {
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
 import WorkspacesOutlinedIcon from '@mui/icons-material/WorkspacesOutlined';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { MediaItem } from '../../data/mockMedia';
 import type { Workspace } from '../../data/workspaces';
-import { isYearOrMonthFolder } from '../../utils/dateFolder';
+
 import {
   PROJECT_ACCENT_COLOR,
   resolveFolderColor,
@@ -22,7 +24,102 @@ import {
 
 export type MoveDestination =
   | { kind: 'folder'; folderId: string; workspaceId: string }
-  | { kind: 'project'; projectId: string; workspaceId: string };
+  | { kind: 'project'; projectId: string; workspaceId: string; targetFolderId?: string | null };
+
+function FolderTreeNode({
+  folder,
+  foldersByParent,
+  selectedFolderId,
+  onSelect,
+  level = 0,
+}: {
+  folder: any;
+  foldersByParent: Record<string, any[]>;
+  selectedFolderId: string | null;
+  onSelect: (id: string) => void;
+  level?: number;
+}) {
+  const children = foldersByParent[folder.id] || [];
+  const hasChildren = children.length > 0;
+  const [expanded, setExpanded] = useState(false);
+  const selected = selectedFolderId === folder.id;
+  const color = resolveFolderColor(folder.folderColor);
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          width: '100%',
+          textAlign: 'left',
+          border: selected ? `1px solid ${cv.purpleFocusBorder}` : '1px solid transparent',
+          borderRadius: '10px',
+          px: 1,
+          py: 0.5,
+          mb: 0.5,
+          cursor: 'pointer',
+          backgroundColor: selected ? cv.purpleSelectionSoft : 'transparent',
+          color: cv.textPrimary,
+          pl: level * 2 + 1,
+          '&:hover': {
+            backgroundColor: selected ? cv.purpleSelectionHover : cv.surfaceHover,
+          },
+        }}
+        onClick={() => onSelect(folder.id)}
+      >
+        <Box
+          component="span"
+          onClick={(e) => {
+            if (hasChildren) {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }
+          }}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 20,
+            height: 20,
+            cursor: hasChildren ? 'pointer' : 'default',
+            opacity: hasChildren ? 1 : 0.3,
+            '&:hover': {
+               backgroundColor: hasChildren ? cv.surfaceHover : 'transparent',
+               borderRadius: '4px'
+            }
+          }}
+        >
+          {expanded ? (
+            <ExpandMoreIcon sx={{ fontSize: 16, color: cv.textMuted }} />
+          ) : (
+            <ChevronRightIcon sx={{ fontSize: 16, color: cv.textMuted }} />
+          )}
+        </Box>
+        <FolderOutlinedIcon sx={{ fontSize: 18, color, flexShrink: 0 }} />
+        <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: selected ? 600 : 500 }}>
+          {folder.title}
+        </Typography>
+      </Box>
+
+      {expanded && hasChildren && (
+        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+          {children.map((child) => (
+            <FolderTreeNode
+              key={child.id}
+              folder={child}
+              foldersByParent={foldersByParent}
+              selectedFolderId={selectedFolderId}
+              onSelect={onSelect}
+              level={level + 1}
+            />
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
 
 type DestinationSubTab = 'folder' | 'project';
 
@@ -101,93 +198,7 @@ function listButtonSx(selected: boolean) {
   };
 }
 
-function destinationFolders(
-  mediaItems: MediaItem[],
-  workspaceId: string,
-  trashedIds: Set<string>,
-  excludeItemId?: string,
-): MediaItem[] {
-  return mediaItems
-    .filter(
-      (item) =>
-        item.workspaceId === workspaceId &&
-        item.type === 'folder' &&
-        !item.isProject &&
-        !isYearOrMonthFolder(item) &&
-        !trashedIds.has(item.id) &&
-        item.id !== excludeItemId,
-    )
-    .sort((a, b) => a.title.localeCompare(b.title));
-}
 
-function destinationProjects(
-  mediaItems: MediaItem[],
-  workspaceId: string,
-  trashedIds: Set<string>,
-  excludeItemId?: string,
-  excludeProjectIds: Set<string> = new Set()
-): MediaItem[] {
-  return mediaItems
-    .filter(
-      (item) =>
-        item.workspaceId === workspaceId &&
-        item.isProject &&
-        !trashedIds.has(item.id) &&
-        item.id !== excludeItemId &&
-        !excludeProjectIds.has(item.id),
-    )
-    .sort((a, b) => a.title.localeCompare(b.title));
-}
-
-function destinationFoldersForWorkspace(
-  workspace: Workspace,
-  mediaItems: MediaItem[],
-  trashedIds: Set<string>,
-  excludeItemId?: string,
-): Array<{ id: string; title: string; folderColor?: string }> {
-  const fromMedia = destinationFolders(mediaItems, workspace.id, trashedIds, excludeItemId);
-  if (fromMedia.length > 0) {
-    return fromMedia.map((item) => ({
-      id: item.id,
-      title: item.title,
-      folderColor: item.folderColor,
-    }));
-  }
-
-  return (workspace.folders || [])
-    .filter((folder) => folder.id !== excludeItemId)
-    .filter((folder) => !isYearOrMonthFolder({ type: 'folder', title: folder.label }))
-    .map((folder) => ({
-      id: folder.id,
-      title: folder.label,
-      folderColor: folder.color,
-    }))
-    .sort((a, b) => a.title.localeCompare(b.title));
-}
-
-function destinationProjectsForWorkspace(
-  workspace: Workspace,
-  mediaItems: MediaItem[],
-  trashedIds: Set<string>,
-  excludeItemId?: string,
-  excludeProjectIds: Set<string> = new Set()
-): Array<{ id: string; title: string }> {
-  const fromMedia = destinationProjects(mediaItems, workspace.id, trashedIds, excludeItemId, excludeProjectIds);
-  if (fromMedia.length > 0) {
-    return fromMedia.map((item) => ({
-      id: item.id,
-      title: item.title,
-    }));
-  }
-
-  return (workspace.projectFolders || [])
-    .filter((project) => project.id !== excludeItemId && !excludeProjectIds.has(project.id))
-    .map((project) => ({
-      id: project.id,
-      title: project.label,
-    }))
-    .sort((a, b) => a.title.localeCompare(b.title));
-}
 
 export default function MoveItemsModal({
   open,
@@ -206,6 +217,10 @@ export default function MoveItemsModal({
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
+  const [fetchedFolders, setFetchedFolders] = useState<any[]>([]);
+  const [fetchedProjects, setFetchedProjects] = useState<any[]>([]);
+  const [isLoadingDestinations, setIsLoadingDestinations] = useState(false);
+
   useEffect(() => {
     if (!open) return;
     setDestinationSubTab('folder');
@@ -214,25 +229,103 @@ export default function MoveItemsModal({
     setSelectedProjectId(null);
   }, [open, activeWorkspaceId]);
 
-  const selectedWorkspace = useMemo(
-    () =>
-      workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ??
-      workspaces.find((workspace) => workspace.id === activeWorkspaceId) ??
-      workspaces[0],
-    [activeWorkspaceId, selectedWorkspaceId, workspaces],
-  );
+  useEffect(() => {
+    if (!open || !selectedWorkspaceId) return;
 
-  const workspaceFolders = useMemo(
-    () =>
-      selectedWorkspace
-        ? destinationFoldersForWorkspace(selectedWorkspace, mediaItems, trashedIds, excludeItemId)
-        : [],
-    [excludeItemId, mediaItems, selectedWorkspace, trashedIds],
-  );
+    let mounted = true;
+    setIsLoadingDestinations(true);
+    setFetchedFolders([]);
+    setFetchedProjects([]);
+
+    import('../../api/client').then(({ apiClient }) => {
+      // Use timestamp param for cache-busting to avoid stale workspace data between switches
+      apiClient.get<any>(`/workspaces/find-all-data/${selectedWorkspaceId}?_t=${Date.now()}`)
+        .then(response => {
+          if (!mounted) return;
+          // apiClient auto-unwraps the top-level { success, data } envelope,
+          // so `response` here IS the inner object: { media, folders, projects, allProjects }
+          console.log('[MoveModal] raw response:', response);
+          const data = (response as any) || {};
+          const folders = data.folders || [];
+          const projects = data.allProjects || data.projects || [];
+          console.log('[MoveModal] folders:', folders.length, 'projects:', projects.length);
+          setFetchedFolders(folders);
+          setFetchedProjects(projects);
+          setIsLoadingDestinations(false);
+        })
+        .catch(err => {
+          console.error('[MoveModal] Failed to fetch workspace data', err);
+          if (mounted) setIsLoadingDestinations(false);
+        });
+    });
+
+    return () => { mounted = false; };
+  }, [selectedWorkspaceId, open]);
+
+  const { rootFolders, foldersByParent } = useMemo(() => {
+    const activeFolders = fetchedFolders.filter(f => !trashedIds.has(f.id));
+
+    // Exclude the folder being moved AND all its descendants
+    const excludedIds = new Set<string>();
+    if (excludeItemId) {
+      excludedIds.add(excludeItemId);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const f of activeFolders) {
+          if (f.parentId && excludedIds.has(f.parentId) && !excludedIds.has(f.id)) {
+            excludedIds.add(f.id);
+            changed = true;
+          }
+        }
+      }
+    }
+
+    const validFolders = activeFolders.filter(f => !excludedIds.has(f.id));
+
+    const mappedFolders = validFolders.map(folder => ({
+      id: folder.id,
+      title: folder.name,
+      folderColor: folder.color,
+      parentFolderId: folder.parentId || null,
+    })).sort((a, b) => a.title.localeCompare(b.title));
+
+    const byParent: Record<string, any[]> = {};
+    const roots: any[] = [];
+    
+    mappedFolders.forEach(f => {
+      const pid = f.parentFolderId;
+      if (pid) {
+        if (!byParent[pid]) byParent[pid] = [];
+        byParent[pid].push(f);
+      } else {
+        roots.push(f);
+      }
+    });
+
+    // In case a parent is missing (e.g. database inconsistency), promote orphans to root
+    mappedFolders.forEach(f => {
+      const pid = f.parentFolderId;
+      if (pid && !mappedFolders.find(p => p.id === pid)) {
+        if (!roots.includes(f)) roots.push(f);
+      }
+    });
+
+    return { rootFolders: roots, foldersByParent: byParent };
+  }, [fetchedFolders, excludeItemId, trashedIds]);
+
+  const { movingItems, hasFiles, allAlreadyAtRoot, hasProjects } = useMemo(() => {
+    const ids = sourceItemIds || (excludeItemId ? [excludeItemId] : []);
+    const items = mediaItems.filter(item => ids.includes(item.id));
+    return {
+      movingItems: items,
+      hasFiles: items.some(item => item.type !== 'folder'),
+      allAlreadyAtRoot: items.length > 0 && items.every(item => !item.parentFolderId),
+      hasProjects: items.some(item => item.isProject)
+    };
+  }, [mediaItems, sourceItemIds, excludeItemId]);
 
   const alreadyAssignedProjectIds = useMemo(() => {
-    const ids = sourceItemIds || (excludeItemId ? [excludeItemId] : []);
-    const movingItems = mediaItems.filter(item => ids.includes(item.id));
     const projectIds = new Set<string>();
     movingItems.forEach(item => {
       (item.linkedProjectIds || []).forEach(pid => projectIds.add(pid));
@@ -240,13 +333,16 @@ export default function MoveItemsModal({
     return projectIds;
   }, [mediaItems, sourceItemIds, excludeItemId]);
 
-  const workspaceProjects = useMemo(
-    () =>
-      selectedWorkspace
-        ? destinationProjectsForWorkspace(selectedWorkspace, mediaItems, trashedIds, excludeItemId, alreadyAssignedProjectIds)
-        : [],
-    [excludeItemId, mediaItems, selectedWorkspace, trashedIds, alreadyAssignedProjectIds],
-  );
+  const workspaceProjects = useMemo(() => {
+    return fetchedProjects
+      .filter((project) => project.id !== excludeItemId && !alreadyAssignedProjectIds.has(project.id) && !trashedIds.has(project.id))
+      .map((project) => ({
+        id: project.id,
+        title: project.name,
+        folderId: project.folderId || null,
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [fetchedProjects, excludeItemId, alreadyAssignedProjectIds, trashedIds]);
 
   const canMove =
     destinationSubTab === 'folder'
@@ -264,10 +360,12 @@ export default function MoveItemsModal({
         workspaceId: selectedWorkspaceId,
       });
     } else if (destinationSubTab === 'project' && selectedProjectId) {
+      const project = workspaceProjects.find(p => p.id === selectedProjectId);
       onMove({
         kind: 'project',
         projectId: selectedProjectId,
         workspaceId: selectedWorkspaceId,
+        targetFolderId: project?.folderId || null,
       });
     } else {
       return;
@@ -321,7 +419,7 @@ export default function MoveItemsModal({
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2.5 }}>
             {workspaces.map((workspace) => {
               const selected = selectedWorkspaceId === workspace.id;
-              const isLocked = workspace.id !== activeWorkspaceId;
+              const isLocked = false;
               return (
                 <Box
                   key={workspace.id}
@@ -419,38 +517,52 @@ export default function MoveItemsModal({
           </Box>
 
           <Box sx={{ maxHeight: 240, overflowY: 'auto', pr: 0.5 }}>
-            {destinationSubTab === 'folder' ? (
-              workspaceFolders.length === 0 ? (
+            {isLoadingDestinations ? (
+              <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted, py: 2, textAlign: 'center' }}>
+                Loading destinations...
+              </Typography>
+            ) : destinationSubTab === 'folder' ? (
+              rootFolders.length === 0 ? (
                 <Typography
                   sx={{ fontSize: '0.875rem', color: cv.textMuted, py: 2, textAlign: 'center' }}
                 >
                   No folders available
                 </Typography>
               ) : (
-                workspaceFolders.map((folder) => {
-                  const color = resolveFolderColor(folder.folderColor);
-                  const selected = selectedFolderId === folder.id;
-                  return (
+                <>
+                  {/* Workspace Root option temporarily hidden per user request */}
+                  {false && !hasFiles && (!allAlreadyAtRoot || selectedWorkspaceId !== activeWorkspaceId) && (
                     <Box
-                      key={folder.id}
                       component="button"
                       type="button"
                       onClick={() => {
-                        setSelectedFolderId(folder.id);
+                        setSelectedFolderId('__ROOT__');
                         setSelectedProjectId(null);
                       }}
-                      sx={listButtonSx(selected)}
+                      sx={listButtonSx(selectedFolderId === '__ROOT__')}
                     >
-                      <FolderOutlinedIcon sx={{ fontSize: 18, color, flexShrink: 0 }} />
+                      <FolderOutlinedIcon sx={{ fontSize: 18, color: cv.brandMain, flexShrink: 0 }} />
                       <Typography
                         noWrap
-                        sx={{ fontSize: '0.875rem', fontWeight: selected ? 600 : 500 }}
+                        sx={{ fontSize: '0.875rem', fontWeight: selectedFolderId === '__ROOT__' ? 600 : 500 }}
                       >
-                        {folder.title}
+                        Workspace Root
                       </Typography>
                     </Box>
-                  );
-                })
+                  )}
+                  {rootFolders.map((folder) => (
+                    <FolderTreeNode
+                      key={folder.id}
+                      folder={folder}
+                      foldersByParent={foldersByParent}
+                      selectedFolderId={selectedFolderId}
+                      onSelect={(id) => {
+                        setSelectedFolderId(id);
+                        setSelectedProjectId(null);
+                      }}
+                    />
+                  ))}
+                </>
               )
             ) : workspaceProjects.length === 0 ? (
               <Typography

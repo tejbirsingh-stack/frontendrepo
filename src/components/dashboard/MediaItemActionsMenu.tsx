@@ -100,7 +100,19 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
 
   const handleMove = (destination: MoveDestination) => {
     if (destination.kind === 'project') {
-      void updateMediaProjectLocation(item.id, { folderId: destination.projectId }, item.type);
+      const performAssignAndMove = async () => {
+        // Cross-workspace: physically move the item to the project's parent folder first,
+        // then link it to the project. Same-workspace: link only (no physical move).
+        if (destination.workspaceId !== activeWorkspaceId && destination.targetFolderId !== undefined) {
+          await moveMediaToWorkspaceFolder(
+            [item.id],
+            destination.workspaceId,
+            destination.targetFolderId || null,
+          );
+        }
+        void updateMediaProjectLocation(item.id, { folderId: destination.projectId }, item.type);
+      };
+      void performAssignAndMove();
       return;
     }
 
