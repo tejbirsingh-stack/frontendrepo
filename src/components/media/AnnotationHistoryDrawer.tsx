@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { cv, palette } from '../../theme/cssVars';
 import {
   Avatar,
@@ -190,6 +190,7 @@ interface AnnotationHistoryDrawerProps {
   onDeleteAnnotationGroup?: (groupId: string) => void;
   onUpdateAnnotationGroup?: (groupId: string, name: string, memberIds: string[]) => Promise<AnnotationAccessGroup | null | undefined>;
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
+  activeHistoryEntryId?: string | null;
 }
 
 const DRAWER_TABS: { value: DrawerTab; label: string }[] = [
@@ -247,6 +248,7 @@ const rowActionSx = {
 
 function HistoryEntryRow({
   entry,
+  isActive,
   replies = [],
   isTimeBasedMedia = true,
   annotationGroups,
@@ -291,6 +293,14 @@ function HistoryEntryRow({
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
 }) {
   const activeUser = useActiveUser();
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isActive && rowRef.current) {
+      rowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [isActive]);
+
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [repliesOpen, setRepliesOpen] = useState(false);
@@ -333,6 +343,7 @@ function HistoryEntryRow({
 
   return (
     <Box
+      ref={rowRef}
       sx={{
         position: 'relative',
         py: 1.5,
@@ -340,10 +351,15 @@ function HistoryEntryRow({
         mx: -1,
         borderRadius: '10px',
         opacity: isResolved ? 0.62 : 1,
-        backgroundColor: entry.unread ? cv.purpleSelectionSoft : 'transparent',
-        transition: 'background-color 0.2s ease',
+        backgroundColor: isActive 
+          ? cv.purpleSelectionSoft 
+          : entry.unread 
+            ? cv.purpleSelectionSoft 
+            : 'transparent',
+        borderLeft: isActive ? `3px solid ${cv.brandPurple}` : '3px solid transparent',
+        transition: 'background-color 0.2s ease, border-left 0.2s ease',
         '&:hover': {
-          backgroundColor: entry.unread ? cv.purpleSelectionHover : cv.surfaceHover,
+          backgroundColor: (isActive || entry.unread) ? cv.purpleSelectionHover : cv.surfaceHover,
         },
       }}
     >
@@ -845,6 +861,7 @@ function HistoryEntryRow({
 
 export default function AnnotationHistoryDrawer({
   open,
+  activeHistoryEntryId,
   entries,
   comments = [],
   mediaItem,
@@ -1299,6 +1316,7 @@ export default function AnnotationHistoryDrawer({
             filteredEntries.map((entry, index) => (
               <Box key={entry.id}>
                 <HistoryEntryRow
+                  isActive={entry.id === activeHistoryEntryId}
                   entry={entry}
                   isTimeBasedMedia={isTimeBasedMedia}
                   replies={

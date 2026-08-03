@@ -483,17 +483,29 @@ export default function VideoPlayerPage({
     setSelectedStampId(null);
     setOpenCommentId(null);
 
+    let historyId: string | null = null;
+
     if (type === 'shape') {
       setSelectedShapeId(id);
       setActiveTool('shape');
+      historyId = getShapeHistoryEntryId(id);
     } else if (type === 'stamp') {
       setSelectedStampId(id);
       setActiveTool('stamp');
+      historyId = getStampHistoryEntryId(id);
     } else if (type === 'comment') {
       setOpenCommentId(id);
       setActiveTool('comment');
+      historyId = `comment-${id}`;
     } else if (type === 'drawing') {
       setActiveTool('draw');
+      historyId = getDrawingHistoryEntryId(id);
+    }
+
+    if (historyId) {
+      setActiveHistoryEntryId(historyId);
+      setHistoryOpen(true);
+      setDrawerTab('history');
     }
   }, []);
 
@@ -660,6 +672,7 @@ export default function VideoPlayerPage({
   useGranularSync('drawing', drawings, prevDrawingsRef);
   useGranularSync('stamp', stamps, prevStampsRef);
   const [draftComment, setDraftComment] = useState<DraftVideoComment | null>(null);
+  const [activeHistoryEntryId, setActiveHistoryEntryId] = useState<string | null>(null);
   const [history, setHistory] = useState<AnnotationHistoryEntry[]>([]);
   const [historyOpen, setHistoryOpen] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -4181,6 +4194,7 @@ export default function VideoPlayerPage({
 
         <AnnotationHistoryDrawer
           open={historyOpen}
+          activeHistoryEntryId={activeHistoryEntryId}
           entries={history}
           comments={comments}
           mediaItem={item}
