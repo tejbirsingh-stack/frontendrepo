@@ -11,6 +11,8 @@ import {
   type SvgIconProps,
 } from '@mui/material';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
+import ChevronLeftOutlinedIcon from '@mui/icons-material/ChevronLeftOutlined';
+import ChevronRightOutlinedIcon from '@mui/icons-material/ChevronRightOutlined';
 import Forward5OutlinedIcon from '@mui/icons-material/Forward5Outlined';
 import FullscreenExitOutlinedIcon from '@mui/icons-material/FullscreenExitOutlined';
 import FullscreenOutlinedIcon from '@mui/icons-material/FullscreenOutlined';
@@ -26,9 +28,18 @@ import AnnotationTimeline from './AnnotationTimeline';
 import ShortcutTooltip from './ShortcutTooltip';
 import type { TimelineAnnotationItem, TimelineAnnotationType } from '../../types/annotationTimeline';
 import { formatVideoTimecode } from '../../utils/formatVideoTimestamp';
+import { shouldBlockAnnotationShortcuts } from '../../constants/annotationShortcuts';
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
 const SKIP_SECONDS = 5;
+
+function parseFps(label?: string): number {
+  if (!label) return 24;
+  const match = label.match(/([\d.]+)/);
+  if (!match) return 24;
+  const parsed = parseFloat(match[1]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 24;
+}
 
 function AnnotationTimelineToggleIcon(props: SvgIconProps) {
   return (
@@ -248,6 +259,46 @@ export default function VideoPlayerControls({
     setCurrentTime(element.currentTime);
   };
 
+  const seekFrames = useCallback(
+    (stepCount: number) => {
+      const element = videoRef.current;
+      if (!element) return;
+
+      if (!element.paused && !element.ended) {
+        element.pause();
+      }
+
+      const fps = parseFps(frameRateLabel);
+      const frameDuration = 1 / fps;
+      const max = Number.isFinite(element.duration) ? element.duration : 0;
+      const targetTime = Math.min(
+        max,
+        Math.max(0, element.currentTime + stepCount * frameDuration),
+      );
+
+      element.currentTime = targetTime;
+      setCurrentTime(targetTime);
+    },
+    [videoRef, frameRateLabel],
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (shouldBlockAnnotationShortcuts(event.target)) return;
+
+      if (event.key === ',' || (event.shiftKey && event.key === 'ArrowLeft')) {
+        event.preventDefault();
+        seekFrames(-1);
+      } else if (event.key === '.' || (event.shiftKey && event.key === 'ArrowRight')) {
+        event.preventDefault();
+        seekFrames(1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [seekFrames]);
+
   const seekTo = useCallback((nextTime: number) => {
     const element = videoRef.current;
     if (!element) return;
@@ -356,6 +407,32 @@ export default function VideoPlayerControls({
           </span>
         </ShortcutTooltip>
 
+        <ShortcutTooltip label="Previous frame (Shift+← or ,)" placement="top">
+          <span>
+            <IconButton
+              type="button"
+              aria-label="Previous frame"
+              onClick={() => seekFrames(-1)}
+              sx={controlButtonSx}
+            >
+              <ChevronLeftOutlinedIcon sx={{ fontSize: 22 }} />
+            </IconButton>
+          </span>
+        </ShortcutTooltip>
+
+        <ShortcutTooltip label="Next frame (Shift+→ or .)" placement="top">
+          <span>
+            <IconButton
+              type="button"
+              aria-label="Next frame"
+              onClick={() => seekFrames(1)}
+              sx={controlButtonSx}
+            >
+              <ChevronRightOutlinedIcon sx={{ fontSize: 22 }} />
+            </IconButton>
+          </span>
+        </ShortcutTooltip>
+
         <ShortcutTooltip label={`Forward ${SKIP_SECONDS} seconds`} placement="top">
           <span>
             <IconButton
@@ -422,7 +499,8 @@ export default function VideoPlayerControls({
               letterSpacing: '0.02em',
             }}
           >
-            {formatVideoTimecode(currentTime)} / {formatVideoTimecode(duration)}
+            {formatVideoTimecode(currentTime, parseFps(frameRateLabel))} /{' '}
+            {formatVideoTimecode(duration, parseFps(frameRateLabel))}
           </Typography>
           {frameRateLabel ? (
             <Typography

@@ -160,7 +160,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [workspaces, setWorkspaces] = useState<Workspace[]>(initialWorkspaces);
   const [fetchedFavorites, setFetchedFavorites] = useState<MediaItem[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaces[0]?.id || '');
+  const [activeWorkspaceId, setActiveWorkspaceIdState] = useState(() => {
+    return localStorage.getItem('activeWorkspaceId') || initialWorkspaces[0]?.id || '';
+  });
+
+  const setActiveWorkspaceId = useCallback((id: string) => {
+    localStorage.setItem('activeWorkspaceId', id);
+    setActiveWorkspaceIdState(id);
+  }, []);
+
   const [systemTimezone, setSystemTimezone] = useState<string>('Europe/London');
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(initialMediaItems);
   const [sharedMediaItems, setSharedMediaItems] = useState<MediaItem[]>([]);
@@ -299,7 +307,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             linkedProjectIds: a.sources?.map((s: any) => s.projectId) || [],
             projectLocations: a.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
             compressionStatus: a.transcodingStatus || 'completed',
-            customMetadata: a.customMetadata,
+            customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
             status: a.status === 'duplicate' ? 'duplicate' : 'active',
           };
         });
@@ -335,7 +343,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             projectFolders: w.projectFolders || [],
           }));
           setWorkspaces(mergeWorkspaceFolderMetadata(sanitizedWorkspaces));
-          setActiveWorkspaceId(sanitizedWorkspaces[0].id);
+          const savedId = localStorage.getItem('activeWorkspaceId');
+          const isValidSavedId = savedId && sanitizedWorkspaces.some((w: any) => w.id === savedId);
+          setActiveWorkspaceId(isValidSavedId ? savedId : sanitizedWorkspaces[0].id);
         } else {
           setWorkspaces(mergeWorkspaceFolderMetadata(initialWorkspaces));
         }
@@ -441,7 +451,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             linkedProjectIds: a.sources?.map((s: any) => s.projectId) || [],
             projectLocations: a.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
             compressionStatus: a.transcodingStatus || 'completed',
-            customMetadata: a.customMetadata,
+            customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
             status: a.status === 'duplicate' ? 'duplicate' : 'active',
           };
         });
@@ -541,7 +551,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             tags: Array.isArray(a.metadata?.tags) ? (a.metadata.tags as string[]) : [],
             location: null,
             compressionStatus: a.transcodingStatus || 'completed',
-            customMetadata: a.customMetadata,
+            customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
             status: a.status === 'duplicate' ? 'duplicate' : 'active',
           };
         });
@@ -720,7 +730,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                 linkedProjectIds: a.sources?.map((s: any) => s.projectId) || [],
                 projectLocations: a.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
                 compressionStatus: a.transcodingStatus || 'completed',
-                customMetadata: a.customMetadata,
+                customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
                 status: a.status === 'duplicate' ? 'duplicate' : 'active',
               });
             }
@@ -807,7 +817,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
               linkedProjectIds: [],
               projectLocations: [],
               compressionStatus: a.transcodingStatus || 'completed',
-              customMetadata: a.customMetadata,
+              customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
               status: 'active',
             };
           });

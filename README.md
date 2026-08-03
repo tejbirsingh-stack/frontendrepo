@@ -17,7 +17,7 @@ When `VITE_API_BASE_URL` is not set, the app uses mock authentication. Use these
 
 | Field | Value |
 |:------|:------|
-| **Name** | Aviral Kataria |
+| **Name** | Aviral Kataria 
 | **Role** | Super Admin |
 | **Email** | `aviral.kataria@mtxb2b.com` |
 | **Password** | `Noah@2026!` |
