@@ -75,6 +75,7 @@ import { useActiveUser } from '../hooks/useActiveUser';
 import VideoPlayerControls from '../components/media/VideoPlayerControls';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../auth/AuthContext';
+import { ROLE_IDS } from '../constants/userRoles';
 
 import { SAMPLE_VIDEO_SRC } from '../constants/sampleVideos';
 import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, HEADER_LOGO_WIDTH, SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
@@ -256,7 +257,16 @@ export default function VideoPlayerPage({
   } catch {
     user = null;
   }
-
+  const canDownloadOriginal = useMemo(() => {
+    if (isGuestMode) return false;
+    if (!user) return true;
+    const role = user.role;
+    const roleId = user.roleId;
+    if (role === 'Viewer' || roleId === ROLE_IDS.VIEWER) {
+      return false;
+    }
+    return true;
+  }, [isGuestMode, user]);
   const { mediaId } = useParams<{ mediaId: string }>();
   const activeUser = useActiveUser();
   const navigate = useNavigate();
@@ -265,14 +275,14 @@ export default function VideoPlayerPage({
     theme.breakpoints.up(SIDEBAR_DESKTOP_BREAKPOINT),
   );
 
-  let dashboardData: any = { mediaItems: [], updateMediaTags: () => {}, favorites: new Set<string>(), toggleFavorite: () => {} };
+  let dashboardData: any = { mediaItems: [], updateMediaTags: () => { }, favorites: new Set<string>(), toggleFavorite: () => { } };
   try {
     const dashboard = useDashboard();
     if (dashboard) dashboardData = dashboard;
   } catch {
     // Guest mode outside DashboardProvider
   }
-  const { mediaItems = [], sharedMediaItems = [], updateMediaTags = () => {}, favorites, toggleFavorite = () => {} } = dashboardData;
+  const { mediaItems = [], sharedMediaItems = [], updateMediaTags = () => { }, favorites, toggleFavorite = () => { } } = dashboardData;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoStageRef = useRef<HTMLDivElement>(null);
@@ -1065,7 +1075,7 @@ export default function VideoPlayerPage({
     if (!element) return;
 
     element.loop = playerLoop;
-    
+
     let rafId: number;
     let isVideoPlaying = false;
 
@@ -1486,15 +1496,15 @@ export default function VideoPlayerPage({
             // Check if there is an explicit role override for this asset
             const override = overrides.find((o) => o.userId === u.id);
             let finalRole = u.role || u.roleRelation?.name;
-            
+
             if (override && override.accessLevel) {
-               if (override.accessLevel === 'Can edit') {
-                 finalRole = 'Editor';
-               } else if (override.accessLevel === 'Can view') {
-                 finalRole = 'Viewer';
-               } else if (override.accessLevel === 'Full Access') {
-                 finalRole = 'Admin';
-               }
+              if (override.accessLevel === 'Can edit') {
+                finalRole = 'Editor';
+              } else if (override.accessLevel === 'Can view') {
+                finalRole = 'Viewer';
+              } else if (override.accessLevel === 'Full Access') {
+                finalRole = 'Admin';
+              }
             }
 
             return {
@@ -1529,7 +1539,7 @@ export default function VideoPlayerPage({
       setAnnotationGroups([]);
       return;
     }
-    
+
     getAnnotationGroupsRequest(mediaId).then((res) => {
       if (Array.isArray(res)) {
         setAnnotationGroups(res);
@@ -2225,11 +2235,11 @@ export default function VideoPlayerPage({
           }
         }
 
-      setStatusToast({
-        open: true,
-        message: `Share link "${link.name}" deleted`,
-        variant: 'reopen',
-      });
+        setStatusToast({
+          open: true,
+          message: `Share link "${link.name}" deleted`,
+          variant: 'reopen',
+        });
       }
     },
     [activeShareLinkId, applyActiveShareLink, mediaId],
@@ -2479,7 +2489,7 @@ export default function VideoPlayerPage({
     try {
       await deleteAnnotationGroupRequest(mediaId, groupId);
       setAnnotationGroups((current) => current.filter((g) => g.id !== groupId));
-      setHistory((current) => 
+      setHistory((current) =>
         current.map(entry => {
           if (entry.visibility === 'group' && entry.groupId === groupId) {
             return {
@@ -2501,7 +2511,7 @@ export default function VideoPlayerPage({
     try {
       const res = await updateAnnotationGroupRequest(mediaId, groupId, name, memberIds);
       if (res && res.id) {
-        setAnnotationGroups((current) => 
+        setAnnotationGroups((current) =>
           current.map(g => g.id === groupId ? res : g)
         );
         return res;
@@ -2533,29 +2543,29 @@ export default function VideoPlayerPage({
       if (!email) return false;
 
       const existingMember = shareTeamMembers.find(m => m.email?.toLowerCase() === email);
-      
+
       if (existingMember) {
         if (existingMember.hasOverride || existingMember.isCurrentUser) {
-           return false; // Already a member with direct access
+          return false; // Already a member with direct access
         }
-        
+
         // Update in state
-        setShareTeamMembers(current => 
+        setShareTeamMembers(current =>
           current.map(m => m.id === existingMember.id ? { ...m, hasOverride: true, access: payload.access } : m)
         );
 
         // Update collaborators state to match
-        setCollaborators(current => 
+        setCollaborators(current =>
           current.map(c => c.id === existingMember.id ? { ...c, hasOverride: true, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' } : c)
         );
-        
+
         // Call backend
         if (mediaId) {
           updateAssetAccessOverride(mediaId, existingMember.id, payload.access).catch(err => {
-             console.error("Failed to add override", err);
+            console.error("Failed to add override", err);
           });
         }
-        
+
         setStatusToast({
           open: true,
           message: `Invite sent to ${existingMember.name}`,
@@ -2563,7 +2573,7 @@ export default function VideoPlayerPage({
         });
         return true;
       }
-      
+
       // Fallback for mock groups or totally external people
       const activeMembers = shareTeamMembers.filter(m => m.hasOverride || m.isCurrentUser);
       const newMember = resolveWorkspaceInvite(payload, activeMembers);
@@ -2594,7 +2604,7 @@ export default function VideoPlayerPage({
       setShareTeamMembers((current) =>
         current.map((member) => (member.id === memberId ? { ...member, access } : member)),
       );
-      
+
       if (!mediaId) return;
 
       try {
@@ -2630,7 +2640,7 @@ export default function VideoPlayerPage({
         }
         return current.filter((member) => member.id !== memberId);
       });
-      
+
       if (!mediaId) return;
 
       try {
@@ -3273,6 +3283,87 @@ export default function VideoPlayerPage({
             </Box>
           ) : (
             <>
+              {item?.id && (
+                <Tooltip
+                  title={
+                    canDownloadOriginal
+                      ? "Download original file"
+                      : "Viewer role does not have permission to download"
+                  }
+                  arrow
+                  placement="bottom"
+                >
+                  <Box sx={{ display: 'inline-flex' }}>
+                    <IconButton
+                      component={canDownloadOriginal ? 'a' : 'button'}
+                      href={canDownloadOriginal ? `/api/media/${encodeURIComponent(item.id)}/download?raw=true` : undefined}
+                      download={canDownloadOriginal ? true : undefined}
+                      disabled={!canDownloadOriginal}
+                      size="small"
+                      aria-label="Download original file"
+                      sx={{
+                        display: { xs: 'inline-flex', lg: 'none' },
+                        width: 36,
+                        height: 36,
+                        borderRadius: '10px',
+                        color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
+                        border: `1px solid ${cv.borderSubtle}`,
+                        backgroundColor: cv.surfaceBackground,
+                        '&:hover': canDownloadOriginal
+                          ? {
+                            backgroundColor: cv.surfaceHover,
+                            borderColor: cv.borderFocus,
+                          }
+                          : {},
+                        '&.Mui-disabled': {
+                          opacity: 0.5,
+                          color: cv.textMuted,
+                        },
+                      }}
+                    >
+                      <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                    <Button
+                      component={canDownloadOriginal ? 'a' : 'button'}
+                      href={canDownloadOriginal ? `/api/media/${encodeURIComponent(item.id)}/download?raw=true` : undefined}
+                      download={canDownloadOriginal ? true : undefined}
+                      disabled={!canDownloadOriginal}
+                      size="small"
+                      variant="outlined"
+                      startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
+                      sx={{
+                        display: { xs: 'none', lg: 'inline-flex' },
+                        minHeight: 36,
+                        height: 36,
+                        py: 0,
+                        px: 1.5,
+                        borderRadius: '10px',
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.8125rem',
+                        letterSpacing: '0.01em',
+                        color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
+                        borderColor: cv.borderSubtle,
+                        backgroundColor: cv.surfaceBackground,
+                        '&:hover': canDownloadOriginal
+                          ? {
+                            backgroundColor: cv.surfaceHover,
+                            borderColor: cv.borderFocus,
+                          }
+                          : {},
+                        '&.Mui-disabled': {
+                          opacity: 0.5,
+                          color: cv.textMuted,
+                          borderColor: cv.borderSubtle,
+                        },
+                      }}
+                    >
+                      Download Original
+                    </Button>
+                  </Box>
+                </Tooltip>
+              )}
+
               <PeopleCollaboratorsPopover
                 collaborators={collaborators}
                 onCollaboratorsChange={setCollaborators}
@@ -3801,9 +3892,9 @@ export default function VideoPlayerPage({
                       userSelect: 'none',
                     }}
                   >
-                    <img 
-                      src={(isGuestMode ? guestAssetMeta?.logoUrl : internalLogoUrl) || ''} 
-                      alt="Company Watermark" 
+                    <img
+                      src={(isGuestMode ? guestAssetMeta?.logoUrl : internalLogoUrl) || ''}
+                      alt="Company Watermark"
                       style={{ maxHeight: '48px', maxWidth: '120px', objectFit: 'contain' }}
                     />
                   </Box>

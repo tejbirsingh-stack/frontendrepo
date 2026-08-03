@@ -5,19 +5,28 @@ export function formatVideoTimestamp(seconds: number): string {
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
-/** Player timecode as HH:MM:SS:MS (MS = centiseconds, 00–99). */
-export function formatVideoTimecode(seconds: number): string {
+/** 
+ * Player timecode as HH:MM:SS:FF (FF = Frame number 00–FPS-1).
+ * Defaults to 24 FPS if fps parameter is missing or invalid.
+ */
+export function formatVideoTimecode(seconds: number, fps: number = 24): string {
   const safe = Math.max(0, Number.isFinite(seconds) ? seconds : 0);
   const hours = Math.floor(safe / 3600);
   const minutes = Math.floor((safe % 3600) / 60);
   const wholeSeconds = Math.floor(safe % 60);
-  const centiseconds = Math.floor((safe % 1) * 100);
+
+  const effectiveFps = fps && Number.isFinite(fps) && fps > 0 ? fps : 24;
+  const frameFraction = safe % 1;
+  const frameNumber = Math.min(
+    Math.floor(effectiveFps) - 1,
+    Math.floor(frameFraction * effectiveFps + 0.00001),
+  );
 
   return [
     hours.toString().padStart(2, '0'),
     minutes.toString().padStart(2, '0'),
     wholeSeconds.toString().padStart(2, '0'),
-    centiseconds.toString().padStart(2, '0'),
+    frameNumber.toString().padStart(2, '0'),
   ].join(':');
 }
 
