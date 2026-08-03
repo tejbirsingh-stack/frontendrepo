@@ -103,13 +103,9 @@ const handleSubmit = async (e: React.FormEvent) => {
       hubspotUtk: "",
     });
 
-    if (response && (response.accessToken || response.token)) {
-      localStorage.setItem("noah_session_token", response.accessToken || response.token);
-      localStorage.removeItem("noah_session_user");
-      localStorage.removeItem("response");
-    } else {
-      localStorage.removeItem("response");
-    }
+    localStorage.removeItem("noah_session_token");
+    localStorage.removeItem("noah_session_user");
+    localStorage.removeItem("response");
     setRegisteredEmail(email);
     setIsRegistered(true);
 

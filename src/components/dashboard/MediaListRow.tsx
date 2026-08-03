@@ -83,8 +83,8 @@ export default function MediaListRow({
   const selectionActive = selectedMediaIds.size > 0;
 
   const openPath = getMediaViewerPath(item);
-  const documentUrl = item.videoSrc;
-  const isClickable = (openPath || (item.type === 'document' && documentUrl)) && !selectionActive;
+  const documentUrl = item.videoSrc || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : undefined);
+  const isClickable = (Boolean(openPath) || (item.type === 'document' && Boolean(documentUrl))) && !selectionActive;
 
   const handleOpen = () => {
     if (!isClickable) return;

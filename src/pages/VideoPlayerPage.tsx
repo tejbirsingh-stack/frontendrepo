@@ -77,6 +77,7 @@ import { useActiveUser } from '../hooks/useActiveUser';
 import VideoPlayerControls from '../components/media/VideoPlayerControls';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../auth/AuthContext';
+import { ROLE_IDS } from '../constants/userRoles';
 
 import { SAMPLE_VIDEO_SRC } from '../constants/sampleVideos';
 import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, HEADER_LOGO_WIDTH, SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
@@ -247,6 +248,17 @@ export default function VideoPlayerPage({
   const isViewer = isGuestMode
     ? !guestPermissions?.comment
     : !user?.permissions?.includes('timeline_annotations');
+
+  const canDownloadOriginal = useMemo(() => {
+    if (isGuestMode) return false;
+    if (!user) return true;
+    const role = user.role;
+    const roleId = user.roleId;
+    if (role === 'Viewer' || roleId === ROLE_IDS.VIEWER) {
+      return false;
+    }
+    return true;
+  }, [isGuestMode, user]);
   const { mediaId } = useParams<{ mediaId: string }>();
   const activeUser = useActiveUser();
   const navigate = useNavigate();
@@ -3137,6 +3149,87 @@ export default function VideoPlayerPage({
             </Box>
           ) : (
             <>
+              {item?.id && (
+                <Tooltip
+                  title={
+                    canDownloadOriginal
+                      ? "Download original file"
+                      : "Viewer role does not have permission to download"
+                  }
+                  arrow
+                  placement="bottom"
+                >
+                  <Box sx={{ display: 'inline-flex' }}>
+                    <IconButton
+                      component={canDownloadOriginal ? 'a' : 'button'}
+                      href={canDownloadOriginal ? `/api/media/${encodeURIComponent(item.id)}/download?raw=true` : undefined}
+                      download={canDownloadOriginal ? true : undefined}
+                      disabled={!canDownloadOriginal}
+                      size="small"
+                      aria-label="Download original file"
+                      sx={{
+                        display: { xs: 'inline-flex', lg: 'none' },
+                        width: 36,
+                        height: 36,
+                        borderRadius: '10px',
+                        color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
+                        border: `1px solid ${cv.borderSubtle}`,
+                        backgroundColor: cv.surfaceBackground,
+                        '&:hover': canDownloadOriginal
+                          ? {
+                              backgroundColor: cv.surfaceHover,
+                              borderColor: cv.borderFocus,
+                            }
+                          : {},
+                        '&.Mui-disabled': {
+                          opacity: 0.5,
+                          color: cv.textMuted,
+                        },
+                      }}
+                    >
+                      <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                    <Button
+                      component={canDownloadOriginal ? 'a' : 'button'}
+                      href={canDownloadOriginal ? `/api/media/${encodeURIComponent(item.id)}/download?raw=true` : undefined}
+                      download={canDownloadOriginal ? true : undefined}
+                      disabled={!canDownloadOriginal}
+                      size="small"
+                      variant="outlined"
+                      startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
+                      sx={{
+                        display: { xs: 'none', lg: 'inline-flex' },
+                        minHeight: 36,
+                        height: 36,
+                        py: 0,
+                        px: 1.5,
+                        borderRadius: '10px',
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.8125rem',
+                        letterSpacing: '0.01em',
+                        color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
+                        borderColor: cv.borderSubtle,
+                        backgroundColor: cv.surfaceBackground,
+                        '&:hover': canDownloadOriginal
+                          ? {
+                              backgroundColor: cv.surfaceHover,
+                              borderColor: cv.borderFocus,
+                            }
+                          : {},
+                        '&.Mui-disabled': {
+                          opacity: 0.5,
+                          color: cv.textMuted,
+                          borderColor: cv.borderSubtle,
+                        },
+                      }}
+                    >
+                      Download Original
+                    </Button>
+                  </Box>
+                </Tooltip>
+              )}
+
               <PeopleCollaboratorsPopover
                 collaborators={collaborators}
                 onCollaboratorsChange={setCollaborators}
