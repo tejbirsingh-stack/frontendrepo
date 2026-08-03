@@ -1365,6 +1365,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     setFileSearch('');
     clearSidebarSelection();
     closeWorkspaceMenu();
+    navigateAndClose('/home');
   };
 
   const openColorPicker = (
