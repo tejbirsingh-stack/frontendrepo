@@ -407,18 +407,15 @@ export default function DashboardPage({
 
   const selectedContainerId = sidebarSelection?.folderId ?? null;
 
-  const canInviteToFolder = useMemo(
-    () => {
-      if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return false;
-      return canInviteTeamMembersToFolderSelection(
-        sidebarSelection,
-        activeWorkspace?.folders || [],
-        activeWorkspace?.projectFolders || [],
-        { isFavoritesView },
-      );
-    },
-    [sidebarSelection, activeWorkspace?.folders, activeWorkspace?.projectFolders, isFavoritesView, user?.role],
-  );
+  const canInviteToFolder = useMemo(() => {
+    if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return false;
+    return canInviteTeamMembersToFolderSelection(
+      sidebarSelection,
+      activeWorkspace?.folders || [],
+      activeWorkspace?.projectFolders || [],
+      { isFavoritesView },
+    );
+  }, [sidebarSelection, activeWorkspace?.folders, activeWorkspace?.projectFolders, isFavoritesView, user?.role]);
 
   const displayedTeamMembers = useMemo(() => {
     if (!sidebarSelection) {
@@ -788,15 +785,32 @@ export default function DashboardPage({
     if (selectedIds.length === 0) return;
 
     if (destination.kind === 'project') {
-      selectedIds.forEach((mediaId) => {
-        const media = mediaItems.find((item) => item.id === mediaId);
-        if (!media || media.isProject) return;
-        void updateMediaProjectLocation(mediaId, { folderId: destination.projectId }, media.type);
-      });
+      const performAssignAndMove = async () => {
+        // Cross-workspace assignment: physically move items to the project's parent folder first.
+        // Same-workspace assignment: link only — no physical move needed.
+        if (destination.workspaceId !== activeWorkspaceId) {
+          await moveMediaToWorkspaceFolder(selectedIds, destination.workspaceId, destination.targetFolderId || null);
+        }
+
+        // Link every selected item to the project
+        for (const mediaId of selectedIds) {
+          const media = mediaItems.find((item) => item.id === mediaId);
+          if (!media || media.isProject) continue; // can't assign a project to a project
+          void updateMediaProjectLocation(mediaId, { folderId: destination.projectId }, media.type);
+        }
+      };
+      void performAssignAndMove();
+
     } else if (destination.workspaceId === activeWorkspaceId) {
-      moveMediaToDashboardFolder(selectedIds, destination.folderId);
+      // Moving within the same workspace to a folder
+      if (destination.folderId === '__ROOT__') {
+        moveMediaToWorkspaceFolder(selectedIds, destination.workspaceId, null);
+      } else {
+        moveMediaToDashboardFolder(selectedIds, destination.folderId);
+      }
     } else {
-      moveMediaToWorkspaceFolder(selectedIds, destination.workspaceId, destination.folderId);
+      // Moving to a different workspace folder
+      moveMediaToWorkspaceFolder(selectedIds, destination.workspaceId, destination.folderId === '__ROOT__' ? null : destination.folderId);
     }
 
     clearMediaSelection();

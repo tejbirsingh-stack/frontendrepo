@@ -70,14 +70,14 @@ interface DashboardContextValue {
   toggleFavorite: (id: string, type?: 'asset' | 'folder' | 'project') => void;
   moveMediaToFolder: (mediaId: string, folderId: string, childLabel?: string) => void;
   moveMediaToFolderBulk: (mediaIds: string[], folderId: string, childLabel?: string) => void;
-  moveMediaToDashboardFolder: (mediaIds: string[], folderId: string) => void;
+  moveMediaToDashboardFolder: (mediaIds: string[], folderId: string) => Promise<void>;
   moveMediaToTrash: (mediaId: string, reason?: string) => void;
   moveMediaToTrashBulk: (mediaIds: string[], reason?: string) => void;
   moveMediaToWorkspaceFolder: (
     mediaIds: string[],
     workspaceId: string,
     folderId: string | null,
-  ) => void;
+  ) => Promise<void>;
   trashedMediaItems: MediaItem[];
   trashedAtById: Record<string, string>;
   restoreFromTrashBulk: (mediaIds: string[]) => void;
@@ -1057,7 +1057,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   );
 
   const moveMediaToDashboardFolder = useCallback(
-    (mediaIds: string[], folderId: string) => {
+    async (mediaIds: string[], folderId: string) => {
       const uniqueIds = [...new Set(mediaIds)].filter((id) => id !== folderId);
       if (uniqueIds.length === 0) return;
 
@@ -1114,12 +1114,31 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         uniqueIds.forEach((id) => next.delete(id));
         return next;
       });
+
+      // API Call
+      try {
+        const { apiClient } = await import('../api/client');
+        await Promise.all(uniqueIds.map(id => {
+          const item = mediaItems.find(m => m.id === id);
+          if (!item) return Promise.resolve();
+          if (item.type === 'folder') {
+            return apiClient.put(`/workspaces/folder/${id}/move`, { targetFolderId: folderId });
+          } else {
+            return apiClient.put(`/media/${id}/move`, { folderId });
+          }
+        }));
+        
+        // Refresh sidebar folder structure
+        void fetchWorkspaceData();
+      } catch (err) {
+        console.error('Failed to move media to folder:', err);
+      }
     },
-    [mediaItems, removeMediaFromSidebar],
+    [mediaItems, removeMediaFromSidebar, fetchWorkspaceData],
   );
 
   const moveMediaToWorkspaceFolder = useCallback(
-    (mediaIds: string[], workspaceId: string, folderId: string | null) => {
+    async (mediaIds: string[], workspaceId: string, folderId: string | null) => {
       const uniqueIds = [...new Set(mediaIds)].filter((id) => id !== folderId);
       if (uniqueIds.length === 0) return;
 
@@ -1177,12 +1196,34 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         uniqueIds.forEach((id) => next.delete(id));
         return next;
       });
+
+      // API Call
+      try {
+        const { apiClient } = await import('../api/client');
+        await Promise.all(uniqueIds.map(id => {
+          const item = mediaItems.find(m => m.id === id);
+          if (!item) return Promise.resolve();
+          if (item.type === 'folder') {
+            return apiClient.put(`/workspaces/folder/${id}/move`, { targetFolderId: folderId, targetWorkspaceId: workspaceId });
+          } else {
+            return apiClient.put(`/media/${id}/move`, { folderId, workspaceId });
+          }
+        }));
+        
+        // Refresh sidebar folder structure if moving within or affecting the active workspace
+        if (workspaceId === activeWorkspaceId || mediaItems.some(m => uniqueIds.includes(m.id) && m.workspaceId === activeWorkspaceId)) {
+          void fetchWorkspaceData();
+        }
+      } catch (err) {
+        console.error('Failed to move media to workspace folder:', err);
+      }
     },
     [
       activeWorkspaceId,
       mediaItems,
       moveMediaToDashboardFolder,
       removeMediaFromSidebar,
+      fetchWorkspaceData,
     ],
   );
 
@@ -2144,15 +2185,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           if (item.id !== mediaId) return item;
           if (!projectLocation) return item;
 
-          const newLinkedProjectIds = [...(item.linkedProjectIds || [])];
-          if (!newLinkedProjectIds.includes(projectLocation.folderId)) {
-            newLinkedProjectIds.push(projectLocation.folderId);
-          }
-
-          const newProjectLocations = [...(item.projectLocations || [])];
-          if (!newProjectLocations.some(l => l.folderId === projectLocation.folderId)) {
-            newProjectLocations.push(projectLocation);
-          }
+          const newLinkedProjectIds = [projectLocation.folderId];
+          const newProjectLocations = [projectLocation];
 
           return { ...item, linkedProjectIds: newLinkedProjectIds, projectLocations: newProjectLocations };
         }),
