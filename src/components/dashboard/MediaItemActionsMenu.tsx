@@ -1,4 +1,5 @@
 import { useState, type MouseEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { cv } from '../../theme/cssVars';
 import {
@@ -11,6 +12,7 @@ import {
   type SxProps,
   type Theme,
 } from '@mui/material';
+import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined';
@@ -49,6 +51,7 @@ interface MediaItemActionsMenuProps {
 }
 
 export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemActionsMenuProps) {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const {
     renameMedia,
@@ -228,6 +231,31 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             )}
           </ListItemIcon>
           {favorites.has(item.id) ? 'Remove from favorites' : 'Add to favorites'}
+        </MenuItem>
+        <MenuItem
+          onClick={(event) => {
+            consumeMenuPointerEvent(event);
+            if (item.parentFolderId) {
+              navigate(`/home/folder/${item.parentFolderId}`);
+            } else if (item.linkedProjectIds && item.linkedProjectIds.length > 0) {
+              navigate(`/home/project/${item.linkedProjectIds[0]}`);
+            } else {
+              navigate('/home');
+            }
+            closeMenu();
+          }}
+          onMouseDown={consumeMenuPointerEvent}
+          sx={{
+            py: 1,
+            fontSize: '0.875rem',
+            color: cv.textSecondary,
+            '&:hover': { backgroundColor: cv.surfaceHover },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 32 }}>
+            <FolderOpenOutlinedIcon sx={{ fontSize: 18, color: cv.textSecondary }} />
+          </ListItemIcon>
+          View in location
         </MenuItem>
         <MenuItem
           disabled={!user?.permissions?.includes('upload_delete_media')}
