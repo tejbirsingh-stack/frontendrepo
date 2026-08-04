@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
@@ -118,6 +118,7 @@ interface VideoPlayerControlsProps {
   timelineFallbackDuration?: number;
   onAnnotationClick?: (id: string, type: TimelineAnnotationType) => void;
   frameRateLabel?: string;
+  mediaTitle?: string;
 }
 
 export default function VideoPlayerControls({
@@ -132,6 +133,7 @@ export default function VideoPlayerControls({
   timelineFallbackDuration,
   onAnnotationClick,
   frameRateLabel,
+  mediaTitle,
 }: VideoPlayerControlsProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -139,6 +141,8 @@ export default function VideoPlayerControls({
   const [volume, setVolume] = useState(1);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isIdle, setIsIdle] = useState(false);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [speedAnchor, setSpeedAnchor] = useState<HTMLElement | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [timelineVisible, setTimelineVisible] = useState(false);
@@ -232,12 +236,55 @@ export default function VideoPlayerControls({
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      const inFullscreen = Boolean(document.fullscreenElement);
+      setIsFullscreen(inFullscreen);
+      if (!inFullscreen) {
+        setIsIdle(false);
+        if (idleTimerRef.current) {
+          clearTimeout(idleTimerRef.current);
+          idleTimerRef.current = null;
+        }
+      }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      setIsIdle(false);
+      return;
+    }
+
+    const resetIdleTimer = () => {
+      setIsIdle(false);
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+      }
+      idleTimerRef.current = setTimeout(() => {
+        setIsIdle(true);
+      }, 2500);
+    };
+
+    resetIdleTimer();
+
+    const target = fullscreenTargetRef.current || document;
+    target.addEventListener('mousemove', resetIdleTimer);
+    target.addEventListener('mousedown', resetIdleTimer);
+    target.addEventListener('touchstart', resetIdleTimer);
+    window.addEventListener('keydown', resetIdleTimer);
+
+    return () => {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+      }
+      target.removeEventListener('mousemove', resetIdleTimer);
+      target.removeEventListener('mousedown', resetIdleTimer);
+      target.removeEventListener('touchstart', resetIdleTimer);
+      window.removeEventListener('keydown', resetIdleTimer);
+    };
+  }, [isFullscreen, fullscreenTargetRef]);
 
   const togglePlay = () => {
     const element = videoRef.current;
@@ -360,13 +407,56 @@ export default function VideoPlayerControls({
     annotationCount !== undefined && Boolean(onToggleAnnotationsVisible);
 
   return (
-    <Box
-      sx={{
-        flexShrink: 0,
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+    <>
+      {isFullscreen && mediaTitle && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9999,
+            opacity: isIdle ? 0 : 1,
+            pointerEvents: isIdle ? 'none' : 'auto',
+            transition: 'opacity 0.3s ease-in-out',
+            px: 2.5,
+            py: 1,
+            borderRadius: '999px',
+            backgroundColor: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            color: cv.textPrimary,
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            maxWidth: '80vw',
+          }}
+        >
+          <Typography
+            noWrap
+            sx={{
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              letterSpacing: '0.01em',
+              color: cv.textPrimary,
+            }}
+          >
+            {mediaTitle}
+          </Typography>
+        </Box>
+      )}
+
+      <Box
+        sx={{
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          opacity: isFullscreen && isIdle ? 0 : 1,
+          pointerEvents: isFullscreen && isIdle ? 'none' : 'auto',
+          transition: 'opacity 0.3s ease-in-out',
+        }}
+      >
       <Box
         role="group"
         aria-label="Video player controls"
@@ -704,5 +794,6 @@ export default function VideoPlayerControls({
         />
       ) : null}
     </Box>
+    </>
   );
 }

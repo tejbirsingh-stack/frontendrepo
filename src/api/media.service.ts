@@ -348,11 +348,11 @@ export async function retryTranscodeRequest(id: string): Promise<void> {
 /**
  * Fetch asset-specific role overrides (direct access users).
  */
-export async function getAssetAccessOverrides(id: string): Promise<any[]> {
-  const res = await apiClient.get<{ success: boolean; overrides: any[] }>(
+export async function getAssetAccessOverrides(id: string): Promise<{ overrides: any[], groupOverrides: any[] }> {
+  const res = await apiClient.get<{ success: boolean; overrides: any[]; groupOverrides?: any[] }>(
     `/media/${encodeURIComponent(id)}/access`,
   );
-  return res.overrides || [];
+  return { overrides: res.overrides || [], groupOverrides: res.groupOverrides || [] };
 }
 
 /**
@@ -371,5 +371,24 @@ export async function updateAssetAccessOverride(id: string, userId: string, acce
 export async function removeAssetAccessOverride(id: string, userId: string): Promise<void> {
   await apiClient.delete(
     `/media/${encodeURIComponent(id)}/access/${encodeURIComponent(userId)}`,
+  );
+}
+
+/**
+ * Update an asset-specific role override for a group.
+ */
+export async function updateAssetGroupAccessOverride(id: string, groupId: string, accessLevel: string): Promise<void> {
+  await apiClient.put(
+    `/media/${encodeURIComponent(id)}/group-access/${encodeURIComponent(groupId)}`,
+    { accessLevel },
+  );
+}
+
+/**
+ * Remove an asset-specific role override for a group.
+ */
+export async function removeAssetGroupAccessOverride(id: string, groupId: string): Promise<void> {
+  await apiClient.delete(
+    `/media/${encodeURIComponent(id)}/group-access/${encodeURIComponent(groupId)}`,
   );
 }

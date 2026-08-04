@@ -35,6 +35,16 @@ export async function deleteMediaAnnotationRequest(
   return apiClient.delete<{ success: boolean; message: string }>(`/annotations/${annotationId}`);
 }
 
+export async function markAnnotationReadRequest(
+  annotationId: string,
+  unread?: boolean
+): Promise<{ success: boolean; unread: boolean; readByUsers: string[] }> {
+  return apiClient.post<{ success: boolean; unread: boolean; readByUsers: string[] }>(
+    `/annotations/${annotationId}/read`,
+    { unread: !!unread }
+  );
+}
+
 export interface BackendAnnotationGroup {
   id: string;
   name: string;
