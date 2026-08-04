@@ -259,16 +259,7 @@ export default function VideoPlayerPage({
   } catch {
     user = null;
   }
-  const canDownloadOriginal = useMemo(() => {
-    if (isGuestMode) return false;
-    if (!user) return true;
-    const role = user.role;
-    const roleId = user.roleId;
-    if (role === 'Viewer' || roleId === ROLE_IDS.VIEWER) {
-      return false;
-    }
-    return true;
-  }, [isGuestMode, user]);
+
   const { mediaId } = useParams<{ mediaId: string }>();
   const activeUser = useActiveUser();
   const navigate = useNavigate();
@@ -537,6 +528,15 @@ export default function VideoPlayerPage({
     const isAssetViewer = currentUserCollab?.role === 'Viewer';
     return isAssetViewer || !user?.permissions?.includes('timeline_annotations');
   }, [isGuestMode, guestPermissions?.comment, collaborators, user?.permissions]);
+  const isAssetAdmin = useMemo(() => {
+    if (isGuestMode) return false;
+    const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
+    if (currentUserCollab?.role === 'Admin') return true;
+    if (isSharedWithUser) return false;
+    return user?.role === 'Super Admin' || user?.role === 'Admin';
+  }, [isGuestMode, collaborators, isSharedWithUser, user]);
+  const canDownloadOriginal = isAssetAdmin;
+  const canShare = isAssetAdmin;
   const [comments, setComments] = useState<VideoComment[]>([]);
   const [drawings, setDrawings] = useState<VideoDrawingStroke[]>([]);
   const [shapes, setShapes] = useState<VideoShape[]>([]);
@@ -1532,7 +1532,6 @@ export default function VideoPlayerPage({
               );
               
               if (userGroups.length > 0) {
-                hasAnyOverride = true;
                 const accessLevels = userGroups.map(go => go.accessLevel);
                 if (accessLevels.includes('Full Access')) {
                   finalRole = 'Admin';
@@ -3506,19 +3505,21 @@ export default function VideoPlayerPage({
                 </Tooltip>
               )}
 
-              <PeopleCollaboratorsPopover
-                collaborators={collaborators}
-                onCollaboratorsChange={setCollaborators}
-                onInvited={(name) =>
-                  setStatusToast({
-                    open: true,
-                    message: `Invite sent to ${name}`,
-                    variant: 'resolved',
-                  })
-                }
-              />
+              {canShare && (
+                <PeopleCollaboratorsPopover
+                  collaborators={collaborators}
+                  onCollaboratorsChange={setCollaborators}
+                  onInvited={(name) =>
+                    setStatusToast({
+                      open: true,
+                      message: `Invite sent to ${name}`,
+                      variant: 'resolved',
+                    })
+                  }
+                />
+              )}
 
-              {!isSharedWithUser && (
+              {canShare && (
                 <Tooltip title="Share video" arrow placement="bottom">
                   <Box sx={{ display: 'inline-flex' }}>
                     <IconButton
