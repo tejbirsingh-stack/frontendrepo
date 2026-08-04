@@ -1514,14 +1514,33 @@ export default function VideoPlayerPage({
             // Check if there is an explicit role override for this asset
             const override = overrides.find((o) => o.userId === u.id);
             let finalRole = u.role || u.roleRelation?.name;
+            let hasAnyOverride = false;
 
             if (override && override.accessLevel) {
+              hasAnyOverride = true;
               if (override.accessLevel === 'Can edit') {
                 finalRole = 'Editor';
               } else if (override.accessLevel === 'Can view') {
                 finalRole = 'Viewer';
               } else if (override.accessLevel === 'Full Access') {
                 finalRole = 'Admin';
+              }
+            } else {
+              // Check if user is in any shared groups and find the most permissive access level
+              const userGroups = groupOverrides.filter((go) => 
+                go.group?.members?.some((m: any) => m.userId === u.id)
+              );
+              
+              if (userGroups.length > 0) {
+                hasAnyOverride = true;
+                const accessLevels = userGroups.map(go => go.accessLevel);
+                if (accessLevels.includes('Full Access')) {
+                  finalRole = 'Admin';
+                } else if (accessLevels.includes('Can edit')) {
+                  finalRole = 'Editor';
+                } else if (accessLevels.includes('Can view')) {
+                  finalRole = 'Viewer';
+                }
               }
             }
 
@@ -1531,7 +1550,7 @@ export default function VideoPlayerPage({
               email: u.email,
               initials,
               isCurrentUser: u.email === user?.email,
-              hasOverride: !!override,
+              hasOverride: hasAnyOverride,
               role: finalRole,
             };
           });
