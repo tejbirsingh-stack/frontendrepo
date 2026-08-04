@@ -1,7 +1,7 @@
 import { useMediaWebSocket, type WebSocketMessage } from '../hooks/useMediaWebSocket';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cv } from '../theme/cssVars';
-import { Alert, Box, Button, Chip, CircularProgress, IconButton, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
+import { Alert, Box, Button, Chip, CircularProgress, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
@@ -14,6 +14,9 @@ import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import KeyboardOutlinedIcon from '@mui/icons-material/KeyboardOutlined';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
@@ -28,6 +31,7 @@ import {
 } from '../constants/annotationColors';
 import { DEFAULT_DRAW_COLOR } from '../constants/drawColors';
 import AnnotationHistoryDrawer from '../components/media/AnnotationHistoryDrawer';
+import AudioWaveformVisualizer from '../components/media/AudioWaveformVisualizer';
 import type {
   MediaDetailsSection,
   MediaTechnicalDetails,
@@ -103,6 +107,7 @@ import {
   saveMediaAnnotationRequest,
   updateMediaAnnotationRequest,
   deleteMediaAnnotationRequest,
+  markAnnotationReadRequest,
 } from '../api/annotations.service';
 import {
   getShareAnnotationsApi,
@@ -320,8 +325,13 @@ export default function VideoPlayerPage({
       url: tokenStreamUrl,
       videoSrc: tokenStreamUrl,
       thumbnail: tokenStreamUrl,
-      duration: '0:00',
-      size: formatFileSize(guestAssetMeta.fileSize || 0),
+      duration: (guestAssetMeta as any).duration || '0:00',
+      resolution_tier: (guestAssetMeta as any).resolution_tier || (guestAssetMeta as any).resolutionTier,
+      resolutionTier: (guestAssetMeta as any).resolution_tier || (guestAssetMeta as any).resolutionTier,
+      fps: (guestAssetMeta as any).fps,
+      file_size: (guestAssetMeta as any).file_size || guestAssetMeta.fileSize,
+      size: formatFileSize((guestAssetMeta as any).file_size || guestAssetMeta.fileSize || 0),
+      sizeBytes: (guestAssetMeta as any).file_size || guestAssetMeta.fileSize || 0,
       updatedAt: guestExpiresAt ? `Expires: ${new Date(guestExpiresAt).toLocaleDateString()}` : '',
       tags: [],
     };
@@ -336,12 +346,18 @@ export default function VideoPlayerPage({
     }
     return contextItem && fetchedItem?.id === contextItem.id
       ? {
+        ...fetchedItem,
         ...contextItem,
         videoSrc: contextItem.videoSrc || fetchedItem.videoSrc,
         thumbnail: contextItem.thumbnail || fetchedItem.thumbnail,
         compressionStatus: fetchedItem.compressionStatus || contextItem.compressionStatus,
         duration: contextItem.duration || fetchedItem.duration,
         customMetadata: fetchedItem.customMetadata || contextItem.customMetadata,
+        resolution_tier: (contextItem as any).resolution_tier || (fetchedItem as any).resolution_tier,
+        resolutionTier: (contextItem as any).resolutionTier || (fetchedItem as any).resolutionTier,
+        fps: (contextItem as any).fps || (fetchedItem as any).fps,
+        file_size: (contextItem as any).file_size || (fetchedItem as any).file_size,
+        sizeBytes: (contextItem as any).sizeBytes || (fetchedItem as any).sizeBytes,
       }
       : contextItem || fetchedItem;
   }, [isGuestMode, guestItem, contextItem, fetchedItem]);
@@ -363,6 +379,7 @@ export default function VideoPlayerPage({
   const [clientDecodedUrl, setClientDecodedUrl] = useState<string | null>(null);
   const [isDecodingImage, setIsDecodingImage] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const [syncTrigger, setSyncTrigger] = useState(0);
 
@@ -523,6 +540,17 @@ export default function VideoPlayerPage({
     const isAssetViewer = currentUserCollab?.role === 'Viewer';
     return isAssetViewer || !user?.permissions?.includes('timeline_annotations');
   }, [isGuestMode, guestPermissions?.comment, collaborators, user?.permissions]);
+
+  const headerPermissions = useMemo(() => {
+    const rawRole = (user?.role || user?.roleRelation?.name || '').trim().toLowerCase();
+    const isViewerRole = isViewer || rawRole === 'viewer' || rawRole === 'guest';
+    return {
+      canShare: !isViewerRole && !isGuestMode,
+      canFavorite: !isViewerRole && !isGuestMode,
+      canDownload: !isViewerRole && !isGuestMode && canDownloadOriginal,
+      canViewTechnicalDetails: !isViewerRole,
+    };
+  }, [isViewer, user, isGuestMode, canDownloadOriginal]);
   const [comments, setComments] = useState<VideoComment[]>([]);
   const [drawings, setDrawings] = useState<VideoDrawingStroke[]>([]);
   const [shapes, setShapes] = useState<VideoShape[]>([]);
@@ -534,6 +562,62 @@ export default function VideoPlayerPage({
   const prevShapesRef = useRef<VideoShape[]>([]);
   const prevDrawingsRef = useRef<VideoDrawingStroke[]>([]);
   const prevStampsRef = useRef<VideoStamp[]>([]);
+  const [moreMenuAnchor, setMoreMenuAnchor] = useState<HTMLElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isIdle, setIsIdle] = useState(false);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const inFullscreen = Boolean(document.fullscreenElement);
+      setIsFullscreen(inFullscreen);
+      if (!inFullscreen) {
+        setIsIdle(false);
+        if (idleTimerRef.current) {
+          clearTimeout(idleTimerRef.current);
+          idleTimerRef.current = null;
+        }
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      setIsIdle(false);
+      return;
+    }
+
+    const resetIdleTimer = () => {
+      setIsIdle(false);
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+      }
+      idleTimerRef.current = setTimeout(() => {
+        setIsIdle(true);
+      }, 2500);
+    };
+
+    resetIdleTimer();
+
+    const target = videoStageRef.current || document;
+    target.addEventListener('mousemove', resetIdleTimer);
+    target.addEventListener('mousedown', resetIdleTimer);
+    target.addEventListener('touchstart', resetIdleTimer);
+    window.addEventListener('keydown', resetIdleTimer);
+
+    return () => {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+      }
+      target.removeEventListener('mousemove', resetIdleTimer);
+      target.removeEventListener('mousedown', resetIdleTimer);
+      target.removeEventListener('touchstart', resetIdleTimer);
+      window.removeEventListener('keydown', resetIdleTimer);
+    };
+  }, [isFullscreen]);
 
   const useGranularSync = <T extends { id: string }>(
     type: string,
@@ -887,22 +971,34 @@ export default function VideoPlayerPage({
 
     const items: string[] = [];
 
-    const qualityLabel = getVideoQualityLabel(
-      videoTechnicalDetails.width,
-      videoTechnicalDetails.height,
-    );
+    const qualityLabel =
+      (item as any)?.resolution_tier ||
+      (item as any)?.resolutionTier ||
+      (item as any)?.metadata?.resolution_tier ||
+      getVideoQualityLabel(
+        videoTechnicalDetails.width,
+        videoTechnicalDetails.height,
+      );
     if (qualityLabel) {
       items.push(qualityLabel);
     }
 
-    items.push(videoTechnicalDetails.frameRate ?? item.frameRate ?? '—');
+    const serverFps = (item as any)?.fps || (item as any)?.metadata?.fps;
+    const formattedFps = serverFps
+      ? (typeof serverFps === 'number' ? `${serverFps} fps` : String(serverFps))
+      : (videoTechnicalDetails.frameRate ?? item.frameRate ?? '—');
+    items.push(formattedFps);
 
-    const duration = videoTechnicalDetails.duration || item.duration;
+    const serverDuration = (item as any)?.duration || (item as any)?.metadata?.duration;
+    const duration = serverDuration
+      ? (typeof serverDuration === 'number' ? formatVideoTimestamp(serverDuration) : String(serverDuration))
+      : (videoTechnicalDetails.duration || item.duration);
     if (duration) {
       items.push(duration);
     }
 
-    items.push(formatFileSize(item.sizeBytes));
+    const fileSize = (item as any)?.file_size ?? item.sizeBytes ?? item.size;
+    items.push(formatFileSize(fileSize));
 
     return items;
   }, [item, videoTechnicalDetails]);
@@ -1305,6 +1401,7 @@ export default function VideoPlayerPage({
         initials: ((ann.guestName || ann.guestEmail || activeUser.initials || 'G')[0] || 'G').toUpperCase()
       };
       const checkUnread = (ann: any, entryId: string) => {
+        if (typeof ann.unread === 'boolean') return ann.unread;
         if (!ann.userId || !user?.id) return false;
         return ann.userId !== user.id && !readIds.has(entryId);
       };
@@ -1338,6 +1435,7 @@ export default function VideoPlayerPage({
             linkedDrawingId: c.linkedDrawingId,
             linkedShapeId: c.linkedShapeId,
             pinned: c.pinned ?? false,
+            backendId: ann.id,
             erasedAt: c.erasedAt,
             erasedBy: c.erasedBy,
           });
@@ -1355,6 +1453,7 @@ export default function VideoPlayerPage({
             resolved: ann.resolved || false,
             unread: checkUnread(ann, entryId),
             pinned: s.pinned ?? false,
+            backendId: ann.id,
             erasedAt: s.erasedAt,
             erasedBy: s.erasedBy,
           });
@@ -1373,6 +1472,7 @@ export default function VideoPlayerPage({
             resolved: ann.resolved || false,
             unread: checkUnread(ann, entryId),
             pinned: d.pinned ?? false,
+            backendId: ann.id,
             erasedAt: d.erasedAt,
             erasedBy: d.erasedBy,
           });
@@ -1390,8 +1490,24 @@ export default function VideoPlayerPage({
             resolved: ann.resolved || false,
             unread: checkUnread(ann, entryId),
             pinned: st.pinned ?? false,
+            backendId: ann.id,
             erasedAt: st.erasedAt,
             erasedBy: st.erasedBy,
+          });
+        } else if (ann.type === 'system') {
+          const entryId = `system-${ann.id}`;
+          const systemText = ann.data?.text || 'System activity logged';
+          newHistory.push({
+            id: entryId,
+            index: index++,
+            type: 'system',
+            author: getAuthor(ann),
+            createdAt,
+            videoTimestamp: 0,
+            summary: systemText,
+            detail: ann.data?.action || 'SYSTEM',
+            unread: checkUnread(ann, entryId),
+            backendId: ann.id,
           });
         }
       });
@@ -2099,6 +2215,12 @@ export default function VideoPlayerPage({
 
     if (entryId && mediaId) {
       setHistory(prev => {
+        const target = prev.find(h => h.id === entryId);
+        const realId = target?.backendId || entryId.replace(/^(comment|shape|drawing|stamp)-/, '');
+        if (realId) {
+          markAnnotationReadRequest(realId, false).catch(() => {});
+        }
+
         const changed = prev.some(h => h.id === entryId && h.unread);
         if (!changed) return prev;
 
@@ -2463,12 +2585,50 @@ export default function VideoPlayerPage({
   );
 
   const handleMarkUnread = useCallback((entryId: string) => {
-    setHistory((current) =>
-      current.map((entry) =>
-        entry.id === entryId ? { ...entry, unread: true } : entry,
-      ),
-    );
-  }, []);
+    if (entryId) {
+      setHistory((current) => {
+        const target = current.find((h) => h.id === entryId);
+        const realId = target?.backendId || entryId.replace(/^(comment|shape|drawing|stamp)-/, '');
+        if (realId) {
+          markAnnotationReadRequest(realId, true).catch(() => {});
+        }
+        return current.map((entry) =>
+          entry.id === entryId ? { ...entry, unread: true } : entry,
+        );
+      });
+
+      if (mediaId) {
+        try {
+          const stored = localStorage.getItem(`read_annotations_${mediaId}`);
+          if (stored) {
+            const readIds = new Set<string>(JSON.parse(stored));
+            readIds.delete(entryId);
+            localStorage.setItem(`read_annotations_${mediaId}`, JSON.stringify(Array.from(readIds)));
+          }
+        } catch { }
+      }
+    }
+  }, [mediaId]);
+
+  const handleMarkRead = useCallback((entryId: string) => {
+    if (entryId && mediaId) {
+      setHistory((prev) => {
+        const target = prev.find((h) => h.id === entryId);
+        const realId = target?.backendId || entryId.replace(/^(comment|shape|drawing|stamp)-/, '');
+        if (realId) {
+          markAnnotationReadRequest(realId, false).catch(() => {});
+        }
+        return prev.map((h) => (h.id === entryId ? { ...h, unread: false } : h));
+      });
+
+      try {
+        const stored = localStorage.getItem(`read_annotations_${mediaId}`);
+        const readIds = stored ? new Set<string>(JSON.parse(stored)) : new Set<string>();
+        readIds.add(entryId);
+        localStorage.setItem(`read_annotations_${mediaId}`, JSON.stringify(Array.from(readIds)));
+      } catch { }
+    }
+  }, [mediaId]);
 
   const handleCreateAnnotationGroup = useCallback(async (name: string, memberIds: string[]) => {
     if (!mediaId) return;
@@ -2724,6 +2884,37 @@ export default function VideoPlayerPage({
     const url = new URL(window.location.href);
     url.searchParams.set('t', String(Math.floor(entry.videoTimestamp)));
     void navigator.clipboard.writeText(url.toString());
+  }, []);
+
+  const handleCopyAssetLink = useCallback(() => {
+    const url = window.location.href;
+    const notifySuccess = () => {
+      setStatusToast({
+        open: true,
+        message: 'Asset link copied to clipboard',
+        variant: 'resolved',
+      });
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(notifySuccess).catch(() => {
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        notifySuccess();
+      });
+    } else {
+      const textArea = document.createElement('textarea');
+      textArea.value = url;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      notifySuccess();
+    }
   }, []);
 
   const handleMarkCommentUnread = useCallback((commentId: string) => {
@@ -3120,7 +3311,7 @@ export default function VideoPlayerPage({
                 color: cv.textPrimary,
               }}
             />
-            {!isGuestMode ? (
+            {headerPermissions.canFavorite ? (
               <Tooltip
                 title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                 placement="bottom"
@@ -3223,38 +3414,42 @@ export default function VideoPlayerPage({
                 </Typography>
               </Box>
             ))}
-            <Box
-              component="span"
-              aria-hidden
-              sx={{
-                width: 4,
-                height: 4,
-                borderRadius: '50%',
-                backgroundColor: cv.textMuted,
-                flexShrink: 0,
-              }}
-            />
-            <Tooltip title="View technical details" placement="bottom">
-              <IconButton
-                type="button"
-                size="small"
-                aria-label="View technical details"
-                onClick={handleOpenTechnicalDetails}
-                sx={{
-                  width: 24,
-                  height: 24,
-                  flexShrink: 0,
-                  p: 0,
-                  color: cv.textMuted,
-                  '&:hover': {
-                    color: cv.textPrimary,
-                    backgroundColor: cv.surfaceHover,
-                  },
-                }}
-              >
-                <InfoOutlinedIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip>
+            {headerPermissions.canViewTechnicalDetails && (
+              <>
+                <Box
+                  component="span"
+                  aria-hidden
+                  sx={{
+                    width: 4,
+                    height: 4,
+                    borderRadius: '50%',
+                    backgroundColor: cv.textMuted,
+                    flexShrink: 0,
+                  }}
+                />
+                <Tooltip title="View technical details" placement="bottom">
+                  <IconButton
+                    type="button"
+                    size="small"
+                    aria-label="View technical details"
+                    onClick={handleOpenTechnicalDetails}
+                    sx={{
+                      width: 24,
+                      height: 24,
+                      flexShrink: 0,
+                      p: 0,
+                      color: cv.textMuted,
+                      '&:hover': {
+                        color: cv.textPrimary,
+                        backgroundColor: cv.surfaceHover,
+                      },
+                    }}
+                  >
+                    <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              </>
+            )}
           </Box>
 
           {isGuestMode ? (
@@ -3283,7 +3478,7 @@ export default function VideoPlayerPage({
             </Box>
           ) : (
             <>
-              {item?.id && (
+              {item?.id && headerPermissions.canDownload && (
                 <Tooltip
                   title={
                     canDownloadOriginal
@@ -3376,65 +3571,181 @@ export default function VideoPlayerPage({
                 }
               />
 
-              {!isSharedWithUser && (
-                <Tooltip title="Share video" arrow placement="bottom">
-                  <Box sx={{ display: 'inline-flex' }}>
-                    <IconButton
-                      type="button"
-                      size="small"
-                      aria-haspopup="dialog"
-                      aria-expanded={shareDialogOpen}
-                      aria-label="Share video"
-                      onClick={handleOpenShareDialog}
-                      sx={{
-                        display: { xs: 'inline-flex', lg: 'none' },
-                        width: 36,
-                        height: 36,
-                        borderRadius: '10px',
-                        color: cv.textPrimary,
-                        background: cv.brandGradient,
-                        boxShadow: cv.brandShadowSoft,
-                        '&:hover': {
+              {!isSharedWithUser && headerPermissions.canShare && (() => {
+                const assetMediaType = item?.type || 'video';
+                const shareControlLabel = assetMediaType === 'image' ? 'Share image' : assetMediaType === 'audio' ? 'Share audio' : 'Share video';
+                return (
+                  <Tooltip title={shareControlLabel} arrow placement="bottom">
+                    <Box sx={{ display: 'inline-flex' }}>
+                      <IconButton
+                        type="button"
+                        size="small"
+                        aria-haspopup="dialog"
+                        aria-expanded={shareDialogOpen}
+                        aria-label={shareControlLabel}
+                        onClick={handleOpenShareDialog}
+                        sx={{
+                          display: { xs: 'inline-flex', lg: 'none' },
+                          width: 36,
+                          height: 36,
+                          borderRadius: '10px',
+                          color: cv.textPrimary,
                           background: cv.brandGradient,
-                          filter: 'brightness(1.08)',
-                        },
-                      }}
-                    >
-                      <ShareOutlinedIcon sx={{ fontSize: 18 }} />
-                    </IconButton>
-                    <Button
-                      type="button"
-                      size="small"
-                      variant="contained"
-                      aria-haspopup="dialog"
-                      aria-expanded={shareDialogOpen}
-                      startIcon={<ShareOutlinedIcon sx={{ fontSize: 16 }} />}
-                      onClick={handleOpenShareDialog}
-                      sx={{
-                        display: { xs: 'none', lg: 'inline-flex' },
-                        minHeight: 36,
-                        height: 36,
-                        py: 0,
-                        px: 1.5,
-                        borderRadius: '10px',
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        fontSize: '0.8125rem',
-                        letterSpacing: '0.01em',
-                        color: cv.textPrimary,
-                        background: cv.brandGradient,
-                        boxShadow: cv.brandShadowSoft,
-                        '&:hover': {
+                          boxShadow: cv.brandShadowSoft,
+                          '&:hover': {
+                            background: cv.brandGradient,
+                            filter: 'brightness(1.08)',
+                          },
+                        }}
+                      >
+                        <ShareOutlinedIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
+                      <Button
+                        type="button"
+                        size="small"
+                        variant="contained"
+                        aria-haspopup="dialog"
+                        aria-expanded={shareDialogOpen}
+                        startIcon={<ShareOutlinedIcon sx={{ fontSize: 16 }} />}
+                        onClick={handleOpenShareDialog}
+                        sx={{
+                          display: { xs: 'none', lg: 'inline-flex' },
+                          minHeight: 36,
+                          height: 36,
+                          py: 0,
+                          px: 1.5,
+                          borderRadius: '10px',
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          fontSize: '0.8125rem',
+                          letterSpacing: '0.01em',
+                          color: cv.textPrimary,
                           background: cv.brandGradient,
-                          filter: 'brightness(1.08)',
-                        },
-                      }}
-                    >
-                      Share
-                    </Button>
-                  </Box>
-                </Tooltip>
-              )}
+                          boxShadow: cv.brandShadowSoft,
+                          '&:hover': {
+                            background: cv.brandGradient,
+                            filter: 'brightness(1.08)',
+                          },
+                        }}
+                      >
+                        Share
+                      </Button>
+                    </Box>
+                  </Tooltip>
+                );
+              })()}
+
+              <Tooltip title="More actions" arrow placement="bottom">
+                <IconButton
+                  type="button"
+                  size="small"
+                  aria-label="More actions"
+                  aria-controls={Boolean(moreMenuAnchor) ? 'header-more-menu' : undefined}
+                  aria-haspopup="true"
+                  aria-expanded={Boolean(moreMenuAnchor)}
+                  onClick={(e) => setMoreMenuAnchor(e.currentTarget)}
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '10px',
+                    color: cv.textPrimary,
+                    border: `1px solid ${cv.borderSubtle}`,
+                    backgroundColor: cv.surfaceBackground,
+                    '&:hover': {
+                      backgroundColor: cv.surfaceHover,
+                      borderColor: cv.borderFocus,
+                    },
+                  }}
+                >
+                  <MoreVertIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+
+              <Menu
+                id="header-more-menu"
+                anchorEl={moreMenuAnchor}
+                open={Boolean(moreMenuAnchor)}
+                onClose={() => setMoreMenuAnchor(null)}
+                slotProps={{
+                  paper: {
+                    sx: {
+                      borderRadius: '12px',
+                      backgroundColor: cv.bgSurfaceElevated || cv.surfaceBackground,
+                      border: `1px solid ${cv.borderSubtle}`,
+                      boxShadow: cv.shadowLg,
+                      color: cv.textPrimary,
+                      minWidth: 190,
+                      py: 0.5,
+                    },
+                  },
+                }}
+                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+              >
+                {item?.id && headerPermissions.canDownload && (
+                  <MenuItem
+                    disabled={!canDownloadOriginal}
+                    onClick={() => {
+                      setMoreMenuAnchor(null);
+                      if (canDownloadOriginal && item?.id) {
+                        const a = document.createElement('a');
+                        a.href = `/api/media/${encodeURIComponent(item.id)}/download?raw=true`;
+                        a.download = '';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                      }
+                    }}
+                    sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                      <FileDownloadOutlinedIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText primary="Download Original" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 500 }} />
+                  </MenuItem>
+                )}
+
+                <MenuItem
+                  onClick={() => {
+                    setMoreMenuAnchor(null);
+                    handleCopyAssetLink();
+                  }}
+                  sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
+                >
+                  <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                    <ContentCopyOutlinedIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText primary="Copy Asset Link" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 500 }} />
+                </MenuItem>
+
+                {headerPermissions.canViewTechnicalDetails && (
+                  <MenuItem
+                    onClick={() => {
+                      setMoreMenuAnchor(null);
+                      handleOpenTechnicalDetails();
+                    }}
+                    sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                      <InfoOutlinedIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText primary="Technical Details" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 500 }} />
+                  </MenuItem>
+                )}
+
+                <MenuItem
+                  onClick={() => {
+                    setMoreMenuAnchor(null);
+                    setKeyboardShortcutsOpen(true);
+                  }}
+                  sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
+                >
+                  <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                    <KeyboardOutlinedIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText primary="Keyboard Shortcuts" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 500 }} />
+                </MenuItem>
+              </Menu>
             </>
           )}
 
@@ -3633,8 +3944,11 @@ export default function VideoPlayerPage({
                     poster={item?.thumbnail}
                     playsInline
                     preload="metadata"
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={() => setIsPlaying(false)}
                     onWaiting={() => setIsBuffering(true)}
-                    onPlaying={() => setIsBuffering(false)}
+                    onPlaying={() => { setIsBuffering(false); setIsPlaying(true); }}
                     onCanPlay={() => setIsBuffering(false)}
                     onLoadedData={() => setIsBuffering(false)}
                     sx={{
@@ -3660,52 +3974,11 @@ export default function VideoPlayerPage({
                 )}
 
                 {item?.type === 'audio' && (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'radial-gradient(circle, rgba(30,30,42,1) 0%, rgba(12,12,18,1) 100%)',
-                      zIndex: 1,
-                    }}
-                  >
-                    {/* Pulsing Audio Waves/Icon */}
-                    <Box
-                      sx={{
-                        width: 120,
-                        height: 120,
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                        mb: 3,
-                        animation: 'pulse-audio 2.5s infinite ease-in-out',
-                        '@keyframes pulse-audio': {
-                          '0%': { transform: 'scale(1)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' },
-                          '50%': { transform: 'scale(1.06)', boxShadow: '0 8px 32px rgba(25,118,210,0.25)' },
-                          '100%': { transform: 'scale(1)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' },
-                        }
-                      }}
-                    >
-                      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#1976d2' }}>
-                        <path d="M12 2v20M17 5v14M22 9v6M7 8v8M2 10v4" />
-                      </svg>
-                    </Box>
-
-                    {/* Audio Details */}
-                    <Typography variant="h6" sx={{ color: '#ffffff', fontWeight: 600, mb: 1 }}>
-                      {item?.title}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)' }}>
-                      Audio Asset • {item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : 'Unknown Size'}
-                    </Typography>
-                  </Box>
+                  <AudioWaveformVisualizer
+                    isPlaying={isPlaying}
+                    audioTitle={item?.title}
+                    fileSizeText={item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : undefined}
+                  />
                 )}
 
                 {item?.type === 'document' && (
@@ -3989,6 +4262,7 @@ export default function VideoPlayerPage({
                   item?.frameRate ||
                   undefined
                 }
+                mediaTitle={item?.title || item?.name}
               />
             )}
 
@@ -4009,6 +4283,9 @@ export default function VideoPlayerPage({
                 minHeight: { xs: 72, md: 72 },
                 overflow: 'visible',
                 zIndex: 12,
+                opacity: isFullscreen && isIdle ? 0 : 1,
+                pointerEvents: isFullscreen && isIdle ? 'none' : 'auto',
+                transition: 'opacity 0.3s ease-in-out',
               }}
             >
               {isDesktopAnnotationToolbar ? (
@@ -4022,7 +4299,7 @@ export default function VideoPlayerPage({
                     position: 'relative',
                   }}
                 >
-                  {showClearIsland ? (
+                  {showClearIsland && !isViewer ? (
                     <Box
                       sx={{
                         position: 'absolute',
@@ -4040,53 +4317,55 @@ export default function VideoPlayerPage({
                     </Box>
                   ) : null}
 
-                  <Box
-                    sx={{
-                      width: '100%',
-                      minWidth: 0,
-                      boxSizing: 'border-box',
-                      display: 'flex',
-                      justifyContent: 'center',
-                      pl: showClearIsland ? '88px' : 2,
-                      pr: '148px',
-                    }}
-                  >
-                    <AnnotationToolbar
-                      disabled={isViewer}
-                      mediaType={item?.type}
-                      activeTool={activeTool}
-                      onToolChange={handleToolChange}
-                      activeDrawTool={activeDrawTool}
-                      onDrawToolChange={setActiveDrawTool}
-                      activeDrawStroke={activeDrawStroke}
-                      onDrawStrokeChange={setActiveDrawStroke}
-                      activeDrawColor={activeDrawColor}
-                      onDrawColorChange={setActiveDrawColor}
-                      activeShape={activeShape}
-                      onShapeChange={setActiveShape}
-                      activeColor={activeShapeColor}
-                      onColorChange={setActiveShapeColor}
-                      activeShapeStroke={activeShapeStroke}
-                      onShapeStrokeChange={setActiveShapeStroke}
-                      activeStamp={activeStamp}
-                      customStamp={customStamp}
-                      onStampSelect={setActiveStamp}
-                      onAddCustomStamp={handleAddCustomStamp}
-                      keyboardShortcutsDisabled={Boolean(draftComment) || commentThreadOpen}
-                      toolsDrawerOpen={toolsDrawerOpen}
-                      onMoreToolsClick={() => setToolsDrawerOpen((open) => !open)}
-                      onToolsDrawerClose={() => setToolsDrawerOpen(false)}
-                      moreToolsButtonRef={moreToolsButtonRef}
-                      moreToolsAnchorRef={moreToolsAnchorRef}
-                      pinnedPlayerTools={pinnedPlayerTools}
-                      playerToolsViewState={playerToolsViewState}
-                      playerToolHandlers={playerToolHandlers}
-                      canUndo={canUndo}
-                      canRedo={canRedo}
-                      onUndo={handleUndo}
-                      onRedo={handleRedo}
-                    />
-                  </Box>
+                  {!isViewer && (
+                    <Box
+                      sx={{
+                        width: '100%',
+                        minWidth: 0,
+                        boxSizing: 'border-box',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        pl: showClearIsland ? '88px' : 2,
+                        pr: '148px',
+                      }}
+                    >
+                      <AnnotationToolbar
+                        disabled={isViewer}
+                        mediaType={item?.type}
+                        activeTool={activeTool}
+                        onToolChange={handleToolChange}
+                        activeDrawTool={activeDrawTool}
+                        onDrawToolChange={setActiveDrawTool}
+                        activeDrawStroke={activeDrawStroke}
+                        onDrawStrokeChange={setActiveDrawStroke}
+                        activeDrawColor={activeDrawColor}
+                        onDrawColorChange={setActiveDrawColor}
+                        activeShape={activeShape}
+                        onShapeChange={setActiveShape}
+                        activeColor={activeShapeColor}
+                        onColorChange={setActiveShapeColor}
+                        activeShapeStroke={activeShapeStroke}
+                        onShapeStrokeChange={setActiveShapeStroke}
+                        activeStamp={activeStamp}
+                        customStamp={customStamp}
+                        onStampSelect={setActiveStamp}
+                        onAddCustomStamp={handleAddCustomStamp}
+                        keyboardShortcutsDisabled={Boolean(draftComment) || commentThreadOpen}
+                        toolsDrawerOpen={toolsDrawerOpen}
+                        onMoreToolsClick={() => setToolsDrawerOpen((open) => !open)}
+                        onToolsDrawerClose={() => setToolsDrawerOpen(false)}
+                        moreToolsButtonRef={moreToolsButtonRef}
+                        moreToolsAnchorRef={moreToolsAnchorRef}
+                        pinnedPlayerTools={pinnedPlayerTools}
+                        playerToolsViewState={playerToolsViewState}
+                        playerToolHandlers={playerToolHandlers}
+                        canUndo={canUndo}
+                        canRedo={canRedo}
+                        onUndo={handleUndo}
+                        onRedo={handleRedo}
+                      />
+                    </Box>
+                  )}
 
                   <Box
                     sx={{
@@ -4162,7 +4441,7 @@ export default function VideoPlayerPage({
                       onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
                       hideZoomControls={item?.type === 'audio'}
                       insertBeforeHelp={
-                        showClearIsland ? (
+                        showClearIsland && !isViewer ? (
                           <AnnotationUndoIsland
                             compact
                             disabled={isViewer}
@@ -4201,6 +4480,7 @@ export default function VideoPlayerPage({
           onToggleResolved={handleToggleResolved}
           onTogglePinned={handleTogglePinned}
           onMarkUnread={handleMarkUnread}
+          onMarkRead={handleMarkRead}
           onCopyLink={handleCopyLink}
           onDeleteEntry={handleDeleteEntry}
           onHardDeleteEntry={handleHardDeleteEntry}
@@ -4213,6 +4493,17 @@ export default function VideoPlayerPage({
           onDeleteAnnotationGroup={handleDeleteAnnotationGroup}
           onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
           onAddCollaborator={handleAddCollaboratorForGroup}
+          canDownload={headerPermissions.canDownload && canDownloadOriginal}
+          onDownloadOriginal={() => {
+            if (item?.id && canDownloadOriginal) {
+              const a = document.createElement('a');
+              a.href = `/api/media/${encodeURIComponent(item.id)}/download?raw=true`;
+              a.download = '';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }
+          }}
         />
       </Box>
 

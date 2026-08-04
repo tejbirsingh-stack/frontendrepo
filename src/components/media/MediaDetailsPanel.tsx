@@ -2,12 +2,16 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
+  Button,
   Chip,
   Typography,
 } from '@mui/material';
-import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
-import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
-import MovieOutlinedIcon from '@mui/icons-material/MovieOutlined';
+import {
+  LayersOutlined as LayersOutlinedIcon,
+  LocalOfferOutlined as LocalOfferOutlinedIcon,
+  MovieOutlined as MovieOutlinedIcon,
+  FileDownloadOutlined as FileDownloadOutlinedIcon,
+} from '@mui/icons-material';
 import type { MediaItem } from '../../data/mockMedia';
 import { formatFileSize } from '../../utils/formatFileSize';
 import { getMediaFileName } from '../../utils/mediaFileName';
@@ -21,6 +25,11 @@ import {
 import { findManagedTagByName, getManagedTagChipSx, getTagScopeChipSx } from '../../utils/managedTagStyles';
 import { useDashboard } from '../../context/DashboardContext';
 import TagTypeaheadInput from './TagTypeaheadInput';
+import {
+  getResolutionTier,
+  calculateMegapixels,
+  deriveOrientation,
+} from '../../utils/resolutionTier';
 
 export type MediaDetailsSection = 'file' | 'technical' | 'tags';
 
@@ -30,6 +39,8 @@ export interface MediaTechnicalDetails {
   height?: number;
   resolution?: string;
   displayResolution?: string;
+  resolutionTier?: string;
+  resolution_tier?: string;
   aspectRatio?: string;
   orientation?: string;
   megapixels?: string;
@@ -73,6 +84,8 @@ interface MediaDetailsPanelProps {
   onTagsChange: (tags: string[]) => void;
   activeSection?: MediaDetailsSection;
   onSectionChange?: (section: MediaDetailsSection) => void;
+  onDownloadOriginal?: () => void;
+  canDownload?: boolean;
 }
 
 const sectionCardSx = {
@@ -103,6 +116,13 @@ const detailRowSx = {
   },
 };
 
+function formatValue(value?: string | number | null): string {
+  if (value === undefined || value === null) return 'N/A';
+  const str = String(value).trim();
+  if (!str || str === '—' || str === '-') return 'N/A';
+  return str;
+}
+
 function DetailRow({
   label,
   value,
@@ -112,6 +132,7 @@ function DetailRow({
   value: string;
   multiline?: boolean;
 }) {
+  const displayVal = formatValue(value);
   if (multiline) {
     return (
       <Box sx={{ ...detailRowSx, flexDirection: 'column', alignItems: 'stretch' }}>
@@ -122,13 +143,13 @@ function DetailRow({
           sx={{
             mt: 0.5,
             fontSize: '0.875rem',
-            color: cv.textPrimary,
+            color: displayVal === 'N/A' ? cv.textMuted : cv.textPrimary,
             lineHeight: 1.5,
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
           }}
         >
-          {value}
+          {displayVal}
         </Typography>
       </Box>
     );
@@ -142,13 +163,66 @@ function DetailRow({
       <Typography
         sx={{
           fontSize: '0.875rem',
-          color: cv.textPrimary,
+          color: displayVal === 'N/A' ? cv.textMuted : cv.textPrimary,
           textAlign: 'right',
+          wordBreak: 'break-word',
+          fontWeight: displayVal === 'N/A' ? 400 : 500,
+        }}
+      >
+        {displayVal}
+      </Typography>
+    </Box>
+  );
+}
+
+function MatrixItem({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | number | null;
+}) {
+  const displayVal = formatValue(value);
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0.25,
+        p: 1.1,
+        borderRadius: '8px',
+        backgroundColor: 'rgba(255, 255, 255, 0.02)',
+        border: `1px solid ${cv.dividerSubtle}`,
+      }}
+    >
+      <Typography sx={{ fontSize: '0.75rem', color: cv.textSecondary, fontWeight: 500 }}>
+        {label}
+      </Typography>
+      <Typography
+        sx={{
+          fontSize: '0.875rem',
+          color: displayVal === 'N/A' ? cv.textMuted : cv.textPrimary,
+          fontWeight: displayVal === 'N/A' ? 400 : 600,
           wordBreak: 'break-word',
         }}
       >
-        {value}
+        {displayVal}
       </Typography>
+    </Box>
+  );
+}
+
+function MatrixGrid({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+        gap: 1,
+        p: 1.5,
+      }}
+    >
+      {children}
     </Box>
   );
 }
@@ -178,18 +252,27 @@ function DetailsSection({
 }
 
 function formatCreatedAt(value?: string): string {
-  if (!value) return '—';
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(value));
+  if (!value) return 'N/A';
+  try {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return 'N/A';
+    return new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(d);
+  } catch {
+    return 'N/A';
+  }
 }
 
 function formatStorageProvider(value?: string): string {
-  if (!value) return '—';
-  if (value === 'b2') return 'B2 Cloud';
-  return 'Local';
+  if (!value) return 'N/A';
+  const valLower = value.toLowerCase();
+  if (valLower === 'b2' || valLower.includes('backblaze')) return 'B2 Cloud Storage';
+  if (valLower.includes('s3') || valLower.includes('cloud')) return 'Cloud Storage';
+  if (valLower === 'local') return 'Local Storage';
+  return `${value} Storage`;
 }
 
 export default function MediaDetailsPanel({
@@ -199,12 +282,36 @@ export default function MediaDetailsPanel({
   onTagsChange,
   activeSection: controlledSection,
   onSectionChange,
+  onDownloadOriginal,
+  canDownload = true,
 }: MediaDetailsPanelProps) {
   const { managedTags, tagScopeColors } = useDashboard();
   const [internalSection, setInternalSection] = useState<MediaDetailsSection>('file');
   const activeSection = controlledSection ?? internalSection;
   const originDetails = resolveMediaOriginDetails(mediaItem, technicalDetails);
   const exifDetails = resolveMediaExifDetails(mediaItem, technicalDetails);
+
+  // Resolution & dimension calculations
+  const width = technicalDetails?.width || (technicalDetails as any)?.w;
+  const height = technicalDetails?.height || (technicalDetails as any)?.h;
+  const resolutionTier =
+    (mediaItem as any)?.resolution_tier ||
+    (mediaItem as any)?.resolutionTier ||
+    technicalDetails?.resolutionTier ||
+    technicalDetails?.resolution_tier ||
+    getResolutionTier(width, height);
+  const megapixels = technicalDetails?.megapixels || calculateMegapixels(width, height);
+  const orientation = technicalDetails?.orientation || exifDetails?.orientation || deriveOrientation(width, height);
+  const resolution = technicalDetails?.resolution || (width && height ? `${width} × ${height} px` : undefined) || exifDetails?.resolution;
+  const displaySize = technicalDetails?.displayResolution || (technicalDetails as any)?.displaySize || resolution;
+  const aspectRatio = technicalDetails?.aspectRatio || (width && height ? `${(width / height).toFixed(2)}:1` : undefined);
+  const camera = [exifDetails?.make || technicalDetails?.make, exifDetails?.model || technicalDetails?.model].filter(Boolean).join(' ') || undefined;
+  const lens = exifDetails?.lens || technicalDetails?.lens;
+  const exposure = exifDetails?.exposureTime || technicalDetails?.exposureTime;
+  const aperture = exifDetails?.fNumber || technicalDetails?.fNumber;
+  const iso = exifDetails?.iso || technicalDetails?.iso;
+  const focalLength = exifDetails?.focalLength || technicalDetails?.focalLength;
+  const storageLabel = formatStorageProvider(technicalDetails?.storageProvider ?? (technicalDetails as any)?.storage ?? mediaItem.storageProvider);
 
   useEffect(() => {
     if (controlledSection !== undefined) {
@@ -292,9 +399,47 @@ export default function MediaDetailsPanel({
           <DetailRow label="Type:" value={mediaItem.type} />
           <DetailRow
             label="Summary:"
-            value={mediaItem.summary?.trim() || (mediaItem.customMetadata as any)?.summary || (technicalDetails as any)?.summary || '—'}
+            value={mediaItem.summary?.trim() || (mediaItem.customMetadata as any)?.summary || (technicalDetails as any)?.summary}
             multiline
           />
+          {canDownload && (
+            <Box sx={{ px: 1.5, py: 1.5, borderTop: `1px solid ${cv.dividerSubtle}` }}>
+              <Button
+                variant="contained"
+                fullWidth
+                startIcon={<FileDownloadOutlinedIcon />}
+                onClick={() => {
+                  if (onDownloadOriginal) {
+                    onDownloadOriginal();
+                  } else if (mediaItem?.id) {
+                    const downloadUrl = `/api/media/${encodeURIComponent(mediaItem.id)}/download?raw=true`;
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    a.download = '';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                  }
+                }}
+                sx={{
+                  py: 1.1,
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  textTransform: 'none',
+                  backgroundColor: cv.purpleAccent || '#9333ea',
+                  color: '#ffffff',
+                  boxShadow: '0 4px 12px rgba(147, 51, 234, 0.25)',
+                  '&:hover': {
+                    backgroundColor: cv.purpleHover || '#7e22ce',
+                    boxShadow: '0 6px 16px rgba(147, 51, 234, 0.35)',
+                  },
+                }}
+              >
+                Download Original File
+              </Button>
+            </Box>
+          )}
         </DetailsSection>
       )}
 
@@ -310,250 +455,71 @@ export default function MediaDetailsPanel({
             originallyCreatedAt={originDetails.originallyCreatedAt}
             exif={exifDetails}
           />
+
           {mediaItem.type === 'image' && (
-            <>
-              {Boolean(
-                [exifDetails?.make, exifDetails?.model].filter(Boolean).join(' ') ||
-                [technicalDetails?.make, technicalDetails?.model].filter(Boolean).join(' ') ||
-                (technicalDetails as any)?.make ||
-                (technicalDetails as any)?.model
-              ) ? (
-                <DetailRow
-                  label="Camera:"
-                  value={
-                    [exifDetails?.make, exifDetails?.model].filter(Boolean).join(' ') ||
-                    [technicalDetails?.make, technicalDetails?.model].filter(Boolean).join(' ') ||
-                    (technicalDetails as any)?.make ||
-                    (technicalDetails as any)?.model ||
-                    ''
-                  }
-                />
-              ) : null}
-              {Boolean(exifDetails?.lens || technicalDetails?.lens || (technicalDetails as any)?.lens) ? (
-                <DetailRow
-                  label="Lens:"
-                  value={exifDetails?.lens || technicalDetails?.lens || (technicalDetails as any)?.lens || ''}
-                />
-              ) : null}
-              <DetailRow
-                label="Resolution:"
-                value={technicalDetails?.resolution || exifDetails?.resolution || '—'}
-              />
-              <DetailRow
-                label="Display size:"
-                value={technicalDetails?.displayResolution || (technicalDetails as any)?.displaySize || technicalDetails?.resolution || '—'}
-              />
-              {technicalDetails?.aspectRatio ? (
-                <DetailRow label="Aspect ratio:" value={technicalDetails.aspectRatio} />
-              ) : null}
-              {technicalDetails?.megapixels ? (
-                <DetailRow label="Megapixels:" value={technicalDetails.megapixels} />
-              ) : null}
-              <DetailRow
-                label="Orientation:"
-                value={technicalDetails?.orientation || exifDetails?.orientation || '—'}
-              />
-              {Boolean(exifDetails?.exposureTime || technicalDetails?.exposureTime || (technicalDetails as any)?.exposureTime) ? (
-                <DetailRow
-                  label="Exposure:"
-                  value={exifDetails?.exposureTime || technicalDetails?.exposureTime || (technicalDetails as any)?.exposureTime || ''}
-                />
-              ) : null}
-              {Boolean(exifDetails?.fNumber || technicalDetails?.fNumber || (technicalDetails as any)?.fNumber) ? (
-                <DetailRow
-                  label="Aperture:"
-                  value={exifDetails?.fNumber || technicalDetails?.fNumber || (technicalDetails as any)?.fNumber || ''}
-                />
-              ) : null}
-              {Boolean(exifDetails?.iso || technicalDetails?.iso || (technicalDetails as any)?.iso) ? (
-                <DetailRow
-                  label="ISO:"
-                  value={exifDetails?.iso || technicalDetails?.iso || (technicalDetails as any)?.iso || ''}
-                />
-              ) : null}
-              {Boolean(exifDetails?.focalLength || technicalDetails?.focalLength || (technicalDetails as any)?.focalLength) ? (
-                <DetailRow
-                  label="Focal length:"
-                  value={exifDetails?.focalLength || technicalDetails?.focalLength || (technicalDetails as any)?.focalLength || ''}
-                />
-              ) : null}
-              <DetailRow
-                label="Container:"
-                value={technicalDetails?.containerFormat || (technicalDetails as any)?.container || (technicalDetails as any)?.format || 'JPEG'}
-              />
-            </>
+            <MatrixGrid>
+              <MatrixItem label="Resolution Tier" value={resolutionTier} />
+              <MatrixItem label="Resolution" value={resolution} />
+              <MatrixItem label="Display Size" value={displaySize} />
+              <MatrixItem label="Aspect Ratio" value={aspectRatio} />
+              <MatrixItem label="Orientation" value={orientation} />
+              <MatrixItem label="Megapixels" value={megapixels} />
+              <MatrixItem label="Container Format" value={technicalDetails?.containerFormat || (technicalDetails as any)?.container || (technicalDetails as any)?.format || 'JPEG'} />
+              <MatrixItem label="Storage Provider" value={storageLabel} />
+              <MatrixItem label="Camera" value={camera} />
+              <MatrixItem label="Lens" value={lens} />
+              <MatrixItem label="Exposure" value={exposure} />
+              <MatrixItem label="Aperture" value={aperture} />
+              <MatrixItem label="ISO" value={iso} />
+              <MatrixItem label="Focal Length" value={focalLength} />
+              <MatrixItem label="Uploaded Date" value={formatCreatedAt(originDetails.uploadedAt)} />
+              <MatrixItem label="Originally Created" value={formatCreatedAt(technicalDetails?.originallyCreatedAt || (technicalDetails as any)?.originallyCreated || originDetails.originallyCreatedAt)} />
+            </MatrixGrid>
           )}
 
           {mediaItem.type === 'audio' && (
-            <>
-              {(technicalDetails as any)?.title ? (
-                <DetailRow label="Title:" value={(technicalDetails as any).title} />
-              ) : null}
-              {technicalDetails?.artist || (technicalDetails as any)?.artist ? (
-                <DetailRow
-                  label="Artist:"
-                  value={technicalDetails?.artist || (technicalDetails as any)?.artist}
-                />
-              ) : null}
-              {technicalDetails?.album || (technicalDetails as any)?.album ? (
-                <DetailRow
-                  label="Album:"
-                  value={technicalDetails?.album || (technicalDetails as any)?.album}
-                />
-              ) : null}
-              {(technicalDetails as any)?.year ? (
-                <DetailRow label="Year:" value={String((technicalDetails as any).year)} />
-              ) : null}
-              {(technicalDetails as any)?.genre ? (
-                <DetailRow label="Genre:" value={(technicalDetails as any).genre} />
-              ) : null}
-              <DetailRow
-                label="Duration:"
-                value={technicalDetails?.duration || mediaItem.duration || '—'}
-              />
-              <DetailRow
-                label="Sample rate:"
-                value={technicalDetails?.sampleRate || (technicalDetails as any)?.sampleRate || '44.1 kHz'}
-              />
-              <DetailRow
-                label="Channels:"
-                value={technicalDetails?.channels || (technicalDetails as any)?.channels || 'Stereo'}
-              />
-              <DetailRow
-                label="Est. bitrate:"
-                value={technicalDetails?.estimatedBitrate || (technicalDetails as any)?.bitrate || '—'}
-              />
-              {(technicalDetails as any)?.audioCodec ? (
-                <DetailRow label="Audio codec:" value={(technicalDetails as any).audioCodec} />
-              ) : null}
-              <DetailRow
-                label="Container:"
-                value={technicalDetails?.containerFormat || (technicalDetails as any)?.container || 'MP3'}
-              />
-            </>
+            <MatrixGrid>
+              <MatrixItem label="Title" value={(technicalDetails as any)?.title} />
+              <MatrixItem label="Artist" value={technicalDetails?.artist || (technicalDetails as any)?.artist} />
+              <MatrixItem label="Album" value={technicalDetails?.album || (technicalDetails as any)?.album} />
+              <MatrixItem label="Genre" value={(technicalDetails as any)?.genre} />
+              <MatrixItem label="Year" value={(technicalDetails as any)?.year} />
+              <MatrixItem label="Duration" value={technicalDetails?.duration || mediaItem.duration} />
+              <MatrixItem label="Sample Rate" value={technicalDetails?.sampleRate || (technicalDetails as any)?.sampleRate || '44.1 kHz'} />
+              <MatrixItem label="Channels" value={technicalDetails?.channels || (technicalDetails as any)?.channels || 'Stereo'} />
+              <MatrixItem label="Est. Bitrate" value={technicalDetails?.estimatedBitrate || (technicalDetails as any)?.bitrate} />
+              <MatrixItem label="Audio Codec" value={(technicalDetails as any)?.audioCodec} />
+              <MatrixItem label="Container Format" value={technicalDetails?.containerFormat || (technicalDetails as any)?.container || 'MP3'} />
+              <MatrixItem label="Storage Provider" value={storageLabel} />
+              <MatrixItem label="Uploaded Date" value={formatCreatedAt(originDetails.uploadedAt)} />
+              <MatrixItem label="Originally Created" value={formatCreatedAt(technicalDetails?.originallyCreatedAt || (technicalDetails as any)?.originallyCreated || originDetails.originallyCreatedAt)} />
+            </MatrixGrid>
           )}
 
           {mediaItem.type !== 'image' && mediaItem.type !== 'audio' && (
-            <>
-              {Boolean(
-                [exifDetails?.make, exifDetails?.model].filter(Boolean).join(' ') ||
-                [technicalDetails?.make, technicalDetails?.model].filter(Boolean).join(' ') ||
-                (technicalDetails as any)?.make ||
-                (technicalDetails as any)?.model
-              ) ? (
-                <DetailRow
-                  label="Camera:"
-                  value={
-                    [exifDetails?.make, exifDetails?.model].filter(Boolean).join(' ') ||
-                    [technicalDetails?.make, technicalDetails?.model].filter(Boolean).join(' ') ||
-                    (technicalDetails as any)?.make ||
-                    (technicalDetails as any)?.model ||
-                    ''
-                  }
-                />
-              ) : null}
-              {Boolean(exifDetails?.lens || technicalDetails?.lens || (technicalDetails as any)?.lens) ? (
-                <DetailRow
-                  label="Lens:"
-                  value={exifDetails?.lens || technicalDetails?.lens || (technicalDetails as any)?.lens || ''}
-                />
-              ) : null}
-              <DetailRow
-                label="Resolution:"
-                value={technicalDetails?.resolution || exifDetails?.resolution || '—'}
-              />
-              <DetailRow
-                label="Orientation:"
-                value={technicalDetails?.orientation || exifDetails?.orientation || '—'}
-              />
-              {Boolean(exifDetails?.exposureTime || technicalDetails?.exposureTime || (technicalDetails as any)?.exposureTime) ? (
-                <DetailRow
-                  label="Exposure:"
-                  value={exifDetails?.exposureTime || technicalDetails?.exposureTime || (technicalDetails as any)?.exposureTime || ''}
-                />
-              ) : null}
-              {Boolean(exifDetails?.fNumber || technicalDetails?.fNumber || (technicalDetails as any)?.fNumber) ? (
-                <DetailRow
-                  label="Aperture:"
-                  value={exifDetails?.fNumber || technicalDetails?.fNumber || (technicalDetails as any)?.fNumber || ''}
-                />
-              ) : null}
-              {Boolean(exifDetails?.iso || technicalDetails?.iso || (technicalDetails as any)?.iso) ? (
-                <DetailRow
-                  label="ISO:"
-                  value={exifDetails?.iso || technicalDetails?.iso || (technicalDetails as any)?.iso || ''}
-                />
-              ) : null}
-              {Boolean(exifDetails?.focalLength || technicalDetails?.focalLength || (technicalDetails as any)?.focalLength) ? (
-                <DetailRow
-                  label="Focal length:"
-                  value={exifDetails?.focalLength || technicalDetails?.focalLength || (technicalDetails as any)?.focalLength || ''}
-                />
-              ) : null}
-              <DetailRow
-                label="Duration:"
-                value={technicalDetails?.duration || mediaItem.duration || '—'}
-              />
-              <DetailRow
-                label="Display size:"
-                value={technicalDetails?.displayResolution || (technicalDetails as any)?.displaySize || '—'}
-              />
-              <DetailRow label="Aspect ratio:" value={technicalDetails?.aspectRatio || '—'} />
-              <DetailRow label="Megapixels:" value={technicalDetails?.megapixels || '—'} />
-              <DetailRow
-                label="Frame rate:"
-                value={
-                  technicalDetails?.frameRate ||
-                  ((technicalDetails as any)?.fps !== undefined
-                    ? typeof (technicalDetails as any).fps === 'number'
-                      ? `${(technicalDetails as any).fps} fps`
-                      : String((technicalDetails as any).fps)
-                    : '—')
-                }
-              />
-              <DetailRow label="Scan type:" value={technicalDetails?.scanType || 'Progressive'} />
-              <DetailRow
-                label="Container:"
-                value={technicalDetails?.containerFormat || (technicalDetails as any)?.container || 'MP4'}
-              />
-              <DetailRow
-                label="Video codec:"
-                value={technicalDetails?.videoCodec || (technicalDetails as any)?.codec || (technicalDetails as any)?.videoCodec || 'H.264 / AAC'}
-              />
-              <DetailRow
-                label="Est. bitrate:"
-                value={technicalDetails?.estimatedBitrate || (technicalDetails as any)?.bitrate || '—'}
-              />
-              <DetailRow
-                label="Audio:"
-                value={
-                  technicalDetails?.hasAudio ||
-                  ((technicalDetails as any)?.audio !== undefined
-                    ? (technicalDetails as any).audio
-                      ? 'Yes (assumed)'
-                      : 'No'
-                    : 'Yes')
-                }
-              />
-            </>
+            <MatrixGrid>
+              <MatrixItem label="Resolution Tier" value={resolutionTier} />
+              <MatrixItem label="Resolution" value={resolution} />
+              <MatrixItem label="Display Size" value={displaySize} />
+              <MatrixItem label="Aspect Ratio" value={aspectRatio} />
+              <MatrixItem label="Orientation" value={orientation} />
+              <MatrixItem label="Megapixels" value={megapixels} />
+              <MatrixItem label="Duration" value={technicalDetails?.duration || mediaItem.duration} />
+              <MatrixItem label="Frame Rate" value={technicalDetails?.frameRate || ((technicalDetails as any)?.fps !== undefined ? `${(technicalDetails as any).fps} fps` : undefined)} />
+              <MatrixItem label="Scan Type" value={technicalDetails?.scanType || 'Progressive'} />
+              <MatrixItem label="Container Format" value={technicalDetails?.containerFormat || (technicalDetails as any)?.container || 'MP4'} />
+              <MatrixItem label="Video Codec" value={technicalDetails?.videoCodec || (technicalDetails as any)?.codec || (technicalDetails as any)?.videoCodec || 'H.264 / AAC'} />
+              <MatrixItem label="Est. Bitrate" value={technicalDetails?.estimatedBitrate || (technicalDetails as any)?.bitrate} />
+              <MatrixItem label="Audio Stream" value={technicalDetails?.hasAudio || ((technicalDetails as any)?.audio !== undefined ? ((technicalDetails as any).audio ? 'Yes' : 'No') : 'Yes')} />
+              <MatrixItem label="Storage Provider" value={storageLabel} />
+              <MatrixItem label="Decoded Frames" value={technicalDetails?.decodedFrames} />
+              <MatrixItem label="Dropped Frames" value={technicalDetails?.droppedFrames} />
+              <MatrixItem label="Camera" value={camera} />
+              <MatrixItem label="Lens" value={lens} />
+              <MatrixItem label="Uploaded Date" value={formatCreatedAt(originDetails.uploadedAt)} />
+              <MatrixItem label="Originally Created" value={formatCreatedAt(technicalDetails?.originallyCreatedAt || (technicalDetails as any)?.originallyCreated || originDetails.originallyCreatedAt)} />
+            </MatrixGrid>
           )}
-
-          <DetailRow
-            label="Uploaded:"
-            value={formatCreatedAt(originDetails.uploadedAt)}
-          />
-          <DetailRow
-            label="Originally created:"
-            value={formatCreatedAt(technicalDetails?.originallyCreatedAt || (technicalDetails as any)?.originallyCreated || originDetails.originallyCreatedAt)}
-          />
-          <DetailRow
-            label="Uploaded by:"
-            value={originDetails.uploadedBy}
-          />
-          <DetailRow
-            label="Storage:"
-            value={formatStorageProvider(technicalDetails?.storageProvider ?? (technicalDetails as any)?.storage ?? mediaItem.storageProvider)}
-          />
         </DetailsSection>
       )}
 
