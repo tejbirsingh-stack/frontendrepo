@@ -1,6 +1,6 @@
 export const MIN_ANNOTATION_DURATION = 0.25;
 
-export const DEFAULT_ANNOTATION_DURATION = 4.0;
+export const DEFAULT_ANNOTATION_DURATION = 1.0;
 
 export function getAnnotationEndTime(
   videoTimestamp: number,

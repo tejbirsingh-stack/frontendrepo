@@ -163,7 +163,7 @@ export default function CommentMarker({
     const query = mentionSearchText.toLowerCase();
     return collaborators.filter(
       (c) =>
-        (c.name.toLowerCase().includes(query) || c.email.toLowerCase().includes(query)) &&
+        (c.name.toLowerCase().includes(query) || (c.email?.toLowerCase().includes(query) ?? false)) &&
         !c.isCurrentUser
     );
   }, [mentionSearchText, collaborators]);

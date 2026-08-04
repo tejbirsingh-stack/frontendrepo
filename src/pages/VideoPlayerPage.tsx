@@ -160,7 +160,8 @@ import {
 } from '../utils/playerToolUtils';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
-import { getMediaAssetByIdRequest, updateAssetTagsRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride, getCompanyInfoRequest } from '../api';
+import { getMediaAssetByIdRequest, updateAssetTagsRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride, updateAssetGroupAccessOverride, removeAssetGroupAccessOverride, getCompanyInfoRequest } from '../api';
+import { fetchUserGroups } from '../api/userGroups.service';
 import type { MediaItem, MediaType } from '../data/mockMedia';
 
 function collaboratorsToTeamMembers(collaborators: MediaCollaborator[]): WorkspaceTeamMember[] {
@@ -181,7 +182,8 @@ function collaboratorsToTeamMembers(collaborators: MediaCollaborator[]): Workspa
       email: collaborator.email,
       avatarUrl: collaborator.avatarUrl,
       access,
-      memberType: 'Member',
+      memberType: collaborator.groupId ? 'Group' : 'Member',
+      groupId: collaborator.groupId,
       isCurrentUser: collaborator.isCurrentUser,
       hasOverride: collaborator.hasOverride,
     };
@@ -683,6 +685,7 @@ export default function VideoPlayerPage({
   const [activeShareLinkId, setActiveShareLinkId] = useState<string | null>(null);
   const [focusLinkNameCounter, setFocusLinkNameCounter] = useState(0);
   const [shareTeamMembers, setShareTeamMembers] = useState<WorkspaceTeamMember[]>([]);
+  const [availableGroups, setAvailableGroups] = useState<SettingsUserGroup[]>([]);
   const [drawerTab, setDrawerTab] = useState<'history' | 'details'>('history');
   const [detailsSection, setDetailsSection] = useState<MediaDetailsSection>('file');
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
@@ -1490,10 +1493,12 @@ export default function VideoPlayerPage({
     }
     const fetchOrgUsers = async () => {
       try {
-        const [users, overrides] = await Promise.all([
+        const [users, overridesData] = await Promise.all([
           fetchOrganizationUsers(),
-          getAssetAccessOverrides(mediaId).catch(() => [])
+          getAssetAccessOverrides(mediaId).catch(() => ({ overrides: [], groupOverrides: [] }))
         ]);
+
+        const { overrides = [], groupOverrides = [] } = overridesData as { overrides: any[], groupOverrides: any[] };
 
         if (users && users.length > 0) {
           const activeUsers = users.filter((u) => u.status?.toLowerCase() === 'active');
@@ -1530,7 +1535,25 @@ export default function VideoPlayerPage({
               role: finalRole,
             };
           });
-          setCollaborators(mapped);
+          // Also map group overrides
+          const groupCollaborators: MediaCollaborator[] = groupOverrides.map(go => {
+            const groupName = go.group?.name || 'Group';
+            let finalRole = 'Viewer';
+            if (go.accessLevel === 'Can edit') finalRole = 'Editor';
+            else if (go.accessLevel === 'Full Access') finalRole = 'Admin';
+            
+            return {
+              id: go.group?.id || go.groupId,
+              name: groupName,
+              initials: groupName.substring(0, 2).toUpperCase(),
+              isCurrentUser: false,
+              hasOverride: true,
+              role: finalRole,
+              groupId: go.group?.id || go.groupId
+            };
+          });
+
+          setCollaborators([...mapped, ...groupCollaborators]);
         } else {
           setCollaborators(loadMediaCollaborators(mediaId));
         }
@@ -1561,6 +1584,26 @@ export default function VideoPlayerPage({
   }, [mediaId]);
 
   useEffect(() => {
+    const loadGroups = async () => {
+      try {
+        const groups = await fetchUserGroups();
+        setAvailableGroups(
+          groups.map((g) => ({
+            id: g.id,
+            name: g.name,
+            description: g.description || '',
+            memberIds: g.members?.map((m) => m.userId) || [],
+            createdAt: g.createdAt,
+          })),
+        );
+      } catch (err) {
+        console.error('Failed to load user groups', err);
+      }
+    };
+    loadGroups();
+  }, []);
+
+  useEffect(() => {
     if (!item) return;
     const previousTitle = document.title;
     document.title = `${item.title} | NOAH`;
@@ -1568,6 +1611,23 @@ export default function VideoPlayerPage({
       document.title = previousTitle;
     };
   }, [item]);
+
+  const allCollaboratorsForMentions = useMemo(() => {
+    const combined = [...collaborators];
+    availableGroups.forEach(g => {
+      if (!combined.some(c => c.groupId === g.id)) {
+        combined.push({
+          id: g.id,
+          name: g.name,
+          initials: (g.name || 'Gr').substring(0, 2).toUpperCase(),
+          groupId: g.id,
+          isCurrentUser: false,
+          hasOverride: false
+        });
+      }
+    });
+    return combined;
+  }, [collaborators, availableGroups]);
 
   useEffect(() => {
     if (!item || item.type !== 'video') return;
@@ -2552,6 +2612,37 @@ export default function VideoPlayerPage({
 
   const handleShareInviteMember = useCallback(
     (payload: WorkspaceInvitePayload) => {
+      if (payload.memberType === 'Group' && payload.groupId) {
+        const groupId = payload.groupId;
+        const existingGroup = shareTeamMembers.find(m => m.groupId === groupId);
+
+        if (existingGroup) {
+          if (existingGroup.hasOverride) return false;
+          setShareTeamMembers(current => current.map(m => m.groupId === groupId ? { ...m, hasOverride: true, access: payload.access } : m));
+          setCollaborators(current => current.map(c => c.groupId === groupId ? { ...c, hasOverride: true, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' } : c));
+        } else {
+          const newGroupMember = {
+            id: groupId,
+            name: payload.groupName || 'Group',
+            initials: (payload.groupName || 'Gr').substring(0, 2).toUpperCase(),
+            access: payload.access,
+            memberType: 'Group' as WorkspaceMemberType,
+            groupId: groupId,
+            isCurrentUser: false,
+            hasOverride: true
+          };
+          setShareTeamMembers(current => [...current, newGroupMember]);
+          setCollaborators(current => [...current, { ...newGroupMember, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' }]);
+        }
+
+        if (mediaId) {
+          updateAssetGroupAccessOverride(mediaId, groupId, payload.access).catch(console.error);
+        }
+
+        setStatusToast({ open: true, message: `${payload.groupName || 'Group'} added`, variant: 'resolved' });
+        return true;
+      }
+
       const email = payload.email?.toLowerCase();
       if (!email) return false;
 
@@ -2614,14 +2705,22 @@ export default function VideoPlayerPage({
 
   const handleShareUpdateMemberAccess = useCallback(
     async (memberId: string, access: WorkspaceMemberAccess) => {
+      const member = shareTeamMembers.find(m => m.id === memberId);
       setShareTeamMembers((current) =>
-        current.map((member) => (member.id === memberId ? { ...member, access } : member)),
+        current.map((m) => (m.id === memberId ? { ...m, access } : m)),
+      );
+      setCollaborators((current) =>
+        current.map((c) => (c.id === memberId ? { ...c, role: access === 'Can edit' ? 'Editor' : 'Viewer' } : c))
       );
 
       if (!mediaId) return;
 
       try {
-        await updateAssetAccessOverride(mediaId, memberId, access);
+        if (member?.memberType === 'Group' && member.groupId) {
+          await updateAssetGroupAccessOverride(mediaId, member.groupId, access);
+        } else {
+          await updateAssetAccessOverride(mediaId, memberId, access);
+        }
         setStatusToast({
           open: true,
           message: `Access updated for member`,
@@ -2636,28 +2735,39 @@ export default function VideoPlayerPage({
         });
       }
     },
-    [mediaId],
+    [mediaId, shareTeamMembers],
   );
 
   const handleShareRemoveMember = useCallback(
     async (memberId: string) => {
+      let removedMember: WorkspaceTeamMember | undefined;
       setShareTeamMembers((current) => {
-        const removed = current.find((member) => member.id === memberId);
-        if (removed?.email) {
+        removedMember = current.find((member) => member.id === memberId);
+        if (removedMember?.email) {
           setCollaborators((collaborators) =>
             collaborators.filter(
               (collaborator) =>
-                collaborator.email.toLowerCase() !== removed.email?.toLowerCase(),
+                collaborator.email?.toLowerCase() !== removedMember?.email?.toLowerCase(),
             ),
+          );
+        } else if (removedMember?.groupId) {
+          setCollaborators((collaborators) =>
+            collaborators.filter(
+              (collaborator) => collaborator.groupId !== removedMember?.groupId
+            )
           );
         }
         return current.filter((member) => member.id !== memberId);
       });
 
-      if (!mediaId) return;
+      if (!mediaId || !removedMember) return;
 
       try {
-        await removeAssetAccessOverride(mediaId, memberId);
+        if (removedMember.memberType === 'Group' && removedMember.groupId) {
+          await removeAssetGroupAccessOverride(mediaId, removedMember.groupId);
+        } else {
+          await removeAssetAccessOverride(mediaId, memberId);
+        }
         setStatusToast({
           open: true,
           message: 'Member removed from project',
@@ -2672,7 +2782,7 @@ export default function VideoPlayerPage({
         });
       }
     },
-    [mediaId],
+    [mediaId, shareTeamMembers],
   );
 
   const handleShareVisibilityChange = useCallback(
@@ -3488,9 +3598,8 @@ export default function VideoPlayerPage({
           resourceId={mediaId || item.id}
           workspaceName={item.title}
           members={shareTeamMembers.filter(m => m.hasOverride || m.isCurrentUser)}
-          suggestedUsers={shareTeamMembers}
-          organizationUsers={shareTeamMembers}
-          suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
+          suggestedUsers={shareTeamMembers.filter(m => m.memberType !== 'Group')}
+          suggestedGroups={availableGroups}
           resourceType="project"
           visibility={shareInviteVisibility}
           shareLinks={shareLinks}
@@ -3975,7 +4084,7 @@ export default function VideoPlayerPage({
                   openCommentId={openCommentId}
                   onOpenCommentIdChange={setOpenCommentId}
                   annotationGroups={annotationGroups}
-                  collaborators={collaborators}
+                  collaborators={allCollaboratorsForMentions}
                   onCommentVisibilityChange={handleCommentVisibilityChange}
                   onCreateAnnotationGroup={handleCreateAnnotationGroup}
                   onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
@@ -4221,7 +4330,7 @@ export default function VideoPlayerPage({
           onRestoreEntry={handleRestoreEntry}
           onEditComment={handleEditComment}
           annotationGroups={annotationGroups}
-          collaborators={collaborators}
+          collaborators={allCollaboratorsForMentions}
           onVisibilityChange={handleEntryVisibilityChange}
           onCreateAnnotationGroup={handleCreateAnnotationGroup}
           onDeleteAnnotationGroup={handleDeleteAnnotationGroup}
