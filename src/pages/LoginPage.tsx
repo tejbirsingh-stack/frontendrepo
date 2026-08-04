@@ -36,6 +36,13 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    const state = location.state as { email?: string } | null;
+    if (state?.email && typeof state.email === 'string') {
+      setEmail(state.email);
+    }
+  }, [location.state]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
