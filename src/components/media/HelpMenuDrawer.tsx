@@ -52,6 +52,10 @@ const shortcutBadgeSx = {
   lineHeight: 1,
 };
 
+const HELP_CENTER_URL = import.meta.env.VITE_HELP_CENTER_URL || 'https://docs.noah.app';
+const SUPPORT_FORUM_URL = import.meta.env.VITE_SUPPORT_FORUM_URL || 'https://forum.noah.app';
+const SUPPORT_EMAIL = 'support@noah.app';
+
 const HELP_MENU_SECTIONS: string[][] = [
   ['Help Center', 'Support Forum', 'References'],
   ['Submit feedback', 'Contact support'],
@@ -101,6 +105,23 @@ export default function HelpMenuDrawer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, onClose]);
 
+  const handleItemClick = (label: string) => {
+    onClose();
+    if (label === 'Help Center') {
+      window.open(HELP_CENTER_URL, '_blank', 'noopener,noreferrer');
+    } else if (label === 'Support Forum') {
+      window.open(SUPPORT_FORUM_URL, '_blank', 'noopener,noreferrer');
+    } else if (label === 'References') {
+      window.open(`${HELP_CENTER_URL}/references`, '_blank', 'noopener,noreferrer');
+    } else if (label === 'Submit feedback') {
+      window.open(`mailto:${SUPPORT_EMAIL}?subject=Feedback`, '_blank');
+    } else if (label === 'Contact support') {
+      window.open(`mailto:${SUPPORT_EMAIL}?subject=Support Request`, '_blank');
+    } else if (label === 'Change keyboard layout...') {
+      onKeyboardShortcuts();
+    }
+  };
+
   return (
     <Popover
       open={open}
@@ -114,7 +135,14 @@ export default function HelpMenuDrawer({
     >
       <Box role="menu" aria-label="Help menu">
         {HELP_MENU_SECTIONS[0].map((label) => (
-          <Box key={label} component="button" type="button" role="menuitem" sx={menuItemSx}>
+          <Box
+            key={label}
+            component="button"
+            type="button"
+            role="menuitem"
+            onClick={() => handleItemClick(label)}
+            sx={menuItemSx}
+          >
             <Typography sx={{ fontSize: '0.9375rem', fontWeight: 400 }}>{label}</Typography>
           </Box>
         ))}
@@ -122,7 +150,14 @@ export default function HelpMenuDrawer({
         <Divider sx={{ my: 0.75, borderColor: cv.border }} />
 
         {HELP_MENU_SECTIONS[1].map((label) => (
-          <Box key={label} component="button" type="button" role="menuitem" sx={menuItemSx}>
+          <Box
+            key={label}
+            component="button"
+            type="button"
+            role="menuitem"
+            onClick={() => handleItemClick(label)}
+            sx={menuItemSx}
+          >
             <Typography sx={{ fontSize: '0.9375rem', fontWeight: 400 }}>{label}</Typography>
           </Box>
         ))}
@@ -146,7 +181,14 @@ export default function HelpMenuDrawer({
         <Divider sx={{ my: 0.75, borderColor: cv.border }} />
 
         {HELP_MENU_SECTIONS[2].map((label) => (
-          <Box key={label} component="button" type="button" role="menuitem" sx={menuItemSx}>
+          <Box
+            key={label}
+            component="button"
+            type="button"
+            role="menuitem"
+            onClick={() => handleItemClick(label)}
+            sx={menuItemSx}
+          >
             <Typography sx={{ fontSize: '0.9375rem', fontWeight: 400 }}>{label}</Typography>
           </Box>
         ))}

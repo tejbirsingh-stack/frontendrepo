@@ -6,7 +6,8 @@ export type AnnotationHistoryType =
   | 'reply'
   | 'drawing'
   | 'shape'
-  | 'stamp';
+  | 'stamp'
+  | 'system';
 
 export interface AnnotationHistoryEntry {
   id: string;
@@ -32,4 +33,5 @@ export interface AnnotationHistoryEntry {
   visibility?: AnnotationVisibility;
   groupId?: string;
   pinned?: boolean;
+  backendId?: string;
 }

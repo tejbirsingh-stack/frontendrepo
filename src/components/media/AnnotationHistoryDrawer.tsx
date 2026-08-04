@@ -33,6 +33,7 @@ import FilterListOutlinedIcon from '@mui/icons-material/FilterListOutlined';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import MoreHorizOutlinedIcon from '@mui/icons-material/MoreHorizOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
+import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import { useActiveUser } from '../../hooks/useActiveUser';
 import type { MediaItem } from '../../data/mockMedia';
 import type { AnnotationHistoryEntry, AnnotationHistoryType } from '../../types/annotationHistory';
@@ -174,6 +175,7 @@ interface AnnotationHistoryDrawerProps {
   onToggleResolved: (entryId: string) => void;
   onTogglePinned?: (entryId: string) => void;
   onMarkUnread: (entryId: string) => void;
+  onMarkRead?: (entryId: string) => void;
   onCopyLink: (entry: AnnotationHistoryEntry) => void;
   onDeleteEntry: (entryId: string) => void;
   onHardDeleteEntry?: (entryId: string) => void;
@@ -191,6 +193,8 @@ interface AnnotationHistoryDrawerProps {
   onUpdateAnnotationGroup?: (groupId: string, name: string, memberIds: string[]) => Promise<AnnotationAccessGroup | null | undefined>;
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
   activeHistoryEntryId?: string | null;
+  onDownloadOriginal?: () => void;
+  canDownload?: boolean;
 }
 
 const DRAWER_TABS: { value: DrawerTab; label: string }[] = [
@@ -267,6 +271,7 @@ function HistoryEntryRow({
   onTogglePinned,
   onHardDeleteEntry,
   onRestoreEntry,
+  onMarkRead,
 }: {
   entry: AnnotationHistoryEntry;
   replies?: CommentReply[];
@@ -278,6 +283,7 @@ function HistoryEntryRow({
   onToggleResolved: (entryId: string) => void;
   onTogglePinned?: (entryId: string) => void;
   onMarkUnread: (entryId: string) => void;
+  onMarkRead?: (entryId: string) => void;
   onCopyLink: (entry: AnnotationHistoryEntry) => void;
   onDeleteEntry: (entryId: string) => void;
   onHardDeleteEntry?: (entryId: string) => void;
@@ -513,12 +519,16 @@ function HistoryEntryRow({
         </MenuItem>
         <MenuItem
           onClick={() => {
-            onMarkUnread(entry.id);
+            if (entry.unread) {
+              onMarkRead?.(entry.id);
+            } else {
+              onMarkUnread(entry.id);
+            }
             setMenuAnchor(null);
           }}
           sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
         >
-          Mark as unread
+          {entry.unread ? 'Mark as read' : 'Mark as unread'}
         </MenuItem>
         <MenuItem
           onClick={() => {
@@ -584,20 +594,37 @@ function HistoryEntryRow({
             color: 'inherit',
           }}
         >
-        <Avatar
-          src={entry.author.avatarUrl}
-          alt=""
-          sx={{
-            width: 32,
-            height: 32,
-            flexShrink: 0,
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            background: cv.brandGradient,
-          }}
-        >
-          {!entry.author.avatarUrl ? entry.author.initials : null}
-        </Avatar>
+        {entry.type === 'system' ? (
+          <Avatar
+            sx={{
+              width: 32,
+              height: 32,
+              flexShrink: 0,
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              background: 'rgba(147, 51, 234, 0.12)',
+              color: cv.brandPurple,
+              border: `1px solid ${cv.border}`,
+            }}
+          >
+            <ShareOutlinedIcon sx={{ fontSize: 16 }} />
+          </Avatar>
+        ) : (
+          <Avatar
+            src={entry.author.avatarUrl}
+            alt=""
+            sx={{
+              width: 32,
+              height: 32,
+              flexShrink: 0,
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              background: cv.brandGradient,
+            }}
+          >
+            {!entry.author.avatarUrl ? entry.author.initials : null}
+          </Avatar>
+        )}
 
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography
@@ -615,7 +642,7 @@ function HistoryEntryRow({
               component="span"
               sx={{ fontSize: '0.875rem', fontWeight: 700, color: cv.textPrimary }}
             >
-              {entry.author.name}
+              {entry.type === 'system' ? 'System Event' : entry.author.name}
             </Typography>
             <Typography
               component="time"
@@ -642,11 +669,12 @@ function HistoryEntryRow({
           <Typography
             sx={{
               fontSize: '0.8125rem',
-              color: cv.textSecondary,
+              color: entry.type === 'system' ? cv.textPrimary : cv.textSecondary,
+              fontWeight: entry.type === 'system' ? 500 : 400,
               mb: 0.25,
             }}
           >
-            {getHistoryTypeLabel(entry.type)}
+            {entry.type === 'system' ? entry.summary : getHistoryTypeLabel(entry.type)}
           </Typography>
 
           {isEditing ? (
@@ -877,6 +905,7 @@ export default function AnnotationHistoryDrawer({
   onToggleResolved,
   onTogglePinned,
   onMarkUnread,
+  onMarkRead,
   onCopyLink,
   onDeleteEntry,
   onHardDeleteEntry,
@@ -889,6 +918,8 @@ export default function AnnotationHistoryDrawer({
   onDeleteAnnotationGroup,
   onUpdateAnnotationGroup,
   onAddCollaborator,
+  onDownloadOriginal,
+  canDownload,
 }: AnnotationHistoryDrawerProps) {
   const theme = useTheme();
   const activeUser = useActiveUser();
@@ -1331,6 +1362,7 @@ export default function AnnotationHistoryDrawer({
                   onToggleResolved={onToggleResolved}
                   onTogglePinned={onTogglePinned}
                   onMarkUnread={onMarkUnread}
+                  onMarkRead={onMarkRead}
                   onCopyLink={onCopyLink}
                   onDeleteEntry={onDeleteEntry}
                   onEditComment={onEditComment}
@@ -1356,6 +1388,8 @@ export default function AnnotationHistoryDrawer({
             onTagsChange={onTagsChange}
             activeSection={detailsSection}
             onSectionChange={onDetailsSectionChange}
+            onDownloadOriginal={onDownloadOriginal}
+            canDownload={canDownload}
           />
         ) : (
           <Box sx={{ py: 4, textAlign: 'center' }}>

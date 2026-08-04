@@ -6,6 +6,7 @@ export const HISTORY_TYPE_LABELS: Record<AnnotationHistoryType, string> = {
   drawing: 'Drawing',
   shape: 'Shape',
   stamp: 'Stamp',
+  system: 'System Event',
 };
 
 export function getHistoryTypeLabel(type: AnnotationHistoryType): string {
