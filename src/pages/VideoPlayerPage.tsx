@@ -58,6 +58,8 @@ import {
   type WorkspaceInvitePayload,
   type WorkspaceMemberAccess,
   type WorkspaceTeamMember,
+  type SettingsUserGroup,
+  type WorkspaceMemberType,
 } from '../data/mockSettingsData';
 import {
   fetchShareLinks,
@@ -313,6 +315,9 @@ export default function VideoPlayerPage({
 
     return {
       id: guestAssetMeta.id || 'guest-asset',
+      workspaceId: '',
+      createdAt: '',
+      storageProvider: 'local',
       title: guestAssetMeta.title || 'Shared Media',
       type,
       url: tokenStreamUrl,
@@ -330,14 +335,14 @@ export default function VideoPlayerPage({
     };
   }, [isGuestMode, guestAssetMeta, shareToken, guestExpiresAt]);
 
-  const contextItem = mediaItems.find((media) => media.id === mediaId);
+  const contextItem = mediaItems.find((media: any) => media.id === mediaId);
   const [fetchedItem, setFetchedItem] = useState<MediaItem | null>(null);
 
   const item = useMemo(() => {
     if (isGuestMode) {
       return guestItem || contextItem || fetchedItem || null;
     }
-    return contextItem && fetchedItem?.id === contextItem.id
+    return contextItem && fetchedItem && fetchedItem.id === contextItem.id
       ? {
         ...fetchedItem,
         ...contextItem,
@@ -1728,6 +1733,8 @@ export default function VideoPlayerPage({
             description: g.description || '',
             memberIds: g.members?.map((m) => m.userId) || [],
             createdAt: g.createdAt,
+            createdDate: g.createdAt,
+            createdBy: 'System',
           })),
         );
       } catch (err) {
@@ -2777,7 +2784,7 @@ export default function VideoPlayerPage({
     (name: string, email: string) => {
       const normalizedEmail = email.trim().toLowerCase();
       const existing = collaborators.find(
-        (person) => person.email.toLowerCase() === normalizedEmail,
+        (person) => person.email?.toLowerCase() === normalizedEmail,
       );
       if (existing) return existing;
 
@@ -3516,8 +3523,8 @@ export default function VideoPlayerPage({
           >
             {item ? (
               <Box
-                component={mediaTypeHeaderIcons[item.type]}
-                aria-label={mediaTypeLabels[item.type]}
+                component={mediaTypeHeaderIcons[item.type as keyof typeof mediaTypeHeaderIcons] || mediaTypeHeaderIcons.video}
+                aria-label={mediaTypeLabels[item.type as keyof typeof mediaTypeLabels] || 'Media'}
                 sx={{
                   fontSize: 18,
                   color: cv.textSecondary,
@@ -3643,12 +3650,12 @@ export default function VideoPlayerPage({
                         height: 36,
                         borderRadius: '10px',
                         color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
-                        border: `1px solid ${cv.borderSubtle}`,
-                        backgroundColor: cv.surfaceBackground,
+                        border: `1px solid ${cv.border}`,
+                        backgroundColor: cv.surface,
                         '&:hover': canDownloadOriginal
                           ? {
                             backgroundColor: cv.surfaceHover,
-                            borderColor: cv.borderFocus,
+                            borderColor: cv.borderStrong,
                           }
                           : {},
                         '&.Mui-disabled': {
@@ -3679,18 +3686,18 @@ export default function VideoPlayerPage({
                         fontSize: '0.8125rem',
                         letterSpacing: '0.01em',
                         color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
-                        borderColor: cv.borderSubtle,
-                        backgroundColor: cv.surfaceBackground,
+                        borderColor: cv.border,
+                        backgroundColor: cv.surface,
                         '&:hover': canDownloadOriginal
                           ? {
                             backgroundColor: cv.surfaceHover,
-                            borderColor: cv.borderFocus,
+                            borderColor: cv.borderStrong,
                           }
                           : {},
                         '&.Mui-disabled': {
                           opacity: 0.5,
                           color: cv.textMuted,
-                          borderColor: cv.borderSubtle,
+                          borderColor: cv.border,
                         },
                       }}
                     >
@@ -3778,7 +3785,7 @@ export default function VideoPlayerPage({
                 );
               })()}
 
-              <Tooltip title="More actions" arrow placement="bottom">
+              <Tooltip title="More options" arrow placement="bottom">
                 <IconButton
                   type="button"
                   size="small"
@@ -3792,11 +3799,11 @@ export default function VideoPlayerPage({
                     height: 36,
                     borderRadius: '10px',
                     color: cv.textPrimary,
-                    border: `1px solid ${cv.borderSubtle}`,
-                    backgroundColor: cv.surfaceBackground,
+                    border: `1px solid ${cv.border}`,
+                    backgroundColor: cv.surface,
                     '&:hover': {
                       backgroundColor: cv.surfaceHover,
-                      borderColor: cv.borderFocus,
+                      borderColor: cv.borderStrong,
                     },
                   }}
                 >
@@ -3813,9 +3820,9 @@ export default function VideoPlayerPage({
                   paper: {
                     sx: {
                       borderRadius: '12px',
-                      backgroundColor: cv.bgSurfaceElevated || cv.surfaceBackground,
-                      border: `1px solid ${cv.borderSubtle}`,
-                      boxShadow: cv.shadowLg,
+                      backgroundColor: cv.surface,
+                      border: `1px solid ${cv.border}`,
+                      boxShadow: cv.dropdownShadow,
                       color: cv.textPrimary,
                       minWidth: 190,
                       py: 0.5,
@@ -3844,7 +3851,7 @@ export default function VideoPlayerPage({
                     <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
                       <FileDownloadOutlinedIcon fontSize="small" />
                     </ListItemIcon>
-                    <ListItemText primary="Download Original" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 500 }} />
+                    <ListItemText primary="Download Original" />
                   </MenuItem>
                 )}
 
@@ -3858,7 +3865,7 @@ export default function VideoPlayerPage({
                   <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
                     <ContentCopyOutlinedIcon fontSize="small" />
                   </ListItemIcon>
-                  <ListItemText primary="Copy Asset Link" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 500 }} />
+                  <ListItemText primary="Copy Asset Link" />
                 </MenuItem>
 
                 {headerPermissions.canViewTechnicalDetails && (
@@ -3872,7 +3879,7 @@ export default function VideoPlayerPage({
                     <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
                       <InfoOutlinedIcon fontSize="small" />
                     </ListItemIcon>
-                    <ListItemText primary="Technical Details" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 500 }} />
+                    <ListItemText primary="Technical Details" />
                   </MenuItem>
                 )}
 
@@ -3886,7 +3893,7 @@ export default function VideoPlayerPage({
                   <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
                     <KeyboardOutlinedIcon fontSize="small" />
                   </ListItemIcon>
-                  <ListItemText primary="Keyboard Shortcuts" primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: 500 }} />
+                  <ListItemText primary="Keyboard Shortcuts" />
                 </MenuItem>
               </Menu>
             </>
@@ -3929,7 +3936,7 @@ export default function VideoPlayerPage({
           resourceId={mediaId || item.id}
           workspaceName={item.title}
           members={shareTeamMembers.filter(m => m.hasOverride || m.isCurrentUser)}
-          suggestedUsers={shareTeamMembers.filter(m => m.memberType !== 'Group')}
+          suggestedUsers={MOCK_SETTINGS_USERS}
           suggestedGroups={availableGroups}
           resourceType="project"
           visibility={shareInviteVisibility}
