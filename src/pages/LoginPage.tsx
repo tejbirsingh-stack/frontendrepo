@@ -138,20 +138,26 @@ export default function LoginPage() {
     if (sessionStorage.getItem('msal_redirecting') === 'true') {
       instance.handleRedirectPromise()
         .then((response) => {
-          sessionStorage.removeItem('msal_redirecting'); // Clear the flag instantly
-          // If response is present, it means we JUST returned from Microsoft successfully!
+          sessionStorage.removeItem('msal_redirecting');
+          const authMode = sessionStorage.getItem('msal_auth_mode');
+          sessionStorage.removeItem('msal_auth_mode');
+          const isSignUp = authMode === 'signup';
+
           if (response && response.idToken) {
             const redirectPath =
               typeof location.state === 'object' && location.state !== null && 'from' in location.state
                 ? (location.state as any).from
                 : '/home';
-                
-            // Pass it to our backend
-            return loginMicrosoft(response.idToken, false, { mode: 'login', isSignUp: false }).then(() => navigate(redirectPath));
+
+            return loginMicrosoft(response.idToken, false, {
+              mode: isSignUp ? 'signup' : 'login',
+              isSignUp,
+            }).then(() => navigate(redirectPath));
           }
         })
         .catch((err: any) => {
           sessionStorage.removeItem('msal_redirecting');
+          sessionStorage.removeItem('msal_auth_mode');
           console.error(err);
           setError(err.response?.data?.message || err.message || 'Microsoft Login Failed.');
         });
@@ -161,15 +167,15 @@ export default function LoginPage() {
   const handleMicrosoftLogin = async () => {
     setError('');
     try {
-      // Set a flag so we know to process the redirect when we return
       sessionStorage.setItem('msal_redirecting', 'true');
-      
-      // Use redirect instead of popup to completely bypass browser isolation/timeout bugs
+      sessionStorage.setItem('msal_auth_mode', 'login');
+
       await instance.loginRedirect({
         scopes: ["User.Read", "profile", "email", "openid"]
       });
     } catch (err: any) {
       sessionStorage.removeItem('msal_redirecting');
+      sessionStorage.removeItem('msal_auth_mode');
       console.error(err);
       setError(err.response?.data?.message || err.message || 'Microsoft Login Failed.');
     }

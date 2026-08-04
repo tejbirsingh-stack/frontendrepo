@@ -3,24 +3,30 @@ import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
+  Divider,
   IconButton,
   Link,
   TextField,
   Typography,
   keyframes,
 } from '@mui/material';
+import { useMsal } from '@azure/msal-react';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import CloseIcon from '@mui/icons-material/Close';
+import GoogleIcon from '@mui/icons-material/Google';
+import MicrosoftIcon from '@mui/icons-material/Window';
 import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo from '../components/NoahLogo';
+import ChoosePlanScreen from '../components/onboarding/ChoosePlanScreen';
+import { useAuth } from '../auth/AuthContext';
 import { cv } from '../theme/cssVars';
 import { validateBusinessEmail } from '../utils/authValidation';
 import { mockAuthEmailExists } from '../constants/mockAuthCredentials';
 
-type SignupPhase = 'email' | 'verify' | 'workspace' | 'usage' | 'upload' | 'done';
+type SignupPhase = 'email' | 'verify' | 'workspace' | 'usage' | 'upload' | 'done' | 'plans';
 
 const STATIC_VERIFICATION_CODE = '123456';
 const WORKSPACE_URL_PREFIX = 'noahcloud.com/';
@@ -197,11 +203,14 @@ function SignupStepFooter({
 
 export default function SignUpPage() {
   const navigate = useNavigate();
+  const { instance } = useMsal();
+  const { loginGoogle, loginMicrosoft } = useAuth();
   const [phase, setPhase] = useState<SignupPhase>('email');
   const [email, setEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [workspaceName, setWorkspaceName] = useState('');
   const [companyWebsite, setCompanyWebsite] = useState('');
+  const [mobileNumber, setMobileNumber] = useState('');
   const [teamSize, setTeamSize] = useState<TeamSizeOption | ''>('');
   const [firstFocus, setFirstFocus] = useState<FirstFocusOption | ''>('');
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
@@ -209,6 +218,7 @@ export default function SignUpPage() {
   const [preparingStep, setPreparingStep] = useState(0);
   const [error, setError] = useState('');
   const [isChecking, setIsChecking] = useState(false);
+  const [isSsoLoading, setIsSsoLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const workspaceSlug = useMemo(() => slugifyWorkspaceName(workspaceName), [workspaceName]);
@@ -302,7 +312,7 @@ export default function SignUpPage() {
     }
 
     if (!firstFocus) {
-      setError('Please select what you are working on first.');
+      setError('Please select how you are planning to use the platform.');
       return;
     }
 
@@ -325,6 +335,81 @@ export default function SignUpPage() {
     setError('');
   };
 
+  const handleGoogleSignup = async () => {
+    setError('');
+    setIsSsoLoading(true);
+    const clientId =
+      import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+      '967923512322-0oullb620hh9se1ff0prs8stvbspi829.apps.googleusercontent.com';
+
+    const loadGoogleScript = (): Promise<any> =>
+      new Promise((resolve) => {
+        if ((window as any).google?.accounts?.oauth2) {
+          resolve((window as any).google);
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve((window as any).google);
+        document.head.appendChild(script);
+      });
+
+    try {
+      const google = await loadGoogleScript();
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope:
+          'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+        callback: async (tokenResponse: any) => {
+          if (!tokenResponse?.access_token) {
+            setIsSsoLoading(false);
+            setError('Google sign-up cancelled or failed.');
+            return;
+          }
+          try {
+            await loginGoogle(tokenResponse.access_token, false, {
+              mode: 'signup',
+              isSignUp: true,
+            });
+            navigate('/home');
+          } catch (submitError: any) {
+            console.error(submitError);
+            setError(
+              submitError.response?.data?.message ||
+                submitError.message ||
+                'Google sign-up failed.',
+            );
+          } finally {
+            setIsSsoLoading(false);
+          }
+        },
+      });
+      client.requestAccessToken();
+    } catch (err: any) {
+      console.error('Failed to load Google SDK:', err);
+      setIsSsoLoading(false);
+      setError('Could not initialize Google sign-up.');
+    }
+  };
+
+  const handleMicrosoftSignup = async () => {
+    setError('');
+    try {
+      sessionStorage.setItem('msal_redirecting', 'true');
+      sessionStorage.setItem('msal_auth_mode', 'signup');
+      await instance.loginRedirect({
+        scopes: ['User.Read', 'profile', 'email', 'openid'],
+      });
+    } catch (err: any) {
+      sessionStorage.removeItem('msal_redirecting');
+      sessionStorage.removeItem('msal_auth_mode');
+      console.error(err);
+      setError(err.response?.data?.message || err.message || 'Microsoft sign-up failed.');
+    }
+  };
+
   useEffect(() => {
     if (phase !== 'done') {
       setPreparingStep(0);
@@ -338,16 +423,20 @@ export default function SignUpPage() {
       }, index * PREPARING_STEP_MS),
     );
 
-    // Hold on the final frame; dashboard redirect intentionally skipped for now
-    const holdTimer = window.setTimeout(() => {
-      setPreparingStep(PREPARING_STATUS_LINES.length - 1);
+    // After the preparing animation, show the plans screen (no dashboard redirect yet)
+    const plansTimer = window.setTimeout(() => {
+      setPhase('plans');
     }, PREPARING_SCREEN_MS);
 
     return () => {
       stepTimers.forEach((timer) => window.clearTimeout(timer));
-      window.clearTimeout(holdTimer);
+      window.clearTimeout(plansTimer);
     };
   }, [phase]);
+
+  if (phase === 'plans') {
+    return <ChoosePlanScreen />;
+  }
 
   if (phase === 'done') {
     return (
@@ -522,7 +611,7 @@ export default function SignUpPage() {
                 type="submit"
                 fullWidth
                 variant="contained"
-                disabled={isChecking}
+                disabled={isChecking || isSsoLoading}
                 sx={{
                   py: 1.5,
                   mb: 2,
@@ -536,6 +625,61 @@ export default function SignUpPage() {
               >
                 {isChecking ? 'Checking…' : 'Continue with email'}
               </Button>
+
+              <Divider
+                sx={{
+                  my: 2,
+                  '&::before, &::after': { borderColor: cv.border },
+                  color: cv.textMuted,
+                  fontSize: '0.8125rem',
+                }}
+              >
+                or
+              </Divider>
+
+              <Box sx={{ display: 'flex', gap: 2, width: '100%', mb: 2 }}>
+                <Button
+                  type="button"
+                  fullWidth
+                  variant="outlined"
+                  disabled={isChecking || isSsoLoading}
+                  onClick={() => void handleGoogleSignup()}
+                  startIcon={<GoogleIcon />}
+                  sx={{
+                    py: 1.5,
+                    borderColor: cv.border,
+                    color: cv.textPrimary,
+                    backgroundColor: cv.footerTint,
+                    '&:hover': {
+                      borderColor: cv.borderStrong,
+                      backgroundColor: cv.surfaceHover,
+                    },
+                  }}
+                >
+                  Google
+                </Button>
+
+                <Button
+                  type="button"
+                  fullWidth
+                  variant="outlined"
+                  disabled={isChecking || isSsoLoading}
+                  onClick={() => void handleMicrosoftSignup()}
+                  startIcon={<MicrosoftIcon />}
+                  sx={{
+                    py: 1.5,
+                    borderColor: cv.border,
+                    color: cv.textPrimary,
+                    backgroundColor: cv.footerTint,
+                    '&:hover': {
+                      borderColor: cv.borderStrong,
+                      backgroundColor: cv.surfaceHover,
+                    },
+                  }}
+                >
+                  Microsoft
+                </Button>
+              </Box>
 
               <Typography
                 variant="body2"
@@ -727,7 +871,7 @@ export default function SignUpPage() {
 
               <TextField
                 fullWidth
-                label="Company website"
+                label="Company website (optional)"
                 type="url"
                 placeholder="www.noahcloud.com"
                 value={companyWebsite}
@@ -735,6 +879,24 @@ export default function SignUpPage() {
                 sx={{ mb: 3 }}
                 slotProps={{
                   inputLabel: { shrink: true },
+                }}
+              />
+
+              <TextField
+                fullWidth
+                label="Mobile number (optional)"
+                type="tel"
+                placeholder="+1 (555) 000-0000"
+                value={mobileNumber}
+                onChange={(e) => setMobileNumber(e.target.value)}
+                autoComplete="tel"
+                sx={{ mb: 3 }}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  htmlInput: {
+                    inputMode: 'tel',
+                    'aria-label': 'Mobile number (optional)',
+                  },
                 }}
               />
 
@@ -826,7 +988,7 @@ export default function SignUpPage() {
                       color: cv.textMuted,
                     }}
                   >
-                    What are you working on first?
+                    How are you planning to use the platform?
                   </Typography>
                   <Box
                     sx={{
