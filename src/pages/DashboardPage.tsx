@@ -259,6 +259,11 @@ export default function DashboardPage({
     duplicateMediaItems,
     sharedMediaItems,
     mediaItems,
+    libraryItems,
+    libraryLoading,
+    libraryLoadingMore,
+    fetchLibraryFirstPage,
+    fetchLibraryNextPage,
     workspaces,
     activeWorkspaceId,
     globalSearchQuery,
@@ -373,6 +378,49 @@ export default function DashboardPage({
     }
     fetchWorkspaceData(Array.from(selectedTags));
   }, [selectedTags, fetchWorkspaceData]);
+
+  // Hook up the backend API fetching for Infinite Scroll (All Views)
+  useEffect(() => {
+    if (activeWorkspaceId) {
+      let view: LibraryViewParam = 'all';
+      if (folderMedia) {
+        view = folderMedia.isProject ? 'project' : 'folder';
+      } else if (libraryView === 'recent') view = 'all';
+      else if (libraryView === 'favorites') view = 'favorites';
+      else if (libraryView === 'duplicates') view = 'duplicates';
+      else if (libraryView === 'shared') view = 'shared';
+      else if (libraryView === 'projects') view = 'projects';
+      else if (libraryView === 'folder') view = 'folder';
+      else if (libraryView === 'project') view = 'project';
+
+      fetchLibraryFirstPage({
+        workspaceId: activeWorkspaceId,
+        view,
+        folderId: view === 'folder' && folderMedia ? folderMedia.id : undefined,
+        projectId: view === 'project' && folderMedia ? folderMedia.id : undefined,
+        q: globalSearchQuery,
+        mediaType: mediaTypeFilter,
+        dateRange: dateRangeFilter,
+        tagIds: Array.from(selectedTags),
+        aiTags: Array.from(selectedAiTags),
+        sortBy,
+        sortOrder: sortDirection,
+        pageSize: 48,
+      });
+    }
+  }, [
+    libraryView,
+    activeWorkspaceId,
+    folderMedia?.id,
+    globalSearchQuery,
+    mediaTypeFilter,
+    dateRangeFilter,
+    selectedTags,
+    selectedAiTags,
+    sortBy,
+    sortDirection,
+    fetchLibraryFirstPage
+  ]);
 
   useEffect(() => {
     let mounted = true;
@@ -549,56 +597,10 @@ export default function DashboardPage({
   ]);
 
   const displayedItems = useMemo(() => {
-    const query = globalSearchQuery.trim().toLowerCase();
-    const searchableItems = isFavoritesView
-      ? favoriteMediaItems
-      : isDuplicatesView
-        ? duplicateMediaItems
-        : isSharedView
-          ? sharedMediaItems
-          : isProjectsView
-            ? librarySourceItems
-            : mediaItems.filter(
-              (item) =>
-                item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
-            );
-    const sourceItems = query ? searchableItems : librarySourceItems;
-
-    const filtered = sourceItems.filter((item) => {
-      if (
-        query &&
-        !item.title.toLowerCase().includes(query) &&
-        !item.type.toLowerCase().includes(query)
-      ) {
-        return false;
-      }
-      if (!matchesMediaTypeFilter(item, mediaTypeFilter)) return false;
-      if (!matchesDateRange(item.createdAt, dateRangeFilter)) return false;
-      // Tag filtering is now handled exclusively by the backend API via fetchWorkspaceData
-      if (
-        selectedAiTags.size > 0 &&
-        !item.aiTags?.some((tag) => selectedAiTags.has(tag))
-      ) {
-        return false;
-      }
-      return true;
-    });
-
-    const direction = sortDirection === 'asc' ? 1 : -1;
-
-    return [...filtered].sort((a, b) => {
-      if (sortBy === 'date') {
-        return (Date.parse(a.createdAt) - Date.parse(b.createdAt)) * direction;
-      }
-      if (sortBy === 'name') {
-        return a.title.localeCompare(b.title) * direction;
-      }
-      if (sortBy === 'size') {
-        return (a.sizeBytes - b.sizeBytes) * direction;
-      }
-      return (typeSortOrder[a.type] - typeSortOrder[b.type]) * direction;
-    });
+    return libraryItems;
   }, [
+    libraryView,
+    libraryItems,
     librarySourceItems,
     favoriteMediaItems,
     duplicateMediaItems,
