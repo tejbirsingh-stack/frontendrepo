@@ -50,6 +50,7 @@ import {
   getFavoritesRequest,
   type MediaAssetResponseDto,
 } from '../api';
+import { type LibraryListParams, getLibraryItems } from '../api/library.service';
 const token = (await import('../auth/authTokenBridge')).getAccessToken();
 
 interface DashboardContextValue {
@@ -66,6 +67,12 @@ interface DashboardContextValue {
   favoriteMediaItems: MediaItem[];
   duplicateMediaItems: MediaItem[];
   sharedMediaItems: MediaItem[];
+  libraryItems: MediaItem[];
+  nextPageToken: string | null;
+  libraryLoading: boolean;
+  libraryLoadingMore: boolean;
+  fetchLibraryFirstPage: (params: LibraryListParams) => Promise<void>;
+  fetchLibraryNextPage: () => Promise<void>;
   favorites: Set<string>;
   toggleFavorite: (id: string, type?: 'asset' | 'folder' | 'project') => void;
   moveMediaToFolder: (mediaId: string, folderId: string, childLabel?: string) => void;
@@ -177,6 +184,52 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [sidebarSelection, setSidebarSelectionState] = useState<SidebarSelection | null>(null);
+
+  const [libraryItems, setLibraryItems] = useState<MediaItem[]>([]);
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryLoadingMore, setLibraryLoadingMore] = useState(false);
+  const listParamsRef = useRef<LibraryListParams | null>(null);
+
+  const fetchLibraryFirstPage = useCallback(async (params: LibraryListParams) => {
+    listParamsRef.current = { ...params, pageToken: null };
+    setLibraryLoading(true);
+    setNextPageToken(null);
+    try {
+      const res = await getLibraryItems(listParamsRef.current);
+      setLibraryItems(res.items);
+      setNextPageToken(res.nextPageToken);
+    } catch (e: any) {
+      setLibraryItems([]);
+      setNextPageToken(null);
+      throw e;
+    } finally {
+      setLibraryLoading(false);
+    }
+  }, []);
+
+  const fetchLibraryNextPage = useCallback(async () => {
+    if (!listParamsRef.current || !nextPageToken || libraryLoadingMore) return;
+    setLibraryLoadingMore(true);
+    try {
+      const res = await getLibraryItems({
+        ...listParamsRef.current,
+        pageToken: nextPageToken,
+      });
+      setLibraryItems((prev) => {
+        const seen = new Set(prev.map((i) => i.id));
+        return [...prev, ...res.items.filter((i) => !seen.has(i.id))];
+      });
+      setNextPageToken(res.nextPageToken);
+    } catch (e: any) {
+      if (e?.response?.data?.code === 'INVALID_PAGE_TOKEN' && listParamsRef.current) {
+        await fetchLibraryFirstPage(listParamsRef.current);
+      }
+    } finally {
+      setLibraryLoadingMore(false);
+    }
+  }, [nextPageToken, libraryLoadingMore, fetchLibraryFirstPage]);
+
 
   // Trash is now purely database-driven: derive trashedIds from item.status === 'trash'
   const trashedIds = useMemo(
@@ -2312,6 +2365,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       fetchWorkspaceData,
       fetchFolderData,
       fetchProjectData,
+      libraryItems,
+      nextPageToken,
+      libraryLoading,
+      libraryLoadingMore,
+      fetchLibraryFirstPage,
+      fetchLibraryNextPage,
     }),
     [
       workspaces,
@@ -2325,6 +2384,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       favoriteMediaItems,
       duplicateMediaItems,
       sharedMediaItems,
+      libraryItems,
+      nextPageToken,
+      libraryLoading,
+      libraryLoadingMore,
+      fetchLibraryFirstPage,
+      fetchLibraryNextPage,
       favorites,
       toggleFavorite,
       moveMediaToFolder,
