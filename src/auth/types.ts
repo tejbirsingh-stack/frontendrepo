@@ -42,4 +42,5 @@ export interface AuthContextValue {
   loginGoogle: (idToken: string, rememberMe?: boolean, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => Promise<void>;
   clearSession: () => void;
   loginMicrosoft: (idToken: string, rememberMe?: boolean, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => Promise<void>;
+  refreshUser: () => Promise<void>;
 }

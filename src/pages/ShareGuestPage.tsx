@@ -28,11 +28,13 @@ import {
   createShareAnnotationApi,
 } from '../api/share.service';
 import { env } from '../config/env';
+import { useLocalizedDate } from '../hooks/useLocalizedDate';
 import VideoPlayerPage from './VideoPlayerPage';
 
 export default function ShareGuestPage() {
   const { token } = useParams<{ token: string }>();
   const streamUrl = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${token}/stream`;
+  const { formatDate, formatTime } = useLocalizedDate();
 
   const [status, setStatus] = useState<'loading' | 'password' | 'unlocked' | 'expired' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
@@ -206,7 +208,7 @@ export default function ShareGuestPage() {
 
         {expiresAt ? (
           <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
-            Expires: {new Date(expiresAt).toLocaleDateString()}
+            Expires: {formatDate(expiresAt)}
           </Typography>
         ) : null}
       </Box>
@@ -455,7 +457,7 @@ export default function ShareGuestPage() {
                             {ann.guestName || ann.data?.guestName || 'Guest Reviewer'}
                           </Typography>
                           <Typography sx={{ fontSize: '0.6875rem', color: cv.textMuted }}>
-                            {new Date(ann.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {formatTime(ann.createdAt, { hour: '2-digit', minute: '2-digit' })}
                           </Typography>
                         </Box>
                         <Typography sx={{ fontSize: '0.875rem', color: '#e2e8f0', lineHeight: 1.4 }}>
