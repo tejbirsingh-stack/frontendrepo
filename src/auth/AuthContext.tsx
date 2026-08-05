@@ -207,6 +207,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [setSession],
   );
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const currentUserDto = await fetchCurrentUserRequest();
+      const sessionUser = mapAuthUserDtoToSessionUser(currentUserDto);
+      setUser(sessionUser);
+      if (accessTokenRef.current) {
+        persistSession(accessTokenRef.current, sessionUser);
+      }
+    } catch (e) {
+      console.error('Failed to refresh user', e);
+    }
+  }, []);
+
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -221,8 +234,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearSession,
       loginMicrosoft,
       setSession,
+      refreshUser,
     }),
-    [accessToken, isInitializing, login, logout, signup, user, loginGoogle, loginMicrosoft, clearSession, setSession],
+    [accessToken, isInitializing, login, logout, signup, user, loginGoogle, loginMicrosoft, clearSession, setSession, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

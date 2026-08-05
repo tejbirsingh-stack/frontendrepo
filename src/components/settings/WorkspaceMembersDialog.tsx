@@ -34,6 +34,8 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import CloseIcon from '@mui/icons-material/Close';
+import CircularProgress from '@mui/material/CircularProgress';
+import { useLocalizedDate } from '../../hooks/useLocalizedDate';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import { noahDialogSlotProps, noahNestedDialogSlotProps } from '../../constants/dialogStyles';
@@ -226,6 +228,7 @@ export default function WorkspaceMembersDialog({
   onRestrictedChange,
   onVisibilityChange,
 }: WorkspaceMembersDialogProps) {
+  const { formatDateTime } = useLocalizedDate();
   const [query, setQuery] = useState('');
   const [access, setAccess] = useState<WorkspaceMemberAccess>('Can view');
   const [error, setError] = useState('');
@@ -1206,10 +1209,11 @@ export default function WorkspaceMembersDialog({
           {/* 2. Render Invited Guest Users Below Organization Members */}
           {guestInvitesList.map((item) => {
             const formattedExpires = item.expiresAt
-              ? new Date(item.expiresAt).toLocaleString([], {
+              ? formatDateTime(item.expiresAt, {
                   month: 'numeric',
                   day: 'numeric',
                   year: 'numeric',
+                }, {
                   hour: '2-digit',
                   minute: '2-digit',
                 })

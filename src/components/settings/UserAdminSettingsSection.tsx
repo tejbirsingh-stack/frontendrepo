@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { cv } from '../../theme/cssVars';
+import toast from 'react-hot-toast';
+import { useLocalizedDate } from '../../hooks/useLocalizedDate';
 import {
   Box,
   Button,
@@ -40,7 +42,7 @@ import { SettingsSectionCard } from './SettingsSectionCard';
 import { SettingsTableContainer } from './SettingsContentLayout';
 import TruncatedText from '../TruncatedText';
 import { ROLE_IDS, USER_ROLES, type UserRole } from '../../constants/userRoles';
-import { fetchRoles, registerRole, fetchOrganizationUsers,} from '../../api/auth.service';
+import { fetchRoles, registerRole, fetchOrganizationUsers, updateOrganizationUser, bulkUpdateOrganizationUsersRequest } from '../../api/auth.service';
 import { useAuth } from '../../auth/AuthContext';
 import type { RoleItem } from '../../api/types';
 import {
@@ -116,8 +118,8 @@ function AddUserDialog({
   open: boolean;
   onClose: () => void;
   onInvite: (email: string, role: UserRole) => void;
-  onSave?: (email: string, role: UserRole) => void;
-  initialUser?: { email: string; role: UserRole };
+  onSave?: (userId: string, email: string, role: UserRole, roleId: string) => void;
+  initialUser?: { id: string; email: string; role: UserRole };
 }) {
   const isEdit = Boolean(initialUser);
   const [email, setEmail] = useState('');
@@ -126,7 +128,7 @@ function AddUserDialog({
   const [roleId, setRoleId] = useState<string>('');
   const [emailError, setEmailError] = useState('');
   const { user } = useAuth();
-  
+
   const filteredRolesList = useMemo(() => {
     if (user?.roleId === ROLE_IDS.ADMIN) {
       return rolesList.filter((r) => r.name !== 'Super Admin' && r.name !== 'Admin' && r.name !== 'System Admin');
@@ -205,7 +207,7 @@ function AddUserDialog({
     }
     const finalRoleId = roleId || role;
     const selectedRoleName = rolesList.find((r) => r.id === finalRoleId)?.name || role;
-    onSave?.(trimmed, selectedRoleName as UserRole);
+    onSave?.(initialUser?.id || '', trimmed, selectedRoleName as UserRole, finalRoleId);
     onClose();
   };
 
@@ -257,7 +259,7 @@ function AddUserDialog({
           }}
           error={Boolean(emailError)}
           helperText={emailError}
-          disabled={isEdit}
+          disabled={false}
           slotProps={{ inputLabel: { shrink: true } }}
         />
         <FormControl fullWidth size="small">
@@ -283,23 +285,23 @@ function AddUserDialog({
           >
             {filteredRolesList.length > 0
               ? filteredRolesList.map((roleOption) => (
-                  <MenuItem
-                    key={roleOption.id}
-                    value={roleOption.id}
-                    sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
-                  >
-                    {roleOption.name}
-                  </MenuItem>
-                ))
+                <MenuItem
+                  key={roleOption.id}
+                  value={roleOption.id}
+                  sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
+                >
+                  {roleOption.name}
+                </MenuItem>
+              ))
               : filteredUserRoles.map((roleOption) => (
-                  <MenuItem
-                    key={roleOption}
-                    value={roleOption}
-                    sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
-                  >
-                    {roleOption}
-                  </MenuItem>
-                ))}
+                <MenuItem
+                  key={roleOption}
+                  value={roleOption}
+                  sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
+                >
+                  {roleOption}
+                </MenuItem>
+              ))}
           </Select>
         </FormControl>
         <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary }}>
@@ -521,12 +523,38 @@ function PeopleTab({
 
   const editUser = users.find((user) => user.id === editUserId);
 
-  const handleSaveUser = (email: string, role: UserRole) => {
-    if (!editUserId) return;
-    setUsers((current) =>
-      current.map((user) => (user.id === editUserId ? { ...user, email, role } : user)),
-    );
-    setSelectedIds(new Set());
+  const handleSaveUser = async (userId: string, email: string, role: UserRole, roleId: string) => {
+    if (!userId) return;
+    try {
+      await updateOrganizationUser(userId, { email, roleId });
+      setUsers((current) =>
+        current.map((user) => (user.id === userId ? { ...user, email, role } : user)),
+      );
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error('Failed to update user', err);
+    }
+  };
+
+  const handleBulkAction = async (action: 'active' | 'inactive' | 'delete') => {
+    if (selectedIds.size === 0) return;
+    const userIds = Array.from(selectedIds);
+    try {
+      toast.loading(`Marking users as ${action}...`, { id: 'bulk-action' });
+      await bulkUpdateOrganizationUsersRequest(userIds, action);
+      
+      if (action === 'delete') {
+        setUsers((current) => current.filter((u) => !userIds.includes(u.id)));
+        toast.success(`Deleted ${userIds.length} users`, { id: 'bulk-action' });
+      } else {
+        const newStatus = action === 'active' ? 'Active' : 'Pending';
+        setUsers((current) => current.map((u) => userIds.includes(u.id) ? { ...u, status: newStatus as any } : u));
+        toast.success(`Marked ${userIds.length} users as ${action}`, { id: 'bulk-action' });
+      }
+      setSelectedIds(new Set());
+    } catch (err: any) {
+      toast.error(err.message || `Failed to mark users as ${action}`, { id: 'bulk-action' });
+    }
   };
 
   const columns: SettingsTableColumn<SettingsUserRow>[] = [
@@ -635,13 +663,13 @@ function PeopleTab({
             >
               Edit
             </Button>
-            <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
+            <Button onClick={() => handleBulkAction('active')} size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
               Mark active
             </Button>
-            <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
+            <Button onClick={() => handleBulkAction('inactive')} size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
               Mark inactive
             </Button>
-            <Button size="small" sx={{ textTransform: 'none', color: cv.destructive }}>
+            <Button onClick={() => handleBulkAction('delete')} size="small" sx={{ textTransform: 'none', color: cv.destructive }}>
               Mark delete
             </Button>
           </Box>
@@ -668,7 +696,7 @@ function PeopleTab({
         }}
         onInvite={handleInvite}
         onSave={handleSaveUser}
-        initialUser={editUser ? { email: editUser.email, role: editUser.role } : undefined}
+        initialUser={editUser ? { id: editUser.id, email: editUser.email, role: editUser.role } : undefined}
       />
     </>
   );
@@ -703,8 +731,8 @@ function GroupMembersCell({ members, borderColor }: { members: { id: string; nam
               <ListItemAvatar sx={{ minWidth: 40 }}>
                 <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: cv.brandGradient }}>{member.initials}</Avatar>
               </ListItemAvatar>
-              <ListItemText 
-                primary={member.name} 
+              <ListItemText
+                primary={member.name}
                 secondary={member.email}
                 slotProps={{
                   primary: { sx: { fontSize: '0.875rem', color: cv.textPrimary } },
@@ -729,6 +757,7 @@ function UserGroupsTab({
   setGroups: Dispatch<SetStateAction<UserGroup[]>>;
 }) {
   const { user } = useAuth();
+  const { formatDate } = useLocalizedDate();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGroupId, setEditGroupId] = useState<string | null>(null);
@@ -810,13 +839,13 @@ function UserGroupsTab({
         const members = row.members
           .map((m) => m.user)
           .map((u) => {
-             const userRow = userById.get(u.id);
-             return {
-               id: u.id,
-               name: u.name,
-               email: u.email,
-               initials: userRow?.initials || u.name.slice(0, 2).toUpperCase()
-             };
+            const userRow = userById.get(u.id);
+            return {
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              initials: userRow?.initials || u.name.slice(0, 2).toUpperCase()
+            };
           });
         return <GroupMembersCell members={members} borderColor={cv.dialogSurface} />;
       },
@@ -827,7 +856,7 @@ function UserGroupsTab({
       width: '10%',
       render: (row) => `${row.members.length}`,
     },
-    { id: 'created', label: 'Created', width: '12%', render: (row) => new Date(row.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
+    { id: 'created', label: 'Created', width: '12%', render: (row) => formatDate(row.createdAt, { month: 'short', day: 'numeric', year: 'numeric' }) },
     { id: 'createdBy', label: 'Created by', width: '12%', render: (row) => tableText(row.createdBy?.name || 'System') },
     {
       id: 'actions',
@@ -863,7 +892,7 @@ function UserGroupsTab({
                 row.description || '',
                 row.members.map(m => m.user.email ? `${m.user.name} (${m.user.email})` : m.user.name).join(', '),
                 row.members.length,
-                new Date(row.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                formatDate(row.createdAt, { month: 'short', day: 'numeric', year: 'numeric' }),
                 row.createdBy?.name || 'System',
               ])
             );
@@ -936,6 +965,7 @@ function UserGroupsTab({
 
 export default function UserAdminSettingsSection() {
   const { user: currentUser } = useAuth();
+  const { formatDate } = useLocalizedDate();
   const [activeTab, setActiveTab] = useState(0);
   const [users, setUsers] = useState<SettingsUserRow[]>([]);
   const [groups, setGroups] = useState<UserGroup[]>([]);
@@ -989,14 +1019,14 @@ export default function UserAdminSettingsSection() {
             if (diffMinutes <= 1) lastActiveText = 'Just now';
             else if (diffMinutes < 60) lastActiveText = `${diffMinutes} mins ago`;
             else if (diffMinutes < 1440) lastActiveText = `${Math.floor(diffMinutes / 60)} hours ago`;
-            else lastActiveText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            else lastActiveText = formatDate(date, { month: 'short', day: 'numeric', year: 'numeric' });
           } else if (u.lastLoginAt) {
             const date = new Date(u.lastLoginAt);
-            lastActiveText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            lastActiveText = formatDate(date, { month: 'short', day: 'numeric', year: 'numeric' });
           }
 
           const joinedDate = u.createdAt
-            ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            ? formatDate(u.createdAt, { month: 'short', day: 'numeric', year: 'numeric' })
             : '—';
           const isMe = Boolean(
             currentUser &&

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { getCompanyInfoRequest, updateCompanyInfoRequest, uploadCompanyLogoRequest } from '../../api';
+import { getCompanyInfoRequest, updateCompanyInfoRequest, uploadCompanyLogoRequest, updateProfileRequest, uploadProfilePhotoRequest } from '../../api';
+import { logoutAllSessions } from '../../api/auth.service';
+import { useAuth } from '../../auth/AuthContext';
+import { useLocalizedDate } from '../../hooks/useLocalizedDate';
 import { cv } from '../../theme/cssVars';
 import {
   Avatar,
@@ -303,7 +306,75 @@ function AddProjectDialog({
 }
 
 export function PersonalSettingsSection() {
-  const [profile, setProfile] = useState(MOCK_PERSONAL_PROFILE);
+  const { user, refreshUser } = useAuth();
+  
+  const [profile, setProfile] = useState({
+    fullName: user?.name || '',
+    timezone: user?.timezone || 'UTC',
+    avatarUrl: user?.avatarUrl || ''
+  });
+  
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveProfileConfirmOpen, setSaveProfileConfirmOpen] = useState(false);
+  const [logoutAllConfirmOpen, setLogoutAllConfirmOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (user) {
+      setProfile({
+        fullName: user.name || '',
+        timezone: user.timezone || 'UTC',
+        avatarUrl: user.avatarUrl || ''
+      });
+    }
+  }, [user]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveProfileConfirmOpen(false);
+    try {
+      await updateProfileRequest({ name: profile.fullName, timezone: profile.timezone });
+      await refreshUser();
+      toast.success('Personal info saved successfully');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save personal info');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleLogoutAll = async () => {
+    setLogoutAllConfirmOpen(false);
+    try {
+      await logoutAllSessions();
+      toast.success('All sessions revoked. Logging out...');
+      setTimeout(() => {
+        user?.logout?.(); // clear local token and redirect if logout is provided, else we rely on AuthContext unmounting
+        window.location.reload(); 
+      }, 1000);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to revoke sessions');
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      toast.loading('Uploading photo...', { id: 'upload-photo' });
+      const res = await uploadProfilePhotoRequest(file);
+      if (res.success && res.avatarUrl) {
+        setProfile((current) => ({ ...current, avatarUrl: res.avatarUrl }));
+        toast.success('Photo uploaded successfully', { id: 'upload-photo' });
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload photo', { id: 'upload-photo' });
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <SettingsFormContainer>
@@ -324,14 +395,22 @@ export function PersonalSettingsSection() {
                 background: profile.avatarUrl ? undefined : cv.brandGradient,
               }}
             >
-              {!profile.avatarUrl ? CURRENT_USER.initials : null}
+              {!profile.avatarUrl ? (profile.fullName || user?.email || 'U').charAt(0).toUpperCase() : null}
             </Avatar>
             <Box>
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+              />
               <Button
                 variant="outlined"
                 size="small"
                 startIcon={<UploadOutlinedIcon />}
                 sx={outlineButtonSx}
+                onClick={() => fileInputRef.current?.click()}
               >
                 Upload photo
               </Button>
@@ -372,8 +451,8 @@ export function PersonalSettingsSection() {
             System detected by default; user configurable.
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button variant="contained" sx={containedButtonSx}>
-              Save personal info
+            <Button variant="contained" sx={containedButtonSx} onClick={() => setSaveProfileConfirmOpen(true)} disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save personal info'}
             </Button>
           </Box>
         </Box>
@@ -382,7 +461,7 @@ export function PersonalSettingsSection() {
       <SettingsSectionCard title="Authentication" description="Login identity and session security.">
         <SettingsRow
           title="Email address"
-          description={`${CURRENT_USER.email} · Primary login identifier · Must be globally unique. Non-editable for standard users; managed by Super Admin.`}
+          description={`${user?.email || CURRENT_USER.email} · Primary login identifier · Must be globally unique. Non-editable for standard users; managed by Super Admin.`}
           action={
             <Chip
               label="Read only"
@@ -395,13 +474,57 @@ export function PersonalSettingsSection() {
           title="Log out of all active sessions"
           description="Triggers a security token reset across all logged-in devices."
           action={
-            <Button variant="outlined" size="small" sx={outlineButtonSx}>
+            <Button variant="outlined" size="small" sx={outlineButtonSx} onClick={() => setLogoutAllConfirmOpen(true)}>
               Log out
             </Button>
           }
           showDivider={false}
         />
       </SettingsSectionCard>
+
+      {/* Save Confirmation Dialog */}
+      <Dialog
+        open={saveProfileConfirmOpen}
+        onClose={() => setSaveProfileConfirmOpen(false)}
+        slotProps={noahDialogSlotProps}
+      >
+        <DialogTitle>Confirm Changes</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: cv.textSecondary, fontSize: '0.875rem' }}>
+            Are you sure you want to save these changes to your personal info? This will update your name and timezone across the platform.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setSaveProfileConfirmOpen(false)} sx={{ color: cv.textSecondary }}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} variant="contained" sx={containedButtonSx}>
+            Confirm Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Logout All Confirmation Dialog */}
+      <Dialog
+        open={logoutAllConfirmOpen}
+        onClose={() => setLogoutAllConfirmOpen(false)}
+        slotProps={noahDialogSlotProps}
+      >
+        <DialogTitle sx={{ color: cv.danger }}>Log Out of All Sessions</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: cv.textSecondary, fontSize: '0.875rem' }}>
+            Are you sure you want to log out of all active sessions? This will instantly revoke access for all devices, including the one you are currently using. You will need to log back in.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setLogoutAllConfirmOpen(false)} sx={{ color: cv.textSecondary }}>
+            Cancel
+          </Button>
+          <Button onClick={handleLogoutAll} variant="contained" sx={{ bgcolor: cv.danger, color: '#fff', '&:hover': { bgcolor: cv.dangerHover } }}>
+            Confirm Logout
+          </Button>
+        </DialogActions>
+      </Dialog>
     </SettingsFormContainer>
   );
 }
@@ -1057,6 +1180,7 @@ export function ProjectsAdminSettingsSection() {
   const [addOpen, setAddOpen] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
+  const { formatDate } = useLocalizedDate();
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -1069,7 +1193,7 @@ export function ProjectsAdminSettingsSection() {
         const data = Array.isArray(response) ? response : response.data;
         if (data && Array.isArray(data)) {
           const formatted = data.map((p: any) => {
-            const today = new Date(p.createdAt || Date.now()).toLocaleDateString('en-US', {
+            const today = formatDate(p.createdAt || Date.now(), {
               month: 'short',
               day: 'numeric',
               year: 'numeric',
@@ -1161,7 +1285,7 @@ export function ProjectsAdminSettingsSection() {
 
   const handleSaveProject = (name: string, workspace: string, visibility: ProjectVisibility) => {
     if (!editProjectId) return;
-    const today = new Date().toLocaleDateString('en-US', {
+    const today = formatDate(Date.now(), {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -1309,6 +1433,7 @@ export function WorkspacesAdminSettingsSection() {
   const [addOpen, setAddOpen] = useState(false);
   const [editWorkspaceId, setEditWorkspaceId] = useState<string | null>(null);
   const [inviteWorkspaceId, setInviteWorkspaceId] = useState<string | null>(null);
+  const { formatDate } = useLocalizedDate();
 
   const inviteWorkspace = workspaces.find((workspace) => workspace.id === inviteWorkspaceId);
   const editWorkspace = workspaces.find((workspace) => workspace.id === editWorkspaceId);
@@ -1338,7 +1463,7 @@ export function WorkspacesAdminSettingsSection() {
 
   const handleSaveWorkspace = (data: CreateWorkspaceFormData) => {
     if (!editWorkspaceId) return;
-    const today = new Date().toLocaleDateString('en-US', {
+    const today = formatDate(Date.now(), {
       month: 'short',
       day: 'numeric',
       year: 'numeric',

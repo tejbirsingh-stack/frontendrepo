@@ -25,6 +25,7 @@ import ExcelJS from 'exceljs';
 import { cv } from '../theme/cssVars';
 import { apiClient } from '../api/client';
 import { dropdownMenuPaperSx } from '../constants/dropdownMenu';
+import { useLocalizedDate } from '../hooks/useLocalizedDate';
 
 interface UserActivity {
   id: string;
@@ -109,7 +110,7 @@ const actionToneSx: Record<ActionTone, { backgroundColor: string; color: string 
   },
 };
 
-function formatActivityTime(value: string): string {
+function formatActivityTime(value: string, timeZone?: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
   return new Intl.DateTimeFormat('en-GB', {
@@ -119,6 +120,7 @@ function formatActivityTime(value: string): string {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
+    timeZone
   })
     .format(date)
     .replace(/(\d{4}),?/, '$1,');
@@ -196,6 +198,7 @@ export default function UserActivitiesPage() {
   const [endDate, setEndDate] = useState(getToday());
   const [sortBy, setSortBy] = useState<SortField>('time');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const { formatDateTime, timeZone } = useLocalizedDate();
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -266,7 +269,7 @@ export default function UserActivitiesPage() {
       if (!query) return true;
 
       const haystack = [
-        formatActivityTime(activity.createdAt),
+        formatActivityTime(activity.createdAt, timeZone),
         activity.userName,
         activity.userEmail,
         activity.userRole,
@@ -368,7 +371,7 @@ export default function UserActivitiesPage() {
         activityName: activity.activityName || '',
         description: activity.description || '',
         type: (activity.activityType || 'INFO').toUpperCase(),
-        time: new Date(activity.createdAt).toLocaleString(),
+        time: formatDateTime(activity.createdAt),
       });
     }
 
@@ -731,7 +734,7 @@ export default function UserActivitiesPage() {
 
                       <TableCell sx={{ ...bodyCellSx, whiteSpace: 'nowrap', minWidth: 150 }}>
                         <Typography sx={{ fontSize: '0.875rem', color: cv.textSecondary }}>
-                          {formatActivityTime(activity.createdAt)}
+                          {formatActivityTime(activity.createdAt, timeZone)}
                         </Typography>
                       </TableCell>
                     </TableRow>
