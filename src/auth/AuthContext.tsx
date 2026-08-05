@@ -220,8 +220,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginGoogle,
       clearSession,
       loginMicrosoft,
+      setSession,
     }),
-    [accessToken, isInitializing, login, logout, signup, user, loginGoogle, loginMicrosoft, clearSession],
+    [accessToken, isInitializing, login, logout, signup, user, loginGoogle, loginMicrosoft, clearSession, setSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

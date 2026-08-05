@@ -5,6 +5,7 @@ import {
   Button,
   Divider,
   IconButton,
+  InputAdornment,
   Link,
   TextField,
   Typography,
@@ -16,15 +17,27 @@ import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutl
 import CloseIcon from '@mui/icons-material/Close';
 import GoogleIcon from '@mui/icons-material/Google';
 import MicrosoftIcon from '@mui/icons-material/Window';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo from '../components/NoahLogo';
 import ChoosePlanScreen from '../components/onboarding/ChoosePlanScreen';
 import { useAuth } from '../auth/AuthContext';
+import { persistSession } from '../auth/authStorage';
 import { cv } from '../theme/cssVars';
-import { validateBusinessEmail } from '../utils/authValidation';
+import { validateBusinessEmail, validatePassword } from '../utils/authValidation';
 import { mockAuthEmailExists } from '../constants/mockAuthCredentials';
+import {
+  checkEmailRequest,
+  sendSignupOtpRequest,
+  verifySignupOtpRequest,
+  completeSignupRequest,
+  mapAuthUserDtoToSessionUser,
+} from '../api/auth.service';
+import { uploadMediaFileRequest } from '../api/media.service';
+import { extractImageMetadata, extractAudioMetadata } from '../utils/mediaMetadataExtractors';
 
 type SignupPhase = 'email' | 'verify' | 'workspace' | 'usage' | 'upload' | 'done' | 'plans';
 
@@ -204,8 +217,15 @@ function SignupStepFooter({
 export default function SignUpPage() {
   const navigate = useNavigate();
   const { instance } = useMsal();
-  const { loginGoogle, loginMicrosoft } = useAuth();
+  const { loginGoogle, loginMicrosoft, setSession } = useAuth();
   const [phase, setPhase] = useState<SignupPhase>('email');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPasswordFields, setShowPasswordFields] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [workspaceName, setWorkspaceName] = useState('');
@@ -244,6 +264,11 @@ export default function SignUpPage() {
     e.preventDefault();
     setError('');
 
+    if (email.length > 255) {
+      setError('Email cannot exceed 255 characters.');
+      return;
+    }
+
     const emailError = validateBusinessEmail(email);
     if (emailError) {
       setError(emailError);
@@ -251,27 +276,73 @@ export default function SignUpPage() {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    setIsChecking(true);
 
-    // Static check only — no backend call for now
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    if (!showPasswordFields) {
+      setIsChecking(true);
+      try {
+        await checkEmailRequest(normalizedEmail);
+        setEmail(normalizedEmail);
+        setShowPasswordFields(true);
+        setError('');
+      } catch (err: any) {
+        console.error('Email check error:', err);
+        if (err.response?.status === 409 || err.response?.data?.exists) {
+          setError('Email ID is already registered with this email');
+          return;
+        }
+        setError(err.response?.data?.message || err.message || 'Failed to check email.');
+      } finally {
+        setIsChecking(false);
+      }
+    } else {
+      if (!firstName.trim()) {
+        setError('First name is required.');
+        return;
+      }
+      if (firstName.trim().length > 50) {
+        setError('First name cannot exceed 50 characters.');
+        return;
+      }
 
-    if (emailAlreadyExists(normalizedEmail)) {
-      setIsChecking(false);
-      navigate('/', {
-        replace: true,
-        state: { email: normalizedEmail, fromSignup: true },
-      });
-      return;
+      if (!lastName.trim()) {
+        setError('Last name is required.');
+        return;
+      }
+      if (lastName.trim().length > 50) {
+        setError('Last name cannot exceed 50 characters.');
+        return;
+      }
+
+      const passwordError = validatePassword(password);
+      if (passwordError) {
+        setError(passwordError);
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.');
+        return;
+      }
+
+      setIsChecking(true);
+      try {
+        await sendSignupOtpRequest(normalizedEmail);
+        setVerificationCode('');
+        setPhase('verify');
+      } catch (err: any) {
+        console.error('Email OTP Error:', err);
+        if (err.response?.status === 409) {
+          setError('Email ID is already registered with this email');
+          return;
+        }
+        setError(err.response?.data?.message || err.message || 'Failed to send verification code.');
+      } finally {
+        setIsChecking(false);
+      }
     }
-
-    setEmail(normalizedEmail);
-    setVerificationCode('');
-    setPhase('verify');
-    setIsChecking(false);
   };
 
-  const handleVerifyContinue = (e: React.FormEvent) => {
+  const handleVerifyContinue = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -281,21 +352,110 @@ export default function SignUpPage() {
       return;
     }
 
-    if (code !== STATIC_VERIFICATION_CODE) {
-      setError('Invalid verification code. Please try again.');
-      return;
+    setIsChecking(true);
+    try {
+      await verifySignupOtpRequest(email, code);
+      setError('');
+      setPhase('workspace');
+    } catch (err: any) {
+      console.error('Verify OTP Error:', err);
+      setError(err.response?.data?.message || err.message || 'Invalid verification code. Please try again.');
+    } finally {
+      setIsChecking(false);
     }
+  };
 
+  const handleFinalPlanSelect = async (planId: string, billingCycle: string) => {
+    setIsChecking(true);
     setError('');
-    setPhase('workspace');
+
+    try {
+      const hubspotUtkCookie = document.cookie
+        .split('; ')
+        .find((row) => row.startsWith('hubspotutk='))
+        ?.split('=')[1];
+
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+      const response = await completeSignupRequest({
+        email,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        name: fullName,
+        password,
+        workspaceName,
+        companyWebsite,
+        mobileNumber,
+        teamSize,
+        firstFocus,
+        planId,
+        billingCycle,
+        hubspotUtk: hubspotUtkCookie,
+      });
+
+      const activeToken = response?.accessToken || response?.token;
+      if (activeToken) {
+        localStorage.setItem('accessToken', activeToken);
+        localStorage.setItem('token', activeToken);
+        const mappedUser = mapAuthUserDtoToSessionUser(response?.user || response);
+        setSession(activeToken, mappedUser);
+        persistSession(activeToken, mappedUser);
+      }
+
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        for (const file of uploadedFiles) {
+          try {
+            let fullTechSpecs: Record<string, any> = {};
+            const mime = file.type || '';
+            if (mime.startsWith('image/')) {
+              fullTechSpecs = await extractImageMetadata(file);
+            } else if (mime.startsWith('audio/')) {
+              fullTechSpecs = await extractAudioMetadata(file);
+            }
+
+            const targetWorkspaceId = response?.workspace?.id || response?.user?.workspace?.id;
+            const uploadedAsset = await uploadMediaFileRequest(file, {
+              title: file.name.replace(/\.[^/.]+$/, ''),
+              technicalSpecs: fullTechSpecs,
+              ownerType: 'WORKSPACE',
+              ownerId: targetWorkspaceId,
+            });
+            console.log('Successfully saved onboarding asset to DB:', file.name, uploadedAsset);
+          } catch (uploadErr) {
+            console.error('Failed to upload onboarding media file with EXIF specs:', file.name, uploadErr);
+          }
+        }
+      }
+
+      navigate('/home', { replace: true });
+    } catch (err: any) {
+      console.error('Failed to complete signup:', err);
+      setError(err.response?.data?.message || err.message || 'Failed to complete signup. Please try again.');
+    } finally {
+      setIsChecking(false);
+    }
   };
 
   const handleWorkspaceContinue = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (workspaceName.trim().length < 2) {
-      setError('Please enter a workspace name.');
+    const trimmedName = workspaceName.trim();
+    if (trimmedName.length < 2) {
+      setError('Workspace name must be at least 2 characters long.');
+      return;
+    }
+    if (trimmedName.length > 100) {
+      setError('Workspace name cannot exceed 100 characters.');
+      return;
+    }
+
+    if (companyWebsite.trim().length > 255) {
+      setError('Company website URL cannot exceed 255 characters.');
+      return;
+    }
+
+    if (mobileNumber.trim().length > 50) {
+      setError('Mobile number cannot exceed 50 characters.');
       return;
     }
 
@@ -369,13 +529,31 @@ export default function SignUpPage() {
             return;
           }
           try {
-            await loginGoogle(tokenResponse.access_token, false, {
-              mode: 'signup',
-              isSignUp: true,
+            const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
             });
-            navigate('/home');
+            if (userInfoRes.ok) {
+              const googleUser = await userInfoRes.json();
+              const googleEmail = (googleUser.email || '').toLowerCase().trim();
+              if (googleEmail) {
+                try {
+                  await checkEmailRequest(googleEmail);
+                } catch (checkErr: any) {
+                  if (checkErr.response?.status === 409 || checkErr.response?.data?.exists) {
+                    setError('Email ID is already registered with this email');
+                    return;
+                  }
+                  setError(checkErr.response?.data?.message || checkErr.message || 'Failed to verify Google email.');
+                  return;
+                }
+                setEmail(googleEmail);
+              }
+              if (googleUser.given_name) setFirstName(googleUser.given_name);
+              if (googleUser.family_name) setLastName(googleUser.family_name);
+            }
+            setPhase('workspace');
           } catch (submitError: any) {
-            console.error(submitError);
+            console.error('Google sign-up error:', submitError);
             setError(
               submitError.response?.data?.message ||
                 submitError.message ||
@@ -396,19 +574,101 @@ export default function SignUpPage() {
 
   const handleMicrosoftSignup = async () => {
     setError('');
+    setIsSsoLoading(true);
     try {
-      sessionStorage.setItem('msal_redirecting', 'true');
-      sessionStorage.setItem('msal_auth_mode', 'signup');
-      await instance.loginRedirect({
-        scopes: ['User.Read', 'profile', 'email', 'openid'],
-      });
+      let response: any = null;
+      try {
+        response = await instance.loginPopup({
+          scopes: ['User.Read', 'profile', 'email', 'openid'],
+        });
+      } catch (popupErr: any) {
+        console.warn('Popup login failed/blocked, falling back to redirect:', popupErr);
+        sessionStorage.setItem('msal_redirecting', 'true');
+        sessionStorage.setItem('msal_auth_mode', 'signup');
+        await instance.loginRedirect({
+          scopes: ['User.Read', 'profile', 'email', 'openid'],
+        });
+        return;
+      }
+
+      if (response && response.account) {
+        const account = response.account;
+        const msEmail = (account.username || (account.idTokenClaims as any)?.email || '').toLowerCase().trim();
+        const msName = account.name || (account.idTokenClaims as any)?.name || '';
+
+        if (msEmail) {
+          try {
+            await checkEmailRequest(msEmail);
+          } catch (checkErr: any) {
+            if (checkErr.response?.status === 409 || checkErr.response?.data?.exists) {
+              setError('Email ID is already registered with this email');
+              return;
+            }
+            setError(checkErr.response?.data?.message || checkErr.message || 'Failed to verify Microsoft email.');
+            return;
+          }
+          setEmail(msEmail);
+        }
+
+        if (msName) {
+          const nameParts = msName.trim().split(' ');
+          setFirstName(nameParts[0] || '');
+          setLastName(nameParts.slice(1).join(' ') || '');
+        }
+
+        setPhase('workspace');
+      }
     } catch (err: any) {
-      sessionStorage.removeItem('msal_redirecting');
-      sessionStorage.removeItem('msal_auth_mode');
-      console.error(err);
+      console.error('Microsoft sign-up error:', err);
       setError(err.response?.data?.message || err.message || 'Microsoft sign-up failed.');
+    } finally {
+      setIsSsoLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (sessionStorage.getItem('msal_redirecting') === 'true') {
+      instance
+        .handleRedirectPromise()
+        .then(async (response) => {
+          sessionStorage.removeItem('msal_redirecting');
+          sessionStorage.removeItem('msal_auth_mode');
+          if (response && response.account) {
+            const account = response.account;
+            const msEmail = (account.username || (account.idTokenClaims as any)?.email || '').toLowerCase().trim();
+            const msName = account.name || (account.idTokenClaims as any)?.name || '';
+
+            if (msEmail) {
+              try {
+                await checkEmailRequest(msEmail);
+              } catch (checkErr: any) {
+                if (checkErr.response?.status === 409 || checkErr.response?.data?.exists) {
+                  setError('Email ID is already registered with this email');
+                  return;
+                }
+                setError(checkErr.response?.data?.message || checkErr.message || 'Failed to verify Microsoft email.');
+                return;
+              }
+              setEmail(msEmail);
+            }
+
+            if (msName) {
+              const nameParts = msName.trim().split(' ');
+              setFirstName(nameParts[0] || '');
+              setLastName(nameParts.slice(1).join(' ') || '');
+            }
+
+            setPhase('workspace');
+          }
+        })
+        .catch((err) => {
+          sessionStorage.removeItem('msal_redirecting');
+          sessionStorage.removeItem('msal_auth_mode');
+          console.error('MSAL Redirect Error:', err);
+          setError(err.message || 'Microsoft sign-up failed.');
+        });
+    }
+  }, [instance]);
 
   useEffect(() => {
     if (phase !== 'done') {
@@ -435,7 +695,11 @@ export default function SignUpPage() {
   }, [phase]);
 
   if (phase === 'plans') {
-    return <ChoosePlanScreen />;
+    return (
+      <ChoosePlanScreen
+        onSelectPlan={(planId, billingCycle) => void handleFinalPlanSelect(planId, billingCycle)}
+      />
+    );
   }
 
   if (phase === 'done') {
@@ -592,14 +856,144 @@ export default function SignUpPage() {
                 type="email"
                 placeholder="you@company.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (showPasswordFields) {
+                    setShowPasswordFields(false);
+                    setFirstName('');
+                    setLastName('');
+                    setPassword('');
+                    setConfirmPassword('');
+                  }
+                  if (error) setError('');
+                }}
                 autoComplete="email"
                 autoFocus
+                disabled={isChecking}
                 sx={{ mb: 2.5 }}
                 slotProps={{
                   inputLabel: { shrink: true },
+                  htmlInput: { maxLength: 255 },
                 }}
               />
+
+              {showPasswordFields ? (
+                <>
+                  <Box sx={{ display: 'flex', gap: 2, mb: 2.5 }}>
+                    <TextField
+                      fullWidth
+                      label="First Name"
+                      type="text"
+                      placeholder="First name"
+                      value={firstName}
+                      onChange={(e) => {
+                        setFirstName(e.target.value);
+                        if (error) setError('');
+                      }}
+                      autoComplete="given-name"
+                      disabled={isChecking}
+                      slotProps={{
+                        inputLabel: { shrink: true },
+                        htmlInput: { maxLength: 50 },
+                      }}
+                    />
+
+                    <TextField
+                      fullWidth
+                      label="Last Name"
+                      type="text"
+                      placeholder="Last name"
+                      value={lastName}
+                      onChange={(e) => {
+                        setLastName(e.target.value);
+                        if (error) setError('');
+                      }}
+                      autoComplete="family-name"
+                      disabled={isChecking}
+                      slotProps={{
+                        inputLabel: { shrink: true },
+                        htmlInput: { maxLength: 50 },
+                      }}
+                    />
+                  </Box>
+
+                  <TextField
+                    fullWidth
+                    label="Password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Enter password (min 8 chars)"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (error) setError('');
+                    }}
+                    autoComplete="new-password"
+                    disabled={isChecking}
+                    sx={{ mb: 2.5 }}
+                    slotProps={{
+                      inputLabel: { shrink: true },
+                      htmlInput: { maxLength: 255 },
+                      input: {
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              aria-label="toggle password visibility"
+                              onClick={() => setShowPassword((prev) => !prev)}
+                              edge="end"
+                              size="small"
+                              sx={{ color: cv.textSecondary }}
+                            >
+                              {showPassword ? (
+                                <VisibilityOff sx={{ fontSize: 20 }} />
+                              ) : (
+                                <Visibility sx={{ fontSize: 20 }} />
+                              )}
+                            </IconButton>
+                          </InputAdornment>
+                        ),
+                      },
+                    }}
+                  />
+
+                  <TextField
+                    fullWidth
+                    label="Confirm Password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    placeholder="Re-enter password"
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (error) setError('');
+                    }}
+                    autoComplete="new-password"
+                    disabled={isChecking}
+                    sx={{ mb: 2.5 }}
+                    slotProps={{
+                      inputLabel: { shrink: true },
+                      htmlInput: { maxLength: 255 },
+                      input: {
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              aria-label="toggle confirm password visibility"
+                              onClick={() => setShowConfirmPassword((prev) => !prev)}
+                              edge="end"
+                              size="small"
+                              sx={{ color: cv.textSecondary }}
+                            >
+                              {showConfirmPassword ? (
+                                <VisibilityOff sx={{ fontSize: 20 }} />
+                              ) : (
+                                <Visibility sx={{ fontSize: 20 }} />
+                              )}
+                            </IconButton>
+                          </InputAdornment>
+                        ),
+                      },
+                    }}
+                  />
+                </>
+              ) : null}
 
               {error ? (
                 <Typography sx={{ mb: 2, fontSize: '0.8125rem', color: cv.destructive }}>
@@ -623,7 +1017,11 @@ export default function SignUpPage() {
                   },
                 }}
               >
-                {isChecking ? 'Checking…' : 'Continue with email'}
+                {isChecking
+                  ? 'Checking…'
+                  : showPasswordFields
+                    ? 'Continue to verification'
+                    : 'Continue with email'}
               </Button>
 
               <Divider
@@ -848,6 +1246,7 @@ export default function SignUpPage() {
                 sx={{ mb: 0.75 }}
                 slotProps={{
                   inputLabel: { shrink: true },
+                  htmlInput: { maxLength: 100 },
                 }}
               />
               <Typography
@@ -879,6 +1278,7 @@ export default function SignUpPage() {
                 sx={{ mb: 3 }}
                 slotProps={{
                   inputLabel: { shrink: true },
+                  htmlInput: { maxLength: 255 },
                 }}
               />
 
@@ -895,6 +1295,7 @@ export default function SignUpPage() {
                   inputLabel: { shrink: true },
                   htmlInput: {
                     inputMode: 'tel',
+                    maxLength: 50,
                     'aria-label': 'Mobile number (optional)',
                   },
                 }}

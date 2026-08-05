@@ -238,6 +238,7 @@ async function uploadResumableChunkedFile(
 
     const workers = Array.from({ length: Math.min(CONCURRENCY, totalParts) }, () => runWorker());
     await Promise.all(workers);
+    parts.sort((a, b) => a.PartNumber - b.PartNumber);
 
     const completeRes = await apiClient.post<{ success: boolean; asset: MediaAssetResponseDto }>(
       '/media/upload/complete',

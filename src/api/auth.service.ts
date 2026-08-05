@@ -25,6 +25,42 @@ import axios from "axios";
 
 const API_BASE_URL = env.apiBaseUrl || '/api';
 
+export interface CompleteSignupPayload {
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+  password?: string;
+  workspaceName: string;
+  companyWebsite?: string;
+  mobileNumber?: string;
+  teamSize?: string;
+  firstFocus?: string;
+  planId?: string;
+  billingCycle?: string;
+  hubspotUtk?: string;
+}
+
+export const checkEmailRequest = async (email: string) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/check-email`, { email });
+  return response.data;
+};
+
+export const sendSignupOtpRequest = async (email: string) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/send-signup-otp`, { email });
+  return response.data;
+};
+
+export const verifySignupOtpRequest = async (email: string, code: string) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/verify-signup-otp`, { email, code });
+  return response.data;
+};
+
+export const completeSignupRequest = async (payload: CompleteSignupPayload) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/complete-signup`, payload);
+  return response.data;
+};
+
 export const registerUser = async (data: RegisterData) => {
   const response = await axios.post(
     `${API_BASE_URL}/auth/register`,

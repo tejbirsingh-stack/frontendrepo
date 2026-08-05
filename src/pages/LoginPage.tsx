@@ -47,6 +47,11 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
+    if (!rememberMe) {
+      setError('Please check "Remember me" to continue.');
+      return;
+    }
+
     const redirectPath =
       typeof location.state === 'object' &&
         location.state !== null &&
@@ -166,20 +171,39 @@ export default function LoginPage() {
 
   const handleMicrosoftLogin = async () => {
     setError('');
-    try {
-      sessionStorage.setItem('msal_redirecting', 'true');
-      sessionStorage.setItem('msal_auth_mode', 'login');
+    const redirectPath =
+      typeof location.state === 'object' &&
+        location.state !== null &&
+        'from' in location.state &&
+        typeof (location.state as { from?: unknown }).from === 'string'
+        ? (location.state as { from: string }).from
+        : '/home';
 
-      await instance.loginRedirect({
-        scopes: ["User.Read", "profile", "email", "openid"]
-      });
+    try {
+      let response: any = null;
+      try {
+        response = await instance.loginPopup({
+          scopes: ['User.Read', 'profile', 'email', 'openid'],
+        });
+      } catch (popupErr: any) {
+        console.warn('MSAL Popup failed/blocked, falling back to redirect:', popupErr);
+        sessionStorage.setItem('msal_redirecting', 'true');
+        sessionStorage.setItem('msal_auth_mode', 'login');
+        await instance.loginRedirect({
+          scopes: ['User.Read', 'profile', 'email', 'openid'],
+        });
+        return;
+      }
+
+      if (response && response.idToken) {
+        await loginMicrosoft(response.idToken, rememberMe, { mode: 'login', isSignUp: false });
+        navigate(redirectPath);
+      }
     } catch (err: any) {
-      sessionStorage.removeItem('msal_redirecting');
-      sessionStorage.removeItem('msal_auth_mode');
       console.error(err);
       setError(err.response?.data?.message || err.message || 'Microsoft Login Failed.');
     }
-  }
+  };
 
   return (
     <Box
@@ -295,7 +319,10 @@ export default function LoginPage() {
                 control={
                   <Checkbox
                     checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
+                    onChange={(e) => {
+                      setRememberMe(e.target.checked);
+                      if (error) setError('');
+                    }}
                     size="small"
                   />
                 }
