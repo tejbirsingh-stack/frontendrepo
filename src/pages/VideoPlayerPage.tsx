@@ -1,5 +1,6 @@
 import { useMediaWebSocket, type WebSocketMessage } from '../hooks/useMediaWebSocket';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocalizedDate } from '../hooks/useLocalizedDate';
 import { cv } from '../theme/cssVars';
 import { Alert, Box, Button, Chip, CircularProgress, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
@@ -259,6 +260,7 @@ export default function VideoPlayerPage({
   guestAssetMeta,
   guestExpiresAt,
 }: VideoPlayerPageProps = {}) {
+  const { formatDate } = useLocalizedDate();
   let user: any = null;
   try {
     const auth = useAuth();
@@ -330,10 +332,10 @@ export default function VideoPlayerPage({
       file_size: (guestAssetMeta as any).file_size || guestAssetMeta.fileSize,
       size: formatFileSize((guestAssetMeta as any).file_size || guestAssetMeta.fileSize || 0),
       sizeBytes: (guestAssetMeta as any).file_size || guestAssetMeta.fileSize || 0,
-      updatedAt: guestExpiresAt ? `Expires: ${new Date(guestExpiresAt).toLocaleDateString()}` : '',
+      updatedAt: guestExpiresAt ? `Expires: ${formatDate(guestExpiresAt)}` : '',
       tags: [],
     };
-  }, [isGuestMode, guestAssetMeta, shareToken, guestExpiresAt]);
+  }, [isGuestMode, guestAssetMeta, shareToken, guestExpiresAt, formatDate]);
 
   const contextItem = mediaItems.find((media: any) => media.id === mediaId);
   const [fetchedItem, setFetchedItem] = useState<MediaItem | null>(null);
@@ -455,6 +457,7 @@ export default function VideoPlayerPage({
             sizeBytes: asset.size,
             storageProvider: 'b2',
             uploadedBy: (asset as any).uploadedBy?.name || user?.name || (user?.email ? user.email.split('@')[0] : 'Uploader'),
+            uploadedByUserId: (asset as any).uploadedBy?.id || undefined,
             tags: tagList,
             location: null,
             thumbnail: asset.thumbnail || undefined,
@@ -542,21 +545,25 @@ export default function VideoPlayerPage({
     DEFAULT_DRAW_STROKE_THICKNESS,
   );
   const [collaborators, setCollaborators] = useState<MediaCollaborator[]>([]);
+  const isAssetAdmin = useMemo(() => {
+    if (isGuestMode) return false;
+    const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
+    if (currentUserCollab?.role === 'Admin') return true;
+    if (item?.uploadedByUserId === user?.id || item?.uploadedBy?.id === user?.id) return true;
+    if (isSharedWithUser) return false;
+    return user?.role === 'Super Admin' || user?.role === 'Admin';
+  }, [isGuestMode, collaborators, isSharedWithUser, user, item?.uploadedByUserId, item?.uploadedBy?.id]);
+
   const isViewer = useMemo(() => {
+    if (isAssetAdmin) return false;
     if (isGuestMode) {
       return !guestPermissions?.comment;
     }
     const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
     const isAssetViewer = currentUserCollab?.role === 'Viewer';
     return isAssetViewer || !user?.permissions?.includes('timeline_annotations');
-  }, [isGuestMode, guestPermissions?.comment, collaborators, user?.permissions]);
-  const isAssetAdmin = useMemo(() => {
-    if (isGuestMode) return false;
-    const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
-    if (currentUserCollab?.role === 'Admin') return true;
-    if (isSharedWithUser) return false;
-    return user?.role === 'Super Admin' || user?.role === 'Admin';
-  }, [isGuestMode, collaborators, isSharedWithUser, user]);
+  }, [isGuestMode, guestPermissions?.comment, collaborators, user?.permissions, isAssetAdmin]);
+
   const canDownloadOriginal = isAssetAdmin;
   const canShare = isAssetAdmin;
 
@@ -564,12 +571,12 @@ export default function VideoPlayerPage({
     const rawRole = (user?.role || user?.roleRelation?.name || '').trim().toLowerCase();
     const isViewerRole = isViewer || rawRole === 'viewer' || rawRole === 'guest';
     return {
-      canShare: canShare && !isViewerRole && !isGuestMode,
-      canFavorite: !isViewerRole && !isGuestMode,
-      canDownload: !isViewerRole && !isGuestMode && canDownloadOriginal,
-      canViewTechnicalDetails: !isViewerRole,
+      canShare: (canShare || isAssetAdmin) && (!isViewerRole || isAssetAdmin) && !isGuestMode,
+      canFavorite: (!isViewerRole || isAssetAdmin) && !isGuestMode,
+      canDownload: (canDownloadOriginal || isAssetAdmin) && (!isViewerRole || isAssetAdmin) && !isGuestMode,
+      canViewTechnicalDetails: !isViewerRole || isAssetAdmin,
     };
-  }, [isViewer, user, isGuestMode, canDownloadOriginal, canShare]);
+  }, [isViewer, user, isGuestMode, canDownloadOriginal, canShare, isAssetAdmin]);
   const [comments, setComments] = useState<VideoComment[]>([]);
   const [drawings, setDrawings] = useState<VideoDrawingStroke[]>([]);
   const [shapes, setShapes] = useState<VideoShape[]>([]);
@@ -710,8 +717,9 @@ export default function VideoPlayerPage({
 
             // 2. Scan if owner/uploader needs comment notification
             const currentItem = fetchedItem || contextItem || guestAssetMeta;
-            if (currentItem?.uploadedByUserId && currentItem?.uploadedByUserId !== user?.id) {
-              const uploaderCollab = collaborators.find(collab => collab.id === currentItem.uploadedByUserId);
+            const uploaderId = currentItem?.uploadedByUserId || currentItem?.uploadedBy?.id;
+            if (uploaderId && uploaderId !== user?.id) {
+              const uploaderCollab = collaborators.find(collab => collab.id === uploaderId);
               if (uploaderCollab) {
                 addInAppNotification(
                   `Comment on ${videoTitle}`,
@@ -1515,21 +1523,6 @@ export default function VideoPlayerPage({
             erasedAt: st.erasedAt,
             erasedBy: st.erasedBy,
           });
-        } else if (ann.type === 'system') {
-          const entryId = `system-${ann.id}`;
-          const systemText = ann.data?.text || 'System activity logged';
-          newHistory.push({
-            id: entryId,
-            index: index++,
-            type: 'system',
-            author: getAuthor(ann),
-            createdAt,
-            videoTimestamp: 0,
-            summary: systemText,
-            detail: ann.data?.action || 'SYSTEM',
-            unread: checkUnread(ann, entryId),
-            backendId: ann.id,
-          });
         }
       });
 
@@ -1648,10 +1641,10 @@ export default function VideoPlayerPage({
               }
             } else {
               // Check if user is in any shared groups and find the most permissive access level
-              const userGroups = groupOverrides.filter((go) => 
+              const userGroups = groupOverrides.filter((go) =>
                 go.group?.members?.some((m: any) => m.userId === u.id)
               );
-              
+
               if (userGroups.length > 0) {
                 const accessLevels = userGroups.map(go => go.accessLevel);
                 if (accessLevels.includes('Full Access')) {
@@ -1680,7 +1673,7 @@ export default function VideoPlayerPage({
             let finalRole = 'Viewer';
             if (go.accessLevel === 'Can edit') finalRole = 'Editor';
             else if (go.accessLevel === 'Full Access') finalRole = 'Admin';
-            
+
             return {
               id: go.group?.id || go.groupId,
               name: groupName,
@@ -2316,7 +2309,7 @@ export default function VideoPlayerPage({
         const target = prev.find(h => h.id === entryId);
         const realId = target?.backendId || entryId.replace(/^(comment|shape|drawing|stamp)-/, '');
         if (realId) {
-          markAnnotationReadRequest(realId, false).catch(() => {});
+          markAnnotationReadRequest(realId, false).catch(() => { });
         }
 
         const changed = prev.some(h => h.id === entryId && h.unread);
@@ -2688,7 +2681,7 @@ export default function VideoPlayerPage({
         const target = current.find((h) => h.id === entryId);
         const realId = target?.backendId || entryId.replace(/^(comment|shape|drawing|stamp)-/, '');
         if (realId) {
-          markAnnotationReadRequest(realId, true).catch(() => {});
+          markAnnotationReadRequest(realId, true).catch(() => { });
         }
         return current.map((entry) =>
           entry.id === entryId ? { ...entry, unread: true } : entry,
@@ -2714,7 +2707,7 @@ export default function VideoPlayerPage({
         const target = prev.find((h) => h.id === entryId);
         const realId = target?.backendId || entryId.replace(/^(comment|shape|drawing|stamp)-/, '');
         if (realId) {
-          markAnnotationReadRequest(realId, false).catch(() => {});
+          markAnnotationReadRequest(realId, false).catch(() => { });
         }
         return prev.map((h) => (h.id === entryId ? { ...h, unread: false } : h));
       });
@@ -3721,7 +3714,7 @@ export default function VideoPlayerPage({
                 />
               )}
 
-              {!isSharedWithUser && headerPermissions.canShare && (() => {
+              {headerPermissions.canShare && (() => {
                 const assetMediaType = item?.type || 'video';
                 const shareControlLabel = assetMediaType === 'image' ? 'Share image' : assetMediaType === 'audio' ? 'Share audio' : 'Share video';
                 return (

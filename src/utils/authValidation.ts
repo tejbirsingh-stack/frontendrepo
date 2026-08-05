@@ -1,4 +1,4 @@
-const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,16}$/;
+const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/;
 
 export function validatePassword(password: string): string | null {
   const trimmed = password.trim();
@@ -6,13 +6,13 @@ export function validatePassword(password: string): string | null {
     return 'Password is required.';
   }
   if (trimmed.length < 8) {
-    return 'Password must be at least 8 characters.';
+    return 'Password must be at least 8 characters long.';
   }
-  if (trimmed.length > 16) {
-    return 'Password must be 16 characters or fewer.';
+  if (trimmed.length > 255) {
+    return 'Password cannot exceed 255 characters.';
   }
   if (!PASSWORD_PATTERN.test(trimmed)) {
-    return 'Password must include uppercase, lowercase, and a number.';
+    return 'Password must include at least one uppercase letter, one lowercase letter, and a number.';
   }
   return null;
 }

@@ -18,7 +18,15 @@ export function clearAuthTokenBridge(): void {
 }
 
 export function getAccessToken(): string | null {
-  return tokenGetter?.() ?? null;
+  const fromGetter = tokenGetter?.();
+  if (fromGetter) return fromGetter;
+
+  return (
+    localStorage.getItem('accessToken') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('noah_session_token') ||
+    null
+  );
 }
 
 export function handleUnauthorized(): void {

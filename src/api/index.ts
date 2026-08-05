@@ -42,3 +42,8 @@ export {
   uploadCompanyLogoRequest,
 } from './organizations.service';
 export type { UpdateCompanyInfoDto, UploadCompanyLogoResponse } from './organizations.service';
+export {
+  updateProfileRequest,
+  uploadProfilePhotoRequest,
+} from './users.service';
+export type { UpdateProfileDto, UploadProfilePhotoResponse } from './users.service';

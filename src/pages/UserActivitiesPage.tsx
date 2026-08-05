@@ -9,6 +9,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   TextField,
   InputAdornment,
   FormControl,
@@ -24,6 +25,7 @@ import ExcelJS from 'exceljs';
 import { cv } from '../theme/cssVars';
 import { apiClient } from '../api/client';
 import { dropdownMenuPaperSx } from '../constants/dropdownMenu';
+import { useLocalizedDate } from '../hooks/useLocalizedDate';
 
 interface UserActivity {
   id: string;
@@ -42,6 +44,8 @@ interface RoleOption {
 }
 
 type ActionTone = 'danger' | 'purple' | 'success' | 'neutral' | 'info';
+type SortField = 'user' | 'role' | 'activityName' | 'type' | 'time';
+type SortDirection = 'asc' | 'desc';
 
 const ACTIVITY_TYPES = ['INFO', 'ERROR'] as const;
 
@@ -106,7 +110,7 @@ const actionToneSx: Record<ActionTone, { backgroundColor: string; color: string 
   },
 };
 
-function formatActivityTime(value: string): string {
+function formatActivityTime(value: string, timeZone?: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
   return new Intl.DateTimeFormat('en-GB', {
@@ -116,6 +120,7 @@ function formatActivityTime(value: string): string {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
+    timeZone
   })
     .format(date)
     .replace(/(\d{4}),?/, '$1,');
@@ -154,6 +159,25 @@ const headerCellSx = {
   backgroundColor: 'transparent',
   py: 1.5,
   px: 2,
+  whiteSpace: 'nowrap' as const,
+};
+
+const sortLabelSx = {
+  color: 'inherit',
+  '& .MuiTableSortLabel-icon': {
+    color: `${cv.textMuted} !important`,
+    opacity: 0.55,
+  },
+  '&.Mui-active': {
+    color: cv.textPrimary,
+    '& .MuiTableSortLabel-icon': {
+      color: `${cv.textSecondary} !important`,
+      opacity: 1,
+    },
+  },
+  '&:hover': {
+    color: cv.textPrimary,
+  },
 };
 
 const bodyCellSx = {
@@ -172,6 +196,9 @@ export default function UserActivitiesPage() {
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [startDate, setStartDate] = useState(getOneYearAgo());
   const [endDate, setEndDate] = useState(getToday());
+  const [sortBy, setSortBy] = useState<SortField>('time');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const { formatDateTime, timeZone } = useLocalizedDate();
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -242,7 +269,7 @@ export default function UserActivitiesPage() {
       if (!query) return true;
 
       const haystack = [
-        formatActivityTime(activity.createdAt),
+        formatActivityTime(activity.createdAt, timeZone),
         activity.userName,
         activity.userEmail,
         activity.userRole,
@@ -258,8 +285,60 @@ export default function UserActivitiesPage() {
     });
   }, [activities, roleFilter, typeFilter, startDate, endDate, searchQuery]);
 
+  const sortedActivities = useMemo(() => {
+    const sorted = [...filteredActivities];
+    const direction = sortDirection === 'asc' ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortBy) {
+        case 'user':
+          comparison = (a.userName || 'System').localeCompare(b.userName || 'System', undefined, {
+            sensitivity: 'base',
+          });
+          break;
+        case 'role':
+          comparison = (a.userRole || '').localeCompare(b.userRole || '', undefined, {
+            sensitivity: 'base',
+          });
+          break;
+        case 'activityName':
+          comparison = normalizeActionLabel(a).localeCompare(normalizeActionLabel(b), undefined, {
+            sensitivity: 'base',
+          });
+          break;
+        case 'type':
+          comparison = (a.activityType || 'INFO')
+            .toUpperCase()
+            .localeCompare((b.activityType || 'INFO').toUpperCase());
+          break;
+        case 'time':
+        default: {
+          const aTime = new Date(a.createdAt).getTime() || 0;
+          const bTime = new Date(b.createdAt).getTime() || 0;
+          comparison = aTime - bTime;
+          break;
+        }
+      }
+
+      return comparison * direction;
+    });
+
+    return sorted;
+  }, [filteredActivities, sortBy, sortDirection]);
+
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortBy(field);
+    setSortDirection(field === 'time' ? 'desc' : 'asc');
+  };
+
   const handleExport = async () => {
-    if (filteredActivities.length === 0) return;
+    if (sortedActivities.length === 0) return;
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('User Activities');
@@ -284,7 +363,7 @@ export default function UserActivitiesPage() {
     };
     headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
-    for (const activity of filteredActivities) {
+    for (const activity of sortedActivities) {
       worksheet.addRow({
         user: activity.userName || 'System',
         email: activity.userEmail || '',
@@ -292,7 +371,7 @@ export default function UserActivitiesPage() {
         activityName: activity.activityName || '',
         description: activity.description || '',
         type: (activity.activityType || 'INFO').toUpperCase(),
-        time: new Date(activity.createdAt).toLocaleString(),
+        time: formatDateTime(activity.createdAt),
       });
     }
 
@@ -440,37 +519,11 @@ export default function UserActivitiesPage() {
             sx={dateFieldSx}
           />
 
-          <TextField
-            size="small"
-            placeholder="Search activities..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ fontSize: 18, color: cv.textMuted }} />
-                  </InputAdornment>
-                ),
-              },
-            }}
-            sx={{
-              minWidth: { xs: '100%', sm: 240 },
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                backgroundColor: cv.surface,
-                '& fieldset': { borderColor: cv.border },
-                '&:hover fieldset': { borderColor: cv.borderStrong },
-                '&.Mui-focused fieldset': { borderColor: cv.borderFocus },
-              },
-            }}
-          />
-
           <Button
             variant="outlined"
             startIcon={<DownloadIcon />}
             onClick={() => void handleExport()}
-            disabled={filteredActivities.length === 0}
+            disabled={sortedActivities.length === 0}
             sx={{
               borderRadius: '10px',
               textTransform: 'none',
@@ -489,6 +542,35 @@ export default function UserActivitiesPage() {
         </Box>
       </Box>
 
+      <Box sx={{ mb: 2 }}>
+        <TextField
+          size="small"
+          placeholder="Search activities..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          fullWidth
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+                </InputAdornment>
+              ),
+            },
+          }}
+          sx={{
+            maxWidth: { sm: 420 },
+            '& .MuiOutlinedInput-root': {
+              borderRadius: '10px',
+              backgroundColor: cv.surface,
+              '& fieldset': { borderColor: cv.border },
+              '&:hover fieldset': { borderColor: cv.borderStrong },
+              '&.Mui-focused fieldset': { borderColor: cv.borderFocus },
+            },
+          }}
+        />
+      </Box>
+
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
@@ -505,16 +587,64 @@ export default function UserActivitiesPage() {
           <Table sx={{ minWidth: 960 }}>
             <TableHead>
               <TableRow>
-                <TableCell sx={headerCellSx}>User</TableCell>
-                <TableCell sx={headerCellSx}>Role</TableCell>
-                <TableCell sx={headerCellSx}>Activity Name</TableCell>
+                <TableCell sx={headerCellSx} sortDirection={sortBy === 'user' ? sortDirection : false}>
+                  <TableSortLabel
+                    active={sortBy === 'user'}
+                    direction={sortBy === 'user' ? sortDirection : 'asc'}
+                    onClick={() => handleSort('user')}
+                    sx={sortLabelSx}
+                  >
+                    User
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={headerCellSx} sortDirection={sortBy === 'role' ? sortDirection : false}>
+                  <TableSortLabel
+                    active={sortBy === 'role'}
+                    direction={sortBy === 'role' ? sortDirection : 'asc'}
+                    onClick={() => handleSort('role')}
+                    sx={sortLabelSx}
+                  >
+                    Role
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell
+                  sx={headerCellSx}
+                  sortDirection={sortBy === 'activityName' ? sortDirection : false}
+                >
+                  <TableSortLabel
+                    active={sortBy === 'activityName'}
+                    direction={sortBy === 'activityName' ? sortDirection : 'asc'}
+                    onClick={() => handleSort('activityName')}
+                    sx={sortLabelSx}
+                  >
+                    Activity Name
+                  </TableSortLabel>
+                </TableCell>
                 <TableCell sx={headerCellSx}>Activity Details</TableCell>
-                <TableCell sx={headerCellSx}>Type</TableCell>
-                <TableCell sx={headerCellSx}>Time</TableCell>
+                <TableCell sx={headerCellSx} sortDirection={sortBy === 'type' ? sortDirection : false}>
+                  <TableSortLabel
+                    active={sortBy === 'type'}
+                    direction={sortBy === 'type' ? sortDirection : 'asc'}
+                    onClick={() => handleSort('type')}
+                    sx={sortLabelSx}
+                  >
+                    Type
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell sx={headerCellSx} sortDirection={sortBy === 'time' ? sortDirection : false}>
+                  <TableSortLabel
+                    active={sortBy === 'time'}
+                    direction={sortBy === 'time' ? sortDirection : 'asc'}
+                    onClick={() => handleSort('time')}
+                    sx={sortLabelSx}
+                  >
+                    Time
+                  </TableSortLabel>
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredActivities.length === 0 ? (
+              {sortedActivities.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={6}
@@ -525,7 +655,7 @@ export default function UserActivitiesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredActivities.map((activity) => {
+                sortedActivities.map((activity) => {
                   const actionLabel = normalizeActionLabel(activity);
                   const typeLabel = (activity.activityType || 'INFO').toUpperCase();
                   const typeTone = typeLabel === 'ERROR' ? 'danger' : getActionTone(actionLabel);
@@ -604,7 +734,7 @@ export default function UserActivitiesPage() {
 
                       <TableCell sx={{ ...bodyCellSx, whiteSpace: 'nowrap', minWidth: 150 }}>
                         <Typography sx={{ fontSize: '0.875rem', color: cv.textSecondary }}>
-                          {formatActivityTime(activity.createdAt)}
+                          {formatActivityTime(activity.createdAt, timeZone)}
                         </Typography>
                       </TableCell>
                     </TableRow>

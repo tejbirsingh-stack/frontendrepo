@@ -36,9 +36,21 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    const state = location.state as { email?: string } | null;
+    if (state?.email && typeof state.email === 'string') {
+      setEmail(state.email);
+    }
+  }, [location.state]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!rememberMe) {
+      setError('Please check "Remember me" to continue.');
+      return;
+    }
 
     const redirectPath =
       typeof location.state === 'object' &&
@@ -131,20 +143,26 @@ export default function LoginPage() {
     if (sessionStorage.getItem('msal_redirecting') === 'true') {
       instance.handleRedirectPromise()
         .then((response) => {
-          sessionStorage.removeItem('msal_redirecting'); // Clear the flag instantly
-          // If response is present, it means we JUST returned from Microsoft successfully!
+          sessionStorage.removeItem('msal_redirecting');
+          const authMode = sessionStorage.getItem('msal_auth_mode');
+          sessionStorage.removeItem('msal_auth_mode');
+          const isSignUp = authMode === 'signup';
+
           if (response && response.idToken) {
             const redirectPath =
               typeof location.state === 'object' && location.state !== null && 'from' in location.state
                 ? (location.state as any).from
                 : '/home';
-                
-            // Pass it to our backend
-            return loginMicrosoft(response.idToken, false, { mode: 'login', isSignUp: false }).then(() => navigate(redirectPath));
+
+            return loginMicrosoft(response.idToken, false, {
+              mode: isSignUp ? 'signup' : 'login',
+              isSignUp,
+            }).then(() => navigate(redirectPath));
           }
         })
         .catch((err: any) => {
           sessionStorage.removeItem('msal_redirecting');
+          sessionStorage.removeItem('msal_auth_mode');
           console.error(err);
           setError(err.response?.data?.message || err.message || 'Microsoft Login Failed.');
         });
@@ -153,20 +171,39 @@ export default function LoginPage() {
 
   const handleMicrosoftLogin = async () => {
     setError('');
+    const redirectPath =
+      typeof location.state === 'object' &&
+        location.state !== null &&
+        'from' in location.state &&
+        typeof (location.state as { from?: unknown }).from === 'string'
+        ? (location.state as { from: string }).from
+        : '/home';
+
     try {
-      // Set a flag so we know to process the redirect when we return
-      sessionStorage.setItem('msal_redirecting', 'true');
-      
-      // Use redirect instead of popup to completely bypass browser isolation/timeout bugs
-      await instance.loginRedirect({
-        scopes: ["User.Read", "profile", "email", "openid"]
-      });
+      let response: any = null;
+      try {
+        response = await instance.loginPopup({
+          scopes: ['User.Read', 'profile', 'email', 'openid'],
+        });
+      } catch (popupErr: any) {
+        console.warn('MSAL Popup failed/blocked, falling back to redirect:', popupErr);
+        sessionStorage.setItem('msal_redirecting', 'true');
+        sessionStorage.setItem('msal_auth_mode', 'login');
+        await instance.loginRedirect({
+          scopes: ['User.Read', 'profile', 'email', 'openid'],
+        });
+        return;
+      }
+
+      if (response && response.idToken) {
+        await loginMicrosoft(response.idToken, rememberMe, { mode: 'login', isSignUp: false });
+        navigate(redirectPath);
+      }
     } catch (err: any) {
-      sessionStorage.removeItem('msal_redirecting');
       console.error(err);
       setError(err.response?.data?.message || err.message || 'Microsoft Login Failed.');
     }
-  }
+  };
 
   return (
     <Box
@@ -282,7 +319,10 @@ export default function LoginPage() {
                 control={
                   <Checkbox
                     checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
+                    onChange={(e) => {
+                      setRememberMe(e.target.checked);
+                      if (error) setError('');
+                    }}
                     size="small"
                   />
                 }
