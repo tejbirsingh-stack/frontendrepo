@@ -25,6 +25,42 @@ import axios from "axios";
 
 const API_BASE_URL = env.apiBaseUrl || '/api';
 
+export interface CompleteSignupPayload {
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+  password?: string;
+  workspaceName: string;
+  companyWebsite?: string;
+  mobileNumber?: string;
+  teamSize?: string;
+  firstFocus?: string;
+  planId?: string;
+  billingCycle?: string;
+  hubspotUtk?: string;
+}
+
+export const checkEmailRequest = async (email: string) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/check-email`, { email });
+  return response.data;
+};
+
+export const sendSignupOtpRequest = async (email: string) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/send-signup-otp`, { email });
+  return response.data;
+};
+
+export const verifySignupOtpRequest = async (email: string, code: string) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/verify-signup-otp`, { email, code });
+  return response.data;
+};
+
+export const completeSignupRequest = async (payload: CompleteSignupPayload) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/complete-signup`, payload);
+  return response.data;
+};
+
 export const registerUser = async (data: RegisterData) => {
   const response = await axios.post(
     `${API_BASE_URL}/auth/register`,
@@ -109,6 +145,15 @@ export const fetchOrganizationUsers = async (): Promise<OrganizationUserItem[]> 
   return response.data?.users || response.data || [];
 };
 
+export const updateOrganizationUser = async (userId: string, data: { email?: string; roleId?: string }) => {
+  const token = getAccessToken();
+  const response = await axios.put(
+    `${API_BASE_URL}/users/${userId}`,
+    data,
+    token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+  );
+  return response.data?.user || response.data;
+};
 
 export const resetPasswordRequest = async (data: { token: string; password?: string; newPassword?: string; name?: string }) => {
   const response = await axios.post(
@@ -139,6 +184,17 @@ export const logoutUser = async (userId: string) => {
   );
   return response.data;
 };
+
+export const logoutAllSessions = async () => {
+  const token = getAccessToken();
+  const response = await axios.post(
+    `${API_BASE_URL}/auth/logout-all`,
+    {},
+    token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+  );
+  return response.data;
+};
+
 
 
 
@@ -297,6 +353,7 @@ export function mapAuthUserDtoToSessionUser(input: any) {
     id: user.id || 'user-id',
     name: name,
     email: user.email || '',
+    timezone: user.timezone || 'UTC',
     role: formattedRole,
     roleId: user.roleId || user.role_id || user.roleRelation?.id || fallbackRoleId,
     roleRelation: user.roleRelation,
@@ -347,6 +404,7 @@ export function extractUserFromTokenOrResponse(response: LoginResponseDto): Auth
       id: decoded.id || 'user-id',
       name: name,
       email: decoded.email || '',
+      timezone: decoded.timezone || 'UTC',
       role: formattedRole,
       roleId: decoded.roleId || decoded.role_id || decoded.roleRelation?.id || fallbackRoleId,
       roleRelation: decoded.roleRelation,
@@ -362,3 +420,13 @@ export function extractUserFromTokenOrResponse(response: LoginResponseDto): Auth
   }
 }
 
+
+export const bulkUpdateOrganizationUsersRequest = async (userIds: string[], action: 'active' | 'inactive' | 'delete') => {
+  const token = getAccessToken();
+  const response = await axios.post(
+    `${API_BASE_URL}/users/bulk`,
+    { userIds, action },
+    token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+  );
+  return response.data;
+};

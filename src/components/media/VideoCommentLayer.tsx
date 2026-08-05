@@ -41,7 +41,7 @@ interface VideoCommentLayerProps {
     visibility: AnnotationVisibility,
     groupId?: string,
   ) => void;
-  onCreateAnnotationGroup: (name: string, memberIds: string[]) => AnnotationAccessGroup;
+  onCreateAnnotationGroup: (name: string, memberIds: string[]) => AnnotationAccessGroup | Promise<AnnotationAccessGroup | null | undefined>;
   onUpdateAnnotationGroup?: (groupId: string, name: string, memberIds: string[]) => Promise<AnnotationAccessGroup | null | undefined>;
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
   onMoveComment?: (commentId: string, xPercent: number, yPercent: number) => void;

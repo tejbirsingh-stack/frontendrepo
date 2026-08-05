@@ -6,7 +6,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
+import { AddOutlined as AddOutlinedIcon } from '@mui/icons-material';
 import { cv } from '../../theme/cssVars';
 import { useDashboard } from '../../context/DashboardContext';
 import type { TagScope } from '../../types/managedTag';

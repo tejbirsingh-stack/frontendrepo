@@ -1,7 +1,8 @@
 import { useMediaWebSocket, type WebSocketMessage } from '../hooks/useMediaWebSocket';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocalizedDate } from '../hooks/useLocalizedDate';
 import { cv } from '../theme/cssVars';
-import { Alert, Box, Button, Chip, CircularProgress, IconButton, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
+import { Alert, Box, Button, Chip, CircularProgress, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
@@ -14,6 +15,9 @@ import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import KeyboardOutlinedIcon from '@mui/icons-material/KeyboardOutlined';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
@@ -28,6 +32,7 @@ import {
 } from '../constants/annotationColors';
 import { DEFAULT_DRAW_COLOR } from '../constants/drawColors';
 import AnnotationHistoryDrawer from '../components/media/AnnotationHistoryDrawer';
+import AudioWaveformVisualizer from '../components/media/AudioWaveformVisualizer';
 import type {
   MediaDetailsSection,
   MediaTechnicalDetails,
@@ -54,6 +59,8 @@ import {
   type WorkspaceInvitePayload,
   type WorkspaceMemberAccess,
   type WorkspaceTeamMember,
+  type SettingsUserGroup,
+  type WorkspaceMemberType,
 } from '../data/mockSettingsData';
 import {
   fetchShareLinks,
@@ -103,6 +110,7 @@ import {
   saveMediaAnnotationRequest,
   updateMediaAnnotationRequest,
   deleteMediaAnnotationRequest,
+  markAnnotationReadRequest,
 } from '../api/annotations.service';
 import {
   getShareAnnotationsApi,
@@ -160,7 +168,8 @@ import {
 } from '../utils/playerToolUtils';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
-import { getMediaAssetByIdRequest, updateAssetTagsRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride, getCompanyInfoRequest } from '../api';
+import { getMediaAssetByIdRequest, updateAssetTagsRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride, updateAssetGroupAccessOverride, removeAssetGroupAccessOverride, getCompanyInfoRequest } from '../api';
+import { fetchUserGroups } from '../api/userGroups.service';
 import type { MediaItem, MediaType } from '../data/mockMedia';
 
 function collaboratorsToTeamMembers(collaborators: MediaCollaborator[]): WorkspaceTeamMember[] {
@@ -181,7 +190,8 @@ function collaboratorsToTeamMembers(collaborators: MediaCollaborator[]): Workspa
       email: collaborator.email,
       avatarUrl: collaborator.avatarUrl,
       access,
-      memberType: 'Member',
+      memberType: collaborator.groupId ? 'Group' : 'Member',
+      groupId: collaborator.groupId,
       isCurrentUser: collaborator.isCurrentUser,
       hasOverride: collaborator.hasOverride,
     };
@@ -250,6 +260,7 @@ export default function VideoPlayerPage({
   guestAssetMeta,
   guestExpiresAt,
 }: VideoPlayerPageProps = {}) {
+  const { formatDate } = useLocalizedDate();
   let user: any = null;
   try {
     const auth = useAuth();
@@ -257,16 +268,7 @@ export default function VideoPlayerPage({
   } catch {
     user = null;
   }
-  const canDownloadOriginal = useMemo(() => {
-    if (isGuestMode) return false;
-    if (!user) return true;
-    const role = user.role;
-    const roleId = user.roleId;
-    if (role === 'Viewer' || roleId === ROLE_IDS.VIEWER) {
-      return false;
-    }
-    return true;
-  }, [isGuestMode, user]);
+
   const { mediaId } = useParams<{ mediaId: string }>();
   const activeUser = useActiveUser();
   const navigate = useNavigate();
@@ -315,33 +317,47 @@ export default function VideoPlayerPage({
 
     return {
       id: guestAssetMeta.id || 'guest-asset',
+      workspaceId: '',
+      createdAt: '',
+      storageProvider: 'local',
       title: guestAssetMeta.title || 'Shared Media',
       type,
       url: tokenStreamUrl,
       videoSrc: tokenStreamUrl,
       thumbnail: tokenStreamUrl,
-      duration: '0:00',
-      size: formatFileSize(guestAssetMeta.fileSize || 0),
-      updatedAt: guestExpiresAt ? `Expires: ${new Date(guestExpiresAt).toLocaleDateString()}` : '',
+      duration: (guestAssetMeta as any).duration || '0:00',
+      resolution_tier: (guestAssetMeta as any).resolution_tier || (guestAssetMeta as any).resolutionTier,
+      resolutionTier: (guestAssetMeta as any).resolution_tier || (guestAssetMeta as any).resolutionTier,
+      fps: (guestAssetMeta as any).fps,
+      file_size: (guestAssetMeta as any).file_size || guestAssetMeta.fileSize,
+      size: formatFileSize((guestAssetMeta as any).file_size || guestAssetMeta.fileSize || 0),
+      sizeBytes: (guestAssetMeta as any).file_size || guestAssetMeta.fileSize || 0,
+      updatedAt: guestExpiresAt ? `Expires: ${formatDate(guestExpiresAt)}` : '',
       tags: [],
     };
-  }, [isGuestMode, guestAssetMeta, shareToken, guestExpiresAt]);
+  }, [isGuestMode, guestAssetMeta, shareToken, guestExpiresAt, formatDate]);
 
-  const contextItem = mediaItems.find((media) => media.id === mediaId);
+  const contextItem = mediaItems.find((media: any) => media.id === mediaId);
   const [fetchedItem, setFetchedItem] = useState<MediaItem | null>(null);
 
   const item = useMemo(() => {
     if (isGuestMode) {
       return guestItem || contextItem || fetchedItem || null;
     }
-    return contextItem && fetchedItem?.id === contextItem.id
+    return contextItem && fetchedItem && fetchedItem.id === contextItem.id
       ? {
+        ...fetchedItem,
         ...contextItem,
         videoSrc: contextItem.videoSrc || fetchedItem.videoSrc,
         thumbnail: contextItem.thumbnail || fetchedItem.thumbnail,
         compressionStatus: fetchedItem.compressionStatus || contextItem.compressionStatus,
         duration: contextItem.duration || fetchedItem.duration,
         customMetadata: fetchedItem.customMetadata || contextItem.customMetadata,
+        resolution_tier: (contextItem as any).resolution_tier || (fetchedItem as any).resolution_tier,
+        resolutionTier: (contextItem as any).resolutionTier || (fetchedItem as any).resolutionTier,
+        fps: (contextItem as any).fps || (fetchedItem as any).fps,
+        file_size: (contextItem as any).file_size || (fetchedItem as any).file_size,
+        sizeBytes: (contextItem as any).sizeBytes || (fetchedItem as any).sizeBytes,
       }
       : contextItem || fetchedItem;
   }, [isGuestMode, guestItem, contextItem, fetchedItem]);
@@ -363,6 +379,7 @@ export default function VideoPlayerPage({
   const [clientDecodedUrl, setClientDecodedUrl] = useState<string | null>(null);
   const [isDecodingImage, setIsDecodingImage] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const [syncTrigger, setSyncTrigger] = useState(0);
 
@@ -440,6 +457,7 @@ export default function VideoPlayerPage({
             sizeBytes: asset.size,
             storageProvider: 'b2',
             uploadedBy: (asset as any).uploadedBy?.name || user?.name || (user?.email ? user.email.split('@')[0] : 'Uploader'),
+            uploadedByUserId: (asset as any).uploadedBy?.id || undefined,
             tags: tagList,
             location: null,
             thumbnail: asset.thumbnail || undefined,
@@ -527,14 +545,38 @@ export default function VideoPlayerPage({
     DEFAULT_DRAW_STROKE_THICKNESS,
   );
   const [collaborators, setCollaborators] = useState<MediaCollaborator[]>([]);
+  const isAssetAdmin = useMemo(() => {
+    if (isGuestMode) return false;
+    const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
+    if (currentUserCollab?.role === 'Admin') return true;
+    if (item?.uploadedByUserId === user?.id || item?.uploadedBy?.id === user?.id) return true;
+    if (isSharedWithUser) return false;
+    return user?.role === 'Super Admin' || user?.role === 'Admin';
+  }, [isGuestMode, collaborators, isSharedWithUser, user, item?.uploadedByUserId, item?.uploadedBy?.id]);
+
   const isViewer = useMemo(() => {
+    if (isAssetAdmin) return false;
     if (isGuestMode) {
       return !guestPermissions?.comment;
     }
     const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
     const isAssetViewer = currentUserCollab?.role === 'Viewer';
     return isAssetViewer || !user?.permissions?.includes('timeline_annotations');
-  }, [isGuestMode, guestPermissions?.comment, collaborators, user?.permissions]);
+  }, [isGuestMode, guestPermissions?.comment, collaborators, user?.permissions, isAssetAdmin]);
+
+  const canDownloadOriginal = isAssetAdmin;
+  const canShare = isAssetAdmin;
+
+  const headerPermissions = useMemo(() => {
+    const rawRole = (user?.role || user?.roleRelation?.name || '').trim().toLowerCase();
+    const isViewerRole = isViewer || rawRole === 'viewer' || rawRole === 'guest';
+    return {
+      canShare: (canShare || isAssetAdmin) && (!isViewerRole || isAssetAdmin) && !isGuestMode,
+      canFavorite: (!isViewerRole || isAssetAdmin) && !isGuestMode,
+      canDownload: (canDownloadOriginal || isAssetAdmin) && (!isViewerRole || isAssetAdmin) && !isGuestMode,
+      canViewTechnicalDetails: !isViewerRole || isAssetAdmin,
+    };
+  }, [isViewer, user, isGuestMode, canDownloadOriginal, canShare, isAssetAdmin]);
   const [comments, setComments] = useState<VideoComment[]>([]);
   const [drawings, setDrawings] = useState<VideoDrawingStroke[]>([]);
   const [shapes, setShapes] = useState<VideoShape[]>([]);
@@ -546,6 +588,62 @@ export default function VideoPlayerPage({
   const prevShapesRef = useRef<VideoShape[]>([]);
   const prevDrawingsRef = useRef<VideoDrawingStroke[]>([]);
   const prevStampsRef = useRef<VideoStamp[]>([]);
+  const [moreMenuAnchor, setMoreMenuAnchor] = useState<HTMLElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isIdle, setIsIdle] = useState(false);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const inFullscreen = Boolean(document.fullscreenElement);
+      setIsFullscreen(inFullscreen);
+      if (!inFullscreen) {
+        setIsIdle(false);
+        if (idleTimerRef.current) {
+          clearTimeout(idleTimerRef.current);
+          idleTimerRef.current = null;
+        }
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      setIsIdle(false);
+      return;
+    }
+
+    const resetIdleTimer = () => {
+      setIsIdle(false);
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+      }
+      idleTimerRef.current = setTimeout(() => {
+        setIsIdle(true);
+      }, 2500);
+    };
+
+    resetIdleTimer();
+
+    const target = videoStageRef.current || document;
+    target.addEventListener('mousemove', resetIdleTimer);
+    target.addEventListener('mousedown', resetIdleTimer);
+    target.addEventListener('touchstart', resetIdleTimer);
+    window.addEventListener('keydown', resetIdleTimer);
+
+    return () => {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+      }
+      target.removeEventListener('mousemove', resetIdleTimer);
+      target.removeEventListener('mousedown', resetIdleTimer);
+      target.removeEventListener('touchstart', resetIdleTimer);
+      window.removeEventListener('keydown', resetIdleTimer);
+    };
+  }, [isFullscreen]);
 
   const useGranularSync = <T extends { id: string }>(
     type: string,
@@ -619,8 +717,9 @@ export default function VideoPlayerPage({
 
             // 2. Scan if owner/uploader needs comment notification
             const currentItem = fetchedItem || contextItem || guestAssetMeta;
-            if (currentItem?.uploadedByUserId && currentItem?.uploadedByUserId !== user?.id) {
-              const uploaderCollab = collaborators.find(collab => collab.id === currentItem.uploadedByUserId);
+            const uploaderId = currentItem?.uploadedByUserId || currentItem?.uploadedBy?.id;
+            if (uploaderId && uploaderId !== user?.id) {
+              const uploaderCollab = collaborators.find(collab => collab.id === uploaderId);
               if (uploaderCollab) {
                 addInAppNotification(
                   `Comment on ${videoTitle}`,
@@ -683,6 +782,7 @@ export default function VideoPlayerPage({
   const [activeShareLinkId, setActiveShareLinkId] = useState<string | null>(null);
   const [focusLinkNameCounter, setFocusLinkNameCounter] = useState(0);
   const [shareTeamMembers, setShareTeamMembers] = useState<WorkspaceTeamMember[]>([]);
+  const [availableGroups, setAvailableGroups] = useState<SettingsUserGroup[]>([]);
   const [drawerTab, setDrawerTab] = useState<'history' | 'details'>('history');
   const [detailsSection, setDetailsSection] = useState<MediaDetailsSection>('file');
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
@@ -900,22 +1000,34 @@ export default function VideoPlayerPage({
 
     const items: string[] = [];
 
-    const qualityLabel = getVideoQualityLabel(
-      videoTechnicalDetails.width,
-      videoTechnicalDetails.height,
-    );
+    const qualityLabel =
+      (item as any)?.resolution_tier ||
+      (item as any)?.resolutionTier ||
+      (item as any)?.metadata?.resolution_tier ||
+      getVideoQualityLabel(
+        videoTechnicalDetails.width,
+        videoTechnicalDetails.height,
+      );
     if (qualityLabel) {
       items.push(qualityLabel);
     }
 
-    items.push(videoTechnicalDetails.frameRate ?? item.frameRate ?? '—');
+    const serverFps = (item as any)?.fps || (item as any)?.metadata?.fps;
+    const formattedFps = serverFps
+      ? (typeof serverFps === 'number' ? `${serverFps} fps` : String(serverFps))
+      : (videoTechnicalDetails.frameRate ?? item.frameRate ?? '—');
+    items.push(formattedFps);
 
-    const duration = videoTechnicalDetails.duration || item.duration;
+    const serverDuration = (item as any)?.duration || (item as any)?.metadata?.duration;
+    const duration = serverDuration
+      ? (typeof serverDuration === 'number' ? formatVideoTimestamp(serverDuration) : String(serverDuration))
+      : (videoTechnicalDetails.duration || item.duration);
     if (duration) {
       items.push(duration);
     }
 
-    items.push(formatFileSize(item.sizeBytes));
+    const fileSize = (item as any)?.file_size ?? item.sizeBytes ?? item.size;
+    items.push(formatFileSize(fileSize));
 
     return items;
   }, [item, videoTechnicalDetails]);
@@ -1318,6 +1430,7 @@ export default function VideoPlayerPage({
         initials: ((ann.guestName || ann.guestEmail || activeUser.initials || 'G')[0] || 'G').toUpperCase()
       };
       const checkUnread = (ann: any, entryId: string) => {
+        if (typeof ann.unread === 'boolean') return ann.unread;
         if (!ann.userId || !user?.id) return false;
         return ann.userId !== user.id && !readIds.has(entryId);
       };
@@ -1351,6 +1464,7 @@ export default function VideoPlayerPage({
             linkedDrawingId: c.linkedDrawingId,
             linkedShapeId: c.linkedShapeId,
             pinned: c.pinned ?? false,
+            backendId: ann.id,
             erasedAt: c.erasedAt,
             erasedBy: c.erasedBy,
           });
@@ -1368,6 +1482,7 @@ export default function VideoPlayerPage({
             resolved: ann.resolved || false,
             unread: checkUnread(ann, entryId),
             pinned: s.pinned ?? false,
+            backendId: ann.id,
             erasedAt: s.erasedAt,
             erasedBy: s.erasedBy,
           });
@@ -1386,6 +1501,7 @@ export default function VideoPlayerPage({
             resolved: ann.resolved || false,
             unread: checkUnread(ann, entryId),
             pinned: d.pinned ?? false,
+            backendId: ann.id,
             erasedAt: d.erasedAt,
             erasedBy: d.erasedBy,
           });
@@ -1403,6 +1519,7 @@ export default function VideoPlayerPage({
             resolved: ann.resolved || false,
             unread: checkUnread(ann, entryId),
             pinned: st.pinned ?? false,
+            backendId: ann.id,
             erasedAt: st.erasedAt,
             erasedBy: st.erasedBy,
           });
@@ -1490,10 +1607,12 @@ export default function VideoPlayerPage({
     }
     const fetchOrgUsers = async () => {
       try {
-        const [users, overrides] = await Promise.all([
+        const [users, overridesData] = await Promise.all([
           fetchOrganizationUsers(),
-          getAssetAccessOverrides(mediaId).catch(() => [])
+          getAssetAccessOverrides(mediaId).catch(() => ({ overrides: [], groupOverrides: [] }))
         ]);
+
+        const { overrides = [], groupOverrides = [] } = overridesData as { overrides: any[], groupOverrides: any[] };
 
         if (users && users.length > 0) {
           const activeUsers = users.filter((u) => u.status?.toLowerCase() === 'active');
@@ -1509,14 +1628,32 @@ export default function VideoPlayerPage({
             // Check if there is an explicit role override for this asset
             const override = overrides.find((o) => o.userId === u.id);
             let finalRole = u.role || u.roleRelation?.name;
+            let hasAnyOverride = false;
 
             if (override && override.accessLevel) {
+              hasAnyOverride = true;
               if (override.accessLevel === 'Can edit') {
                 finalRole = 'Editor';
               } else if (override.accessLevel === 'Can view') {
                 finalRole = 'Viewer';
               } else if (override.accessLevel === 'Full Access') {
                 finalRole = 'Admin';
+              }
+            } else {
+              // Check if user is in any shared groups and find the most permissive access level
+              const userGroups = groupOverrides.filter((go) =>
+                go.group?.members?.some((m: any) => m.userId === u.id)
+              );
+
+              if (userGroups.length > 0) {
+                const accessLevels = userGroups.map(go => go.accessLevel);
+                if (accessLevels.includes('Full Access')) {
+                  finalRole = 'Admin';
+                } else if (accessLevels.includes('Can edit')) {
+                  finalRole = 'Editor';
+                } else if (accessLevels.includes('Can view')) {
+                  finalRole = 'Viewer';
+                }
               }
             }
 
@@ -1526,11 +1663,29 @@ export default function VideoPlayerPage({
               email: u.email,
               initials,
               isCurrentUser: u.email === user?.email,
-              hasOverride: !!override,
+              hasOverride: hasAnyOverride,
               role: finalRole,
             };
           });
-          setCollaborators(mapped);
+          // Also map group overrides
+          const groupCollaborators: MediaCollaborator[] = groupOverrides.map(go => {
+            const groupName = go.group?.name || 'Group';
+            let finalRole = 'Viewer';
+            if (go.accessLevel === 'Can edit') finalRole = 'Editor';
+            else if (go.accessLevel === 'Full Access') finalRole = 'Admin';
+
+            return {
+              id: go.group?.id || go.groupId,
+              name: groupName,
+              initials: groupName.substring(0, 2).toUpperCase(),
+              isCurrentUser: false,
+              hasOverride: true,
+              role: finalRole,
+              groupId: go.group?.id || go.groupId
+            };
+          });
+
+          setCollaborators([...mapped, ...groupCollaborators]);
         } else {
           setCollaborators(loadMediaCollaborators(mediaId));
         }
@@ -1561,6 +1716,28 @@ export default function VideoPlayerPage({
   }, [mediaId]);
 
   useEffect(() => {
+    const loadGroups = async () => {
+      try {
+        const groups = await fetchUserGroups();
+        setAvailableGroups(
+          groups.map((g) => ({
+            id: g.id,
+            name: g.name,
+            description: g.description || '',
+            memberIds: g.members?.map((m) => m.userId) || [],
+            createdAt: g.createdAt,
+            createdDate: g.createdAt,
+            createdBy: 'System',
+          })),
+        );
+      } catch (err) {
+        console.error('Failed to load user groups', err);
+      }
+    };
+    loadGroups();
+  }, []);
+
+  useEffect(() => {
     if (!item) return;
     const previousTitle = document.title;
     document.title = `${item.title} | NOAH`;
@@ -1568,6 +1745,23 @@ export default function VideoPlayerPage({
       document.title = previousTitle;
     };
   }, [item]);
+
+  const allCollaboratorsForMentions = useMemo(() => {
+    const combined = [...collaborators];
+    availableGroups.forEach(g => {
+      if (!combined.some(c => c.groupId === g.id)) {
+        combined.push({
+          id: g.id,
+          name: g.name,
+          initials: (g.name || 'Gr').substring(0, 2).toUpperCase(),
+          groupId: g.id,
+          isCurrentUser: false,
+          hasOverride: false
+        });
+      }
+    });
+    return combined;
+  }, [collaborators, availableGroups]);
 
   useEffect(() => {
     if (!item || item.type !== 'video') return;
@@ -2112,6 +2306,12 @@ export default function VideoPlayerPage({
 
     if (entryId && mediaId) {
       setHistory(prev => {
+        const target = prev.find(h => h.id === entryId);
+        const realId = target?.backendId || entryId.replace(/^(comment|shape|drawing|stamp)-/, '');
+        if (realId) {
+          markAnnotationReadRequest(realId, false).catch(() => { });
+        }
+
         const changed = prev.some(h => h.id === entryId && h.unread);
         if (!changed) return prev;
 
@@ -2476,12 +2676,50 @@ export default function VideoPlayerPage({
   );
 
   const handleMarkUnread = useCallback((entryId: string) => {
-    setHistory((current) =>
-      current.map((entry) =>
-        entry.id === entryId ? { ...entry, unread: true } : entry,
-      ),
-    );
-  }, []);
+    if (entryId) {
+      setHistory((current) => {
+        const target = current.find((h) => h.id === entryId);
+        const realId = target?.backendId || entryId.replace(/^(comment|shape|drawing|stamp)-/, '');
+        if (realId) {
+          markAnnotationReadRequest(realId, true).catch(() => { });
+        }
+        return current.map((entry) =>
+          entry.id === entryId ? { ...entry, unread: true } : entry,
+        );
+      });
+
+      if (mediaId) {
+        try {
+          const stored = localStorage.getItem(`read_annotations_${mediaId}`);
+          if (stored) {
+            const readIds = new Set<string>(JSON.parse(stored));
+            readIds.delete(entryId);
+            localStorage.setItem(`read_annotations_${mediaId}`, JSON.stringify(Array.from(readIds)));
+          }
+        } catch { }
+      }
+    }
+  }, [mediaId]);
+
+  const handleMarkRead = useCallback((entryId: string) => {
+    if (entryId && mediaId) {
+      setHistory((prev) => {
+        const target = prev.find((h) => h.id === entryId);
+        const realId = target?.backendId || entryId.replace(/^(comment|shape|drawing|stamp)-/, '');
+        if (realId) {
+          markAnnotationReadRequest(realId, false).catch(() => { });
+        }
+        return prev.map((h) => (h.id === entryId ? { ...h, unread: false } : h));
+      });
+
+      try {
+        const stored = localStorage.getItem(`read_annotations_${mediaId}`);
+        const readIds = stored ? new Set<string>(JSON.parse(stored)) : new Set<string>();
+        readIds.add(entryId);
+        localStorage.setItem(`read_annotations_${mediaId}`, JSON.stringify(Array.from(readIds)));
+      } catch { }
+    }
+  }, [mediaId]);
 
   const handleCreateAnnotationGroup = useCallback(async (name: string, memberIds: string[]) => {
     if (!mediaId) return;
@@ -2539,7 +2777,7 @@ export default function VideoPlayerPage({
     (name: string, email: string) => {
       const normalizedEmail = email.trim().toLowerCase();
       const existing = collaborators.find(
-        (person) => person.email.toLowerCase() === normalizedEmail,
+        (person) => person.email?.toLowerCase() === normalizedEmail,
       );
       if (existing) return existing;
 
@@ -2552,6 +2790,37 @@ export default function VideoPlayerPage({
 
   const handleShareInviteMember = useCallback(
     (payload: WorkspaceInvitePayload) => {
+      if (payload.memberType === 'Group' && payload.groupId) {
+        const groupId = payload.groupId;
+        const existingGroup = shareTeamMembers.find(m => m.groupId === groupId);
+
+        if (existingGroup) {
+          if (existingGroup.hasOverride) return false;
+          setShareTeamMembers(current => current.map(m => m.groupId === groupId ? { ...m, hasOverride: true, access: payload.access } : m));
+          setCollaborators(current => current.map(c => c.groupId === groupId ? { ...c, hasOverride: true, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' } : c));
+        } else {
+          const newGroupMember = {
+            id: groupId,
+            name: payload.groupName || 'Group',
+            initials: (payload.groupName || 'Gr').substring(0, 2).toUpperCase(),
+            access: payload.access,
+            memberType: 'Group' as WorkspaceMemberType,
+            groupId: groupId,
+            isCurrentUser: false,
+            hasOverride: true
+          };
+          setShareTeamMembers(current => [...current, newGroupMember]);
+          setCollaborators(current => [...current, { ...newGroupMember, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' }]);
+        }
+
+        if (mediaId) {
+          updateAssetGroupAccessOverride(mediaId, groupId, payload.access).catch(console.error);
+        }
+
+        setStatusToast({ open: true, message: `${payload.groupName || 'Group'} added`, variant: 'resolved' });
+        return true;
+      }
+
       const email = payload.email?.toLowerCase();
       if (!email) return false;
 
@@ -2614,14 +2883,22 @@ export default function VideoPlayerPage({
 
   const handleShareUpdateMemberAccess = useCallback(
     async (memberId: string, access: WorkspaceMemberAccess) => {
+      const member = shareTeamMembers.find(m => m.id === memberId);
       setShareTeamMembers((current) =>
-        current.map((member) => (member.id === memberId ? { ...member, access } : member)),
+        current.map((m) => (m.id === memberId ? { ...m, access } : m)),
+      );
+      setCollaborators((current) =>
+        current.map((c) => (c.id === memberId ? { ...c, role: access === 'Can edit' ? 'Editor' : 'Viewer' } : c))
       );
 
       if (!mediaId) return;
 
       try {
-        await updateAssetAccessOverride(mediaId, memberId, access);
+        if (member?.memberType === 'Group' && member.groupId) {
+          await updateAssetGroupAccessOverride(mediaId, member.groupId, access);
+        } else {
+          await updateAssetAccessOverride(mediaId, memberId, access);
+        }
         setStatusToast({
           open: true,
           message: `Access updated for member`,
@@ -2636,28 +2913,39 @@ export default function VideoPlayerPage({
         });
       }
     },
-    [mediaId],
+    [mediaId, shareTeamMembers],
   );
 
   const handleShareRemoveMember = useCallback(
     async (memberId: string) => {
+      let removedMember: WorkspaceTeamMember | undefined;
       setShareTeamMembers((current) => {
-        const removed = current.find((member) => member.id === memberId);
-        if (removed?.email) {
+        removedMember = current.find((member) => member.id === memberId);
+        if (removedMember?.email) {
           setCollaborators((collaborators) =>
             collaborators.filter(
               (collaborator) =>
-                collaborator.email.toLowerCase() !== removed.email?.toLowerCase(),
+                collaborator.email?.toLowerCase() !== removedMember?.email?.toLowerCase(),
             ),
+          );
+        } else if (removedMember?.groupId) {
+          setCollaborators((collaborators) =>
+            collaborators.filter(
+              (collaborator) => collaborator.groupId !== removedMember?.groupId
+            )
           );
         }
         return current.filter((member) => member.id !== memberId);
       });
 
-      if (!mediaId) return;
+      if (!mediaId || !removedMember) return;
 
       try {
-        await removeAssetAccessOverride(mediaId, memberId);
+        if (removedMember.memberType === 'Group' && removedMember.groupId) {
+          await removeAssetGroupAccessOverride(mediaId, removedMember.groupId);
+        } else {
+          await removeAssetAccessOverride(mediaId, memberId);
+        }
         setStatusToast({
           open: true,
           message: 'Member removed from project',
@@ -2672,7 +2960,7 @@ export default function VideoPlayerPage({
         });
       }
     },
-    [mediaId],
+    [mediaId, shareTeamMembers],
   );
 
   const handleShareVisibilityChange = useCallback(
@@ -2737,6 +3025,37 @@ export default function VideoPlayerPage({
     const url = new URL(window.location.href);
     url.searchParams.set('t', String(Math.floor(entry.videoTimestamp)));
     void navigator.clipboard.writeText(url.toString());
+  }, []);
+
+  const handleCopyAssetLink = useCallback(() => {
+    const url = window.location.href;
+    const notifySuccess = () => {
+      setStatusToast({
+        open: true,
+        message: 'Asset link copied to clipboard',
+        variant: 'resolved',
+      });
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(notifySuccess).catch(() => {
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        notifySuccess();
+      });
+    } else {
+      const textArea = document.createElement('textarea');
+      textArea.value = url;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      notifySuccess();
+    }
   }, []);
 
   const handleMarkCommentUnread = useCallback((commentId: string) => {
@@ -3133,7 +3452,7 @@ export default function VideoPlayerPage({
                 color: cv.textPrimary,
               }}
             />
-            {!isGuestMode ? (
+            {headerPermissions.canFavorite ? (
               <Tooltip
                 title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                 placement="bottom"
@@ -3197,8 +3516,8 @@ export default function VideoPlayerPage({
           >
             {item ? (
               <Box
-                component={mediaTypeHeaderIcons[item.type]}
-                aria-label={mediaTypeLabels[item.type]}
+                component={mediaTypeHeaderIcons[item.type as keyof typeof mediaTypeHeaderIcons] || mediaTypeHeaderIcons.video}
+                aria-label={mediaTypeLabels[item.type as keyof typeof mediaTypeLabels] || 'Media'}
                 sx={{
                   fontSize: 18,
                   color: cv.textSecondary,
@@ -3236,38 +3555,42 @@ export default function VideoPlayerPage({
                 </Typography>
               </Box>
             ))}
-            <Box
-              component="span"
-              aria-hidden
-              sx={{
-                width: 4,
-                height: 4,
-                borderRadius: '50%',
-                backgroundColor: cv.textMuted,
-                flexShrink: 0,
-              }}
-            />
-            <Tooltip title="View technical details" placement="bottom">
-              <IconButton
-                type="button"
-                size="small"
-                aria-label="View technical details"
-                onClick={handleOpenTechnicalDetails}
-                sx={{
-                  width: 24,
-                  height: 24,
-                  flexShrink: 0,
-                  p: 0,
-                  color: cv.textMuted,
-                  '&:hover': {
-                    color: cv.textPrimary,
-                    backgroundColor: cv.surfaceHover,
-                  },
-                }}
-              >
-                <InfoOutlinedIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip>
+            {headerPermissions.canViewTechnicalDetails && (
+              <>
+                <Box
+                  component="span"
+                  aria-hidden
+                  sx={{
+                    width: 4,
+                    height: 4,
+                    borderRadius: '50%',
+                    backgroundColor: cv.textMuted,
+                    flexShrink: 0,
+                  }}
+                />
+                <Tooltip title="View technical details" placement="bottom">
+                  <IconButton
+                    type="button"
+                    size="small"
+                    aria-label="View technical details"
+                    onClick={handleOpenTechnicalDetails}
+                    sx={{
+                      width: 24,
+                      height: 24,
+                      flexShrink: 0,
+                      p: 0,
+                      color: cv.textMuted,
+                      '&:hover': {
+                        color: cv.textPrimary,
+                        backgroundColor: cv.surfaceHover,
+                      },
+                    }}
+                  >
+                    <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              </>
+            )}
           </Box>
 
           {isGuestMode ? (
@@ -3296,7 +3619,7 @@ export default function VideoPlayerPage({
             </Box>
           ) : (
             <>
-              {item?.id && (
+              {item?.id && headerPermissions.canDownload && (
                 <Tooltip
                   title={
                     canDownloadOriginal
@@ -3320,12 +3643,12 @@ export default function VideoPlayerPage({
                         height: 36,
                         borderRadius: '10px',
                         color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
-                        border: `1px solid ${cv.borderSubtle}`,
-                        backgroundColor: cv.surfaceBackground,
+                        border: `1px solid ${cv.border}`,
+                        backgroundColor: cv.surface,
                         '&:hover': canDownloadOriginal
                           ? {
                             backgroundColor: cv.surfaceHover,
-                            borderColor: cv.borderFocus,
+                            borderColor: cv.borderStrong,
                           }
                           : {},
                         '&.Mui-disabled': {
@@ -3356,18 +3679,18 @@ export default function VideoPlayerPage({
                         fontSize: '0.8125rem',
                         letterSpacing: '0.01em',
                         color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
-                        borderColor: cv.borderSubtle,
-                        backgroundColor: cv.surfaceBackground,
+                        borderColor: cv.border,
+                        backgroundColor: cv.surface,
                         '&:hover': canDownloadOriginal
                           ? {
                             backgroundColor: cv.surfaceHover,
-                            borderColor: cv.borderFocus,
+                            borderColor: cv.borderStrong,
                           }
                           : {},
                         '&.Mui-disabled': {
                           opacity: 0.5,
                           color: cv.textMuted,
-                          borderColor: cv.borderSubtle,
+                          borderColor: cv.border,
                         },
                       }}
                     >
@@ -3377,77 +3700,195 @@ export default function VideoPlayerPage({
                 </Tooltip>
               )}
 
-              <PeopleCollaboratorsPopover
-                collaborators={collaborators}
-                onCollaboratorsChange={setCollaborators}
-                onInvited={(name) =>
-                  setStatusToast({
-                    open: true,
-                    message: `Invite sent to ${name}`,
-                    variant: 'resolved',
-                  })
-                }
-              />
-
-              {!isSharedWithUser && (
-                <Tooltip title="Share video" arrow placement="bottom">
-                  <Box sx={{ display: 'inline-flex' }}>
-                    <IconButton
-                      type="button"
-                      size="small"
-                      aria-haspopup="dialog"
-                      aria-expanded={shareDialogOpen}
-                      aria-label="Share video"
-                      onClick={handleOpenShareDialog}
-                      sx={{
-                        display: { xs: 'inline-flex', lg: 'none' },
-                        width: 36,
-                        height: 36,
-                        borderRadius: '10px',
-                        color: cv.textPrimary,
-                        background: cv.brandGradient,
-                        boxShadow: cv.brandShadowSoft,
-                        '&:hover': {
-                          background: cv.brandGradient,
-                          filter: 'brightness(1.08)',
-                        },
-                      }}
-                    >
-                      <ShareOutlinedIcon sx={{ fontSize: 18 }} />
-                    </IconButton>
-                    <Button
-                      type="button"
-                      size="small"
-                      variant="contained"
-                      aria-haspopup="dialog"
-                      aria-expanded={shareDialogOpen}
-                      startIcon={<ShareOutlinedIcon sx={{ fontSize: 16 }} />}
-                      onClick={handleOpenShareDialog}
-                      sx={{
-                        display: { xs: 'none', lg: 'inline-flex' },
-                        minHeight: 36,
-                        height: 36,
-                        py: 0,
-                        px: 1.5,
-                        borderRadius: '10px',
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        fontSize: '0.8125rem',
-                        letterSpacing: '0.01em',
-                        color: cv.textPrimary,
-                        background: cv.brandGradient,
-                        boxShadow: cv.brandShadowSoft,
-                        '&:hover': {
-                          background: cv.brandGradient,
-                          filter: 'brightness(1.08)',
-                        },
-                      }}
-                    >
-                      Share
-                    </Button>
-                  </Box>
-                </Tooltip>
+              {canShare && (
+                <PeopleCollaboratorsPopover
+                  collaborators={collaborators}
+                  onCollaboratorsChange={setCollaborators}
+                  onInvited={(name) =>
+                    setStatusToast({
+                      open: true,
+                      message: `Invite sent to ${name}`,
+                      variant: 'resolved',
+                    })
+                  }
+                />
               )}
+
+              {headerPermissions.canShare && (() => {
+                const assetMediaType = item?.type || 'video';
+                const shareControlLabel = assetMediaType === 'image' ? 'Share image' : assetMediaType === 'audio' ? 'Share audio' : 'Share video';
+                return (
+                  <Tooltip title={shareControlLabel} arrow placement="bottom">
+                    <Box sx={{ display: 'inline-flex' }}>
+                      <IconButton
+                        type="button"
+                        size="small"
+                        aria-haspopup="dialog"
+                        aria-expanded={shareDialogOpen}
+                        aria-label={shareControlLabel}
+                        onClick={handleOpenShareDialog}
+                        sx={{
+                          display: { xs: 'inline-flex', lg: 'none' },
+                          width: 36,
+                          height: 36,
+                          borderRadius: '10px',
+                          color: cv.textPrimary,
+                          background: cv.brandGradient,
+                          boxShadow: cv.brandShadowSoft,
+                          '&:hover': {
+                            background: cv.brandGradient,
+                            filter: 'brightness(1.08)',
+                          },
+                        }}
+                      >
+                        <ShareOutlinedIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
+                      <Button
+                        type="button"
+                        size="small"
+                        variant="contained"
+                        aria-haspopup="dialog"
+                        aria-expanded={shareDialogOpen}
+                        startIcon={<ShareOutlinedIcon sx={{ fontSize: 16 }} />}
+                        onClick={handleOpenShareDialog}
+                        sx={{
+                          display: { xs: 'none', lg: 'inline-flex' },
+                          minHeight: 36,
+                          height: 36,
+                          py: 0,
+                          px: 1.5,
+                          borderRadius: '10px',
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          fontSize: '0.8125rem',
+                          letterSpacing: '0.01em',
+                          color: cv.textPrimary,
+                          background: cv.brandGradient,
+                          boxShadow: cv.brandShadowSoft,
+                          '&:hover': {
+                            background: cv.brandGradient,
+                            filter: 'brightness(1.08)',
+                          },
+                        }}
+                      >
+                        Share
+                      </Button>
+                    </Box>
+                  </Tooltip>
+                );
+              })()}
+
+              <Tooltip title="More options" arrow placement="bottom">
+                <IconButton
+                  type="button"
+                  size="small"
+                  aria-label="More actions"
+                  aria-controls={Boolean(moreMenuAnchor) ? 'header-more-menu' : undefined}
+                  aria-haspopup="true"
+                  aria-expanded={Boolean(moreMenuAnchor)}
+                  onClick={(e) => setMoreMenuAnchor(e.currentTarget)}
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '10px',
+                    color: cv.textPrimary,
+                    border: `1px solid ${cv.border}`,
+                    backgroundColor: cv.surface,
+                    '&:hover': {
+                      backgroundColor: cv.surfaceHover,
+                      borderColor: cv.borderStrong,
+                    },
+                  }}
+                >
+                  <MoreVertIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+
+              <Menu
+                id="header-more-menu"
+                anchorEl={moreMenuAnchor}
+                open={Boolean(moreMenuAnchor)}
+                onClose={() => setMoreMenuAnchor(null)}
+                slotProps={{
+                  paper: {
+                    sx: {
+                      borderRadius: '12px',
+                      backgroundColor: cv.surface,
+                      border: `1px solid ${cv.border}`,
+                      boxShadow: cv.dropdownShadow,
+                      color: cv.textPrimary,
+                      minWidth: 190,
+                      py: 0.5,
+                    },
+                  },
+                }}
+                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+              >
+                {item?.id && headerPermissions.canDownload && (
+                  <MenuItem
+                    disabled={!canDownloadOriginal}
+                    onClick={() => {
+                      setMoreMenuAnchor(null);
+                      if (canDownloadOriginal && item?.id) {
+                        const a = document.createElement('a');
+                        a.href = `/api/media/${encodeURIComponent(item.id)}/download?raw=true`;
+                        a.download = '';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                      }
+                    }}
+                    sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                      <FileDownloadOutlinedIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText primary="Download Original" />
+                  </MenuItem>
+                )}
+
+                <MenuItem
+                  onClick={() => {
+                    setMoreMenuAnchor(null);
+                    handleCopyAssetLink();
+                  }}
+                  sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
+                >
+                  <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                    <ContentCopyOutlinedIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText primary="Copy Asset Link" />
+                </MenuItem>
+
+                {headerPermissions.canViewTechnicalDetails && (
+                  <MenuItem
+                    onClick={() => {
+                      setMoreMenuAnchor(null);
+                      handleOpenTechnicalDetails();
+                    }}
+                    sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                      <InfoOutlinedIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText primary="Technical Details" />
+                  </MenuItem>
+                )}
+
+                <MenuItem
+                  onClick={() => {
+                    setMoreMenuAnchor(null);
+                    setKeyboardShortcutsOpen(true);
+                  }}
+                  sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
+                >
+                  <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                    <KeyboardOutlinedIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText primary="Keyboard Shortcuts" />
+                </MenuItem>
+              </Menu>
             </>
           )}
 
@@ -3488,9 +3929,8 @@ export default function VideoPlayerPage({
           resourceId={mediaId || item.id}
           workspaceName={item.title}
           members={shareTeamMembers.filter(m => m.hasOverride || m.isCurrentUser)}
-          suggestedUsers={shareTeamMembers}
-          organizationUsers={shareTeamMembers}
-          suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
+          suggestedUsers={MOCK_SETTINGS_USERS}
+          suggestedGroups={availableGroups}
           resourceType="project"
           visibility={shareInviteVisibility}
           shareLinks={shareLinks}
@@ -3646,8 +4086,11 @@ export default function VideoPlayerPage({
                     poster={item?.thumbnail}
                     playsInline
                     preload="metadata"
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onEnded={() => setIsPlaying(false)}
                     onWaiting={() => setIsBuffering(true)}
-                    onPlaying={() => setIsBuffering(false)}
+                    onPlaying={() => { setIsBuffering(false); setIsPlaying(true); }}
                     onCanPlay={() => setIsBuffering(false)}
                     onLoadedData={() => setIsBuffering(false)}
                     sx={{
@@ -3673,52 +4116,11 @@ export default function VideoPlayerPage({
                 )}
 
                 {item?.type === 'audio' && (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'radial-gradient(circle, rgba(30,30,42,1) 0%, rgba(12,12,18,1) 100%)',
-                      zIndex: 1,
-                    }}
-                  >
-                    {/* Pulsing Audio Waves/Icon */}
-                    <Box
-                      sx={{
-                        width: 120,
-                        height: 120,
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                        mb: 3,
-                        animation: 'pulse-audio 2.5s infinite ease-in-out',
-                        '@keyframes pulse-audio': {
-                          '0%': { transform: 'scale(1)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' },
-                          '50%': { transform: 'scale(1.06)', boxShadow: '0 8px 32px rgba(25,118,210,0.25)' },
-                          '100%': { transform: 'scale(1)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' },
-                        }
-                      }}
-                    >
-                      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#1976d2' }}>
-                        <path d="M12 2v20M17 5v14M22 9v6M7 8v8M2 10v4" />
-                      </svg>
-                    </Box>
-
-                    {/* Audio Details */}
-                    <Typography variant="h6" sx={{ color: '#ffffff', fontWeight: 600, mb: 1 }}>
-                      {item?.title}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)' }}>
-                      Audio Asset • {item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : 'Unknown Size'}
-                    </Typography>
-                  </Box>
+                  <AudioWaveformVisualizer
+                    isPlaying={isPlaying}
+                    audioTitle={item?.title}
+                    fileSizeText={item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : undefined}
+                  />
                 )}
 
                 {item?.type === 'document' && (
@@ -3975,7 +4377,7 @@ export default function VideoPlayerPage({
                   openCommentId={openCommentId}
                   onOpenCommentIdChange={setOpenCommentId}
                   annotationGroups={annotationGroups}
-                  collaborators={collaborators}
+                  collaborators={allCollaboratorsForMentions}
                   onCommentVisibilityChange={handleCommentVisibilityChange}
                   onCreateAnnotationGroup={handleCreateAnnotationGroup}
                   onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
@@ -4002,6 +4404,7 @@ export default function VideoPlayerPage({
                   item?.frameRate ||
                   undefined
                 }
+                mediaTitle={item?.title || item?.name}
               />
             )}
 
@@ -4022,6 +4425,9 @@ export default function VideoPlayerPage({
                 minHeight: { xs: 72, md: 72 },
                 overflow: 'visible',
                 zIndex: 12,
+                opacity: isFullscreen && isIdle ? 0 : 1,
+                pointerEvents: isFullscreen && isIdle ? 'none' : 'auto',
+                transition: 'opacity 0.3s ease-in-out',
               }}
             >
               {isDesktopAnnotationToolbar ? (
@@ -4035,7 +4441,7 @@ export default function VideoPlayerPage({
                     position: 'relative',
                   }}
                 >
-                  {showClearIsland ? (
+                  {showClearIsland && !isViewer ? (
                     <Box
                       sx={{
                         position: 'absolute',
@@ -4053,53 +4459,55 @@ export default function VideoPlayerPage({
                     </Box>
                   ) : null}
 
-                  <Box
-                    sx={{
-                      width: '100%',
-                      minWidth: 0,
-                      boxSizing: 'border-box',
-                      display: 'flex',
-                      justifyContent: 'center',
-                      pl: showClearIsland ? '88px' : 2,
-                      pr: '148px',
-                    }}
-                  >
-                    <AnnotationToolbar
-                      disabled={isViewer}
-                      mediaType={item?.type}
-                      activeTool={activeTool}
-                      onToolChange={handleToolChange}
-                      activeDrawTool={activeDrawTool}
-                      onDrawToolChange={setActiveDrawTool}
-                      activeDrawStroke={activeDrawStroke}
-                      onDrawStrokeChange={setActiveDrawStroke}
-                      activeDrawColor={activeDrawColor}
-                      onDrawColorChange={setActiveDrawColor}
-                      activeShape={activeShape}
-                      onShapeChange={setActiveShape}
-                      activeColor={activeShapeColor}
-                      onColorChange={setActiveShapeColor}
-                      activeShapeStroke={activeShapeStroke}
-                      onShapeStrokeChange={setActiveShapeStroke}
-                      activeStamp={activeStamp}
-                      customStamp={customStamp}
-                      onStampSelect={setActiveStamp}
-                      onAddCustomStamp={handleAddCustomStamp}
-                      keyboardShortcutsDisabled={Boolean(draftComment) || commentThreadOpen}
-                      toolsDrawerOpen={toolsDrawerOpen}
-                      onMoreToolsClick={() => setToolsDrawerOpen((open) => !open)}
-                      onToolsDrawerClose={() => setToolsDrawerOpen(false)}
-                      moreToolsButtonRef={moreToolsButtonRef}
-                      moreToolsAnchorRef={moreToolsAnchorRef}
-                      pinnedPlayerTools={pinnedPlayerTools}
-                      playerToolsViewState={playerToolsViewState}
-                      playerToolHandlers={playerToolHandlers}
-                      canUndo={canUndo}
-                      canRedo={canRedo}
-                      onUndo={handleUndo}
-                      onRedo={handleRedo}
-                    />
-                  </Box>
+                  {!isViewer && (
+                    <Box
+                      sx={{
+                        width: '100%',
+                        minWidth: 0,
+                        boxSizing: 'border-box',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        pl: showClearIsland ? '88px' : 2,
+                        pr: '148px',
+                      }}
+                    >
+                      <AnnotationToolbar
+                        disabled={isViewer}
+                        mediaType={item?.type}
+                        activeTool={activeTool}
+                        onToolChange={handleToolChange}
+                        activeDrawTool={activeDrawTool}
+                        onDrawToolChange={setActiveDrawTool}
+                        activeDrawStroke={activeDrawStroke}
+                        onDrawStrokeChange={setActiveDrawStroke}
+                        activeDrawColor={activeDrawColor}
+                        onDrawColorChange={setActiveDrawColor}
+                        activeShape={activeShape}
+                        onShapeChange={setActiveShape}
+                        activeColor={activeShapeColor}
+                        onColorChange={setActiveShapeColor}
+                        activeShapeStroke={activeShapeStroke}
+                        onShapeStrokeChange={setActiveShapeStroke}
+                        activeStamp={activeStamp}
+                        customStamp={customStamp}
+                        onStampSelect={setActiveStamp}
+                        onAddCustomStamp={handleAddCustomStamp}
+                        keyboardShortcutsDisabled={Boolean(draftComment) || commentThreadOpen}
+                        toolsDrawerOpen={toolsDrawerOpen}
+                        onMoreToolsClick={() => setToolsDrawerOpen((open) => !open)}
+                        onToolsDrawerClose={() => setToolsDrawerOpen(false)}
+                        moreToolsButtonRef={moreToolsButtonRef}
+                        moreToolsAnchorRef={moreToolsAnchorRef}
+                        pinnedPlayerTools={pinnedPlayerTools}
+                        playerToolsViewState={playerToolsViewState}
+                        playerToolHandlers={playerToolHandlers}
+                        canUndo={canUndo}
+                        canRedo={canRedo}
+                        onUndo={handleUndo}
+                        onRedo={handleRedo}
+                      />
+                    </Box>
+                  )}
 
                   <Box
                     sx={{
@@ -4175,7 +4583,7 @@ export default function VideoPlayerPage({
                       onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
                       hideZoomControls={item?.type === 'audio'}
                       insertBeforeHelp={
-                        showClearIsland ? (
+                        showClearIsland && !isViewer ? (
                           <AnnotationUndoIsland
                             compact
                             disabled={isViewer}
@@ -4215,18 +4623,30 @@ export default function VideoPlayerPage({
           onToggleResolved={handleToggleResolved}
           onTogglePinned={handleTogglePinned}
           onMarkUnread={handleMarkUnread}
+          onMarkRead={handleMarkRead}
           onCopyLink={handleCopyLink}
           onDeleteEntry={handleDeleteEntry}
           onHardDeleteEntry={handleHardDeleteEntry}
           onRestoreEntry={handleRestoreEntry}
           onEditComment={handleEditComment}
           annotationGroups={annotationGroups}
-          collaborators={collaborators}
+          collaborators={allCollaboratorsForMentions}
           onVisibilityChange={handleEntryVisibilityChange}
           onCreateAnnotationGroup={handleCreateAnnotationGroup}
           onDeleteAnnotationGroup={handleDeleteAnnotationGroup}
           onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
           onAddCollaborator={handleAddCollaboratorForGroup}
+          canDownload={headerPermissions.canDownload && canDownloadOriginal}
+          onDownloadOriginal={() => {
+            if (item?.id && canDownloadOriginal) {
+              const a = document.createElement('a');
+              a.href = `/api/media/${encodeURIComponent(item.id)}/download?raw=true`;
+              a.download = '';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }
+          }}
         />
       </Box>
 

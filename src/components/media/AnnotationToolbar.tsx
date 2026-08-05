@@ -8,6 +8,7 @@ import InterestsOutlinedIcon from '@mui/icons-material/InterestsOutlined';
 import ChatBubbleOutlineOutlinedIcon from '@mui/icons-material/ChatBubbleOutlineOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
+import TuneIcon from '@mui/icons-material/Tune';
 import RedoOutlinedIcon from '@mui/icons-material/RedoOutlined';
 import UndoOutlinedIcon from '@mui/icons-material/UndoOutlined';
 import ShapeSubToolbar, { type ShapeStrokeThickness, type ShapeTool } from './ShapeSubToolbar';
@@ -219,6 +220,8 @@ export default function AnnotationToolbar({
   disabled = false,
   mediaType = 'video',
 }: AnnotationToolbarProps) {
+  if (disabled) return null;
+
   const [internalTool, setInternalTool] = useState<AnnotationTool>('select');
   const [internalShape, setInternalShape] = useState<ShapeTool>('circle');
   const [internalColor, setInternalColor] = useState<AnnotationColor>(DEFAULT_ANNOTATION_COLOR);
@@ -536,7 +539,7 @@ export default function AnnotationToolbar({
                   ariaExpanded={toolsDrawerOpen}
                   buttonRef={moreToolsButtonRef}
                 >
-                  <AddOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
+                  <TuneIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
                 </LabeledToolbarButton>
               </Box>
             ) : (
@@ -565,7 +568,7 @@ export default function AnnotationToolbar({
                         },
                       }}
                     >
-                      <AddOutlinedIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
+                      <TuneIcon sx={{ fontSize: TOOL_ICON_SIZE }} />
                     </IconButton>
                   </span>
                 </ShortcutTooltip>

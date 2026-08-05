@@ -9,7 +9,7 @@ import DashboardLayout from './layouts/DashboardLayout';
 import MediaViewerLayout from './layouts/MediaViewerLayout';
 import SettingsLayout from './layouts/SettingsLayout';
 import {
-  DashboardPage,
+  DashboardPage, 
   FolderPage,
   ProjectPage,
   LoginPage,
@@ -17,7 +17,7 @@ import {
   SignUpPage,
   SettingsSectionPage,
   TagsManagementPage,
-  UserActivitiesPage,
+  UserActivitiesPage,   
   TrashPage,
   VideoPlayerPage,
   MfaAuthPage,

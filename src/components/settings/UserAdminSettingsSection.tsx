@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { cv } from '../../theme/cssVars';
+import toast from 'react-hot-toast';
+import { useLocalizedDate } from '../../hooks/useLocalizedDate';
 import {
   Box,
   Button,
@@ -19,9 +21,15 @@ import {
   Tabs,
   TextField,
   Typography,
+  Avatar,
+  Popover,
+  List,
+  ListItem,
+  ListItemAvatar,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { TeamMemberAvatarStack } from '../common/TeamMemberAvatarStack';
 import SettingsAdminToolbar from './SettingsAdminToolbar';
 import SettingsDataTable, {
@@ -34,16 +42,15 @@ import { SettingsSectionCard } from './SettingsSectionCard';
 import { SettingsTableContainer } from './SettingsContentLayout';
 import TruncatedText from '../TruncatedText';
 import { ROLE_IDS, USER_ROLES, type UserRole } from '../../constants/userRoles';
-import { fetchRoles, registerRole, fetchOrganizationUsers,} from '../../api/auth.service';
+import { fetchRoles, registerRole, fetchOrganizationUsers, updateOrganizationUser, bulkUpdateOrganizationUsersRequest } from '../../api/auth.service';
 import { useAuth } from '../../auth/AuthContext';
 import type { RoleItem } from '../../api/types';
 import {
   createInvitedUser,
-  createUserGroup,
-  MOCK_SETTINGS_USER_GROUPS,
-  type SettingsUserGroup,
   type SettingsUserRow,
 } from '../../data/mockSettingsData';
+import { fetchUserGroups, createUserGroup as apiCreateUserGroup, updateUserGroup as apiUpdateUserGroup, deleteUserGroup as apiDeleteUserGroup, type UserGroup } from '../../api/userGroups.service';
+import { downloadCSV } from '../../utils/csvExport';
 import { noahDialogSlotProps } from '../../constants/dialogStyles';
 import { selectInDialogMenuProps } from '../../constants/dropdownMenu';
 import {
@@ -111,8 +118,8 @@ function AddUserDialog({
   open: boolean;
   onClose: () => void;
   onInvite: (email: string, role: UserRole) => void;
-  onSave?: (email: string, role: UserRole) => void;
-  initialUser?: { email: string; role: UserRole };
+  onSave?: (userId: string, email: string, role: UserRole, roleId: string) => void;
+  initialUser?: { id: string; email: string; role: UserRole };
 }) {
   const isEdit = Boolean(initialUser);
   const [email, setEmail] = useState('');
@@ -121,19 +128,19 @@ function AddUserDialog({
   const [roleId, setRoleId] = useState<string>('');
   const [emailError, setEmailError] = useState('');
   const { user } = useAuth();
-  
+
   const filteredRolesList = useMemo(() => {
     if (user?.roleId === ROLE_IDS.ADMIN) {
       return rolesList.filter((r) => r.name !== 'Super Admin' && r.name !== 'Admin' && r.name !== 'System Admin');
     }
-    return rolesList;
+    return rolesList.filter((r) => r.name !== 'Super Admin');
   }, [rolesList, user]);
 
   const filteredUserRoles = useMemo(() => {
     if (user?.roleId === ROLE_IDS.ADMIN) {
       return USER_ROLES.filter((r) => r !== 'Super Admin' && r !== 'Admin');
     }
-    return USER_ROLES;
+    return USER_ROLES.filter((r) => r !== 'Super Admin');
   }, [user]);
 
   useEffect(() => {
@@ -200,7 +207,7 @@ function AddUserDialog({
     }
     const finalRoleId = roleId || role;
     const selectedRoleName = rolesList.find((r) => r.id === finalRoleId)?.name || role;
-    onSave?.(trimmed, selectedRoleName as UserRole);
+    onSave?.(initialUser?.id || '', trimmed, selectedRoleName as UserRole, finalRoleId);
     onClose();
   };
 
@@ -252,7 +259,7 @@ function AddUserDialog({
           }}
           error={Boolean(emailError)}
           helperText={emailError}
-          disabled={isEdit}
+          disabled={false}
           slotProps={{ inputLabel: { shrink: true } }}
         />
         <FormControl fullWidth size="small">
@@ -278,23 +285,23 @@ function AddUserDialog({
           >
             {filteredRolesList.length > 0
               ? filteredRolesList.map((roleOption) => (
-                  <MenuItem
-                    key={roleOption.id}
-                    value={roleOption.id}
-                    sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
-                  >
-                    {roleOption.name}
-                  </MenuItem>
-                ))
+                <MenuItem
+                  key={roleOption.id}
+                  value={roleOption.id}
+                  sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
+                >
+                  {roleOption.name}
+                </MenuItem>
+              ))
               : filteredUserRoles.map((roleOption) => (
-                  <MenuItem
-                    key={roleOption}
-                    value={roleOption}
-                    sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
-                  >
-                    {roleOption}
-                  </MenuItem>
-                ))}
+                <MenuItem
+                  key={roleOption}
+                  value={roleOption}
+                  sx={{ fontSize: '0.875rem', color: cv.textPrimary }}
+                >
+                  {roleOption}
+                </MenuItem>
+              ))}
           </Select>
         </FormControl>
         <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary }}>
@@ -330,7 +337,7 @@ function UserGroupDialog({
   onClose: () => void;
   onSave: (name: string, description: string, memberIds: string[]) => void;
   users: SettingsUserRow[];
-  initialGroup?: SettingsUserGroup;
+  initialGroup?: UserGroup;
 }) {
   const isEdit = Boolean(initialGroup);
   const [name, setName] = useState('');
@@ -348,8 +355,8 @@ function UserGroupDialog({
     }
     if (initialGroup) {
       setName(initialGroup.name);
-      setDescription(initialGroup.description);
-      setMemberIds(initialGroup.memberIds);
+      setDescription(initialGroup.description || '');
+      setMemberIds(initialGroup.members.map(m => m.user.id));
       setNameError('');
     }
   }, [open, initialGroup]);
@@ -516,12 +523,38 @@ function PeopleTab({
 
   const editUser = users.find((user) => user.id === editUserId);
 
-  const handleSaveUser = (email: string, role: UserRole) => {
-    if (!editUserId) return;
-    setUsers((current) =>
-      current.map((user) => (user.id === editUserId ? { ...user, email, role } : user)),
-    );
-    setSelectedIds(new Set());
+  const handleSaveUser = async (userId: string, email: string, role: UserRole, roleId: string) => {
+    if (!userId) return;
+    try {
+      await updateOrganizationUser(userId, { email, roleId });
+      setUsers((current) =>
+        current.map((user) => (user.id === userId ? { ...user, email, role } : user)),
+      );
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error('Failed to update user', err);
+    }
+  };
+
+  const handleBulkAction = async (action: 'active' | 'inactive' | 'delete') => {
+    if (selectedIds.size === 0) return;
+    const userIds = Array.from(selectedIds);
+    try {
+      toast.loading(`Marking users as ${action}...`, { id: 'bulk-action' });
+      await bulkUpdateOrganizationUsersRequest(userIds, action);
+      
+      if (action === 'delete') {
+        setUsers((current) => current.filter((u) => !userIds.includes(u.id)));
+        toast.success(`Deleted ${userIds.length} users`, { id: 'bulk-action' });
+      } else {
+        const newStatus = action === 'active' ? 'Active' : 'Pending';
+        setUsers((current) => current.map((u) => userIds.includes(u.id) ? { ...u, status: newStatus as any } : u));
+        toast.success(`Marked ${userIds.length} users as ${action}`, { id: 'bulk-action' });
+      }
+      setSelectedIds(new Set());
+    } catch (err: any) {
+      toast.error(err.message || `Failed to mark users as ${action}`, { id: 'bulk-action' });
+    }
   };
 
   const columns: SettingsTableColumn<SettingsUserRow>[] = [
@@ -562,7 +595,20 @@ function PeopleTab({
           onFilter={() => setFilterOpen((open) => !open)}
           filterOpen={filterOpen}
           hasActiveFilters={hasActiveFilters}
-          onExport={() => undefined}
+          onExport={() => {
+            downloadCSV(
+              'People',
+              ['User', 'Email address', 'Last active', 'Joined on', 'Account role', 'Status'],
+              rows.map((row) => [
+                row.name,
+                row.email,
+                row.lastActive,
+                row.joinedDate,
+                row.role,
+                row.status,
+              ])
+            );
+          }}
           onAdd={() => setAddOpen(true)}
           addLabel="New user"
           exportDisabled={user?.role === 'Editor'}
@@ -617,13 +663,13 @@ function PeopleTab({
             >
               Edit
             </Button>
-            <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
+            <Button onClick={() => handleBulkAction('active')} size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
               Mark active
             </Button>
-            <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
+            <Button onClick={() => handleBulkAction('inactive')} size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
               Mark inactive
             </Button>
-            <Button size="small" sx={{ textTransform: 'none', color: cv.destructive }}>
+            <Button onClick={() => handleBulkAction('delete')} size="small" sx={{ textTransform: 'none', color: cv.destructive }}>
               Mark delete
             </Button>
           </Box>
@@ -650,8 +696,53 @@ function PeopleTab({
         }}
         onInvite={handleInvite}
         onSave={handleSaveUser}
-        initialUser={editUser ? { email: editUser.email, role: editUser.role } : undefined}
+        initialUser={editUser ? { id: editUser.id, email: editUser.email, role: editUser.role } : undefined}
       />
+    </>
+  );
+}
+
+function GroupMembersCell({ members, borderColor }: { members: { id: string; name: string; initials: string; email?: string }[]; borderColor: string }) {
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+
+  if (members.length === 0) {
+    return <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted }}>No members</Typography>;
+  }
+
+  return (
+    <>
+      <Box onClick={(e) => { e.stopPropagation(); setAnchorEl(e.currentTarget); }} sx={{ cursor: 'pointer', display: 'inline-flex' }}>
+        <TeamMemberAvatarStack members={members} max={4} borderColor={borderColor} />
+      </Box>
+      <Popover
+        open={Boolean(anchorEl)}
+        anchorEl={anchorEl}
+        onClose={(e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+          setAnchorEl(null);
+        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        PaperProps={{ sx: { mt: 1, borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxHeight: 300, minWidth: 200, bgcolor: cv.dialogSurface } }}
+      >
+        <List dense sx={{ p: 0 }}>
+          {members.map(member => (
+            <ListItem key={member.id}>
+              <ListItemAvatar sx={{ minWidth: 40 }}>
+                <Avatar sx={{ width: 28, height: 28, fontSize: '0.75rem', bgcolor: cv.brandGradient }}>{member.initials}</Avatar>
+              </ListItemAvatar>
+              <ListItemText
+                primary={member.name}
+                secondary={member.email}
+                slotProps={{
+                  primary: { sx: { fontSize: '0.875rem', color: cv.textPrimary } },
+                  secondary: { sx: { fontSize: '0.75rem', color: cv.textSecondary } }
+                }}
+              />
+            </ListItem>
+          ))}
+        </List>
+      </Popover>
     </>
   );
 }
@@ -662,14 +753,16 @@ function UserGroupsTab({
   setGroups,
 }: {
   users: SettingsUserRow[];
-  groups: SettingsUserGroup[];
-  setGroups: Dispatch<SetStateAction<SettingsUserGroup[]>>;
+  groups: UserGroup[];
+  setGroups: Dispatch<SetStateAction<UserGroup[]>>;
 }) {
   const { user } = useAuth();
+  const { formatDate } = useLocalizedDate();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGroupId, setEditGroupId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(false);
 
   const userById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
 
@@ -677,14 +770,14 @@ function UserGroupsTab({
     const query = search.trim().toLowerCase();
     if (!query) return groups;
     return groups.filter((group) => {
-      const memberNames = group.memberIds
-        .map((id) => userById.get(id)?.name ?? '')
+      const memberNames = group.members
+        .map((m) => m.user.name)
         .join(' ')
         .toLowerCase();
       return (
         group.name.toLowerCase().includes(query) ||
-        group.description.toLowerCase().includes(query) ||
-        group.createdBy.toLowerCase().includes(query) ||
+        (group.description || '').toLowerCase().includes(query) ||
+        (group.createdBy?.name || '').toLowerCase().includes(query) ||
         memberNames.includes(query)
       );
     });
@@ -692,25 +785,40 @@ function UserGroupsTab({
 
   const editGroup = groups.find((group) => group.id === editGroupId);
 
-  const handleSaveGroup = (name: string, description: string, memberIds: string[]) => {
-    if (editGroupId) {
-      setGroups((current) =>
-        current.map((group) =>
-          group.id === editGroupId ? { ...group, name, description, memberIds } : group,
-        ),
-      );
-      setSelectedIds(new Set());
-      return;
+  const handleSaveGroup = async (name: string, description: string, memberIds: string[]) => {
+    setIsLoading(true);
+    try {
+      if (editGroupId) {
+        const updated = await apiUpdateUserGroup(editGroupId, { name, description, memberIds });
+        setGroups((current) => current.map((group) => (group.id === editGroupId ? updated : group)));
+        setSelectedIds(new Set());
+      } else {
+        const created = await apiCreateUserGroup({ name, description, memberIds });
+        setGroups((current) => [created, ...current]);
+      }
+    } catch (err) {
+      console.error('Failed to save group:', err);
+    } finally {
+      setIsLoading(false);
     }
-    setGroups((current) => [...current, createUserGroup(name, description, memberIds)]);
   };
 
-  const handleDeleteSelected = () => {
-    setGroups((current) => current.filter((group) => !selectedIds.has(group.id)));
-    setSelectedIds(new Set());
+  const handleDeleteSelected = async () => {
+    setIsLoading(true);
+    try {
+      for (const id of Array.from(selectedIds)) {
+        await apiDeleteUserGroup(id);
+      }
+      setGroups((current) => current.filter((group) => !selectedIds.has(group.id)));
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error('Failed to delete groups:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const columns: SettingsTableColumn<SettingsUserGroup>[] = [
+  const columns: SettingsTableColumn<UserGroup>[] = [
     {
       id: 'name',
       label: 'Group name',
@@ -728,29 +836,41 @@ function UserGroupsTab({
       label: 'Members',
       width: '18%',
       render: (row) => {
-        const members = row.memberIds
-          .map((id) => userById.get(id))
-          .filter((user): user is SettingsUserRow => Boolean(user))
-          .map((user) => ({
-            id: user.id,
-            name: user.name,
-            initials: user.initials,
-          }));
-        return members.length > 0 ? (
-          <TeamMemberAvatarStack members={members} max={4} borderColor={cv.dialogSurface} />
-        ) : (
-          <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted }}>No members</Typography>
-        );
+        const members = row.members
+          .map((m) => m.user)
+          .map((u) => {
+            const userRow = userById.get(u.id);
+            return {
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              initials: userRow?.initials || u.name.slice(0, 2).toUpperCase()
+            };
+          });
+        return <GroupMembersCell members={members} borderColor={cv.dialogSurface} />;
       },
     },
     {
       id: 'count',
       label: 'Count',
       width: '10%',
-      render: (row) => `${row.memberIds.length}`,
+      render: (row) => `${row.members.length}`,
     },
-    { id: 'created', label: 'Created', width: '14%', render: (row) => row.createdDate },
-    { id: 'createdBy', label: 'Created by', width: '14%', render: (row) => tableText(row.createdBy) },
+    { id: 'created', label: 'Created', width: '12%', render: (row) => formatDate(row.createdAt, { month: 'short', day: 'numeric', year: 'numeric' }) },
+    { id: 'createdBy', label: 'Created by', width: '12%', render: (row) => tableText(row.createdBy?.name || 'System') },
+    {
+      id: 'actions',
+      label: '',
+      width: '4%',
+      render: (row) => (
+        <IconButton size="small" onClick={(e) => {
+          e.stopPropagation();
+          setEditGroupId(row.id);
+        }}>
+          <EditOutlinedIcon fontSize="small" />
+        </IconButton>
+      ),
+    },
   ];
 
   return (
@@ -763,7 +883,20 @@ function UserGroupsTab({
           searchValue={search}
           onSearchChange={setSearch}
           searchPlaceholder="Search groups…"
-          onExport={() => undefined}
+          onExport={() => {
+            downloadCSV(
+              'UserGroups',
+              ['Group name', 'Description', 'Members', 'Count', 'Created', 'Created by'],
+              rows.map((row) => [
+                row.name,
+                row.description || '',
+                row.members.map(m => m.user.email ? `${m.user.name} (${m.user.email})` : m.user.name).join(', '),
+                row.members.length,
+                formatDate(row.createdAt, { month: 'short', day: 'numeric', year: 'numeric' }),
+                row.createdBy?.name || 'System',
+              ])
+            );
+          }}
           onAdd={() => setDialogOpen(true)}
           addLabel="New group"
           exportDisabled={user?.role === 'Editor'}
@@ -832,9 +965,10 @@ function UserGroupsTab({
 
 export default function UserAdminSettingsSection() {
   const { user: currentUser } = useAuth();
+  const { formatDate } = useLocalizedDate();
   const [activeTab, setActiveTab] = useState(0);
   const [users, setUsers] = useState<SettingsUserRow[]>([]);
-  const [groups, setGroups] = useState<SettingsUserGroup[]>(MOCK_SETTINGS_USER_GROUPS);
+  const [groups, setGroups] = useState<UserGroup[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -885,14 +1019,14 @@ export default function UserAdminSettingsSection() {
             if (diffMinutes <= 1) lastActiveText = 'Just now';
             else if (diffMinutes < 60) lastActiveText = `${diffMinutes} mins ago`;
             else if (diffMinutes < 1440) lastActiveText = `${Math.floor(diffMinutes / 60)} hours ago`;
-            else lastActiveText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            else lastActiveText = formatDate(date, { month: 'short', day: 'numeric', year: 'numeric' });
           } else if (u.lastLoginAt) {
             const date = new Date(u.lastLoginAt);
-            lastActiveText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            lastActiveText = formatDate(date, { month: 'short', day: 'numeric', year: 'numeric' });
           }
 
           const joinedDate = u.createdAt
-            ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            ? formatDate(u.createdAt, { month: 'short', day: 'numeric', year: 'numeric' })
             : '—';
           const isMe = Boolean(
             currentUser &&
@@ -931,6 +1065,20 @@ export default function UserAdminSettingsSection() {
       mounted = false;
     };
   }, [currentUser?.id, currentUser?.email]);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchUserGroups()
+      .then((data) => {
+        if (mounted) setGroups(data);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch user groups:', err);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [currentUser?.id]);
 
   return (
     <SettingsTableContainer>

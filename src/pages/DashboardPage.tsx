@@ -1208,7 +1208,7 @@ export default function DashboardPage({
                     checked={linkNewItemsToProject} 
                     onChange={(e) => setLinkNewItemsToProject(e.target.checked)}
                     size="small"
-                    sx={{ p: 0.5, ml: 1, color: cv.textMuted, '&.Mui-checked': { color: cv.brandMain } }}
+                    sx={{ p: 0.5, ml: 1, color: cv.textMuted, '&.Mui-checked': { color: cv.brandBlue } }}
                   />
                 }
                 label="Link to project"

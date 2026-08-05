@@ -1,4 +1,5 @@
-import { Box, Tooltip, Typography } from '@mui/material';
+import { useState } from 'react';
+import { Box, Collapse, Typography } from '@mui/material';
 import { cv } from '../../theme/cssVars';
 import { formatFileSizeCompact } from '../../utils/formatFileSize';
 import { formatTechnicalDate } from '../../utils/formatTechnicalDate';
@@ -30,24 +31,6 @@ const accentSx = {
   fontWeight: 500,
 };
 
-function buildExifTooltip(exif: TechnicalExifDetails): string {
-  const lines = [
-    exif.dateTimeOriginal ? `Date taken: ${formatTechnicalDate(exif.dateTimeOriginal)}` : null,
-    exif.make || exif.model
-      ? `Camera: ${[exif.make, exif.model].filter(Boolean).join(' ')}`
-      : null,
-    exif.lens ? `Lens: ${exif.lens}` : null,
-    exif.resolution ? `Resolution: ${exif.resolution}` : null,
-    exif.orientation ? `Orientation: ${exif.orientation}` : null,
-    exif.exposureTime ? `Exposure: ${exif.exposureTime}` : null,
-    exif.fNumber ? `Aperture: ${exif.fNumber}` : null,
-    exif.iso ? `ISO: ${exif.iso}` : null,
-    exif.focalLength ? `Focal length: ${exif.focalLength}` : null,
-  ].filter(Boolean);
-
-  return lines.length > 0 ? lines.join('\n') : 'No EXIF metadata available';
-}
-
 export default function TechnicalFileOriginSummary({
   fileSizeBytes,
   uploadedBy,
@@ -56,11 +39,23 @@ export default function TechnicalFileOriginSummary({
   exif,
   variant = 'panel',
 }: TechnicalFileOriginSummaryProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   const hasUploadLine = Boolean(uploadedAt);
   const hasOriginLine = Boolean(originallyCreatedAt);
-  const hasCameraExif = Boolean(exif && (exif.make || exif.model || exif.lens || exif.exposureTime || exif.fNumber || exif.iso));
-  const exifTooltip = hasCameraExif ? buildExifTooltip(exif!) : 'There is no EXIF metadata for this file';
-  const showExif = true;
+  const hasCameraExif = Boolean(
+    exif &&
+      (exif.make ||
+        exif.model ||
+        exif.lens ||
+        exif.exposureTime ||
+        exif.fNumber ||
+        exif.iso ||
+        exif.focalLength ||
+        exif.dateTimeOriginal ||
+        exif.resolution ||
+        exif.orientation),
+  );
 
   if (!hasUploadLine && !hasOriginLine) {
     return null;
@@ -68,13 +63,29 @@ export default function TechnicalFileOriginSummary({
 
   const uploaderLabel = uploadedBy?.trim() || 'Unknown user';
 
+  const exifItems = exif
+    ? [
+        { label: 'Date taken', value: exif.dateTimeOriginal ? formatTechnicalDate(exif.dateTimeOriginal) : null },
+        {
+          label: 'Camera',
+          value: exif.make || exif.model ? [exif.make, exif.model].filter(Boolean).join(' ') : null,
+        },
+        { label: 'Lens', value: exif.lens },
+        { label: 'Resolution', value: exif.resolution },
+        { label: 'Orientation', value: exif.orientation },
+        { label: 'Exposure', value: exif.exposureTime },
+        { label: 'Aperture', value: exif.fNumber },
+        { label: 'ISO', value: exif.iso },
+        { label: 'Focal length', value: exif.focalLength },
+      ].filter((item) => Boolean(item.value))
+    : [];
+
   return (
     <Box
       sx={{
         px: variant === 'panel' ? 1.5 : 0,
         py: variant === 'panel' ? 1.25 : 0,
-        borderBottom:
-          variant === 'panel' ? `1px solid ${cv.dividerSubtle}` : 'none',
+        borderBottom: variant === 'panel' ? `1px solid ${cv.dividerSubtle}` : 'none',
         textAlign: variant === 'inline' ? 'center' : 'left',
         maxWidth: '100%',
       }}
@@ -100,33 +111,34 @@ export default function TechnicalFileOriginSummary({
           <Box component="span" sx={accentSx}>
             {formatTechnicalDate(uploadedAt)}
           </Box>
-          {showExif ? (
+          {hasCameraExif ? (
             <>
               {' '}
-              <Tooltip title={<Box sx={{ whiteSpace: 'pre-line' }}>{exifTooltip}</Box>} arrow placement="top">
-                <Box
-                  component="button"
-                  type="button"
-                  aria-label="View EXIF metadata"
-                  sx={{
-                    m: 0,
-                    p: 0,
-                    border: 'none',
-                    background: 'transparent',
-                    font: 'inherit',
-                    fontSize: 'inherit',
-                    lineHeight: 'inherit',
-                    color: cv.textMuted,
-                    textDecoration: 'underline',
-                    textDecorationStyle: 'dashed',
-                    textUnderlineOffset: 3,
-                    cursor: 'pointer',
-                    '&:hover': { color: cv.textSecondary },
-                  }}
-                >
-                  EXIF
-                </Box>
-              </Tooltip>
+              <Box
+                component="button"
+                type="button"
+                aria-expanded={isExpanded}
+                aria-controls="exif-expandable-panel"
+                onClick={() => setIsExpanded((prev) => !prev)}
+                sx={{
+                  m: 0,
+                  p: 0,
+                  border: 'none',
+                  background: 'transparent',
+                  font: 'inherit',
+                  fontSize: 'inherit',
+                  lineHeight: 'inherit',
+                  color: cv.purpleAccent || '#a855f7',
+                  fontWeight: 600,
+                  textDecoration: 'underline',
+                  textUnderlineOffset: 3,
+                  cursor: 'pointer',
+                  transition: 'color 0.15s ease',
+                  '&:hover': { color: cv.textPrimary },
+                }}
+              >
+                {isExpanded ? 'Hide EXIF' : 'Show EXIF'}
+              </Box>
             </>
           ) : null}
         </Typography>
@@ -149,7 +161,34 @@ export default function TechnicalFileOriginSummary({
           </Box>
         </Typography>
       ) : null}
+
+      {hasCameraExif && (
+        <Collapse in={isExpanded} timeout="auto" unmountOnExit id="exif-expandable-panel">
+          <Box
+            sx={{
+              mt: 1,
+              p: 1.25,
+              borderRadius: '8px',
+              backgroundColor: 'rgba(255, 255, 255, 0.02)',
+              border: `1px solid ${cv.dividerSubtle}`,
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+              gap: 0.75,
+            }}
+          >
+            {exifItems.map((item) => (
+              <Box key={item.label} sx={{ display: 'flex', flexDirection: 'column', gap: 0.2 }}>
+                <Typography sx={{ fontSize: '0.7rem', color: cv.textSecondary, fontWeight: 500 }}>
+                  {item.label}
+                </Typography>
+                <Typography sx={{ fontSize: '0.8125rem', color: cv.textPrimary, fontWeight: 600 }}>
+                  {item.value}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Collapse>
+      )}
     </Box>
   );
 }
-

@@ -17,6 +17,8 @@ export {
   getAssetAccessOverrides,
   updateAssetAccessOverride,
   removeAssetAccessOverride,
+  updateAssetGroupAccessOverride,
+  removeAssetGroupAccessOverride,
   getSharedMediaAssetsRequest
 } from './media.service';
 export type { MediaAssetResponseDto, UploadMediaProgress } from './media.service';
@@ -40,3 +42,8 @@ export {
   uploadCompanyLogoRequest,
 } from './organizations.service';
 export type { UpdateCompanyInfoDto, UploadCompanyLogoResponse } from './organizations.service';
+export {
+  updateProfileRequest,
+  uploadProfilePhotoRequest,
+} from './users.service';
+export type { UpdateProfileDto, UploadProfilePhotoResponse } from './users.service';

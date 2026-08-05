@@ -1,5 +1,7 @@
+import { getValidTimezone } from './dateUtils';
+
 /** e.g. May 26 2024 */
-export function formatTechnicalDate(value?: string): string {
+export function formatTechnicalDate(value?: string, tzString?: string): string {
   if (!value) return '—';
 
   const date = new Date(value);
@@ -9,6 +11,7 @@ export function formatTechnicalDate(value?: string): string {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+    timeZone: getValidTimezone(tzString)
   })
     .format(date)
     .replace(',', '');

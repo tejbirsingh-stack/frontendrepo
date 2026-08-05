@@ -20,7 +20,7 @@ export function getMediaSidebarPlacement(
     return null;
   }
 
-  return item.location;
+  return item.location ?? null;
 }
 
 export function getProjectLabel(
