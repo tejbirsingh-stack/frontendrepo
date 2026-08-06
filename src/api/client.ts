@@ -65,6 +65,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
       const code = mapStatusToCode(response.status);
       if (
         (response.status === 401 && !path.includes('/auth/logout')) ||
+        (response.status === 403 && path.includes('/auth/me')) ||
         (response.status === 404 && path.includes('/auth/me'))
       ) {
         handleUnauthorized();
