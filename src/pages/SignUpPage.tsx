@@ -88,6 +88,16 @@ function slugifyWorkspaceName(value: string): string {
     .slice(0, 48);
 }
 
+function formatWorkspaceNameWithSuffix(value: string): string {
+  if (!value || typeof value !== 'string') return 'Workspace-ARK';
+  let trimmed = value.trim();
+  if (trimmed.endsWith('-Workspace-ARK')) {
+    return trimmed;
+  }
+  trimmed = trimmed.replace(/-Workspace$/i, '').replace(/-ARK$/i, '').replace(/-Workspace-ARK$/i, '').trim();
+  return `${trimmed}-Workspace-ARK`;
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -376,13 +386,14 @@ export default function SignUpPage() {
         ?.split('=')[1];
 
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+      const formattedWorkspaceName = formatWorkspaceNameWithSuffix(workspaceName);
       const response = await completeSignupRequest({
         email,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         name: fullName,
         password,
-        workspaceName,
+        workspaceName: formattedWorkspaceName,
         companyWebsite,
         mobileNumber,
         teamSize,
