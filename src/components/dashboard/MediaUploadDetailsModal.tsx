@@ -415,6 +415,7 @@ export default function MediaUploadDetailsModal({
   const [duration, setDuration] = useState<string | undefined>();
   const [selectedTags, setSelectedTags] = useState<ManagedTag[]>([]);
   const [folderId, setFolderId] = useState('');
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -450,6 +451,7 @@ export default function MediaUploadDetailsModal({
     setDuration(undefined);
     setSelectedTags([]);
     setFolderId(pendingUpload.parentFolderId || '');
+    setVisibility('public');
     setIsUploading(false);
     setUploadProgress(null);
 
@@ -587,6 +589,7 @@ export default function MediaUploadDetailsModal({
           ...(thumbnail ? { thumbnail } : {}),
           tagIds: selectedTags.map((tag) => tag.id),
           folderId: folderId || null,
+          visibility,
           ...(duration ? { duration } : {}),
         },
         (progress) => {
@@ -925,6 +928,24 @@ export default function MediaUploadDetailsModal({
                 </FormControl>
               </Box>
             )}
+
+            <Box>
+              <Typography sx={fieldLabelSx}>Visibility</Typography>
+              <FormControl fullWidth size="small">
+                <Select
+                  value={visibility}
+                  onChange={(event) => setVisibility(event.target.value as 'public' | 'private')}
+                  MenuProps={dropdownMenuProps}
+                  sx={{
+                    borderRadius: '10px',
+                    backgroundColor: cv.surface,
+                  }}
+                >
+                  <MenuItem value="public">Public (Entire organization)</MenuItem>
+                  <MenuItem value="private">Private (Only you)</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
           </Box>
 
           <Box>
