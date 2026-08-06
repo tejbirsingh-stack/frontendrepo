@@ -26,7 +26,7 @@ export type MoveDestination =
   | { kind: 'folder'; folderId: string; workspaceId: string }
   | { kind: 'project'; projectId: string; workspaceId: string; targetFolderId?: string | null };
 
-function FolderTreeNode({
+export function FolderTreeNode({
   folder,
   foldersByParent,
   selectedFolderId,
