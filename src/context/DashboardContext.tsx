@@ -50,6 +50,7 @@ import {
   getFavoritesRequest,
   type MediaAssetResponseDto,
 } from '../api';
+import { type LibraryListParams, getLibraryItems } from '../api/library.service';
 const token = (await import('../auth/authTokenBridge')).getAccessToken();
 
 interface DashboardContextValue {
@@ -66,6 +67,12 @@ interface DashboardContextValue {
   favoriteMediaItems: MediaItem[];
   duplicateMediaItems: MediaItem[];
   sharedMediaItems: MediaItem[];
+  libraryItems: MediaItem[];
+  nextPageToken: string | null;
+  libraryLoading: boolean;
+  libraryLoadingMore: boolean;
+  fetchLibraryFirstPage: (params: LibraryListParams) => Promise<void>;
+  fetchLibraryNextPage: () => Promise<void>;
   favorites: Set<string>;
   toggleFavorite: (id: string, type?: 'asset' | 'folder' | 'project') => void;
   moveMediaToFolder: (mediaId: string, folderId: string, childLabel?: string) => void;
@@ -110,7 +117,7 @@ interface DashboardContextValue {
   completeMediaUpload: (
     details: MediaUploadDetails,
     onProgress?: (progress: { loaded: number; total: number }) => void,
-  ) => Promise<void>;
+  ) => Promise<string | void>;
   cancelMediaUpload: () => void;
   /** @deprecated Use pendingMediaUpload */
   pendingVideoUpload: PendingMediaUpload | null;
@@ -128,12 +135,12 @@ interface DashboardContextValue {
     color?: string,
     parentFolderId?: string | null,
     projectLocation?: MediaLocation | null,
-  ) => Promise<void>;
+  ) => Promise<string | void>;
   createProject: (
     name: string,
     parentFolderId?: string | null,
     defaultTagIds?: string[],
-  ) => Promise<void>;
+  ) => Promise<string | void>;
   updateMediaProjectLocation: (mediaId: string, projectLocation: MediaLocation | null, itemType?: string) => void;
   trashedIds: Set<string>;
   draggingMediaId: string | null;
@@ -177,6 +184,52 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [sidebarSelection, setSidebarSelectionState] = useState<SidebarSelection | null>(null);
+
+  const [libraryItems, setLibraryItems] = useState<MediaItem[]>([]);
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryLoadingMore, setLibraryLoadingMore] = useState(false);
+  const listParamsRef = useRef<LibraryListParams | null>(null);
+
+  const fetchLibraryFirstPage = useCallback(async (params: LibraryListParams) => {
+    listParamsRef.current = { ...params, pageToken: null };
+    setLibraryLoading(true);
+    setNextPageToken(null);
+    try {
+      const res = await getLibraryItems(listParamsRef.current);
+      setLibraryItems(res.items);
+      setNextPageToken(res.nextPageToken);
+    } catch (e: any) {
+      setLibraryItems([]);
+      setNextPageToken(null);
+      throw e;
+    } finally {
+      setLibraryLoading(false);
+    }
+  }, []);
+
+  const fetchLibraryNextPage = useCallback(async () => {
+    if (!listParamsRef.current || !nextPageToken || libraryLoadingMore) return;
+    setLibraryLoadingMore(true);
+    try {
+      const res = await getLibraryItems({
+        ...listParamsRef.current,
+        pageToken: nextPageToken,
+      });
+      setLibraryItems((prev) => {
+        const seen = new Set(prev.map((i) => i.id));
+        return [...prev, ...res.items.filter((i) => !seen.has(i.id))];
+      });
+      setNextPageToken(res.nextPageToken);
+    } catch (e: any) {
+      if (e?.response?.data?.code === 'INVALID_PAGE_TOKEN' && listParamsRef.current) {
+        await fetchLibraryFirstPage(listParamsRef.current);
+      }
+    } finally {
+      setLibraryLoadingMore(false);
+    }
+  }, [nextPageToken, libraryLoadingMore, fetchLibraryFirstPage]);
+
 
   // Trash is now purely database-driven: derive trashedIds from item.status === 'trash'
   const trashedIds = useMemo(
@@ -1296,6 +1349,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }),
       );
 
+      setLibraryItems((prev) => prev.filter(item => !uniqueIds.includes(item.id)));
+
       setSelectedMediaIds((prev) => {
         const next = new Set(prev);
         uniqueIds.forEach((id) => next.delete(id));
@@ -1557,6 +1612,19 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }),
       );
 
+      setLibraryItems((prev) =>
+        prev.map((item) => {
+          if (item.id !== mediaId) return item;
+          return {
+            ...item,
+            title: trimmed,
+            location: item.location
+              ? { ...item.location, childLabel: trimmed }
+              : null,
+          };
+        }),
+      );
+
       if (media.location) {
         setWorkspaces((prev) =>
           prev.map((workspace) => {
@@ -1670,6 +1738,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         );
 
         setMediaItems((prev) =>
+          prev.map((item) =>
+            item.id === folderId ? { ...item, title: trimmed } : item
+          )
+        );
+
+        setLibraryItems((prev) =>
           prev.map((item) =>
             item.id === folderId ? { ...item, title: trimmed } : item
           )
@@ -1974,11 +2048,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       };
 
       if (!parentFolderId) {
-        fetchWorkspaceData().then(() => {
-          if (uploadedAssetDto?.folderId) {
-            navigate(`/home/folder/${uploadedAssetDto.folderId}`);
-          }
-        });
+        // Just refresh workspace data, we return the folderId so the caller navigates.
+        fetchWorkspaceData();
       } else {
         setMediaItems((items) => {
           if (items.some((item) => item.id === newItem.id)) {
@@ -2017,13 +2088,22 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      // Always update libraryItems so it shows up instantly in the grid, regardless of whether 
+      // parentFolderId is set or if we're just navigating to the project.
+      setLibraryItems((prev) => {
+        if (prev.some((item) => item.id === newItem.id)) return prev;
+        return [newItem, ...prev];
+      });
+
       if (current.type === 'image') {
         URL.revokeObjectURL(current.previewSrc);
       }
 
       setPendingMediaQueue((prev) => prev.slice(1));
+      
+      return uploadedAssetDto?.folderId;
     },
-    [activeWorkspaceId, fetchWorkspaceData, navigate],
+    [activeWorkspaceId, fetchWorkspaceData],
   );
 
   const createRootMediaFolder = useCallback(
@@ -2055,40 +2135,46 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         const resData = (response as any).data || response;
         const folderId = resData?.id || `folder-${Date.now()}`;
 
-        setMediaItems((prev) => {
-          let resolvedProjectLocation = projectLocation ?? null;
-          if (!resolvedProjectLocation && parentFolderId) {
+        let resolvedProjectLocation = projectLocation ?? null;
+        if (!resolvedProjectLocation && parentFolderId) {
+          setMediaItems((prev) => {
             const parent = prev.find(
               (item) => item.id === parentFolderId && item.type === 'folder',
             );
-            resolvedProjectLocation = parent?.projectLocation ?? null;
-          }
+            if (parent?.projectLocation) resolvedProjectLocation = parent.projectLocation;
+            return prev; // No-op update just to read state safely, though ideally we'd use a ref
+          });
+        }
 
-          const newItem: MediaItem = {
-            id: folderId,
-            title: resData?.name || trimmed,
-            type: 'folder',
-            workspaceId: activeWorkspaceId,
-            createdAt: new Date().toISOString(),
-            sizeBytes: 0,
-            storageProvider: 'b2',
-            uploadedBy: CURRENT_USER.name,
-            status: 'active',
-            folderColor: resData?.color || color,
-            ...(parentFolderId ? { parentFolderId } : {}),
-            linkedProjectIds: linkedProjectId ? [linkedProjectId] : [],
-            ...(resolvedProjectLocation ? { projectLocation: resolvedProjectLocation } : {}),
-          };
+        const newItem: MediaItem = {
+          id: folderId,
+          title: resData?.name || trimmed,
+          type: 'folder',
+          workspaceId: activeWorkspaceId,
+          createdAt: new Date().toISOString(),
+          sizeBytes: 0,
+          storageProvider: 'b2',
+          uploadedBy: CURRENT_USER.name,
+          status: 'active',
+          folderColor: resData?.color || color,
+          ...(parentFolderId ? { parentFolderId } : {}),
+          linkedProjectIds: linkedProjectId ? [linkedProjectId] : [],
+          ...(resolvedProjectLocation ? { projectLocation: resolvedProjectLocation } : {}),
+        };
 
+        setMediaItems((prev) => {
           const next = [...prev, newItem];
           if (!parentFolderId) return next;
-
           return next.map((item) =>
             item.id === parentFolderId && item.type === 'folder'
               ? { ...item, itemCount: (item.itemCount ?? 0) + 1 }
               : item,
           );
         });
+
+        setLibraryItems((prev) => [newItem, ...prev]);
+
+        return folderId;
       } catch (err) {
         console.error('Failed to create media folder:', err);
       }
@@ -2119,21 +2205,21 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         const projectId = resData?.id || `project-${Date.now()}`;
         const resolvedFolderId = (response as any).folderId || parentFolderId;
 
-        setMediaItems((prev) => {
-          const newItem: MediaItem = {
-            id: projectId,
-            title: resData?.name || trimmed,
-            type: 'folder',
-            workspaceId: activeWorkspaceId,
-            createdAt: new Date().toISOString(),
-            sizeBytes: 0,
-            storageProvider: 'b2',
-            uploadedBy: CURRENT_USER.name,
-            status: 'active',
-            isProject: true,
-            ...(resolvedFolderId ? { parentFolderId: resolvedFolderId } : {}),
-          };
+        const newItem: MediaItem = {
+          id: projectId,
+          title: resData?.name || trimmed,
+          type: 'folder',
+          workspaceId: activeWorkspaceId,
+          createdAt: new Date().toISOString(),
+          sizeBytes: 0,
+          storageProvider: 'b2',
+          uploadedBy: CURRENT_USER.name,
+          status: 'active',
+          isProject: true,
+          ...(resolvedFolderId ? { parentFolderId: resolvedFolderId } : {}),
+        };
 
+        setMediaItems((prev) => {
           const next = [...prev, newItem];
           if (!resolvedFolderId) return next;
 
@@ -2143,6 +2229,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
               : item,
           );
         });
+
+        setLibraryItems((prev) => [newItem, ...prev]);
 
         setWorkspaces((prev) =>
           prev.map((workspace) => {
@@ -2162,6 +2250,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             navigate(`/home/folder/${(response as any).folderId}`);
           });
         }
+
+        return projectId;
       } catch (err) {
         console.error('Failed to create project:', err);
       }
@@ -2227,6 +2317,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const updateMediaFolderColor = useCallback((mediaId: string, color: string) => {
     setMediaItems((prev) =>
+      prev.map((item) =>
+        item.id === mediaId && item.type === 'folder' ? { ...item, folderColor: color } : item,
+      ),
+    );
+    setLibraryItems((prev) =>
       prev.map((item) =>
         item.id === mediaId && item.type === 'folder' ? { ...item, folderColor: color } : item,
       ),
@@ -2312,6 +2407,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       fetchWorkspaceData,
       fetchFolderData,
       fetchProjectData,
+      libraryItems,
+      nextPageToken,
+      libraryLoading,
+      libraryLoadingMore,
+      fetchLibraryFirstPage,
+      fetchLibraryNextPage,
     }),
     [
       workspaces,
@@ -2325,6 +2426,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       favoriteMediaItems,
       duplicateMediaItems,
       sharedMediaItems,
+      libraryItems,
+      nextPageToken,
+      libraryLoading,
+      libraryLoadingMore,
+      fetchLibraryFirstPage,
+      fetchLibraryNextPage,
       favorites,
       toggleFavorite,
       moveMediaToFolder,

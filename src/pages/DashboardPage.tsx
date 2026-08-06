@@ -64,6 +64,7 @@ import type { MediaItem, MediaLocation, MediaType } from '../data/mockMedia';
 import { resolveLibraryFolderColor } from '../utils/folderColorStyle';
 import { isYearOrMonthFolder } from '../utils/dateFolder';
 import type { LibraryView } from '../types/libraryView';
+import type { LibraryViewParam } from '../api/library.service';
 import { canInviteTeamMembersToFolderSelection, isProjectSelection } from '../utils/folderInviteAccess';
 import {
   filterMediaBySidebarSelection,
@@ -80,6 +81,8 @@ import InviteTeamMemberModal from '../components/common/InviteTeamMemberModal';
 import { createWorkspaceTeamMember } from '../data/mockSettingsData';
 import type { WorkspaceTeamMember } from '../data/mockSettingsData';
 import { fetchOrganizationUsers } from '../api/auth.service';
+import { useLibraryInfiniteScroll } from '../hooks/useLibraryInfiniteScroll';
+import LibraryScrollSentinel from '../components/dashboard/LibraryScrollSentinel';
 
 type ViewMode = 'grid' | 'list' | 'folder';
 type SortField = 'date' | 'name' | 'type' | 'size';
@@ -259,6 +262,12 @@ export default function DashboardPage({
     duplicateMediaItems,
     sharedMediaItems,
     mediaItems,
+    libraryItems,
+    nextPageToken,
+    libraryLoading,
+    libraryLoadingMore,
+    fetchLibraryFirstPage,
+    fetchLibraryNextPage,
     workspaces,
     activeWorkspaceId,
     globalSearchQuery,
@@ -284,13 +293,18 @@ export default function DashboardPage({
     createProject,
     sidebarSelection,
     activeWorkspace,
-    fetchWorkspaceData,
   } = useDashboard();
 
   // Duplicates pagination and tabs state
   const [duplicateTab, setDuplicateTab] = useState<MediaType>('video');
-  const [duplicatePage, setDuplicatePage] = useState<number>(1);
-  const DUPLICATES_PER_PAGE = 10;
+  const [duplicatePage, setDuplicatePage] = useState(1);
+  const DUPLICATES_PER_PAGE = 48;
+
+  const { sentinelRef } = useLibraryInfiniteScroll({
+    loading: libraryLoadingMore,
+    hasMore: Boolean(nextPageToken),
+    onLoadMore: fetchLibraryNextPage,
+  });
 
   const handleDuplicateTabChange = (event: React.SyntheticEvent, newValue: MediaType) => {
     setDuplicateTab(newValue);
@@ -365,14 +379,48 @@ export default function DashboardPage({
   const helpMenuShortcut =
     getShortcut('dashboard-open-help-menu') ?? getHelpMenuShortcutLabel();
 
-  const initialTagsMount = useRef(true);
+  // Hook up the backend API fetching for Infinite Scroll (All Views)
   useEffect(() => {
-    if (initialTagsMount.current) {
-      initialTagsMount.current = false;
-      return;
+    if (activeWorkspaceId) {
+      let view: LibraryViewParam = 'all';
+      if (folderMedia) {
+        view = folderMedia.isProject ? 'project' : 'folder';
+      } else if (libraryView === 'recent') view = 'all';
+      else if (libraryView === 'favorites') view = 'favorites';
+      else if (libraryView === 'duplicates') view = 'duplicates';
+      else if (libraryView === 'shared') view = 'shared';
+      else if (libraryView === 'projects') view = 'projects';
+      else if (libraryView === 'folder') view = 'folder';
+      else if (libraryView === 'project') view = 'project';
+
+      fetchLibraryFirstPage({
+        workspaceId: activeWorkspaceId,
+        view,
+        folderId: view === 'folder' && folderMedia ? folderMedia.id : undefined,
+        projectId: view === 'project' && folderMedia ? folderMedia.id : undefined,
+        q: globalSearchQuery,
+        mediaType: mediaTypeFilter,
+        dateRange: dateRangeFilter,
+        tagIds: Array.from(selectedTags),
+        aiTags: Array.from(selectedAiTags),
+        sortBy,
+        sortOrder: sortDirection,
+        pageSize: 48,
+      });
     }
-    fetchWorkspaceData(Array.from(selectedTags));
-  }, [selectedTags, fetchWorkspaceData]);
+  }, [
+    libraryView,
+    activeWorkspaceId,
+    folderMedia?.id,
+    globalSearchQuery,
+    mediaTypeFilter,
+    dateRangeFilter,
+    selectedTags,
+    selectedAiTags,
+    sortBy,
+    sortDirection,
+    fetchLibraryFirstPage
+  ]);
 
   useEffect(() => {
     let mounted = true;
@@ -497,8 +545,8 @@ export default function DashboardPage({
 
   const librarySourceItems = useMemo(() => {
     if (isFavoritesView) return favoriteMediaItems;
-    if (isDuplicatesView) return duplicateMediaItems;
-    if (isSharedView) return sharedMediaItems;
+    if (isDuplicatesView) return libraryItems;
+    if (isSharedView) return libraryItems;
     if (isProjectsView) {
       return mediaItems.filter(
         (item) => item.workspaceId === activeWorkspaceId && item.isProject && !trashedIds.has(item.id)
@@ -549,56 +597,13 @@ export default function DashboardPage({
   ]);
 
   const displayedItems = useMemo(() => {
-    const query = globalSearchQuery.trim().toLowerCase();
-    const searchableItems = isFavoritesView
-      ? favoriteMediaItems
-      : isDuplicatesView
-        ? duplicateMediaItems
-        : isSharedView
-          ? sharedMediaItems
-          : isProjectsView
-            ? librarySourceItems
-            : mediaItems.filter(
-              (item) =>
-                item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
-            );
-    const sourceItems = query ? searchableItems : librarySourceItems;
-
-    const filtered = sourceItems.filter((item) => {
-      if (
-        query &&
-        !item.title.toLowerCase().includes(query) &&
-        !item.type.toLowerCase().includes(query)
-      ) {
-        return false;
-      }
-      if (!matchesMediaTypeFilter(item, mediaTypeFilter)) return false;
-      if (!matchesDateRange(item.createdAt, dateRangeFilter)) return false;
-      // Tag filtering is now handled exclusively by the backend API via fetchWorkspaceData
-      if (
-        selectedAiTags.size > 0 &&
-        !item.aiTags?.some((tag) => selectedAiTags.has(tag))
-      ) {
-        return false;
-      }
-      return true;
-    });
-
-    const direction = sortDirection === 'asc' ? 1 : -1;
-
-    return [...filtered].sort((a, b) => {
-      if (sortBy === 'date') {
-        return (Date.parse(a.createdAt) - Date.parse(b.createdAt)) * direction;
-      }
-      if (sortBy === 'name') {
-        return a.title.localeCompare(b.title) * direction;
-      }
-      if (sortBy === 'size') {
-        return (a.sizeBytes - b.sizeBytes) * direction;
-      }
-      return (typeSortOrder[a.type] - typeSortOrder[b.type]) * direction;
-    });
+    if (isFavoritesView) {
+      return libraryItems.filter(item => favorites.has(item.id));
+    }
+    return libraryItems;
   }, [
+    libraryView,
+    libraryItems,
     librarySourceItems,
     favoriteMediaItems,
     duplicateMediaItems,
@@ -619,36 +624,46 @@ export default function DashboardPage({
     refreshKey,
     sidebarSelection,
     isProjectsView,
+    favorites,
   ]);
 
   const duplicateClusters = useMemo(() => {
     if (!isDuplicatesView) return [];
 
-    const clusters = new Map<string, typeof duplicateMediaItems>();
+    // Group library items (from the API) by title — items sharing the same title are duplicates.
+    // The oldest item (earliest createdAt) is treated as the "original".
+    const byTitle = new Map<string, typeof libraryItems>();
 
-    duplicateMediaItems.forEach(item => {
-      const originalIds = item.customMetadata?.duplicates as string[] | undefined;
-      if (originalIds && originalIds.length > 0) {
-        const originalId = originalIds[0];
-        if (!clusters.has(originalId)) {
-          clusters.set(originalId, []);
-        }
-        clusters.get(originalId)!.push(item);
+    libraryItems.forEach(item => {
+      const key = item.title?.trim().toLowerCase() || item.id;
+      if (!byTitle.has(key)) {
+        byTitle.set(key, []);
       }
+      byTitle.get(key)!.push(item);
     });
 
-    return Array.from(clusters.entries()).map(([originalId, duplicates]) => {
-      const originalItem = mediaItems.find(m => m.id === originalId);
-      return {
-        originalId,
+    const result: { originalId: string; originalItem: (typeof libraryItems)[0]; duplicates: typeof libraryItems }[] = [];
+
+    byTitle.forEach((items) => {
+      if (items.length < 2) return; // not a duplicate group
+      // Sort ascending by createdAt — oldest is the original
+      const sorted = [...items].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      const [originalItem, ...duplicates] = sorted;
+      result.push({
+        originalId: originalItem.id,
         originalItem,
-        duplicates
-      };
+        duplicates,
+      });
     });
-  }, [isDuplicatesView, duplicateMediaItems, mediaItems]);
+
+    return result;
+  }, [isDuplicatesView, libraryItems]);
 
   const groupedItems = useMemo(() => {
-    const groups: Record<MediaType, typeof displayedItems> = {
+    const groups: Record<MediaType | 'project', typeof displayedItems> = {
+      project: [],
       folder: [],
       video: [],
       image: [],
@@ -656,7 +671,16 @@ export default function DashboardPage({
       document: [],
     };
     displayedItems.forEach((item) => {
-      groups[item.type].push(item);
+      const safeType = item.type || 'document';
+      if (safeType === 'folder' && item.isProject) {
+        if (groups['project']) groups['project'].push(item);
+      } else {
+        if (groups[safeType]) {
+          groups[safeType].push(item);
+        } else {
+          groups['document'].push(item);
+        }
+      }
     });
     return groups;
   }, [displayedItems]);
@@ -703,7 +727,7 @@ export default function DashboardPage({
     event.target.value = '';
   };
 
-  const handleCreateFolder = (
+  const handleCreateFolder = async (
     name: string,
     color: string,
     projectLocation?: MediaLocation | null,
@@ -712,11 +736,17 @@ export default function DashboardPage({
     const parentId = isProject ? (folderMedia?.parentFolderId ?? null) : (folderMedia?.id ?? null);
     const location = isProject && linkNewItemsToProject ? { folderId: folderMedia.id } : projectLocation;
     
-    createRootMediaFolder(name, color, parentId, location);
+    const folderId = await createRootMediaFolder(name, color, parentId, location);
+    if (folderId) {
+      navigate(`/home/folder/${folderId}`);
+    }
   };
 
-  const handleCreateProject = (name: string, tagIds: string[] = []) => {
-    createProject(name, folderMedia?.id ?? null, tagIds);
+  const handleCreateProject = async (name: string, tagIds: string[] = []) => {
+    const projectId = await createProject(name, folderMedia?.id ?? null, tagIds);
+    if (projectId) {
+      navigate(`/home/project/${projectId}`);
+    }
   };
 
   const clearPanelFilters = () => {
@@ -1412,7 +1442,7 @@ export default function DashboardPage({
             textAlign: 'center',
             color: cv.textMuted,
             borderRadius: '16px',
-            border: `1px dashed var(--noah-border)`,
+            border: `1px dashed ${cv.border}`,
           }}
         >
           <Typography variant="body1" sx={{ mb: 0.5 }}>
@@ -1586,8 +1616,8 @@ export default function DashboardPage({
         </Box>
       ) : viewMode === 'folder' ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {allTypes.map((type) => {
-            const items = groupedItems[type];
+          {(['project', ...allTypes] as const).map((type) => {
+            const items = groupedItems[type as MediaType | 'project'] || [];
             if (items.length === 0) return null;
             return (
               <Box key={type}>
@@ -1602,7 +1632,7 @@ export default function DashboardPage({
                     letterSpacing: '0.06em',
                   }}
                 >
-                  {isProjectsView && type === 'folder' ? 'Projects' : typeGroupLabels[type]} ({items.length})
+                  {type === 'project' ? 'Projects' : typeGroupLabels[type as MediaType]} ({items.length})
                 </Typography>
                 <Box
                   sx={{
@@ -1637,6 +1667,15 @@ export default function DashboardPage({
         >
           {displayedItems.map((item) => renderMediaItem(item))}
         </Box>
+      )}
+
+      {/* Infinite Scroll Sentinel */}
+      {displayedItems.length > 0 && !isFavoritesView && !isDuplicatesView && (
+        <LibraryScrollSentinel
+          ref={sentinelRef}
+          loading={libraryLoadingMore}
+          hasMore={Boolean(nextPageToken)}
+        />
       )}
 
       <IconButton

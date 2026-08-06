@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import {
   Box,
   Chip,
@@ -90,6 +91,9 @@ export default function MediaFilterPanel({
 }: MediaFilterPanelProps) {
   const { activeWorkspaceId, getAssignableTags } = useDashboard();
   const tagOptions = getAssignableTags(activeWorkspaceId).map((tag) => tag.name);
+
+  const [showAllTags, setShowAllTags] = useState(false);
+  const [showAllAiTags, setShowAllAiTags] = useState(false);
 
   const handleMediaTypeChange = (event: SelectChangeEvent) => {
     onMediaTypeChange(event.target.value as MediaTypeFilter);
@@ -203,7 +207,7 @@ export default function MediaFilterPanel({
 
         <FilterField label="Tags">
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-            {tagOptions.map((tag) => {
+            {(showAllTags ? tagOptions : tagOptions.slice(0, 3)).map((tag) => {
               const selected = selectedTags.has(tag);
               return (
                 <Chip
@@ -214,12 +218,26 @@ export default function MediaFilterPanel({
                 />
               );
             })}
+            {tagOptions.length > 3 && (
+              <Chip
+                label={showAllTags ? "See less" : "See more"}
+                onClick={() => setShowAllTags(!showAllTags)}
+                sx={{
+                  ...filterTagChipStyles(false),
+                  backgroundColor: 'transparent',
+                  border: `1px dashed ${cv.border}`,
+                  '&:hover': {
+                    backgroundColor: cv.surfaceHover,
+                  }
+                }}
+              />
+            )}
           </Box>
         </FilterField>
 
         <FilterField label="AI Tags">
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-            {AI_TAG_OPTIONS.map((tag) => {
+            {(showAllAiTags ? AI_TAG_OPTIONS : AI_TAG_OPTIONS.slice(0, 3)).map((tag) => {
               const selected = selectedAiTags.has(tag);
               return (
                 <Chip
@@ -247,6 +265,26 @@ export default function MediaFilterPanel({
                 />
               );
             })}
+            {AI_TAG_OPTIONS.length > 3 && (
+              <Chip
+                label={showAllAiTags ? "See less" : "See more"}
+                onClick={() => setShowAllAiTags(!showAllAiTags)}
+                sx={{
+                  height: 30,
+                  borderRadius: '999px',
+                  fontSize: '0.8125rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  backgroundColor: 'transparent',
+                  color: palette.blueLight,
+                  border: `1px dashed ${cv.blueBorderSoft}`,
+                  '&:hover': {
+                    backgroundColor: cv.blueSurfaceHover,
+                  },
+                  '& .MuiChip-label': { px: 1.25 },
+                }}
+              />
+            )}
           </Box>
         </FilterField>
       </Box>

@@ -42,12 +42,14 @@ function DashboardLayoutContent() {
   ) => {
     const parentFolderId = pendingMediaUpload?.parentFolderId ?? null;
     const linkedProjectId = pendingMediaUpload?.linkedProjectId ?? null;
-    await completeMediaUpload(details, onProgress);
+    const resolvedFolderId = await completeMediaUpload(details, onProgress);
     if (pendingMediaUploadCount <= 1) {
       if (linkedProjectId) {
         navigate(`/home/project/${linkedProjectId}`);
+      } else if (parentFolderId || resolvedFolderId) {
+        navigate(getMediaFolderPath((parentFolderId || resolvedFolderId) as string));
       } else {
-        navigate(parentFolderId ? getMediaFolderPath(parentFolderId) : '/home');
+        navigate('/home');
       }
     }
   };

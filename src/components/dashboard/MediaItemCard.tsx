@@ -11,6 +11,7 @@ import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import LinkIcon from '@mui/icons-material/Link';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
 import TruncatedText from '../TruncatedText';
 import { useNavigate } from 'react-router-dom';
@@ -146,6 +147,41 @@ function TypeBadge({ type, isProject }: { type: MediaType; isProject?: boolean }
           variant="caption"
           sx={{ fontSize: '0.6875rem', fontWeight: 500, color: cv.textInverse }}
         >
+          {label}
+        </Typography>
+      </Box>
+    </Tooltip>
+  );
+}
+
+function ShareStatusBadge({ item }: { item: MediaItem }) {
+  const raw = item as any;
+  if (!raw.shareLinks) return null;
+  const isActive: boolean = raw.isShareActive ?? false;
+  const total: number = raw.shareCount ?? 0;
+  const color = isActive ? '#22c55e' : '#f97316';
+  const label = isActive ? 'Active' : 'Expired';
+  const tip = isActive
+    ? `${total} active share link${total !== 1 ? 's' : ''}`
+    : `${total} share link${total !== 1 ? 's' : ''} — all expired`;
+
+  return (
+    <Tooltip title={tip} arrow placement="top">
+      <Box
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.4,
+          px: 0.75,
+          py: 0.2,
+          borderRadius: '999px',
+          backgroundColor: `${color}22`,
+          border: `1px solid ${color}55`,
+          flexShrink: 0,
+        }}
+      >
+        <LinkIcon sx={{ fontSize: 10, color }} />
+        <Typography variant="caption" sx={{ fontSize: '0.625rem', fontWeight: 600, color, lineHeight: 1 }}>
           {label}
         </Typography>
       </Box>
@@ -636,6 +672,7 @@ export default function MediaItemCard({
           text={item.title}
           sx={{ flex: 1, minWidth: 0, fontWeight: 500, fontSize: '0.875rem', textAlign: 'left' }}
         />
+        <ShareStatusBadge item={item} />
         <MediaItemActionsMenu item={item} />
       </Box>
     </Box>
