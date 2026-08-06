@@ -1,19 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Button, Typography, keyframes } from '@mui/material';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import LiquidBackground from '../LiquidBackground';
 import WaveBackground from '../WaveBackground';
 import NoahLogo from '../NoahLogo';
 import { cv } from '../../theme/cssVars';
+import { fetchPublicCatalogPlans } from '../../platform/api/platformApi';
 
 type BillingCycle = 'annual' | 'monthly';
-type PlanId = 'free' | 'basic' | 'premium' | 'enterprise';
+type PlanId = string;
 
 interface PlanDefinition {
   id: PlanId;
   name: string;
   description: string;
   monthlyPrice: number;
+  yearlyPrice?: number;
   cta: string;
   featured?: boolean;
   features: string[];
@@ -22,7 +24,7 @@ interface PlanDefinition {
 const ANNUAL_DISCOUNT = 0.1;
 const DEFAULT_PLAN: PlanId = 'free';
 
-const PLANS: PlanDefinition[] = [
+const FALLBACK_PLANS: PlanDefinition[] = [
   {
     id: 'free',
     name: 'Free',
@@ -89,12 +91,15 @@ const fadeUp = keyframes`
   to { opacity: 1; transform: translateY(0); }
 `;
 
-function priceForCycle(monthlyPrice: number, cycle: BillingCycle): number {
-  if (monthlyPrice === 0) return 0;
+function priceForCycle(plan: PlanDefinition, cycle: BillingCycle): number {
+  if (plan.monthlyPrice === 0) return 0;
   if (cycle === 'annual') {
-    return Math.round(monthlyPrice * (1 - ANNUAL_DISCOUNT));
+    if (plan.yearlyPrice != null && plan.yearlyPrice > 0) {
+      return Math.round(plan.yearlyPrice / 12);
+    }
+    return Math.round(plan.monthlyPrice * (1 - ANNUAL_DISCOUNT));
   }
-  return monthlyPrice;
+  return plan.monthlyPrice;
 }
 
 interface ChoosePlanScreenProps {
@@ -105,6 +110,31 @@ interface ChoosePlanScreenProps {
 export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps) {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('annual');
   const [selectedPlan, setSelectedPlan] = useState<PlanId>(DEFAULT_PLAN);
+  const [plans, setPlans] = useState<PlanDefinition[]>(FALLBACK_PLANS);
+
+  useEffect(() => {
+    fetchPublicCatalogPlans()
+      .then((res) => {
+        if (!res.plans?.length) return;
+        setPlans(
+          res.plans.map((p) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description || '',
+            monthlyPrice: (p.monthlyPriceCents || 0) / 100,
+            yearlyPrice: ((p.yearlyPriceCents ?? p.annualPriceCents) || 0) / 100,
+            cta: p.ctaLabel || `Start with ${p.name}`,
+            featured: Boolean(p.isFeatured),
+            features: Array.isArray(p.features) ? p.features : [],
+          })),
+        );
+        const free = res.plans.find((p) => p.id === 'free');
+        if (free) setSelectedPlan(free.id);
+      })
+      .catch(() => {
+        /* keep fallback catalog */
+      });
+  }, []);
 
   const handleSelect = (planId: PlanId) => {
     setSelectedPlan(planId);
@@ -273,9 +303,9 @@ export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps
             alignItems: 'stretch',
           }}
         >
-          {PLANS.map((plan) => {
+          {plans.map((plan) => {
             const isFree = plan.monthlyPrice === 0;
-            const price = priceForCycle(plan.monthlyPrice, billingCycle);
+            const price = priceForCycle(plan, billingCycle);
             const isFeatured = Boolean(plan.featured);
             const isSelected = selectedPlan === plan.id;
             const showAnnualNote = !isFree && billingCycle === 'annual';
