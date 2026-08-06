@@ -411,8 +411,9 @@ function SidebarMediaFolderRow({
   const openKey = getMediaFolderOpenKey(mediaFolder.id);
   const isOpen = Boolean(openMediaFolders[openKey]);
   const showChildren = isOpen || Boolean(normalizedSearch);
-  const itemPath =
-    getMediaViewerPath(mediaFolder) ?? getMediaFolderPath(mediaFolder.id);
+  const itemPath = isProject
+    ? `/home/project/${mediaFolder.id}`
+    : getMediaViewerPath(mediaFolder) ?? getMediaFolderPath(mediaFolder.id);
   const isActive = location.pathname === itemPath;
   const activeBackground = isProject
     ? projectAccentTint()
@@ -702,6 +703,10 @@ function FolderItem({
   const handleFolderClick = () => {
     if (hasChildren && !isOpen) {
       onToggle();
+    }
+    if (isProjectRoot) {
+      navigate(`/home/project/${folder.id}`);
+      return;
     }
     if (isCustomFolder) {
       navigate(getMediaFolderPath(folder.id));
