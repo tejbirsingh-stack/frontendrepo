@@ -395,10 +395,13 @@ export default function MediaItemCard({
   const config = typeConfig[item.type];
   const isFolder = item.type === 'folder';
   const folderChildCount = isFolder
-    ? getFolderChildCount(item.id, mediaItems, {
-      workspaceId: item.workspaceId,
-      trashedIds,
-    })
+    ? Math.max(
+        item.itemCount ?? 0,
+        getFolderChildCount(item.id, mediaItems, {
+          workspaceId: item.workspaceId,
+          trashedIds,
+        })
+      )
     : 0;
   const folderFooterAccent = isFolder
     ? item.isProject

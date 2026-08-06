@@ -26,4 +26,5 @@ export interface MediaUploadDetails {
   tagIds: string[];
   folderId: string | null;
   duration?: string;
+  visibility?: 'public' | 'private';
 }

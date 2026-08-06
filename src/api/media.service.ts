@@ -154,6 +154,7 @@ export interface UploadMediaMetadataOptions {
   folderId?: string;
   tagIds?: string[];
   technicalSpecs?: Record<string, any>;
+  visibility?: 'public' | 'private';
   onProgress?: (progress: UploadMediaProgress) => void;
 }
 
@@ -177,6 +178,7 @@ async function uploadResumableChunkedFile(
       ownerType: options?.ownerType,
       ownerId: options?.ownerId,
       linkedProjectId: options?.linkedProjectId,
+      visibility: options?.visibility,
     },
   );
 
@@ -250,6 +252,7 @@ async function uploadResumableChunkedFile(
         folderId: options?.folderId,
         tagIds: options?.tagIds,
         technicalSpecs: options?.technicalSpecs,
+        visibility: options?.visibility,
       },
     );
 
@@ -287,6 +290,7 @@ export async function uploadMediaFileRequest(
     folderId?: string;
     tagIds?: string[];
     technicalSpecs?: Record<string, any>;
+    visibility?: 'public' | 'private';
     onProgress?: (progress: UploadMediaProgress) => void;
   },
   onProgress?: (progress: UploadMediaProgress) => void,

@@ -33,10 +33,12 @@ import type { SelectChangeEvent } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import UploadOutlinedIcon from '@mui/icons-material/UploadOutlined';
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import SettingsAdminToolbar from './SettingsAdminToolbar';
 import SettingsTableFilterPanel from './SettingsTableFilterPanel';
 import WorkspaceTeamMembersCell from './WorkspaceTeamMembersCell';
 import WorkspaceMembersDialog from './WorkspaceMembersDialog';
+import { FolderTreeNode } from '../dashboard/MoveItemsModal';
 import ProjectVisibilityPicker from './ProjectVisibilityPicker';
 import InvitePeopleFields from './InvitePeopleFields';
 import CreateWorkspaceModal, {
@@ -123,8 +125,9 @@ function AddProjectDialog({
   onClose,
   onAdd,
   onSave,
-  workspaceOptions,
+  workspaces,
   initialProject,
+  suggestedUsers,
 }: {
   open: boolean;
   onClose: () => void;
@@ -134,15 +137,18 @@ function AddProjectDialog({
     inviteEmails: string[],
     inviteGroupIds: string[],
     visibility: ProjectVisibility,
+    folderId: string | null
   ) => void;
   onSave?: (name: string, workspace: string, visibility: ProjectVisibility) => void;
-  workspaceOptions: string[];
+  workspaces: { id: string; name: string }[];
   initialProject?: { name: string; workspace: string; visibility: ProjectVisibility };
   suggestedUsers: import('../../data/mockSettingsData').SettingsUserRow[];
 }) {
   const isEdit = Boolean(initialProject);
   const [name, setName] = useState('');
   const [workspace, setWorkspace] = useState('');
+  const [folderId, setFolderId] = useState('');
+  const [folders, setFolders] = useState<any[]>([]);
   const [inviteEmails, setInviteEmails] = useState<string[]>([]);
   const [inviteGroupIds, setInviteGroupIds] = useState<string[]>([]);
   const [inviteMemberType, setInviteMemberType] = useState<WorkspaceMemberType>('Member');
@@ -150,10 +156,62 @@ function AddProjectDialog({
   const [visibility, setVisibility] = useState<ProjectVisibility>('public');
   const [nameError, setNameError] = useState('');
 
+  const { rootFolders, foldersByParent } = useMemo(() => {
+    const mappedFolders = folders.map(folder => ({
+      id: folder.id,
+      title: folder.name,
+      folderColor: folder.color,
+      parentFolderId: folder.parentId || null,
+    })).sort((a, b) => a.title.localeCompare(b.title));
+
+    const byParent: Record<string, any[]> = {};
+    const roots: any[] = [];
+    
+    mappedFolders.forEach(f => {
+      const pid = f.parentFolderId;
+      if (pid) {
+        if (!byParent[pid]) byParent[pid] = [];
+        byParent[pid].push(f);
+      } else {
+        roots.push(f);
+      }
+    });
+
+    mappedFolders.forEach(f => {
+      const pid = f.parentFolderId;
+      if (pid && !mappedFolders.find(p => p.id === pid)) {
+        if (!roots.includes(f)) roots.push(f);
+      }
+    });
+
+    return { rootFolders: roots, foldersByParent: byParent };
+  }, [folders]);
+
+  useEffect(() => {
+    let mounted = true;
+    if (workspace && open && !isEdit) {
+      const selectedWorkspace = workspaces.find((w) => w.name === workspace);
+      if (selectedWorkspace) {
+        import('../../api/client').then(({ apiClient }) => {
+          apiClient.get<any>(`/workspaces/find-all-data/${selectedWorkspace.id}`)
+            .then(res => {
+              if (mounted) {
+                const data = (res as any) || {};
+                setFolders(data.folders || []);
+              }
+            })
+            .catch(() => {});
+        });
+      }
+    }
+    return () => { mounted = false; };
+  }, [workspace, open, workspaces, isEdit]);
+
   useEffect(() => {
     if (!open) {
       setName('');
-      setWorkspace(workspaceOptions[0] ?? '');
+      setWorkspace(workspaces[0]?.name ?? '');
+      setFolderId('');
       setInviteEmails([]);
       setInviteGroupIds([]);
       setInviteMemberType('Member');
@@ -171,8 +229,8 @@ function AddProjectDialog({
       setNameError('');
       return;
     }
-    setWorkspace((current) => current || workspaceOptions[0] || '');
-  }, [open, initialProject, workspaceOptions]);
+    setWorkspace((current) => current || workspaces[0]?.name || '');
+  }, [open, initialProject, workspaces]);
 
   const handleSubmit = () => {
     const trimmed = name.trim();
@@ -188,7 +246,7 @@ function AddProjectDialog({
       onClose();
       return;
     }
-    onAdd(trimmed, workspace, inviteEmails, inviteGroupIds, visibility);
+    onAdd(trimmed, workspace, inviteEmails, inviteGroupIds, visibility, folderId || null);
     onClose();
   };
 
@@ -254,13 +312,66 @@ function AddProjectDialog({
             MenuProps={selectInDialogMenuProps}
             sx={dialogSelectSx}
           >
-            {workspaceOptions.map((option) => (
-              <MenuItem key={option} value={option} sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
-                {option}
+            {workspaces.map((option) => (
+              <MenuItem key={option.id} value={option.name} sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
+                {option.name}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
+        {!isEdit && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <InputLabel id="add-project-folder-label" shrink sx={{ fontSize: '0.875rem', mb: -0.5 }}>
+              Folder (Optional)
+            </InputLabel>
+            <Box sx={{ maxHeight: 200, overflowY: 'auto', border: `1px solid ${cv.border}`, borderRadius: '10px', p: 1 }}>
+              {rootFolders.length === 0 && (
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={() => setFolderId('')}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    width: '100%',
+                    textAlign: 'left',
+                    border: folderId === '' ? `1px solid ${cv.purpleFocusBorder}` : '1px solid transparent',
+                    borderRadius: '10px',
+                    px: 1,
+                    py: 0.5,
+                    mb: 0.5,
+                    cursor: 'pointer',
+                    backgroundColor: folderId === '' ? cv.purpleSelectionSoft : 'transparent',
+                    color: cv.textPrimary,
+                    '&:hover': {
+                      backgroundColor: folderId === '' ? cv.purpleSelectionHover : cv.surfaceHover,
+                    },
+                  }}
+                >
+                  <FolderOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted, flexShrink: 0, ml: 1 }} />
+                  <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: folderId === '' ? 600 : 500, color: cv.textMuted }}>
+                    {(() => {
+                      const now = new Date();
+                      const currentYear = new Intl.DateTimeFormat('en-US', { year: 'numeric' }).format(now);
+                      const currentMonth = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(now);
+                      return `${currentYear} / ${currentMonth}`;
+                    })()}
+                  </Typography>
+                </Box>
+              )}
+              {rootFolders.map((folder) => (
+                <FolderTreeNode
+                  key={folder.id}
+                  folder={folder}
+                  foldersByParent={foldersByParent}
+                  selectedFolderId={folderId || null}
+                  onSelect={(id) => setFolderId(id)}
+                />
+              ))}
+            </Box>
+          </Box>
+        )}
         <ProjectVisibilityPicker
           value={visibility}
           onChange={(next) => {
@@ -1267,6 +1378,7 @@ export function ProjectsAdminSettingsSection() {
     inviteEmails: string[],
     inviteGroupIds: string[],
     visibility: ProjectVisibility,
+    folderId: string | null,
   ) => {
     try {
       const workspaceObj = workspaces.find((w) => w.name === workspace);
@@ -1279,6 +1391,7 @@ export function ProjectsAdminSettingsSection() {
       const token = localStorage.getItem('token');
       await apiClient.post(`/workspaces/project/add/${workspaceObj.id}`, {
         name,
+        folderId,
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -1421,7 +1534,7 @@ export function ProjectsAdminSettingsSection() {
         }}
         onAdd={handleAddProject}
         onSave={handleSaveProject}
-        workspaceOptions={workspaceOptions}
+        workspaces={workspaces}
         initialProject={
           editProject
             ? {

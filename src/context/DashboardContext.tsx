@@ -2014,6 +2014,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             folderId: details.folderId || undefined,
             tagIds: details.tagIds,
             technicalSpecs: fullTechSpecs,
+            visibility: details.visibility,
           },
           onProgress,
         );
