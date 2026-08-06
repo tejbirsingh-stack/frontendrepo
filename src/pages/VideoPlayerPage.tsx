@@ -53,9 +53,9 @@ import type { ShareLink } from '../types/shareLink';
 import type { MediaCollaborator } from '../types/mediaCollaborator';
 import {
   MOCK_SETTINGS_USER_GROUPS,
-  MOCK_SETTINGS_USERS,
   resolveWorkspaceInvite,
   type ProjectVisibility,
+  type SettingsUserRow,
   type WorkspaceInvitePayload,
   type WorkspaceMemberAccess,
   type WorkspaceTeamMember,
@@ -82,7 +82,6 @@ import { useActiveUser } from '../hooks/useActiveUser';
 import VideoPlayerControls from '../components/media/VideoPlayerControls';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../auth/AuthContext';
-import { ROLE_IDS } from '../constants/userRoles';
 
 import { SAMPLE_VIDEO_SRC } from '../constants/sampleVideos';
 import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, HEADER_LOGO_WIDTH, SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
@@ -545,6 +544,7 @@ export default function VideoPlayerPage({
     DEFAULT_DRAW_STROKE_THICKNESS,
   );
   const [collaborators, setCollaborators] = useState<MediaCollaborator[]>([]);
+  const [orgUsersList, setOrgUsersList] = useState<SettingsUserRow[]>([]);
   const isAssetAdmin = useMemo(() => {
     if (isGuestMode) return false;
     const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
@@ -1686,6 +1686,33 @@ export default function VideoPlayerPage({
           });
 
           setCollaborators([...mapped, ...groupCollaborators]);
+
+          // Map real org users to SettingsUserRow[] for the share invite dropdown
+          const userRows: SettingsUserRow[] = users.map((u) => {
+            const displayName = u.name || u.email.split('@')[0] || 'User';
+            const initials = displayName
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((part: string) => part[0]?.toUpperCase() ?? '')
+              .join('') || u.email[0]?.toUpperCase() || 'U';
+            const roleName = (u.roleRelation?.name || u.role || 'Collaborator') as SettingsUserRow['role'];
+            return {
+              id: u.id,
+              name: displayName,
+              initials,
+              email: u.email,
+              lastActive: u.lastActiveAt || u.lastLoginAt || 'Never',
+              joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—',
+              role: roleName,
+              roleId: u.roleId,
+              roleRelation: u.roleRelation,
+              status: (u.status?.toLowerCase() === 'active' ? 'Active' : 'Pending') as 'Active' | 'Pending',
+              isCurrentUser: u.email === user?.email,
+              isOrganizationMember: true,
+            };
+          });
+          setOrgUsersList(userRows);
         } else {
           setCollaborators(loadMediaCollaborators(mediaId));
         }
@@ -3929,7 +3956,7 @@ export default function VideoPlayerPage({
           resourceId={mediaId || item.id}
           workspaceName={item.title}
           members={shareTeamMembers.filter(m => m.hasOverride || m.isCurrentUser)}
-          suggestedUsers={MOCK_SETTINGS_USERS}
+          suggestedUsers={orgUsersList}
           suggestedGroups={availableGroups}
           resourceType="project"
           visibility={shareInviteVisibility}

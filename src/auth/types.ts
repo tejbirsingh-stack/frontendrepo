@@ -10,6 +10,16 @@ export interface AuthSessionUser {
     id: string;
     name: string;
   };
+  organization?: {
+    id?: string;
+    name?: string;
+    slug?: string;
+    planType?: string;
+  };
+  planType?: string;
+  timezone?: string;
+  orgId?: string;
+  allowedProjectIds?: string[];
   permissions?: string[];
   initials: string;
   avatarUrl?: string;

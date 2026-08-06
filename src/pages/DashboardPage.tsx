@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, Fragment } from 'react';
 import { cv } from '../theme/cssVars';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -49,6 +49,7 @@ import DashboardKeyboardShortcutsDialog from '../components/dashboard/DashboardK
 import HelpMenuDrawer, { getHelpMenuShortcutLabel } from '../components/media/HelpMenuDrawer';
 import { useAuth } from '../auth/AuthContext';
 import { ROLE_IDS } from '../constants/userRoles';
+import { PERMISSIONS, hasPermission } from '../constants/permissions';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
 import { dropdownMenuPaperSx } from '../constants/dropdownMenu';
@@ -251,6 +252,7 @@ export default function DashboardPage({
   folderMedia,
 }: DashboardPageProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isFavoritesView = libraryView === 'favorites';
   const isDuplicatesView = libraryView === 'duplicates';
   const isProjectsView = libraryView === 'projects';
@@ -1265,66 +1267,66 @@ export default function DashboardPage({
             </MenuItem>
           )}
           <MenuItem
-            disabled={user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+            disabled={!hasPermission(user, PERMISSIONS.UPLOAD_MEDIA)}
             onClick={() => {
-              if (user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+              if (!hasPermission(user, PERMISSIONS.UPLOAD_MEDIA)) return;
               closeNewMenu();
               newUploadInputRef.current?.click();
             }}
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
-              opacity: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-              cursor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
+              color: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary,
+              opacity: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 0.6 : 1,
+              cursor: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+              <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Upload files
           </MenuItem>
           <MenuItem
-            disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+            disabled={!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)}
             onClick={() => {
-              if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+              if (!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
               closeNewMenu();
               setNewFolderModalOpen(true);
             }}
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
-              opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-              cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
+              color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
+              opacity: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+              cursor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+              <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             New folder
           </MenuItem>
           {!folderMedia?.isProject && (
             <MenuItem
-              disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+              disabled={!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)}
               onClick={() => {
-                if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+                if (!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
                 closeNewMenu();
                 setNewProjectModalOpen(true);
               }}
               sx={{
                 py: 1,
                 fontSize: '0.875rem',
-                color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
-                opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-                cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-                '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
+                color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
+                opacity: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+                cursor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+                '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
               }}
             >
               <ListItemIcon sx={{ minWidth: 32 }}>
-                <AddIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+                <AddIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
               </ListItemIcon>
               New project
             </MenuItem>

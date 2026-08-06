@@ -17,8 +17,8 @@ import RestoreOutlinedIcon from '@mui/icons-material/RestoreOutlined';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { PERMISSIONS, hasPermission } from '../constants/permissions';
 import { apiClient } from '../api/client';
-import GlassCard from '../components/GlassCard';
 import { useDashboard } from '../context/DashboardContext';
 import { ROLE_IDS } from '../constants/userRoles';
 import { cv } from '../theme/cssVars';
@@ -225,6 +225,7 @@ export default function DeletionRequestsPage() {
     isSuperAdmin ||
     user?.role === 'Admin' ||
     user?.roleId === ROLE_IDS.ADMIN;
+  const isHardDeleteAllowed = hasPermission(user, PERMISSIONS.DELETE_MEDIA);
 
   const tabSx = {
     minHeight: 40,
@@ -435,7 +436,7 @@ export default function DeletionRequestsPage() {
                 size="small"
                 variant="contained"
                 startIcon={<DeleteOutlineOutlinedIcon />}
-                disabled={isBusy}
+                disabled={isBusy || !isHardDeleteAllowed}
                 onClick={() => void handlePermanentDelete(item.id)}
                 sx={{
                   textTransform: 'none',
