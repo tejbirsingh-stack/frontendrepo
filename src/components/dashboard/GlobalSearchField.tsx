@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from 'react';
+import { useRef, useState, useEffect, type RefObject } from 'react';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
@@ -35,6 +35,28 @@ export default function GlobalSearchField({
   sx,
 }: GlobalSearchFieldProps) {
   const { globalSearchQuery, setGlobalSearchQuery } = useDashboard();
+  const [inputValue, setInputValue] = useState(globalSearchQuery);
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(event.target.value);
+  };
+
+  useEffect(() => {
+    // If the input is between 1 and 3 characters, do not search yet
+    if (inputValue.length > 0 && inputValue.length <= 3) {
+      return;
+    }
+
+    // Debounce the search API call
+    const handler = setTimeout(() => {
+      setGlobalSearchQuery(inputValue);
+    }, 500);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [inputValue, setGlobalSearchQuery]);
+
   const { getShortcut } = useResolvedKeyboardShortcuts();
   const localRef = useRef<HTMLInputElement>(null);
   const inputRef = inputRefProp ?? localRef;
@@ -48,8 +70,8 @@ export default function GlobalSearchField({
     <TextField
       fullWidth
       inputRef={inputRef}
-      value={globalSearchQuery}
-      onChange={(event) => setGlobalSearchQuery(event.target.value)}
+      value={inputValue}
+      onChange={handleChange}
       placeholder={resolvedPlaceholder}
       size="small"
       aria-label="Global search"

@@ -356,10 +356,17 @@ export default function DashboardPage({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  // Applied filter state — these drive the API call
   const [mediaTypeFilter, setMediaTypeFilter] = useState<MediaTypeFilter>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>('all');
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [selectedAiTags, setSelectedAiTags] = useState<Set<string>>(new Set());
+
+  // Pending filter state — tracks what the user has selected but not yet submitted
+  const [pendingMediaType, setPendingMediaType] = useState<MediaTypeFilter>('all');
+  const [pendingDateRange, setPendingDateRange] = useState<DateRangeFilter>('all');
+  const [pendingTags, setPendingTags] = useState<Set<string>>(new Set());
+  const [pendingAiTags, setPendingAiTags] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [linkNewItemsToProject, setLinkNewItemsToProject] = useState(true);
@@ -393,7 +400,7 @@ export default function DashboardPage({
       else if (libraryView === 'folder') view = 'folder';
       else if (libraryView === 'project') view = 'project';
 
-      fetchLibraryFirstPage({
+    fetchLibraryFirstPage({
         workspaceId: activeWorkspaceId,
         view,
         folderId: view === 'folder' && folderMedia ? folderMedia.id : undefined,
@@ -690,7 +697,7 @@ export default function DashboardPage({
   };
 
   const toggleTag = (tag: string) => {
-    setSelectedTags((prev) => {
+    setPendingTags((prev) => {
       const next = new Set(prev);
       if (next.has(tag)) next.delete(tag);
       else next.add(tag);
@@ -699,7 +706,7 @@ export default function DashboardPage({
   };
 
   const toggleAiTag = (tag: string) => {
-    setSelectedAiTags((prev) => {
+    setPendingAiTags((prev) => {
       const next = new Set(prev);
       if (next.has(tag)) next.delete(tag);
       else next.add(tag);
@@ -749,7 +756,20 @@ export default function DashboardPage({
     }
   };
 
+  const handleApplyFilters = () => {
+    setMediaTypeFilter(pendingMediaType);
+    setDateRangeFilter(pendingDateRange);
+    setSelectedTags(new Set(pendingTags));
+    setSelectedAiTags(new Set(pendingAiTags));
+    setFilterPanelOpen(false);
+  };
+
   const clearPanelFilters = () => {
+    // Reset both pending and applied together
+    setPendingMediaType('all');
+    setPendingDateRange('all');
+    setPendingTags(new Set());
+    setPendingAiTags(new Set());
     setMediaTypeFilter('all');
     setDateRangeFilter('all');
     setSelectedTags(new Set());
@@ -1330,15 +1350,16 @@ export default function DashboardPage({
         <Collapse in={filterPanelOpen}>
           <Box sx={{ mt: 2 }}>
             <MediaFilterPanel
-              mediaTypeFilter={mediaTypeFilter}
-              dateRangeFilter={dateRangeFilter}
-              selectedTags={selectedTags}
-              selectedAiTags={selectedAiTags}
-              onMediaTypeChange={setMediaTypeFilter}
-              onDateRangeChange={setDateRangeFilter}
+              mediaTypeFilter={pendingMediaType}
+              dateRangeFilter={pendingDateRange}
+              selectedTags={pendingTags}
+              selectedAiTags={pendingAiTags}
+              onMediaTypeChange={setPendingMediaType}
+              onDateRangeChange={setPendingDateRange}
               onToggleTag={toggleTag}
               onToggleAiTag={toggleAiTag}
               onClearAll={clearPanelFilters}
+              onApply={handleApplyFilters}
             />
           </Box>
         </Collapse>
