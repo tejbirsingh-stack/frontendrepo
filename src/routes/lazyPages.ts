@@ -32,3 +32,4 @@ export const ResetPasswordPage = lazyPage(() => import('../pages/ResetPasswordPa
 export const VerifyEmailPage = lazyPage(() => import('../pages/VerifyEmailPage'));
 export const DeletionRequestsPage = lazyPage(() => import('../pages/DeletionRequestsPage'));
 export const ShareGuestPage = lazyPage(() => import('../pages/ShareGuestPage'));
+export const PlatformApp = lazyPage(() => import('../platform/PlatformApp'));

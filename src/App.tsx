@@ -25,6 +25,7 @@ import {
   VerifyEmailPage,
   DeletionRequestsPage,
   ShareGuestPage,
+  PlatformApp,
 } from './routes/lazyPages';
 
 function App() {
@@ -58,6 +59,7 @@ function App() {
               </GuestRoute>
             }
           />
+          <Route path="/platform/*" element={<PlatformApp />} />
           <Route
             path="/reset-password"
             element={<ResetPasswordPage />}
