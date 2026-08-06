@@ -18,6 +18,8 @@ export interface AuthSessionUser {
   };
   planType?: string;
   timezone?: string;
+  orgId?: string;
+  allowedProjectIds?: string[];
   permissions?: string[];
   initials: string;
   avatarUrl?: string;

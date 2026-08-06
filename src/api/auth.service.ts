@@ -362,6 +362,8 @@ export function mapAuthUserDtoToSessionUser(input: any) {
     roleRelation: user.roleRelation,
     organization: user.organization,
     planType: rawPlanType,
+    orgId: user.orgId || user.organization?.id,
+    allowedProjectIds: user.allowedProjectIds || [],
     permissions: user.permissions || [],
     initials: user.initials || getNameInitials(name),
     avatarUrl: user.avatarUrl,

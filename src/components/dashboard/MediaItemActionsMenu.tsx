@@ -1,6 +1,7 @@
 import { useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { PERMISSIONS, hasPermission } from '../../constants/permissions';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
@@ -369,24 +370,25 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           </MenuItem>
         )}
         <MenuItem
-          disabled={(isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media'))}
-          onClick={(event) => {
-            if ((isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media'))) return;
-            consumeMenuPointerEvent(event);
-            openDelete();
+          disabled={isFolder ? !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) : !hasPermission(user, PERMISSIONS.MANAGE_TRASH)}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
+            if (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) return;
+            handleMenuClose(e);
+            onTrash();
           }}
-          onMouseDown={consumeMenuPointerEvent}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: (isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media')) ? cv.textMuted : cv.destructive,
-            opacity: (isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media')) ? 0.6 : 1,
-            cursor: (isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media')) ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: (isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media')) ? 'transparent' : cv.destructiveHover },
+            color: (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) || (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) ? cv.textMuted : cv.destructive,
+            opacity: (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) || (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) ? 0.6 : 1,
+            cursor: (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) || (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) || (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) ? 'transparent' : cv.destructiveHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DeleteOutlinedIcon sx={{ fontSize: 18, color: (isFolder && !user?.permissions?.includes('manage_root_folders')) || (!isFolder && !user?.permissions?.includes('upload_delete_media')) ? cv.textMuted : cv.destructive }} />
+            <DeleteOutlinedIcon sx={{ fontSize: 18, color: (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) || (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) ? cv.textMuted : cv.destructive }} />
           </ListItemIcon>
           Delete
         </MenuItem>
