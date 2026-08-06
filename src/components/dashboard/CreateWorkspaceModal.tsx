@@ -13,7 +13,8 @@ import {
 import { DEFAULT_WORKSPACE_COLOR, WORKSPACE_COLORS } from '../../constants/workspaceColors';
 import InvitePeopleFields from '../settings/InvitePeopleFields';
 import CustomHexColorPickerButton from './CustomHexColorPickerButton';
-import { MOCK_SETTINGS_USER_GROUPS, MOCK_SETTINGS_USERS } from '../../data/mockSettingsData';
+import { MOCK_SETTINGS_USER_GROUPS } from '../../data/mockSettingsData';
+import { fetchOrganizationUsers } from '../../api/auth.service';
 import type { WorkspaceMemberAccess, WorkspaceMemberType } from '../../data/mockSettingsData';
 
 export interface CreateWorkspaceFormData {
@@ -56,6 +57,7 @@ export default function CreateWorkspaceModal({
   const [inviteGroupIds, setInviteGroupIds] = useState<string[]>([]);
   const [inviteMemberType, setInviteMemberType] = useState<WorkspaceMemberType>('Member');
   const [inviteAccess, setInviteAccess] = useState<WorkspaceMemberAccess>('Full Access');
+  const [orgUsersList, setOrgUsersList] = useState<import('../../data/mockSettingsData').SettingsUserRow[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -74,7 +76,32 @@ export default function CreateWorkspaceModal({
     setInviteGroupIds([]);
     setInviteMemberType('Member');
     setInviteAccess('Full Access');
-  }, [open, initialWorkspace]);
+
+    if (!isEdit) {
+      fetchOrganizationUsers()
+        .then((users) => {
+          const rows = users.map((u) => {
+            const displayName = u.name || u.email.split('@')[0] || 'User';
+            const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((p: string) => p[0]?.toUpperCase() ?? '').join('') || u.email[0]?.toUpperCase() || 'U';
+            return {
+              id: u.id,
+              name: displayName,
+              initials,
+              email: u.email,
+              lastActive: u.lastActiveAt || u.lastLoginAt || 'Never',
+              joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—',
+              role: (u.roleRelation?.name || u.role || 'Collaborator') as import('../../data/mockSettingsData').SettingsUserRow['role'],
+              roleId: u.roleId,
+              roleRelation: u.roleRelation,
+              status: (u.status?.toLowerCase() === 'active' ? 'Active' : 'Pending') as 'Active' | 'Pending',
+              isOrganizationMember: true,
+            };
+          });
+          setOrgUsersList(rows);
+        })
+        .catch((err) => console.error('Failed to fetch org users for workspace creation:', err));
+    }
+  }, [open, initialWorkspace, isEdit]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -239,7 +266,7 @@ export default function CreateWorkspaceModal({
               onMemberTypeChange={setInviteMemberType}
               access={inviteAccess}
               onAccessChange={setInviteAccess}
-              suggestedUsers={MOCK_SETTINGS_USERS}
+              suggestedUsers={orgUsersList}
               suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
               description="Optional — invite people or groups to join this workspace."
             />
