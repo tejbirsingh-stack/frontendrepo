@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { getCompanyInfoRequest, updateCompanyInfoRequest, uploadCompanyLogoRequest, updateProfileRequest, uploadProfilePhotoRequest } from '../../api';
-import { logoutAllSessions } from '../../api/auth.service';
+import { logoutAllSessions, fetchOrganizationUsers } from '../../api/auth.service';
 import { useAuth } from '../../auth/AuthContext';
 import { useLocalizedDate } from '../../hooks/useLocalizedDate';
 import { cv } from '../../theme/cssVars';
@@ -56,7 +56,6 @@ import {
   createSettingsWorkspace,
   MOCK_CUSTOM_FIELDS,
   MOCK_SETTINGS_PROJECTS,
-  MOCK_SETTINGS_USERS,
   MOCK_SETTINGS_USER_GROUPS,
   MOCK_SETTINGS_WORKSPACES,
   MOCK_CURRENT_PLAN,
@@ -139,6 +138,7 @@ function AddProjectDialog({
   onSave?: (name: string, workspace: string, visibility: ProjectVisibility) => void;
   workspaceOptions: string[];
   initialProject?: { name: string; workspace: string; visibility: ProjectVisibility };
+  suggestedUsers: import('../../data/mockSettingsData').SettingsUserRow[];
 }) {
   const isEdit = Boolean(initialProject);
   const [name, setName] = useState('');
@@ -282,7 +282,7 @@ function AddProjectDialog({
             onMemberTypeChange={setInviteMemberType}
             access={inviteAccess}
             onAccessChange={setInviteAccess}
-            suggestedUsers={MOCK_SETTINGS_USERS}
+            suggestedUsers={suggestedUsers}
             suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
             description="Private projects are invite-only. Add people or groups who should have access."
           />
@@ -1180,7 +1180,33 @@ export function ProjectsAdminSettingsSection() {
   const [addOpen, setAddOpen] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
+  const [orgUsersList, setOrgUsersList] = useState<import('../../data/mockSettingsData').SettingsUserRow[]>([]);
   const { formatDate } = useLocalizedDate();
+
+  useEffect(() => {
+    fetchOrganizationUsers()
+      .then((users) => {
+        const rows = users.map((u) => {
+          const displayName = u.name || u.email.split('@')[0] || 'User';
+          const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((p: string) => p[0]?.toUpperCase() ?? '').join('') || u.email[0]?.toUpperCase() || 'U';
+          return {
+            id: u.id,
+            name: displayName,
+            initials,
+            email: u.email,
+            lastActive: u.lastActiveAt || u.lastLoginAt || 'Never',
+            joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—',
+            role: (u.roleRelation?.name || u.role || 'Collaborator') as import('../../data/mockSettingsData').SettingsUserRow['role'],
+            roleId: u.roleId,
+            roleRelation: u.roleRelation,
+            status: (u.status?.toLowerCase() === 'active' ? 'Active' : 'Pending') as 'Active' | 'Pending',
+            isOrganizationMember: true,
+          };
+        });
+        setOrgUsersList(rows);
+      })
+      .catch((err) => console.error('Failed to fetch org users for share dialog:', err));
+  }, []);
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -1405,13 +1431,14 @@ export function ProjectsAdminSettingsSection() {
               }
             : undefined
         }
+        suggestedUsers={orgUsersList}
       />
       <WorkspaceMembersDialog
         open={Boolean(inviteProjectId)}
         workspaceName={inviteProject?.project ?? 'project'}
         resourceId={inviteProjectId ?? undefined}
         members={inviteProject?.teamMembers ?? []}
-        suggestedUsers={MOCK_SETTINGS_USERS}
+        suggestedUsers={orgUsersList}
         suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
         isRestricted={inviteProject?.isRestricted ?? false}
         resourceType="project"
@@ -1433,9 +1460,36 @@ export function WorkspacesAdminSettingsSection() {
   const [addOpen, setAddOpen] = useState(false);
   const [editWorkspaceId, setEditWorkspaceId] = useState<string | null>(null);
   const [inviteWorkspaceId, setInviteWorkspaceId] = useState<string | null>(null);
+  const [orgUsersList, setOrgUsersList] = useState<import('../../data/mockSettingsData').SettingsUserRow[]>([]);
   const { formatDate } = useLocalizedDate();
 
+  useEffect(() => {
+    fetchOrganizationUsers()
+      .then((users) => {
+        const rows = users.map((u) => {
+          const displayName = u.name || u.email.split('@')[0] || 'User';
+          const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((p: string) => p[0]?.toUpperCase() ?? '').join('') || u.email[0]?.toUpperCase() || 'U';
+          return {
+            id: u.id,
+            name: displayName,
+            initials,
+            email: u.email,
+            lastActive: u.lastActiveAt || u.lastLoginAt || 'Never',
+            joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—',
+            role: (u.roleRelation?.name || u.role || 'Collaborator') as import('../../data/mockSettingsData').SettingsUserRow['role'],
+            roleId: u.roleId,
+            roleRelation: u.roleRelation,
+            status: (u.status?.toLowerCase() === 'active' ? 'Active' : 'Pending') as 'Active' | 'Pending',
+            isOrganizationMember: true,
+          };
+        });
+        setOrgUsersList(rows);
+      })
+      .catch((err) => console.error('Failed to fetch org users for share dialog:', err));
+  }, []);
+
   const inviteWorkspace = workspaces.find((workspace) => workspace.id === inviteWorkspaceId);
+
   const editWorkspace = workspaces.find((workspace) => workspace.id === editWorkspaceId);
 
   const handleCreateWorkspace = (data: CreateWorkspaceFormData) => {
@@ -1565,7 +1619,7 @@ export function WorkspacesAdminSettingsSection() {
         workspaceName={inviteWorkspace?.workspace ?? 'workspace'}
         resourceId={inviteWorkspaceId ?? undefined}
         members={inviteWorkspace?.teamMembers ?? []}
-        suggestedUsers={MOCK_SETTINGS_USERS}
+        suggestedUsers={orgUsersList}
         suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
         isRestricted={inviteWorkspace?.isRestricted ?? false}
         onClose={() => setInviteWorkspaceId(null)}
