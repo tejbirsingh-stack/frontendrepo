@@ -1,0 +1,37 @@
+import type { AuthSessionUser } from '../auth/types';
+
+export const PERMISSIONS = {
+  VIEW_SEARCH_MEDIA: 'view_search_media',
+  DOWNLOAD_STREAM_MEDIA: 'download_stream_media',
+  UPLOAD_MEDIA: 'upload_media',
+  DELETE_MEDIA: 'delete_media',
+  MANAGE_TRASH: 'manage_trash',
+  EDIT_METADATA_TAGS: 'edit_metadata_tags',
+  TIMELINE_ANNOTATIONS: 'timeline_annotations',
+  ANNOTATION_PRIVACY: 'annotation_privacy',
+  CREATE_SHARE_LINKS: 'create_share_links',
+  MANAGE_USERS_PERMISSIONS: 'manage_users_permissions',
+  CONFIGURE_SSO_MFA: 'configure_sso_mfa',
+  VIEW_AUDIT_ANALYTICS: 'view_audit_analytics',
+  MANAGE_ROOT_FOLDERS: 'manage_root_folders',
+  MANAGE_SUBSCRIPTION_BILLING: 'manage_subscription_billing',
+  PROVISION_ENTERPRISE_ORG: 'provision_enterprise_org',
+  MANAGE_INFRASTRUCTURE: 'manage_infrastructure',
+} as const;
+
+export type PermissionSlug = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+export function hasPermission(
+  user: Pick<AuthSessionUser, 'permissions'> | null | undefined,
+  slug: PermissionSlug | string,
+): boolean {
+  if (!user || !user.permissions) return false;
+  return user.permissions.includes(slug);
+}
+
+export function hasAnyPermission(
+  user: Pick<AuthSessionUser, 'permissions'> | null | undefined,
+  slugs: (PermissionSlug | string)[],
+): boolean {
+  return slugs.some((slug) => hasPermission(user, slug));
+}

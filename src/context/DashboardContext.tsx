@@ -973,6 +973,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         name: data.name,
         description: data.description,
         color: data.color,
+        inviteEmails: data.inviteEmails,
+        inviteGroupIds: data.inviteGroupIds,
       };
 
       const response = await apiClient.post<Workspace>('/workspaces/add', payload, {
@@ -1701,6 +1703,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         };
 
         setMediaItems((prev) => [...prev, newFolderItem]);
+        setLibraryItems((prev) => [newFolderItem, ...prev]);
 
         return folderId;
       } catch (err) {
@@ -2011,6 +2014,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             folderId: details.folderId || undefined,
             tagIds: details.tagIds,
             technicalSpecs: fullTechSpecs,
+            visibility: details.visibility,
           },
           onProgress,
         );
@@ -2117,8 +2121,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       if (!trimmed) return;
 
       if (!parentFolderId && !projectLocation) {
-        await addWorkspaceFolder(trimmed, color);
-        return;
+        const newFolderId = await addWorkspaceFolder(trimmed, color);
+        return newFolderId || undefined;
       }
       try {
         const { apiClient } = await import('../api/client');

@@ -411,6 +411,7 @@ export default function VideoUploadDetailsModal({
   const [duration, setDuration] = useState<string | undefined>();
   const [selectedTags, setSelectedTags] = useState<ManagedTag[]>([]);
   const [folderId, setFolderId] = useState('');
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [createTagOpen, setCreateTagOpen] = useState(false);

@@ -5,11 +5,14 @@ import { cv } from '../theme/cssVars';
 import { Box, Typography } from '@mui/material';
 import PlanBadge from '../components/dashboard/PlanBadge';
 import { getSettingsSectionMeta } from '../constants/settingsNav';
+import { useAuth } from '../auth/AuthContext';
 
 export default function SettingsLayout() {
   const location = useLocation();
+  const { user } = useAuth();
   const pathSuffix = location.pathname.replace('/home/settings/', '').replace(/\/$/, '');
   const sectionMeta = getSettingsSectionMeta(pathSuffix);
+  const displayPlan = (user?.planType || user?.organization?.planType || 'free').toUpperCase();
 
   return (
     <Box
@@ -48,7 +51,7 @@ export default function SettingsLayout() {
             </Typography>
           ) : null}
         </Box>
-        <PlanBadge label="Team · Premium" size="md" />
+        <PlanBadge label={displayPlan} size="md" />
       </Box>
 
       <Box sx={{ width: '100%', minWidth: 0 }}>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Box,
+  Button,
   Chip,
   FormControl,
   MenuItem,
@@ -76,6 +77,7 @@ interface MediaFilterPanelProps {
   onToggleTag: (tag: string) => void;
   onToggleAiTag: (tag: string) => void;
   onClearAll: () => void;
+  onApply: () => void;
 }
 
 export default function MediaFilterPanel({
@@ -88,6 +90,7 @@ export default function MediaFilterPanel({
   onToggleTag,
   onToggleAiTag,
   onClearAll,
+  onApply,
 }: MediaFilterPanelProps) {
   const { activeWorkspaceId, getAssignableTags } = useDashboard();
   const tagOptions = getAssignableTags(activeWorkspaceId).map((tag) => tag.name);
@@ -287,6 +290,31 @@ export default function MediaFilterPanel({
             )}
           </Box>
         </FilterField>
+      </Box>
+
+      {/* Apply button */}
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2.5 }}>
+        <Button
+          variant="contained"
+          onClick={onApply}
+          sx={{
+            px: 3,
+            py: 0.875,
+            borderRadius: '10px',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            textTransform: 'none',
+            background: 'linear-gradient(135deg, var(--noah-brand-purple), var(--noah-brand-purple-light, #a78bfa))',
+            boxShadow: '0 2px 12px rgba(139,92,246,0.35)',
+            '&:hover': {
+              background: 'linear-gradient(135deg, var(--noah-brand-purple-hover, #7c3aed), var(--noah-brand-purple))',
+              boxShadow: '0 4px 16px rgba(139,92,246,0.5)',
+            },
+            transition: 'all 0.2s ease',
+          }}
+        >
+          Apply Filters
+        </Button>
       </Box>
     </Box>
   );

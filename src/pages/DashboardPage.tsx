@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, Fragment } from 'react';
 import { cv } from '../theme/cssVars';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -49,6 +49,7 @@ import DashboardKeyboardShortcutsDialog from '../components/dashboard/DashboardK
 import HelpMenuDrawer, { getHelpMenuShortcutLabel } from '../components/media/HelpMenuDrawer';
 import { useAuth } from '../auth/AuthContext';
 import { ROLE_IDS } from '../constants/userRoles';
+import { PERMISSIONS, hasPermission } from '../constants/permissions';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
 import { dropdownMenuPaperSx } from '../constants/dropdownMenu';
@@ -251,6 +252,7 @@ export default function DashboardPage({
   folderMedia,
 }: DashboardPageProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isFavoritesView = libraryView === 'favorites';
   const isDuplicatesView = libraryView === 'duplicates';
   const isProjectsView = libraryView === 'projects';
@@ -356,10 +358,17 @@ export default function DashboardPage({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  // Applied filter state — these drive the API call
   const [mediaTypeFilter, setMediaTypeFilter] = useState<MediaTypeFilter>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>('all');
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [selectedAiTags, setSelectedAiTags] = useState<Set<string>>(new Set());
+
+  // Pending filter state — tracks what the user has selected but not yet submitted
+  const [pendingMediaType, setPendingMediaType] = useState<MediaTypeFilter>('all');
+  const [pendingDateRange, setPendingDateRange] = useState<DateRangeFilter>('all');
+  const [pendingTags, setPendingTags] = useState<Set<string>>(new Set());
+  const [pendingAiTags, setPendingAiTags] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [linkNewItemsToProject, setLinkNewItemsToProject] = useState(true);
@@ -393,7 +402,7 @@ export default function DashboardPage({
       else if (libraryView === 'folder') view = 'folder';
       else if (libraryView === 'project') view = 'project';
 
-      fetchLibraryFirstPage({
+    fetchLibraryFirstPage({
         workspaceId: activeWorkspaceId,
         view,
         folderId: view === 'folder' && folderMedia ? folderMedia.id : undefined,
@@ -690,7 +699,7 @@ export default function DashboardPage({
   };
 
   const toggleTag = (tag: string) => {
-    setSelectedTags((prev) => {
+    setPendingTags((prev) => {
       const next = new Set(prev);
       if (next.has(tag)) next.delete(tag);
       else next.add(tag);
@@ -699,7 +708,7 @@ export default function DashboardPage({
   };
 
   const toggleAiTag = (tag: string) => {
-    setSelectedAiTags((prev) => {
+    setPendingAiTags((prev) => {
       const next = new Set(prev);
       if (next.has(tag)) next.delete(tag);
       else next.add(tag);
@@ -749,7 +758,20 @@ export default function DashboardPage({
     }
   };
 
+  const handleApplyFilters = () => {
+    setMediaTypeFilter(pendingMediaType);
+    setDateRangeFilter(pendingDateRange);
+    setSelectedTags(new Set(pendingTags));
+    setSelectedAiTags(new Set(pendingAiTags));
+    setFilterPanelOpen(false);
+  };
+
   const clearPanelFilters = () => {
+    // Reset both pending and applied together
+    setPendingMediaType('all');
+    setPendingDateRange('all');
+    setPendingTags(new Set());
+    setPendingAiTags(new Set());
     setMediaTypeFilter('all');
     setDateRangeFilter('all');
     setSelectedTags(new Set());
@@ -1245,66 +1267,66 @@ export default function DashboardPage({
             </MenuItem>
           )}
           <MenuItem
-            disabled={user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+            disabled={!hasPermission(user, PERMISSIONS.UPLOAD_MEDIA)}
             onClick={() => {
-              if (user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+              if (!hasPermission(user, PERMISSIONS.UPLOAD_MEDIA)) return;
               closeNewMenu();
               newUploadInputRef.current?.click();
             }}
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
-              opacity: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-              cursor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
+              color: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary,
+              opacity: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 0.6 : 1,
+              cursor: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+              <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Upload files
           </MenuItem>
           <MenuItem
-            disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+            disabled={!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)}
             onClick={() => {
-              if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+              if (!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
               closeNewMenu();
               setNewFolderModalOpen(true);
             }}
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
-              opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-              cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
+              color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
+              opacity: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+              cursor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+              <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             New folder
           </MenuItem>
           {!folderMedia?.isProject && (
             <MenuItem
-              disabled={user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER}
+              disabled={!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)}
               onClick={() => {
-                if (user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER) return;
+                if (!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
                 closeNewMenu();
                 setNewProjectModalOpen(true);
               }}
               sx={{
                 py: 1,
                 fontSize: '0.875rem',
-                color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary,
-                opacity: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 0.6 : 1,
-                cursor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'not-allowed' : 'pointer',
-                '&:hover': { backgroundColor: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? 'transparent' : cv.surfaceHover },
+                color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
+                opacity: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+                cursor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+                '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
               }}
             >
               <ListItemIcon sx={{ minWidth: 32 }}>
-                <AddIcon sx={{ fontSize: 18, color: user?.roleId === ROLE_IDS.EDITOR || user?.roleId === ROLE_IDS.COLLABORATOR || user?.roleId === ROLE_IDS.VIEWER ? cv.textMuted : cv.textSecondary }} />
+                <AddIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
               </ListItemIcon>
               New project
             </MenuItem>
@@ -1330,15 +1352,16 @@ export default function DashboardPage({
         <Collapse in={filterPanelOpen}>
           <Box sx={{ mt: 2 }}>
             <MediaFilterPanel
-              mediaTypeFilter={mediaTypeFilter}
-              dateRangeFilter={dateRangeFilter}
-              selectedTags={selectedTags}
-              selectedAiTags={selectedAiTags}
-              onMediaTypeChange={setMediaTypeFilter}
-              onDateRangeChange={setDateRangeFilter}
+              mediaTypeFilter={pendingMediaType}
+              dateRangeFilter={pendingDateRange}
+              selectedTags={pendingTags}
+              selectedAiTags={pendingAiTags}
+              onMediaTypeChange={setPendingMediaType}
+              onDateRangeChange={setPendingDateRange}
               onToggleTag={toggleTag}
               onToggleAiTag={toggleAiTag}
               onClearAll={clearPanelFilters}
+              onApply={handleApplyFilters}
             />
           </Box>
         </Collapse>

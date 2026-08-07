@@ -189,14 +189,25 @@ function AddUserDialog({
       return;
     }
     const finalRoleId = roleId || role;
-    try {
-      await registerRole({ email: trimmed, roleId: finalRoleId });
-    } catch (err) {
-      console.error('Error calling registerRole API:', err);
+    if (!finalRoleId) {
+      toast.error('Role is not found');
+      return;
     }
-    const selectedRoleName = rolesList.find((r) => r.id === finalRoleId)?.name || role;
-    onInvite(trimmed, selectedRoleName as UserRole);
-    onClose();
+    try {
+      const res = await registerRole({ email: trimmed, roleId: finalRoleId });
+      if (res && res.success === false) {
+        toast.error(res.message || 'Role is not found');
+        return;
+      }
+      toast.success('Invitation sent successfully');
+      const selectedRoleName = rolesList.find((r) => r.id === finalRoleId)?.name || role;
+      onInvite(trimmed, selectedRoleName as UserRole);
+      onClose();
+    } catch (err: any) {
+      console.error('Error calling registerRole API:', err);
+      const serverMsg = err?.response?.data?.message || err?.message || 'Role is not found';
+      toast.error(serverMsg);
+    }
   };
 
   const handleSave = () => {
@@ -542,7 +553,7 @@ function PeopleTab({
     try {
       toast.loading(`Marking users as ${action}...`, { id: 'bulk-action' });
       await bulkUpdateOrganizationUsersRequest(userIds, action);
-      
+
       if (action === 'delete') {
         setUsers((current) => current.filter((u) => !userIds.includes(u.id)));
         toast.success(`Deleted ${userIds.length} users`, { id: 'bulk-action' });

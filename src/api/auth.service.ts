@@ -349,6 +349,9 @@ export function mapAuthUserDtoToSessionUser(input: any) {
   };
   const fallbackRoleId = roleNameMap[formattedRole] || '';
 
+  const rawPlanType =
+    user.organization?.planType || user.planType || user.workspace?.planType || 'free';
+
   return {
     id: user.id || 'user-id',
     name: name,
@@ -357,6 +360,10 @@ export function mapAuthUserDtoToSessionUser(input: any) {
     role: formattedRole,
     roleId: user.roleId || user.role_id || user.roleRelation?.id || fallbackRoleId,
     roleRelation: user.roleRelation,
+    organization: user.organization,
+    planType: rawPlanType,
+    orgId: user.orgId || user.organization?.id,
+    allowedProjectIds: user.allowedProjectIds || [],
     permissions: user.permissions || [],
     initials: user.initials || getNameInitials(name),
     avatarUrl: user.avatarUrl,

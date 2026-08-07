@@ -27,7 +27,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
     label: 'Accounts',
     items: [
       { id: 'usage', label: 'Usage', path: 'accounts/usage' },
-      { id: 'plan', label: 'Plan (WIP)', path: 'accounts/plan' },
+      { id: 'plan', label: 'Plan', path: 'accounts/plan' },
       { id: 'billing', label: 'Billing', path: 'accounts/billing' },
       { id: 'branding', label: 'Branding (WIP)', path: 'accounts/branding' },
     ],
@@ -47,7 +47,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     id: 'share',
     label: 'Share Management',
-    items: [{ id: 'settings', label: 'Share Settings (WIP)', path: 'share/settings' }],
+    items: [{ id: 'settings', label: 'Share Settings', path: 'share/settings' }],
   },
 ];
 
