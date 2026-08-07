@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
-  Backdrop,
   Box,
   Button,
-  CircularProgress,
   Divider,
   IconButton,
   InputAdornment,
@@ -38,8 +36,7 @@ import {
   completeSignupRequest,
   mapAuthUserDtoToSessionUser,
 } from '../api/auth.service';
-import { uploadMediaFileRequest } from '../api/media.service';
-import { extractImageMetadata, extractAudioMetadata } from '../utils/mediaMetadataExtractors';
+import { useUploadManager } from '../context/UploadManagerContext';
 
 type SignupPhase = 'email' | 'verify' | 'workspace' | 'usage' | 'upload' | 'done' | 'plans';
 
@@ -251,8 +248,7 @@ export default function SignUpPage() {
   const [error, setError] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [isSsoLoading, setIsSsoLoading] = useState(false);
-  const [isUploadingOnboardingFiles, setIsUploadingOnboardingFiles] = useState(false);
-  const [uploadProgressText, setUploadProgressText] = useState('');
+  const { enqueueFiles } = useUploadManager();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const workspaceSlug = useMemo(() => slugifyWorkspaceName(workspaceName), [workspaceName]);
@@ -414,33 +410,11 @@ export default function SignUpPage() {
       }
 
       if (uploadedFiles && uploadedFiles.length > 0) {
-        setIsUploadingOnboardingFiles(true);
-        let currentCount = 0;
-        for (const file of uploadedFiles) {
-          currentCount++;
-          setUploadProgressText(`Uploading onboarding file ${currentCount} of ${uploadedFiles.length}: ${file.name}`);
-          try {
-            let fullTechSpecs: Record<string, any> = {};
-            const mime = file.type || '';
-            if (mime.startsWith('image/')) {
-              fullTechSpecs = await extractImageMetadata(file);
-            } else if (mime.startsWith('audio/')) {
-              fullTechSpecs = await extractAudioMetadata(file);
-            }
-
-            const targetWorkspaceId = response?.workspace?.id || response?.user?.workspace?.id;
-            const uploadedAsset = await uploadMediaFileRequest(file, {
-              title: file.name.replace(/\.[^/.]+$/, ''),
-              technicalSpecs: fullTechSpecs,
-              ownerType: 'WORKSPACE',
-              ownerId: targetWorkspaceId,
-            });
-            console.log('Successfully saved onboarding asset to DB:', file.name, uploadedAsset);
-          } catch (uploadErr) {
-            console.error('Failed to upload onboarding media file with EXIF specs:', file.name, uploadErr);
-          }
-        }
-        setIsUploadingOnboardingFiles(false);
+        const targetWorkspaceId = response?.workspace?.id || response?.user?.workspace?.id;
+        void enqueueFiles(uploadedFiles, {
+          ownerType: 'WORKSPACE',
+          ownerId: targetWorkspaceId,
+        });
       }
 
       if (activeToken) {
@@ -453,7 +427,6 @@ export default function SignUpPage() {
     } catch (err: any) {
       console.error('Failed to complete signup:', err);
       setError(err.response?.data?.message || err.message || 'Failed to complete signup. Please try again.');
-      setIsUploadingOnboardingFiles(false);
     } finally {
       setIsChecking(false);
     }
@@ -718,41 +691,11 @@ export default function SignUpPage() {
     };
   }, [phase]);
 
-  const renderUploadBackdropLoader = () => (
-    <Backdrop
-      open={isUploadingOnboardingFiles}
-      sx={{
-        color: '#fff',
-        zIndex: (theme) => theme.zIndex.drawer + 9999,
-        backgroundColor: 'rgba(15, 23, 42, 0.88)',
-        backdropFilter: 'blur(10px)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 2.5,
-      }}
-    >
-      <CircularProgress size={56} sx={{ color: '#818cf8' }} />
-      <Box sx={{ textAlign: 'center', maxWidth: 420, px: 2 }}>
-        <Typography variant="h6" sx={{ color: '#f8fafc', fontWeight: 600, mb: 0.5 }}>
-          Uploading your media files...
-        </Typography>
-        <Typography variant="body2" sx={{ color: '#94a3b8' }}>
-          {uploadProgressText || 'Please wait while we complete setting up your workspace.'}
-        </Typography>
-      </Box>
-    </Backdrop>
-  );
-
   if (phase === 'plans') {
     return (
-      <>
-        <ChoosePlanScreen
-          onSelectPlan={(planId, billingCycle) => void handleFinalPlanSelect(planId, billingCycle)}
-        />
-        {renderUploadBackdropLoader()}
-      </>
+      <ChoosePlanScreen
+        onSelectPlan={(planId, billingCycle) => void handleFinalPlanSelect(planId, billingCycle)}
+      />
     );
   }
 
@@ -844,7 +787,6 @@ export default function SignUpPage() {
             })}
           </Box>
         </Box>
-        {renderUploadBackdropLoader()}
       </Box>
     );
   }
@@ -1671,8 +1613,6 @@ export default function SignUpPage() {
           ) : null}
         </GlassCard>
       </Box>
-
-      {renderUploadBackdropLoader()}
     </Box>
   );
 }

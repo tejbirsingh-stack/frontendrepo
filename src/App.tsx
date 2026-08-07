@@ -28,11 +28,14 @@ import {
   PlatformApp,
 } from './routes/lazyPages';
 
+import { UploadManagerProvider } from './context/UploadManagerContext';
+
 function App() {
   return (
-    <BrowserRouter>
-      <StampStickerFilterDefs />
-      <Suspense fallback={<RouteLoadingFallback />}>
+    <UploadManagerProvider>
+      <BrowserRouter>
+        <StampStickerFilterDefs />
+        <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
           <Route path="/s/:token" element={<ShareGuestPage />} />
           <Route
@@ -110,6 +113,7 @@ function App() {
         </Routes>
       </Suspense>
     </BrowserRouter>
+    </UploadManagerProvider>
   );
 }
 

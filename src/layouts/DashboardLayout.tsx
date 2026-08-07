@@ -12,6 +12,7 @@ import SettingsSidebar from '../components/settings/SettingsSidebar';
 import SettingsSidebarDrawer from '../components/settings/SettingsSidebarDrawer';
 import Header from '../components/dashboard/Header';
 import MediaUploadDetailsModal from '../components/dashboard/MediaUploadDetailsModal';
+import FloatingUploadProgressWidget from '../components/dashboard/FloatingUploadProgressWidget';
 import { SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
 import { DashboardProvider, useDashboard } from '../context/DashboardContext';
 import type { MediaUploadDetails } from '../types/mediaUpload';
@@ -114,6 +115,8 @@ function DashboardLayoutContent() {
         onClose={cancelMediaUpload}
         onUpload={handleCompleteMediaUpload}
       />
+
+      <FloatingUploadProgressWidget />
     </>
   );
 }

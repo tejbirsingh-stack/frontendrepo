@@ -9,9 +9,8 @@ import {
   type ReactNode,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loadFavoriteMediaIds, saveFavoriteMediaIds } from '../utils/favoritesStorage';
+import { loadFavoriteMediaIds } from '../utils/favoritesStorage';
 import {
-  loadManagedTags,
   normalizeTagName,
   saveManagedTags,
 } from '../utils/tagRegistryStorage';
@@ -42,16 +41,15 @@ import type {
   MediaUploadOptions,
 } from '../types/mediaUpload';
 import type { SidebarSelection } from '../types/sidebarSelection';
-import { extractImageMetadata, extractAudioMetadata, extractExifFromFile, type TechnicalExifDetails } from '../utils/mediaMetadataExtractors';
+import { extractImageMetadata, extractAudioMetadata } from '../utils/mediaMetadataExtractors';
 import {
   uploadMediaFileRequest,
-  getMediaAssetsRequest,
   toggleFavoriteRequest,
   getFavoritesRequest,
   type MediaAssetResponseDto,
 } from '../api';
 import { type LibraryListParams, getLibraryItems } from '../api/library.service';
-const token = (await import('../auth/authTokenBridge')).getAccessToken();
+
 
 interface DashboardContextValue {
   workspaces: Workspace[];
@@ -117,7 +115,7 @@ interface DashboardContextValue {
   completeMediaUpload: (
     details: MediaUploadDetails,
     onProgress?: (progress: { loaded: number; total: number }) => void,
-  ) => Promise<string | void>;
+  ) => Promise<string | null | undefined | void>;
   cancelMediaUpload: () => void;
   /** @deprecated Use pendingMediaUpload */
   pendingVideoUpload: PendingMediaUpload | null;
@@ -127,7 +125,7 @@ interface DashboardContextValue {
   completeVideoUpload: (
     details: MediaUploadDetails,
     onProgress?: (progress: { loaded: number; total: number }) => void,
-  ) => Promise<void>;
+  ) => Promise<string | null | undefined | void>;
   /** @deprecated Use cancelMediaUpload */
   cancelVideoUpload: () => void;
   createRootMediaFolder: (
@@ -245,9 +243,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     async function fetchTimezone() {
       try {
         const { apiClient } = await import('../api/client');
-        const res = await apiClient.get<any>('/workspaces/timezone', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await apiClient.get<any>('/workspaces/timezone');
         const data = res.data || res;
         if (data && data.timezone) {
           setSystemTimezone(data.timezone);
@@ -263,9 +259,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     try {
       const { apiClient } = await import('../api/client');
       const query = tagIds && tagIds.length > 0 ? `?tagIds=${tagIds.join(',')}` : '';
-      const response = await apiClient.get<any>(`/workspaces/find-all-data/${activeWorkspaceId}${query}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const response = await apiClient.get<any>(`/workspaces/find-all-data/${activeWorkspaceId}${query}`);
 
       const resBody = (response as any).data || response;
       const actualData = resBody.data || resBody;
@@ -384,9 +378,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     const fetchWorkspaces = async () => {
       try {
         const { apiClient } = await import('../api/client');
-        const response = await apiClient.get<Workspace[]>('/workspaces/find-all', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const response = await apiClient.get<Workspace[]>('/workspaces/find-all');
         const data = Array.isArray(response) ? response : (response as any).data;
 
         if (data && Array.isArray(data) && data.length > 0) {
@@ -415,13 +407,25 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     fetchWorkspaceData();
   }, [activeWorkspaceId, fetchWorkspaceData]);
 
+  // Listen for upload completion events (from background upload queue or modal)
+  useEffect(() => {
+    const handleUploadCompleted = () => {
+      fetchWorkspaceData();
+      if (listParamsRef.current) {
+        void fetchLibraryFirstPage(listParamsRef.current);
+      }
+    };
+
+    window.addEventListener('noah-upload-completed', handleUploadCompleted);
+    return () => {
+      window.removeEventListener('noah-upload-completed', handleUploadCompleted);
+    };
+  }, [fetchWorkspaceData, fetchLibraryFirstPage]);
+
   const fetchFolderData = useCallback(async (folderId: string): Promise<string[]> => {
     try {
       const { apiClient } = await import('../api/client');
-      const token = localStorage.getItem('token');
-      const response = await apiClient.get<any>(`/workspaces/folder/find-all-data/${folderId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const response = await apiClient.get<any>(`/workspaces/folder/find-all-data/${folderId}`);
 
       const resBody = (response as any).data || response;
       const actualData = resBody.data || resBody;
@@ -555,10 +559,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const fetchProjectData = useCallback(async (projectId: string) => {
     try {
       const { apiClient } = await import('../api/client');
-      const token = localStorage.getItem('token');
-      const response = await apiClient.get<any>(`/workspaces/project/find-all-data/${projectId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const response = await apiClient.get<any>(`/workspaces/project/find-all-data/${projectId}`);
 
       const resBody = (response as any).data || response;
       const actualData = resBody.data || resBody;
@@ -632,10 +633,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     const fetchTags = async () => {
       try {
         const { apiClient } = await import('../api/client');
-        const token = localStorage.getItem('token');
-        const response = await apiClient.get<any>('/tags', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const response = await apiClient.get<any>('/tags');
         const data = response.data || response;
         if (Array.isArray(data)) {
           const tags = data.map((t: any) => ({
@@ -977,9 +975,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         inviteGroupIds: data.inviteGroupIds,
       };
 
-      const response = await apiClient.post<Workspace>('/workspaces/add', payload, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const response = await apiClient.post<Workspace>('/workspaces/add', payload);
       const newWorkspace = (response as any).data || response;
 
       const sanitizedWorkspace: Workspace = {
@@ -1460,15 +1456,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       try {
         const { apiClient } = await import('../api/client');
-        const token = localStorage.getItem('token');
         const response = await apiClient.post<any>('/tags', {
           name,
           scope: input.scope,
           workspaceId,
           parentId: input.parentId,
           color: tagScopeColors[input.scope],
-        }, {
-          headers: { 'Authorization': `Bearer ${token}` }
         });
         const resData = response.data || response;
 
@@ -1513,15 +1506,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       try {
         const { apiClient } = await import('../api/client');
-        const token = localStorage.getItem('token');
         
         const payload: any = {};
         if (updates.name) payload.name = nextName;
         if (updates.parentId !== undefined) payload.parentId = updates.parentId;
         
-        const response = await apiClient.patch<any>(`/tags/${id}`, payload, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const response = await apiClient.patch<any>(`/tags/${id}`, payload);
         const resData = response.data || response;
 
         setManagedTags((prev) =>
@@ -1567,10 +1557,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       try {
         const { apiClient } = await import('../api/client');
-        const token = localStorage.getItem('token');
-        await apiClient.delete(`/tags/${id}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        await apiClient.delete(`/tags/${id}`);
 
         setManagedTags((prev) => prev.filter((tag) => tag.id !== id));
         setMediaItems((prev) =>
@@ -1662,8 +1649,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         const response = await apiClient.post<any>(`/workspaces/folder/add/${activeWorkspaceId}`, {
           name: trimmed,
           color,
-        }, {
-          headers: { 'Authorization': `Bearer ${token}` }
         });
 
         const resData = (response as any).data || response;
@@ -1723,8 +1708,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         const { apiClient } = await import('../api/client');
         await apiClient.put(`/workspaces/folder/update/${folderId}`, {
           name: trimmed,
-        }, {
-          headers: { 'Authorization': `Bearer ${token}` }
         });
 
         setWorkspaces((prev) =>
@@ -2051,45 +2034,44 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           : {}),
       };
 
-      if (!parentFolderId) {
-        // Just refresh workspace data, we return the folderId so the caller navigates.
-        fetchWorkspaceData();
-      } else {
-        setMediaItems((items) => {
-          if (items.some((item) => item.id === newItem.id)) {
-            return items;
-          }
-
-          const next = [...items, newItem];
-          return next.map((item) =>
-            item.id === parentFolderId && item.type === 'folder'
-              ? { ...item, itemCount: (item.itemCount ?? 0) + 1 }
-              : item,
-          );
-        });
-
-        if (details.folderId) {
-          setWorkspaces((workspaces) =>
-            workspaces.map((workspace) => {
-              if (workspace.id !== activeWorkspaceId) return workspace;
-
-              return {
-                ...workspace,
-                folders: workspace.folders.map((folder) => {
-                  if (folder.id !== details.folderId) return folder;
-
-                  const children = folder.children ?? [];
-                  if (children.includes(trimmedTitle)) return folder;
-
-                  return {
-                    ...folder,
-                    children: [...children, trimmedTitle],
-                  };
-                }),
-              };
-            }),
-          );
+      setMediaItems((items) => {
+        if (items.some((item) => item.id === newItem.id)) {
+          return items;
         }
+
+        const next = [newItem, ...items];
+        if (!parentFolderId) return next;
+
+        return next.map((item) =>
+          item.id === parentFolderId && item.type === 'folder'
+            ? { ...item, itemCount: (item.itemCount ?? 0) + 1 }
+            : item,
+        );
+      });
+
+      if (!parentFolderId) {
+        fetchWorkspaceData();
+      } else if (details.folderId) {
+        setWorkspaces((workspaces) =>
+          workspaces.map((workspace) => {
+            if (workspace.id !== activeWorkspaceId) return workspace;
+
+            return {
+              ...workspace,
+              folders: workspace.folders.map((folder) => {
+                if (folder.id !== details.folderId) return folder;
+
+                const children = folder.children ?? [];
+                if (children.includes(trimmedTitle)) return folder;
+
+                return {
+                  ...folder,
+                  children: [...children, trimmedTitle],
+                };
+              }),
+            };
+          }),
+        );
       }
 
       // Always update libraryItems so it shows up instantly in the grid, regardless of whether 
@@ -2132,8 +2114,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           color,
           parentId: parentFolderId || null,
           linkedProjectId: linkedProjectId || undefined,
-        }, {
-          headers: { 'Authorization': `Bearer ${token}` }
         });
 
         const resData = (response as any).data || response;
@@ -2201,8 +2181,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           name: trimmed,
           folderId: parentFolderId || null,
           ...(defaultTagIds && defaultTagIds.length > 0 ? { defaultTagIds } : {}),
-        }, {
-          headers: { 'Authorization': `Bearer ${token}` }
         });
 
         const resData = (response as any).data || response;
@@ -2271,13 +2249,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
         try {
           const { apiClient } = await import('../api/client');
-          const token = localStorage.getItem('token');
           await apiClient.post(`/workspaces/project/link-source/${projectLocation.folderId}`, {
             sourceableType,
             assetId: !isFolder ? mediaId : undefined,
             folderId: isFolder ? mediaId : undefined
-          }, {
-            headers: { 'Authorization': `Bearer ${token}` }
           });
         } catch (err) {
           console.error('Failed to link source to project:', err);
