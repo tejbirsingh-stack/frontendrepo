@@ -15,6 +15,7 @@ interface StorageConsumptionChartProps {
   breakdown: StorageBreakdownSegment[];
   capBytes: number;
   compact?: boolean;
+  warningLevel?: 'ok' | 'warning' | 'exceeded';
 }
 
 const CHART_SIZE_DEFAULT = 220;
@@ -101,6 +102,7 @@ export default function StorageConsumptionChart({
   breakdown,
   capBytes,
   compact = false,
+  warningLevel = 'ok',
 }: StorageConsumptionChartProps) {
   const chartSize = compact ? CHART_SIZE_COMPACT : CHART_SIZE_DEFAULT;
   const center = chartSize / 2;
@@ -194,7 +196,7 @@ export default function StorageConsumptionChart({
                 mt: 0.75,
                 fontSize: '0.6875rem',
                 fontWeight: 600,
-                color: cv.brandPurple,
+                color: warningLevel === 'exceeded' ? cv.errorText : warningLevel === 'warning' ? cv.warning : cv.brandPurple,
               }}
             >
               {usedPercent < 1 ? usedPercent.toFixed(1) : Math.round(usedPercent)}%

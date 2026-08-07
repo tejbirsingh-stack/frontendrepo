@@ -98,7 +98,7 @@ export const verifyEmailRequest = async (token: string) => {
 
 export const loginWithGoogle = async (idToken: string, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => {
   const response = await axios.post(
-    `${API_BASE_URL}/auth/loging-google`,
+    `${API_BASE_URL}/auth/login-google`,
     { idToken, ...(options || {}) }
   );
 

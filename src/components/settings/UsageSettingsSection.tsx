@@ -1,18 +1,24 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
+  Alert,
   Box,
   Button,
   LinearProgress,
+  Skeleton,
   Typography,
 } from '@mui/material';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
 import WorkspacesOutlinedIcon from '@mui/icons-material/WorkspacesOutlined';
+import toast from 'react-hot-toast';
+
 import { cv } from '../../theme/cssVars';
 import { SETTINGS_BASE_PATH } from '../../constants/settingsNav';
-import { MOCK_USAGE_SUMMARY } from '../../data/mockSettingsData';
+import { getUsageSummary } from '../../api/usage.service';
+import type { UsageSummaryResponse } from '../../types/usage';
+import { progressBarColor, warningCopy } from '../../utils/usageWarning';
 import { SettingsTableContainer } from './SettingsContentLayout';
 import StorageConsumptionChart from './StorageConsumptionChart';
 
@@ -147,8 +153,56 @@ function UsageDetailCard({
 }
 
 export default function UsageSettingsSection() {
-  const usage = MOCK_USAGE_SUMMARY;
-  const membersPercent = (usage.membersUsed / usage.membersTotal) * 100;
+  const [usage, setUsage] = useState<UsageSummaryResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isCancelled = false;
+    (async () => {
+      try {
+        const data = await getUsageSummary();
+        if (!isCancelled) {
+          setUsage(data);
+        }
+      } catch (err: any) {
+        if (!isCancelled) {
+          console.error('Failed to load usage summary:', err);
+          toast.error(err?.message || 'Failed to load usage summary');
+        }
+      } finally {
+        if (!isCancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <SettingsTableContainer>
+        <Skeleton variant="rectangular" height={40} sx={{ mb: 2, borderRadius: 2 }} />
+        <Skeleton variant="rectangular" height={320} sx={{ borderRadius: 4 }} />
+      </SettingsTableContainer>
+    );
+  }
+
+  if (!usage) {
+    return (
+      <SettingsTableContainer>
+        <Typography sx={{ color: cv.errorText }}>
+          Failed to load usage data. Please refresh or try again later.
+        </Typography>
+      </SettingsTableContainer>
+    );
+  }
+
+  const banner = warningCopy(usage);
+  const membersPercent = (usage.membersUsed / Math.max(usage.membersTotal, 1)) * 100;
+  const primarySystem = usage.storageSystems?.[0];
 
   return (
     <SettingsTableContainer>
@@ -167,6 +221,32 @@ export default function UsageSettingsSection() {
           Seat allotment, storage, projects, and workspaces for this account shell.
         </Typography>
       </Box>
+
+      {banner ? (
+        <Alert
+          severity={usage.warningLevel === 'exceeded' ? 'error' : 'warning'}
+          sx={{
+            mb: 2.5,
+            borderRadius: '12px',
+            backgroundColor:
+              usage.warningLevel === 'exceeded' ? cv.errorSurface : cv.warningSurface,
+            border: `1px solid ${usage.warningLevel === 'exceeded' ? cv.errorText : cv.warning}`,
+          }}
+          action={
+            <Button
+              component={RouterLink}
+              to={`${SETTINGS_BASE_PATH}/accounts/billing`}
+              color="inherit"
+              size="small"
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              View billing
+            </Button>
+          }
+        >
+          <strong>{banner.title}</strong> — {banner.body}
+        </Alert>
+      ) : null}
 
       <Box
         sx={{
@@ -192,7 +272,9 @@ export default function UsageSettingsSection() {
             Storage consumption
           </Typography>
           <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, mb: 2 }}>
-            Core repository streams from Backblaze B2.
+            {primarySystem
+              ? `Core repository streams from ${primarySystem.name}.`
+              : 'Core repository streams from Backblaze B2.'}
           </Typography>
 
           <StorageConsumptionChart
@@ -201,7 +283,8 @@ export default function UsageSettingsSection() {
             capLabel={usage.storageCapLabel}
             usedPercent={usage.storageUsedPercent}
             breakdown={usage.storageBreakdown}
-            capBytes={usage.storageCapBytes}
+            capBytes={usage.storageQuotaBytes}
+            warningLevel={usage.storageWarningLevel}
           />
         </Box>
 
@@ -267,13 +350,22 @@ export default function UsageSettingsSection() {
                 backgroundColor: cv.surfaceRaised,
                 '& .MuiLinearProgress-bar': {
                   borderRadius: 999,
-                  background: cv.brandGradient,
+                  background: progressBarColor(usage.seatsWarningLevel),
                 },
               }}
             />
             <Typography sx={{ mt: 1, fontSize: '0.75rem', color: cv.textMuted, lineHeight: 1.5 }}>
-              Admin & Super Admin only. Adding a {usage.seatGuardrailMax + 1}th member triggers a billing
-              upgrade roadblock.
+              {usage.seatsWarningLevel === 'exceeded'
+                ? 'All seats are in use. Upgrade your plan to invite more members.'
+                : `Adding a ${usage.membersTotal + 1}th member requires a plan upgrade.`}{' '}
+              <Button
+                component={RouterLink}
+                to={`${SETTINGS_BASE_PATH}/accounts/plan`}
+                size="small"
+                sx={{ textTransform: 'none', p: 0, minWidth: 0 }}
+              >
+                View plans
+              </Button>
             </Typography>
           </UsageDetailCard>
 
