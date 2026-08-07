@@ -1,11 +1,19 @@
 export const SIDE_PANEL_WIDTH = 260;
 export const NOTIFICATION_DRAWER_WIDTH = SIDE_PANEL_WIDTH * 2;
 /** Dashboard header + sidebar logo bar share this height so their bottom borders align. */
-export const DASHBOARD_TOP_BAR_HEIGHT = 64;
+export const DASHBOARD_TOP_BAR_HEIGHT = 72;
 /** Shared bottom border for the dashboard header and sidebar logo bar. */
 export const DASHBOARD_TOP_BAR_BORDER = '1px solid var(--noah-border)';
-/** Shared Noah logo width in compact headers (landing + video annotation, mobile/tablet). */
+/** Shared Noah logo width in compact headers (mobile/tablet). */
 export const HEADER_LOGO_WIDTH = 72;
+/**
+ * Media-viewer header logo box — width keeps the mark readable;
+ * height is shorter than the PNG’s native aspect so empty canvas is cropped via object-fit.
+ */
+export const HEADER_LOGO_BOX_WIDTH_DESKTOP = 280;
+export const HEADER_LOGO_BOX_HEIGHT_DESKTOP = 40;
+export const HEADER_LOGO_BOX_WIDTH_MOBILE = 140;
+export const HEADER_LOGO_BOX_HEIGHT_MOBILE = 32;
 /** Annotation footer island sizing (mobile vs desktop). */
 export const ANNOTATION_TOOL_BUTTON_SIZE = { xs: 36, lg: 48 } as const;
 export const ANNOTATION_TOOL_ICON_SIZE = { xs: 18, lg: 24 } as const;

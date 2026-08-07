@@ -202,12 +202,15 @@ export default function ShareLinksSection({
                         )}
                       </Typography>
                       <Typography
+                        title={link.url}
                         sx={{
                           mt: 0.25,
                           fontSize: '0.75rem',
                           color: cv.textMuted,
                           lineHeight: 1.3,
-                          wordBreak: 'break-all',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
                         }}
                       >
                         {link.url}

@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client';
+import { Toaster } from 'react-hot-toast';
 import 'react-loading-skeleton/dist/skeleton.css';
 import { AuthProvider } from './auth/AuthContext';
 import AppSkeletonTheme from './components/loading/AppSkeletonTheme';
@@ -19,6 +20,7 @@ msalInstance.initialize().then(() => {
         <AppSkeletonTheme>
           <AuthProvider>
             <App />
+            <Toaster position="top-right" />
           </AuthProvider>
         </AppSkeletonTheme>
       </ThemePreferenceProvider>

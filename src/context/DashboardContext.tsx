@@ -22,6 +22,7 @@ import {
 } from '../utils/tagScopeColorsStorage';
 import type { CreateManagedTagInput, ManagedTag } from '../types/managedTag';
 import type { TagScopeColors } from '../types/tagScopeColors';
+import { withAncestorTags } from '../utils/tagHierarchy';
 import { apiClient } from '../api/client';
 import type { TagScope } from '../types/managedTag';
 import { initialMediaItems, type MediaItem, type MediaLocation, type MediaType, type SidebarFolder } from '../data/mockMedia';
@@ -95,6 +96,7 @@ interface DashboardContextValue {
   clearMediaSelection: () => void;
   renameMedia: (mediaId: string, newTitle: string) => void;
   updateMediaTags: (mediaId: string, tags: string[]) => void;
+  updateMediaReviewStatus: (mediaId: string, reviewStatus: string) => void;
   managedTags: ManagedTag[];
   tagScopeColors: TagScopeColors;
   updateTagScopeColor: (scope: TagScope, color: string) => void;
@@ -1406,6 +1408,22 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const updateMediaReviewStatus = useCallback((mediaId: string, reviewStatus: string) => {
+    const patch = (item: MediaItem): MediaItem =>
+      item.id === mediaId
+        ? {
+            ...item,
+            customMetadata: {
+              ...(item.customMetadata || {}),
+              reviewStatus,
+            },
+          }
+        : item;
+
+    setMediaItems((prev) => prev.map(patch));
+    setLibraryItems((prev) => prev.map(patch));
+  }, []);
+
   const getTagUsageCount = useCallback(
     (tagName: string) => {
       const normalized = normalizeTagName(tagName);
@@ -1415,11 +1433,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   );
 
   const getAssignableTags = useCallback(
-    (workspaceId: string) =>
-      managedTags.filter((tag) => {
+    (workspaceId: string) => {
+      const assignable = managedTags.filter((tag) => {
         if (tag.scope === 'company' || tag.scope === 'personal') return true;
         return tag.scope === 'project' && tag.workspaceId === workspaceId;
-      }),
+      });
+      // Keep parent chain so parentId hierarchy resolves across scopes/workspaces.
+      return withAncestorTags(assignable, managedTags);
+    },
     [managedTags],
   );
 
@@ -2368,6 +2389,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       clearMediaSelection,
       renameMedia,
       updateMediaTags,
+      updateMediaReviewStatus,
       managedTags,
       tagScopeColors,
       updateTagScopeColor,
@@ -2454,6 +2476,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       clearMediaSelection,
       renameMedia,
       updateMediaTags,
+      updateMediaReviewStatus,
       managedTags,
       tagScopeColors,
       updateTagScopeColor,

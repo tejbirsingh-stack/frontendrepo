@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { cv } from '../../theme/cssVars';
 import { Box, Divider, Popover, Typography } from '@mui/material';
-import { getAppVersionLabel } from '../../constants/appVersion';
 
 export function getHelpMenuShortcutLabel(): string {
   const isMac =
@@ -59,7 +58,6 @@ const SUPPORT_EMAIL = 'support@noah.app';
 const HELP_MENU_SECTIONS: string[][] = [
   ['Help Center', 'Support Forum', 'References'],
   ['Submit feedback', 'Contact support'],
-  ['Change keyboard layout...'],
 ];
 
 interface HelpMenuDrawerProps {
@@ -117,8 +115,6 @@ export default function HelpMenuDrawer({
       window.open(`mailto:${SUPPORT_EMAIL}?subject=Feedback`, '_blank');
     } else if (label === 'Contact support') {
       window.open(`mailto:${SUPPORT_EMAIL}?subject=Support Request`, '_blank');
-    } else if (label === 'Change keyboard layout...') {
-      onKeyboardShortcuts();
     }
   };
 
@@ -176,34 +172,6 @@ export default function HelpMenuDrawer({
         >
           <Typography sx={{ fontSize: '0.9375rem', fontWeight: 400 }}>Keyboard shortcuts</Typography>
           <ShortcutBadges />
-        </Box>
-
-        <Divider sx={{ my: 0.75, borderColor: cv.border }} />
-
-        {HELP_MENU_SECTIONS[2].map((label) => (
-          <Box
-            key={label}
-            component="button"
-            type="button"
-            role="menuitem"
-            onClick={() => handleItemClick(label)}
-            sx={menuItemSx}
-          >
-            <Typography sx={{ fontSize: '0.9375rem', fontWeight: 400 }}>{label}</Typography>
-          </Box>
-        ))}
-
-        <Box sx={{ px: 2, pt: 0.75, pb: 1 }}>
-          <Typography
-            sx={{
-              fontSize: '0.6875rem',
-              fontWeight: 400,
-              lineHeight: 1.4,
-              color: cv.textMuted,
-            }}
-          >
-            {getAppVersionLabel()}
-          </Typography>
         </Box>
       </Box>
     </Popover>

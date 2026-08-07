@@ -86,6 +86,13 @@ const SIDEBAR_WIDTH = SIDE_PANEL_WIDTH;
 const sidebarLogoSx = {
   mb: 0,
   px: 0,
+  height: '100%',
+  '& img': {
+    maxHeight: 'none',
+    height: '100%',
+    width: 'auto',
+    maxWidth: '100%',
+  },
 } as const;
 
 interface NavItemProps {
@@ -1604,7 +1611,6 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
           alignItems: 'center',
           height: DASHBOARD_TOP_BAR_HEIGHT,
           minHeight: DASHBOARD_TOP_BAR_HEIGHT,
-          maxHeight: DASHBOARD_TOP_BAR_HEIGHT,
           boxSizing: 'border-box',
           px: 2,
           borderBottom: DASHBOARD_TOP_BAR_BORDER,

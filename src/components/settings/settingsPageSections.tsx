@@ -66,6 +66,7 @@ import {
   DEFAULT_PRIVACY_SETTINGS,
   MOCK_PERSONAL_PROFILE,
   PROFILE_TIMEZONE_OPTIONS,
+  resolveProfileTimezoneOption,
   resolveWorkspaceInvite,
   type BrandingSettingsData,
   type SettingsProjectRow,
@@ -417,11 +418,11 @@ function AddProjectDialog({
 }
 
 export function PersonalSettingsSection() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   
   const [profile, setProfile] = useState({
     fullName: user?.name || '',
-    timezone: user?.timezone || 'UTC',
+    timezone: resolveProfileTimezoneOption(user?.timezone),
     avatarUrl: user?.avatarUrl || ''
   });
   
@@ -434,7 +435,7 @@ export function PersonalSettingsSection() {
     if (user) {
       setProfile({
         fullName: user.name || '',
-        timezone: user.timezone || 'UTC',
+        timezone: resolveProfileTimezoneOption(user.timezone),
         avatarUrl: user.avatarUrl || ''
       });
     }
@@ -460,8 +461,8 @@ export function PersonalSettingsSection() {
       await logoutAllSessions();
       toast.success('All sessions revoked. Logging out...');
       setTimeout(() => {
-        user?.logout?.(); // clear local token and redirect if logout is provided, else we rely on AuthContext unmounting
-        window.location.reload(); 
+        void logout();
+        window.location.assign('/');
       }, 1000);
     } catch (err: any) {
       toast.error(err.message || 'Failed to revoke sessions');
@@ -545,15 +546,18 @@ export function PersonalSettingsSection() {
             <Select
               labelId="profile-timezone-label"
               label="Timezone"
-              value={profile.timezone}
+              value={resolveProfileTimezoneOption(profile.timezone)}
               onChange={(event: SelectChangeEvent) =>
-                setProfile((current) => ({ ...current, timezone: event.target.value }))
+                setProfile((current) => ({
+                  ...current,
+                  timezone: resolveProfileTimezoneOption(event.target.value),
+                }))
               }
               sx={dialogSelectSx}
             >
               {PROFILE_TIMEZONE_OPTIONS.map((zone) => (
-                <MenuItem key={zone} value={zone} sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
-                  {zone}
+                <MenuItem key={zone.value} value={zone.value} sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
+                  {zone.label}
                 </MenuItem>
               ))}
             </Select>
@@ -597,7 +601,7 @@ export function PersonalSettingsSection() {
       <Dialog
         open={saveProfileConfirmOpen}
         onClose={() => setSaveProfileConfirmOpen(false)}
-        slotProps={noahDialogSlotProps}
+        slotProps={noahDialogSlotProps()}
       >
         <DialogTitle>Confirm Changes</DialogTitle>
         <DialogContent>
@@ -619,9 +623,9 @@ export function PersonalSettingsSection() {
       <Dialog
         open={logoutAllConfirmOpen}
         onClose={() => setLogoutAllConfirmOpen(false)}
-        slotProps={noahDialogSlotProps}
+        slotProps={noahDialogSlotProps()}
       >
-        <DialogTitle sx={{ color: cv.danger }}>Log Out of All Sessions</DialogTitle>
+        <DialogTitle sx={{ color: cv.destructive }}>Log Out of All Sessions</DialogTitle>
         <DialogContent>
           <Typography sx={{ color: cv.textSecondary, fontSize: '0.875rem' }}>
             Are you sure you want to log out of all active sessions? This will instantly revoke access for all devices, including the one you are currently using. You will need to log back in.
@@ -631,7 +635,15 @@ export function PersonalSettingsSection() {
           <Button onClick={() => setLogoutAllConfirmOpen(false)} sx={{ color: cv.textSecondary }}>
             Cancel
           </Button>
-          <Button onClick={handleLogoutAll} variant="contained" sx={{ bgcolor: cv.danger, color: '#fff', '&:hover': { bgcolor: cv.dangerHover } }}>
+          <Button
+            onClick={handleLogoutAll}
+            variant="contained"
+            sx={{
+              bgcolor: cv.destructive,
+              color: '#fff',
+              '&:hover': { bgcolor: cv.destructiveStrong },
+            }}
+          >
             Confirm Logout
           </Button>
         </DialogActions>
