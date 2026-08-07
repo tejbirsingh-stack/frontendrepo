@@ -250,6 +250,41 @@ export default function WorkspaceMembersDialog({
   const [sharePassword, setSharePassword] = useState('');
   const [sharePasswordVisible, setSharePasswordVisible] = useState(false);
   const [sharePasswordCopied, setSharePasswordCopied] = useState(false);
+  
+  // Organization Share Settings State for locking UI
+  const [orgShareSettings, setOrgShareSettings] = useState<any>(null);
+
+  useEffect(() => {
+    if (secureShareOpen) {
+      import('../../api/client').then(({ apiClient }) => {
+        apiClient.get<any>('/organizations/share-settings')
+          .then(res => {
+            const settings = res.data || res;
+            setOrgShareSettings(settings);
+            
+            if (settings.defaultExpiryDays) {
+              const daysStr = String(settings.defaultExpiryDays);
+              if (['7', '15', '30'].includes(daysStr)) {
+                setShareExpiry(daysStr as any);
+              } else {
+                setShareExpiry('custom');
+              }
+            }
+            if (settings.requirePasswordDefault === true) {
+              setShareRequirePassword(true);
+            }
+            if (settings.allowDownloadsDefault !== undefined) {
+              setSharePermDownload(settings.allowDownloadsDefault);
+              setSharePermDownloadProxy(settings.allowDownloadsDefault);
+            }
+          })
+          .catch(err => console.error("Failed to load share settings", err));
+      });
+    } else {
+      setOrgShareSettings(null); // clear when closed
+    }
+  }, [secureShareOpen]);
+
   // Legacy state
   const [pendingMemberRemove, setPendingMemberRemove] = useState<WorkspaceTeamMember | null>(null);
   const [pendingShareLinkDelete, setPendingShareLinkDelete] = useState<ShareLink | null>(null);
@@ -1500,6 +1535,7 @@ export default function WorkspaceMembersDialog({
               exclusive
               onChange={(_e, val) => { if (val) setShareExpiry(val as typeof shareExpiry); }}
               size="small"
+              disabled={Boolean(orgShareSettings?.defaultExpiryDays)}
               sx={{ flexWrap: 'wrap', gap: 0.5 }}
             >
               {(['7', '15', '30', 'custom'] as const).map((opt) => (
@@ -1564,6 +1600,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermDownload}
                     onChange={(e) => setSharePermDownload(e.target.checked)}
+                    disabled={orgShareSettings?.allowDownloadsDefault !== undefined}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Download original</Typography>}
@@ -1574,6 +1611,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermDownloadProxy}
                     onChange={(e) => setSharePermDownloadProxy(e.target.checked)}
+                    disabled={orgShareSettings?.allowDownloadsDefault !== undefined}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Download proxy</Typography>}
@@ -1598,6 +1636,7 @@ export default function WorkspaceMembersDialog({
                 <Switch
                   size="small"
                   checked={shareRequirePassword}
+                  disabled={orgShareSettings?.requirePasswordDefault === true}
                   onChange={(e) => {
                     setShareRequirePassword(e.target.checked);
                     if (!e.target.checked) setSharePassword('');

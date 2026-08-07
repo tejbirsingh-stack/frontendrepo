@@ -1689,6 +1689,70 @@ export function SecurityAdminSettingsSection() {
 export function ShareSettingsSection() {
   const [requirePassword, setRequirePassword] = useState(false);
   const [allowDownloads, setAllowDownloads] = useState(true);
+  const [linkExpiry, setLinkExpiry] = useState('30');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const response = await apiClient.get<any>('/organizations/share-settings', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = response.data || response;
+        if (data) {
+          if (typeof data.requirePasswordDefault === 'boolean') {
+            setRequirePassword(data.requirePasswordDefault);
+          }
+          if (typeof data.allowDownloadsDefault === 'boolean') {
+            setAllowDownloads(data.allowDownloadsDefault);
+          }
+          if (data.defaultExpiryDays) {
+            setLinkExpiry(String(data.defaultExpiryDays));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load share settings", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  const updateSetting = async (key: string, value: any) => {
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      await apiClient.patch('/organizations/share-settings', {
+        [key]: value
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Settings updated');
+    } catch (err) {
+      console.error(`Failed to update ${key}`, err);
+      toast.error('Failed to update settings');
+    }
+  };
+
+  const handleRequirePasswordChange = (checked: boolean) => {
+    setRequirePassword(checked);
+    updateSetting('requirePasswordDefault', checked);
+  };
+
+  const handleAllowDownloadsChange = (checked: boolean) => {
+    setAllowDownloads(checked);
+    updateSetting('allowDownloadsDefault', checked);
+  };
+
+  const handleLinkExpiryChange = (value: string) => {
+    setLinkExpiry(value);
+    updateSetting('defaultExpiryDays', parseInt(value, 10));
+  };
+
+  if (loading) return null;
 
   return (
     <SettingsFormContainer>
@@ -1702,7 +1766,7 @@ export function ShareSettingsSection() {
         action={
           <Switch
             checked={requirePassword}
-            onChange={(event) => setRequirePassword(event.target.checked)}
+            onChange={(event) => handleRequirePasswordChange(event.target.checked)}
             slotProps={{ input: { 'aria-label': 'Require password on share links' } }}
           />
         }
@@ -1713,7 +1777,7 @@ export function ShareSettingsSection() {
         action={
           <Switch
             checked={allowDownloads}
-            onChange={(event) => setAllowDownloads(event.target.checked)}
+            onChange={(event) => handleAllowDownloadsChange(event.target.checked)}
             slotProps={{ input: { 'aria-label': 'Allow downloads on share links' } }}
           />
         }
@@ -1725,7 +1789,8 @@ export function ShareSettingsSection() {
           <TextField
             select
             size="small"
-            defaultValue="30"
+            value={linkExpiry}
+            onChange={(event) => handleLinkExpiryChange(event.target.value)}
             sx={{ minWidth: 120 }}
             slotProps={textFieldSelectInDialogSlotProps}
           >
