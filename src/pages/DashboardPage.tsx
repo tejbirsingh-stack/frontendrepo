@@ -76,6 +76,10 @@ import { formatProjectLocationLabel } from '../utils/mediaProjectLocation';
 import { MULTI_ITEM_TRASH_CONFIRMATION_PHRASE } from '../constants/trash';
 import { CURRENT_USER } from '../constants/currentUser';
 import {
+  FILE_REVIEW_STATUSES,
+  type FileReviewStatus,
+} from '../constants/fileReviewStatus';
+import {
   InviteTeamMemberButton,
 } from '../components/common/TeamMemberAvatarStack';
 import InviteTeamMemberModal from '../components/common/InviteTeamMemberModal';
@@ -88,6 +92,12 @@ import LibraryScrollSentinel from '../components/dashboard/LibraryScrollSentinel
 type ViewMode = 'grid' | 'list' | 'folder';
 type SortField = 'date' | 'name' | 'type' | 'size';
 type SortDirection = 'asc' | 'desc';
+type ReviewStatusFilter = 'all' | FileReviewStatus;
+
+const REVIEW_STATUS_FILTER_OPTIONS: { value: ReviewStatusFilter; label: string }[] = [
+  { value: 'all', label: 'All Statuses' },
+  ...FILE_REVIEW_STATUSES.map((status) => ({ value: status, label: status })),
+];
 
 const sortFieldLabels: Record<SortField, string> = {
   date: 'Date',
@@ -363,6 +373,7 @@ export default function DashboardPage({
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>('all');
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [selectedAiTags, setSelectedAiTags] = useState<Set<string>>(new Set());
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<ReviewStatusFilter>('all');
 
   // Pending filter state — tracks what the user has selected but not yet submitted
   const [pendingMediaType, setPendingMediaType] = useState<MediaTypeFilter>('all');
@@ -412,6 +423,7 @@ export default function DashboardPage({
         dateRange: dateRangeFilter,
         tagIds: Array.from(selectedTags),
         aiTags: Array.from(selectedAiTags),
+        reviewStatus: reviewStatusFilter,
         sortBy,
         sortOrder: sortDirection,
         pageSize: 48,
@@ -426,6 +438,7 @@ export default function DashboardPage({
     dateRangeFilter,
     selectedTags,
     selectedAiTags,
+    reviewStatusFilter,
     sortBy,
     sortDirection,
     fetchLibraryFirstPage
@@ -548,7 +561,8 @@ export default function DashboardPage({
     mediaTypeFilter !== 'all' ||
     dateRangeFilter !== 'all' ||
     selectedTags.size > 0 ||
-    selectedAiTags.size > 0;
+    selectedAiTags.size > 0 ||
+    reviewStatusFilter !== 'all';
 
   const hasNonDefaultSort = sortBy !== 'date' || sortDirection !== 'desc';
 
@@ -696,6 +710,10 @@ export default function DashboardPage({
 
   const handleSortByChange = (event: SelectChangeEvent) => {
     setSortBy(event.target.value as SortField);
+  };
+
+  const handleReviewStatusFilterChange = (event: SelectChangeEvent) => {
+    setReviewStatusFilter(event.target.value as ReviewStatusFilter);
   };
 
   const toggleTag = (tag: string) => {
@@ -1134,6 +1152,40 @@ export default function DashboardPage({
                 Filter
               </Button>
             </Tooltip>
+
+            <FormControl size="small" sx={{ minWidth: { xs: 120, sm: 140 } }}>
+              <Select
+                value={reviewStatusFilter}
+                onChange={handleReviewStatusFilterChange}
+                displayEmpty
+                IconComponent={KeyboardArrowDownIcon}
+                renderValue={(value) => {
+                  const selected = value as ReviewStatusFilter;
+                  if (selected === 'all') return 'Status: All';
+                  return `Status: ${selected}`;
+                }}
+                sx={{
+                  ...getToolbarControlSx(reviewStatusFilter !== 'all'),
+                  minWidth: { xs: 120, sm: 140 },
+                }}
+                MenuProps={{
+                  slotProps: {
+                    paper: { sx: { ...menuPaperSx, minWidth: 200 } },
+                  },
+                }}
+                inputProps={{ 'aria-label': 'Filter by review status' }}
+              >
+                {REVIEW_STATUS_FILTER_OPTIONS.map((option) => (
+                  <MenuItem
+                    key={option.value}
+                    value={option.value}
+                    sx={{ fontSize: '0.875rem', color: cv.textSecondary }}
+                  >
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <FormControl size="small" sx={{ minWidth: { xs: 130, sm: 148 } }}>

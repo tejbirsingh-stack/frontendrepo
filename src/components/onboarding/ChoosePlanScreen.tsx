@@ -3,7 +3,7 @@ import { Box, Button, Typography, keyframes } from '@mui/material';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import LiquidBackground from '../LiquidBackground';
 import WaveBackground from '../WaveBackground';
-import NoahLogo from '../NoahLogo';
+import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../NoahLogo';
 import { cv } from '../../theme/cssVars';
 import { fetchPublicCatalogPlans } from '../../platform/api/platformApi';
 
@@ -177,13 +177,14 @@ export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps
           animation: `${fadeUp} 0.55s ease`,
         }}
       >
-        <NoahLogo
-          align="center"
-          width={{ xs: 120, sm: 150 }}
-          animated={false}
-          showGlow={false}
-          sx={{ mb: { xs: 3, md: 3.5 } }}
-        />
+        <Box sx={{ ...AUTH_LOGO_PARENT_SX, mb: { xs: 3, md: 3.5 } }}>
+          <NoahLogo
+            align="center"
+            animated={false}
+            showGlow={false}
+            sx={AUTH_LOGO_SX}
+          />
+        </Box>
 
         <Typography
           component="h1"

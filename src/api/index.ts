@@ -12,6 +12,7 @@ export {
   getMediaAssetsRequest,
   getMediaAssetByIdRequest,
   updateAssetTagsRequest,
+  updateAssetReviewStatusRequest,
   deleteMediaFileRequest,
   retryTranscodeRequest,
   getAssetAccessOverrides,

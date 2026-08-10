@@ -2,6 +2,11 @@ import type { SxProps, Theme } from '@mui/material';
 import { cv } from '../theme/cssVars';
 import type { ManagedTag, TagScope } from '../types/managedTag';
 import type { TagScopeColors } from '../types/tagScopeColors';
+import {
+  TAG_UI_DARK_SURFACE,
+  ensureContrastOnBackground,
+  getContrastingForeground,
+} from './colorContrast';
 import { getTagScopeColor } from './tagScopeColorsStorage';
 import { normalizeTagName } from './tagRegistryStorage';
 
@@ -13,39 +18,90 @@ export function findManagedTagByName(
   return managedTags.find((tag) => tag.name === normalized);
 }
 
+/** Readable scope accent against dark UI (borders, icons, unchecked accents). */
+export function getReadableTagScopeAccent(
+  scope: TagScope,
+  scopeColors: TagScopeColors,
+  surfaceHex: string = TAG_UI_DARK_SURFACE,
+): string {
+  return ensureContrastOnBackground(getTagScopeColor(scope, scopeColors), surfaceHex, 4.5);
+}
+
+/** Solid category badge: scope fill + contrasting label (WCAG AA). */
+export function getTagScopeBadgeSx(
+  scope: TagScope,
+  scopeColors: TagScopeColors,
+): SxProps<Theme> {
+  const fill = getTagScopeColor(scope, scopeColors);
+  const text = getContrastingForeground(fill);
+
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    px: 0.75,
+    py: 0.15,
+    borderRadius: '999px',
+    fontSize: '0.625rem',
+    fontWeight: 700,
+    letterSpacing: '0.02em',
+    lineHeight: 1.4,
+    color: text,
+    backgroundColor: fill,
+    border: `1px solid ${fill}`,
+    flexShrink: 0,
+  };
+}
+
 export function getTagScopeChipSx(
   scope: TagScope,
   scopeColors: TagScopeColors,
   options?: { selected?: boolean; height?: number; fontSize?: string },
 ): SxProps<Theme> {
-  const color = getTagScopeColor(scope, scopeColors);
+  const fill = getTagScopeColor(scope, scopeColors);
   const selected = options?.selected ?? false;
+  const accent = ensureContrastOnBackground(fill, TAG_UI_DARK_SURFACE, 4.5);
+  const onFill = getContrastingForeground(fill);
+
+  if (selected) {
+    return {
+      height: options?.height ?? 28,
+      borderRadius: '999px',
+      fontSize: options?.fontSize ?? '0.8125rem',
+      fontWeight: 600,
+      backgroundColor: fill,
+      color: onFill,
+      border: `1px solid ${fill}`,
+      '& .MuiChip-label': { px: 1.25 },
+      '& .MuiChip-deleteIcon': {
+        color: onFill,
+        opacity: 0.85,
+        '&:hover': { color: onFill, opacity: 1 },
+      },
+      '&:hover': {
+        backgroundColor: fill,
+        filter: 'brightness(1.08)',
+      },
+    };
+  }
 
   return {
     height: options?.height ?? 28,
     borderRadius: '999px',
     fontSize: options?.fontSize ?? '0.8125rem',
     fontWeight: 600,
-    backgroundColor: selected ? `${color}40` : `${color}20`,
-    color: selected ? cv.textOnCta : color,
-    border: `1px solid ${selected ? color : `${color}55`}`,
+    backgroundColor: 'transparent',
+    color: accent,
+    border: `1px solid ${accent}`,
     '& .MuiChip-label': { px: 1.25 },
     '& .MuiChip-deleteIcon': {
-      color: selected ? cv.textOnCta : color,
-      opacity: 0.72,
-      '&:hover': { color: selected ? cv.textOnCta : color, opacity: 1 },
+      color: accent,
+      opacity: 0.85,
+      '&:hover': { color: accent, opacity: 1 },
     },
-    ...(selected
-      ? {
-          '&:hover': {
-            backgroundColor: `${color}55`,
-          },
-        }
-      : {
-          '&:hover': {
-            backgroundColor: `${color}30`,
-          },
-        }),
+    '&:hover': {
+      backgroundColor: `${fill}24`,
+      borderColor: accent,
+    },
   };
 }
 
@@ -63,6 +119,7 @@ export function getManagedTagOptionSx(
   highlighted: boolean,
 ): SxProps<Theme> {
   const color = getTagScopeColor(tag.scope, scopeColors);
+  const accent = ensureContrastOnBackground(color, TAG_UI_DARK_SURFACE, 4.5);
 
   return {
     display: 'flex',
@@ -72,9 +129,10 @@ export function getManagedTagOptionSx(
     py: 0.85,
     borderRadius: '10px',
     cursor: 'pointer',
-    backgroundColor: highlighted ? `${color}18` : 'transparent',
+    backgroundColor: highlighted ? `${color}28` : 'transparent',
+    outline: highlighted ? `1px solid ${accent}` : 'none',
     '&:hover': {
-      backgroundColor: `${color}18`,
+      backgroundColor: `${color}28`,
     },
   };
 }

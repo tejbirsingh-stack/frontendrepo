@@ -193,8 +193,6 @@ interface AnnotationHistoryDrawerProps {
   onUpdateAnnotationGroup?: (groupId: string, name: string, memberIds: string[]) => Promise<AnnotationAccessGroup | null | undefined>;
   onAddCollaborator?: (name: string, email: string) => MediaCollaborator | null;
   activeHistoryEntryId?: string | null;
-  onDownloadOriginal?: () => void;
-  canDownload?: boolean;
 }
 
 const DRAWER_TABS: { value: DrawerTab; label: string }[] = [
@@ -918,8 +916,6 @@ export default function AnnotationHistoryDrawer({
   onDeleteAnnotationGroup,
   onUpdateAnnotationGroup,
   onAddCollaborator,
-  onDownloadOriginal,
-  canDownload,
 }: AnnotationHistoryDrawerProps) {
   const theme = useTheme();
   const activeUser = useActiveUser();
@@ -1388,8 +1384,6 @@ export default function AnnotationHistoryDrawer({
             onTagsChange={onTagsChange}
             activeSection={detailsSection}
             onSectionChange={onDetailsSectionChange}
-            onDownloadOriginal={onDownloadOriginal}
-            canDownload={canDownload}
           />
         ) : (
           <Box sx={{ py: 4, textAlign: 'center' }}>

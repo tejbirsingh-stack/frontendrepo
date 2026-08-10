@@ -12,6 +12,8 @@ import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import LinkIcon from '@mui/icons-material/Link';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
 import TruncatedText from '../TruncatedText';
 import { useNavigate } from 'react-router-dom';
@@ -34,6 +36,7 @@ import {
 import { formatFolderItemCount, getFolderChildCount } from '../../utils/folderItemCount';
 import { useDashboard } from '../../context/DashboardContext';
 import { decodeClientImageToDataUrl } from '../../utils/clientImageDecoder';
+import { parseFileReviewStatus } from '../../constants/fileReviewStatus';
 
 interface MediaItemCardProps {
   item: MediaItem;
@@ -149,6 +152,64 @@ function TypeBadge({ type, isProject }: { type: MediaType; isProject?: boolean }
         >
           {label}
         </Typography>
+      </Box>
+    </Tooltip>
+  );
+}
+
+/** Approved / Rejected badge shown next to the type pill on media cards. */
+function ReviewStatusBadge({ item }: { item: MediaItem }) {
+  if (item.type === 'folder' || item.isProject) return null;
+
+  const status = parseFileReviewStatus(
+    (item.customMetadata as { reviewStatus?: unknown } | undefined)?.reviewStatus ??
+      (item as { reviewStatus?: unknown }).reviewStatus,
+  );
+
+  if (status !== 'Approved' && status !== 'Rejected') return null;
+
+  const isApproved = status === 'Approved';
+
+  return (
+    <Tooltip title={status} arrow placement="top">
+      <Box
+        aria-label={status}
+        sx={{
+          width: 28,
+          height: 28,
+          borderRadius: '50%',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          ...(isApproved
+            ? {
+                backgroundColor: cv.brandTeal,
+                border: `1.5px solid ${cv.brandTeal}`,
+                boxShadow: `0 0 0 1.5px rgba(0,0,0,0.35)`,
+              }
+            : {
+                ...thumbnailOverlayChipStyles,
+              }),
+        }}
+      >
+        {isApproved ? (
+          <CheckIcon sx={{ fontSize: 16, color: '#fff', strokeWidth: 2 }} />
+        ) : (
+          <Box
+            sx={{
+              width: 18,
+              height: 18,
+              borderRadius: '50%',
+              backgroundColor: cv.destructive,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <CloseIcon sx={{ fontSize: 12, color: '#fff' }} />
+          </Box>
+        )}
       </Box>
     </Tooltip>
   );
@@ -561,6 +622,7 @@ export default function MediaItemCard({
             onToggle={() => onToggleFavorite(item.id, item.isProject ? 'project' : (item.type === 'folder' ? 'folder' : 'asset'))}
           />
           <TypeBadge type={item.type} isProject={item.isProject} />
+          <ReviewStatusBadge item={item} />
         </Box>
 
         <Box

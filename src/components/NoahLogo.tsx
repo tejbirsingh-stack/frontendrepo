@@ -4,6 +4,32 @@ import { cv } from '../theme/cssVars';
 
 const LOGO_SRC = '/noah-logo.png';
 
+/** Parent wrapper for login / signup flow logos. */
+export const AUTH_LOGO_PARENT_SX = {
+  height: 160,
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  mb: 4,
+} as const;
+
+/** Logo styles when constrained by AUTH_LOGO_PARENT_SX — crop tall PNG canvas, keep width. */
+export const AUTH_LOGO_SX = {
+  mb: 0,
+  height: '100%',
+  width: '100%',
+  maxWidth: 480,
+  overflow: 'hidden',
+  '& img': {
+    maxHeight: 'none',
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    objectPosition: 'center',
+  },
+} as const;
+
 const pulse = keyframes`
   0%, 100% { opacity: 0.5; transform: scale(1); }
   50% { opacity: 0.75; transform: scale(1.05); }
@@ -19,6 +45,15 @@ type ResponsiveSize = number | { xs?: number; sm?: number; md?: number; lg?: num
 interface NoahLogoProps {
   /** Scales the logo — maps to rendered height; width follows the asset aspect ratio. */
   width?: ResponsiveSize;
+  /** Explicit image / crop-box height in px (overrides height derived from `width`). */
+  height?: ResponsiveSize;
+  /**
+   * When set with an explicit height, sizes the crop box to this width and uses
+   * object-fit to fill it (keeps width while cropping excess PNG canvas height).
+   */
+  boxWidth?: ResponsiveSize;
+  /** object-fit for the image inside the sized box. Default: contain when fitContainer, else none. */
+  objectFit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
   /** Shrink the logo to fit a narrow parent (e.g. sidebar). */
   fitContainer?: boolean;
   animated?: boolean;
@@ -45,7 +80,11 @@ function resolveLogoHeight(width: ResponsiveSize): ResponsiveSize {
 }
 
 export default function NoahLogo({
-  width = { xs: 160, sm: 200 },
+  /** ~171 width resolves to 72px height — matches compact header/sidebar bars. */
+  width = 171,
+  height,
+  boxWidth,
+  objectFit,
   fitContainer = false,
   animated = true,
   showGlow = true,
@@ -56,13 +95,17 @@ export default function NoahLogo({
   ariaLabel = 'Go to dashboard',
 }: NoahLogoProps) {
   const isInteractive = Boolean(to || onClick);
-  const logoHeight = resolveLogoHeight(width);
+  const logoHeight = height ?? resolveLogoHeight(width);
+  const useCropBox = Boolean(boxWidth && height);
+  const resolvedObjectFit = objectFit ?? (fitContainer || useCropBox ? 'cover' : undefined);
 
   const rootSx: SxProps<Theme> = {
     position: 'relative',
-    display: fitContainer ? 'flex' : 'inline-flex',
-    width: fitContainer ? '100%' : undefined,
+    display: fitContainer || useCropBox ? 'flex' : 'inline-flex',
+    width: fitContainer ? '100%' : useCropBox ? boxWidth : undefined,
     maxWidth: fitContainer ? '100%' : undefined,
+    height: useCropBox ? logoHeight : undefined,
+    overflow: useCropBox ? 'hidden' : undefined,
     justifyContent: align === 'left' ? 'flex-start' : 'center',
     alignItems: 'center',
     mb: 4,
@@ -88,8 +131,10 @@ export default function NoahLogo({
         position: 'relative',
         display: 'inline-flex',
         alignItems: 'center',
-        width: fitContainer ? '100%' : undefined,
+        width: fitContainer || useCropBox ? '100%' : undefined,
+        height: useCropBox ? '100%' : undefined,
         zIndex: 1,
+        overflow: useCropBox ? 'hidden' : undefined,
       }}
     >
       {showGlow && (
@@ -119,20 +164,27 @@ export default function NoahLogo({
           flexShrink: 0,
           position: 'relative',
           animation: animated ? `${drift} 8s ease-in-out infinite` : 'none',
-          ...(fitContainer
+          ...(useCropBox
             ? {
                 width: '100%',
-                maxWidth: '100%',
-                height: 'auto',
-                maxHeight: logoHeight,
-                objectFit: 'contain',
-                objectPosition: 'left center',
+                height: '100%',
+                objectFit: resolvedObjectFit ?? 'cover',
+                objectPosition: align === 'left' ? 'left center' : 'center',
               }
-            : {
-                height: logoHeight,
-                width: 'auto',
-                verticalAlign: 'middle',
-              }),
+            : fitContainer
+              ? {
+                  width: '100%',
+                  maxWidth: '100%',
+                  height: 'auto',
+                  maxHeight: logoHeight,
+                  objectFit: resolvedObjectFit ?? 'contain',
+                  objectPosition: align === 'left' ? 'left center' : 'center',
+                }
+              : {
+                  height: logoHeight,
+                  width: 'auto',
+                  verticalAlign: 'middle',
+                }),
         }}
       />
     </Box>
