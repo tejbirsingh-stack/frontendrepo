@@ -3621,29 +3621,7 @@ export default function VideoPlayerPage({
           </Box>
 
           {isGuestMode ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {(guestPermissions.download || guestPermissions.downloadProxy) && shareToken ? (
-                <Button
-                  variant="contained"
-                  size="small"
-                  startIcon={<FileDownloadOutlinedIcon />}
-                  component="a"
-                  href={`/api/share/${shareToken}/stream?download=true`}
-                  download
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    borderRadius: '10px',
-                    background: cv.brandGradient,
-                    color: '#fff',
-                    minHeight: 36,
-                    px: 2,
-                  }}
-                >
-                  Download
-                </Button>
-              ) : null}
-            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }} />
           ) : (
             <>
               {item?.id && headerPermissions.canDownload && (
@@ -3919,7 +3897,7 @@ export default function VideoPlayerPage({
             </>
           )}
 
-          {!historyOpen ? (
+          {!isGuestMode && !historyOpen ? (
             <Tooltip title="Show annotation history" arrow placement="bottom">
               <IconButton
                 type="button"
@@ -4342,7 +4320,9 @@ export default function VideoPlayerPage({
                   </Box>
                 ) : null}
 
-                <VideoAnnotationSurface
+                {!isGuestMode && (
+                  <>
+                    <VideoAnnotationSurface
                   activeTool={isViewer ? 'select' : activeTool}
                   enabled={surfaceEnabled && !isViewer}
                   annotationsVisible={annotationsVisible}
@@ -4412,6 +4392,8 @@ export default function VideoPlayerPage({
                   onMoveComment={handleMoveComment}
                   onPanActionStart={handleAnnotationActionStart}
                 />
+                  </>
+                )}
               </Box>
             </Box>
 
@@ -4419,10 +4401,10 @@ export default function VideoPlayerPage({
               <VideoPlayerControls
                 videoRef={videoRef}
                 fullscreenTargetRef={videoStageRef}
-                annotationCount={history.length}
+                annotationCount={!isGuestMode ? history.length : undefined}
                 annotationsVisible={annotationsVisible}
                 onToggleAnnotationsVisible={() => setAnnotationsVisible((visible) => !visible)}
-                timelineItems={timelineItems}
+                timelineItems={!isGuestMode ? timelineItems : []}
                 timelineFallbackDuration={timelineFallbackDuration}
                 onAnnotationRangeChange={handleAnnotationRangeChange}
                 onAnnotationClick={handleAnnotationClick}
@@ -4627,8 +4609,9 @@ export default function VideoPlayerPage({
           </Box>
         </GlassCard>
 
-        <AnnotationHistoryDrawer
-          open={historyOpen}
+        {!isGuestMode && (
+          <AnnotationHistoryDrawer
+            open={historyOpen}
           activeHistoryEntryId={activeHistoryEntryId}
           entries={history}
           comments={comments}
@@ -4675,6 +4658,7 @@ export default function VideoPlayerPage({
             }
           }}
         />
+        )}
       </Box>
 
       <PlayerToolsDrawer
