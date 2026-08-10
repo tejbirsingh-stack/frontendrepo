@@ -18,7 +18,7 @@ import { cv } from '../../theme/cssVars';
 import { SETTINGS_BASE_PATH } from '../../constants/settingsNav';
 import { getUsageSummary } from '../../api/usage.service';
 import type { UsageSummaryResponse } from '../../types/usage';
-import { progressBarColor, warningCopy } from '../../utils/usageWarning';
+import { progressBarColor, warningBanners } from '../../utils/usageWarning';
 import { SettingsTableContainer } from './SettingsContentLayout';
 import StorageConsumptionChart from './StorageConsumptionChart';
 
@@ -228,7 +228,7 @@ export default function UsageSettingsSection() {
     );
   }
 
-  const banner = warningCopy(usage);
+  const banners = warningBanners(usage);
   const membersPercent = (usage.membersUsed / Math.max(usage.membersTotal, 1)) * 100;
   const primarySystem = usage.storageSystems?.[0];
   const displayCapLabel = formatCleanCapBytes(usage.storageQuotaBytes, usage.storageCapLabel);
@@ -251,15 +251,15 @@ export default function UsageSettingsSection() {
         </Typography>
       </Box>
 
-      {banner ? (
+      {banners.map((b) => (
         <Alert
-          severity={usage.warningLevel === 'exceeded' ? 'error' : 'warning'}
+          key={b.id}
+          severity={b.severity}
           sx={{
-            mb: 2.5,
+            mb: 2,
             borderRadius: '12px',
-            backgroundColor:
-              usage.warningLevel === 'exceeded' ? cv.errorSurface : cv.warningSurface,
-            border: `1px solid ${usage.warningLevel === 'exceeded' ? cv.errorText : cv.warning}`,
+            backgroundColor: b.severity === 'error' ? cv.errorSurface : cv.warningSurface,
+            border: `1px solid ${b.severity === 'error' ? cv.errorText : cv.warning}`,
           }}
           action={
             <Button
@@ -273,9 +273,9 @@ export default function UsageSettingsSection() {
             </Button>
           }
         >
-          <strong>{banner.title}</strong> — {banner.body}
+          <strong>{b.title}</strong> — {b.body}
         </Alert>
-      ) : null}
+      ))}
 
       <Box
         sx={{

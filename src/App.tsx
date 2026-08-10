@@ -28,11 +28,13 @@ import {
   PlatformApp,
 } from './routes/lazyPages';
 
+import { Toaster } from 'react-hot-toast';
 import { UploadManagerProvider } from './context/UploadManagerContext';
 
 function App() {
   return (
     <UploadManagerProvider>
+      <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
       <BrowserRouter>
         <StampStickerFilterDefs />
         <Suspense fallback={<RouteLoadingFallback />}>
