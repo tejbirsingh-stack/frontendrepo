@@ -25,6 +25,7 @@ import {
   VerifyEmailPage,
   DeletionRequestsPage,
   ShareGuestPage,
+  ProjectGuestPage,
   PlatformApp,
 } from './routes/lazyPages';
 
@@ -38,6 +39,7 @@ function App() {
         <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
           <Route path="/s/:token" element={<ShareGuestPage />} />
+          <Route path="/pg/:token" element={<ProjectGuestPage />} />
           <Route
             path="/"
             element={

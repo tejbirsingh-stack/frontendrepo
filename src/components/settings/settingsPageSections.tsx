@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { getCompanyInfoRequest, updateCompanyInfoRequest, uploadCompanyLogoRequest, updateProfileRequest, uploadProfilePhotoRequest } from '../../api';
 import { logoutAllSessions, fetchOrganizationUsers } from '../../api/auth.service';
+import { fetchUserGroups } from '../../api/userGroups.service';
 import { useAuth } from '../../auth/AuthContext';
 import { useLocalizedDate } from '../../hooks/useLocalizedDate';
 import { cv } from '../../theme/cssVars';
@@ -128,6 +129,7 @@ function AddProjectDialog({
   workspaces,
   initialProject,
   suggestedUsers,
+  suggestedGroups,
 }: {
   open: boolean;
   onClose: () => void;
@@ -137,12 +139,15 @@ function AddProjectDialog({
     inviteEmails: string[],
     inviteGroupIds: string[],
     visibility: ProjectVisibility,
-    folderId: string | null
+    folderId: string | null,
+    inviteAccess?: import('../../data/mockSettingsData').WorkspaceMemberAccess,
+    inviteMemberType?: import('../../data/mockSettingsData').WorkspaceMemberType
   ) => void;
   onSave?: (name: string, workspace: string, visibility: ProjectVisibility) => void;
   workspaces: { id: string; name: string }[];
   initialProject?: { name: string; workspace: string; visibility: ProjectVisibility };
   suggestedUsers: import('../../data/mockSettingsData').SettingsUserRow[];
+  suggestedGroups?: import('../../data/mockSettingsData').SettingsUserGroup[];
 }) {
   const isEdit = Boolean(initialProject);
   const [name, setName] = useState('');
@@ -246,7 +251,7 @@ function AddProjectDialog({
       onClose();
       return;
     }
-    onAdd(trimmed, workspace, inviteEmails, inviteGroupIds, visibility, folderId || null);
+    onAdd(trimmed, workspace, inviteEmails, inviteGroupIds, visibility, folderId || null, inviteAccess, inviteMemberType);
     onClose();
   };
 
@@ -283,7 +288,8 @@ function AddProjectDialog({
           gap: 2,
           pt: '8px !important',
           backgroundColor: cv.dialogSurface,
-          overflow: 'visible',
+          overflowY: 'auto',
+          maxHeight: 'calc(90vh - 120px)',
         }}
       >
         <TextField
@@ -322,7 +328,7 @@ function AddProjectDialog({
         {!isEdit && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <InputLabel id="add-project-folder-label" shrink sx={{ fontSize: '0.875rem', mb: -0.5 }}>
-              Folder (Optional)
+              Folder
             </InputLabel>
             <Box sx={{ maxHeight: 200, overflowY: 'auto', border: `1px solid ${cv.border}`, borderRadius: '10px', p: 1 }}>
               {rootFolders.length === 0 && (
@@ -394,7 +400,7 @@ function AddProjectDialog({
             access={inviteAccess}
             onAccessChange={setInviteAccess}
             suggestedUsers={suggestedUsers}
-            suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
+            suggestedGroups={suggestedGroups}
             description="Private projects are invite-only. Add people or groups who should have access."
           />
         ) : null}
@@ -1061,6 +1067,7 @@ function ProjectWorkspaceTable({
   showTeamMembersColumn = false,
   onAdd,
   onEdit,
+  onDelete,
   onInviteTeamMembers,
 }: {
   title: string;
@@ -1072,6 +1079,7 @@ function ProjectWorkspaceTable({
   showTeamMembersColumn?: boolean;
   onAdd?: () => void;
   onEdit?: (rowId: string) => void;
+  onDelete?: (ids: string[]) => void;
   onInviteTeamMembers?: (workspaceId: string) => void;
 }) {
   const [search, setSearch] = useState('');
@@ -1229,7 +1237,13 @@ function ProjectWorkspaceTable({
           <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
             Mark inactive
           </Button>
-          <Button size="small" sx={{ textTransform: 'none', color: cv.destructive }}>
+          <Button 
+            size="small" 
+            sx={{ textTransform: 'none', color: cv.destructive }}
+            onClick={() => {
+              if (onDelete) onDelete(Array.from(selectedIds));
+            }}
+          >
             Mark delete
           </Button>
         </Box>
@@ -1291,7 +1305,9 @@ export function ProjectsAdminSettingsSection() {
   const [addOpen, setAddOpen] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
+  const [deleteDialogIds, setDeleteDialogIds] = useState<string[]>([]);
   const [orgUsersList, setOrgUsersList] = useState<import('../../data/mockSettingsData').SettingsUserRow[]>([]);
+  const [orgGroupsList, setOrgGroupsList] = useState<import('../../data/mockSettingsData').SettingsUserGroup[]>([]);
   const { formatDate } = useLocalizedDate();
 
   useEffect(() => {
@@ -1317,6 +1333,17 @@ export function ProjectsAdminSettingsSection() {
         setOrgUsersList(rows);
       })
       .catch((err) => console.error('Failed to fetch org users for share dialog:', err));
+
+    fetchUserGroups()
+      .then((groups) => {
+        const mappedGroups = groups.map((g) => ({
+          id: g.id,
+          name: g.name,
+          memberIds: g.members?.map((m) => m.userId) || [],
+        }));
+        setOrgGroupsList(mappedGroups);
+      })
+      .catch((err) => console.error('Failed to fetch org groups:', err));
   }, []);
 
   useEffect(() => {
@@ -1379,6 +1406,8 @@ export function ProjectsAdminSettingsSection() {
     inviteGroupIds: string[],
     visibility: ProjectVisibility,
     folderId: string | null,
+    inviteAccess?: import('../../data/mockSettingsData').WorkspaceMemberAccess,
+    inviteMemberType?: import('../../data/mockSettingsData').WorkspaceMemberType
   ) => {
     try {
       const workspaceObj = workspaces.find((w) => w.name === workspace);
@@ -1392,6 +1421,11 @@ export function ProjectsAdminSettingsSection() {
       await apiClient.post(`/workspaces/project/add/${workspaceObj.id}`, {
         name,
         folderId,
+        visibility,
+        inviteEmails,
+        inviteGroupIds,
+        inviteAccess,
+        inviteMemberType
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -1422,28 +1456,64 @@ export function ProjectsAdminSettingsSection() {
     }
   };
 
-  const handleSaveProject = (name: string, workspace: string, visibility: ProjectVisibility) => {
+  const handleSaveProject = async (name: string, workspace: string, visibility: ProjectVisibility) => {
     if (!editProjectId) return;
     const today = formatDate(Date.now(), {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
     });
-    setProjects((current) =>
-      current.map((project) =>
-        project.id === editProjectId
-          ? {
-              ...project,
-              project: name,
-              workspace,
-              visibility,
-              isRestricted: visibility === 'private',
-              lastUpdated: today,
-            }
-          : project,
-      ),
-    );
+
+    try {
+      const workspaceObj = workspaces.find((w) => w.name === workspace);
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      await apiClient.put(`/workspaces/project/update/${editProjectId}`, {
+        name,
+        workspaceId: workspaceObj?.id,
+        visibility
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setProjects((current) =>
+        current.map((project) =>
+          project.id === editProjectId
+            ? {
+                ...project,
+                project: name,
+                workspace,
+                visibility,
+                isRestricted: visibility === 'private',
+                lastUpdated: today,
+              }
+            : project,
+        ),
+      );
+    } catch (err) {
+      console.error("Failed to update project in backend:", err);
+    }
     setEditProjectId(null);
+  };
+
+  const handleDeleteProjects = async () => {
+    if (deleteDialogIds.length === 0) return;
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      
+      // Delete projects sequentially
+      for (const id of deleteDialogIds) {
+        await apiClient.delete(`/workspaces/project/delete/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+
+      setProjects((current) => current.filter((p) => !deleteDialogIds.includes(p.id)));
+    } catch (err) {
+      console.error("Failed to delete projects in backend:", err);
+    }
+    setDeleteDialogIds([]);
   };
 
   const handleInviteMember = (payload: WorkspaceInvitePayload) => {
@@ -1524,6 +1594,7 @@ export function ProjectsAdminSettingsSection() {
         showTeamMembersColumn
         onAdd={() => setAddOpen(true)}
         onEdit={setEditProjectId}
+        onDelete={(ids) => setDeleteDialogIds(ids)}
         onInviteTeamMembers={setInviteProjectId}
       />
       <AddProjectDialog
@@ -1545,14 +1616,35 @@ export function ProjectsAdminSettingsSection() {
             : undefined
         }
         suggestedUsers={orgUsersList}
+        suggestedGroups={orgGroupsList}
       />
+      <Dialog 
+        open={deleteDialogIds.length > 0} 
+        onClose={() => setDeleteDialogIds([])}
+        PaperProps={{ sx: { bgcolor: cv.bgLayer, color: cv.textPrimary, backgroundImage: 'none', border: `1px solid ${cv.borderPrimary}` } }}
+      >
+        <DialogTitle sx={{ fontWeight: 600 }}>Delete Project{deleteDialogIds.length > 1 ? 's' : ''}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: cv.textSecondary }}>
+            Are you sure you want to delete {deleteDialogIds.length === 1 ? 'this project' : `these ${deleteDialogIds.length} projects`}? There can be folders or assets linked in it.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setDeleteDialogIds([])} sx={{ color: cv.textSecondary, textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteProjects} variant="contained" sx={{ bgcolor: cv.destructive, '&:hover': { bgcolor: '#b91c1c' }, textTransform: 'none' }}>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
       <WorkspaceMembersDialog
         open={Boolean(inviteProjectId)}
         workspaceName={inviteProject?.project ?? 'project'}
         resourceId={inviteProjectId ?? undefined}
         members={inviteProject?.teamMembers ?? []}
         suggestedUsers={orgUsersList}
-        suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
+        suggestedGroups={orgGroupsList}
         isRestricted={inviteProject?.isRestricted ?? false}
         resourceType="project"
         visibility={inviteProject?.visibility ?? 'private'}
