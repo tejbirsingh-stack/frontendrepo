@@ -1801,7 +1801,68 @@ export function SecurityAdminSettingsSection() {
 
 export function ShareSettingsSection() {
   const [requirePassword, setRequirePassword] = useState(false);
-  const [allowDownloads, setAllowDownloads] = useState(true);
+  const [allowComments, setAllowComments] = useState(false);
+  const [allowDownloadOriginal, setAllowDownloadOriginal] = useState(true);
+  const [allowDownloadProxy, setAllowDownloadProxy] = useState(true);
+  const [showCompanyWatermark, setShowCompanyWatermark] = useState(true);
+  const [linkExpiry, setLinkExpiry] = useState('30');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const response = await apiClient.get<any>('/organizations/share-settings', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = response.data || response;
+        if (data) {
+          if (typeof data.requirePasswordDefault === 'boolean') {
+            setRequirePassword(data.requirePasswordDefault);
+          }
+          if (typeof data.allowCommentsDefault === 'boolean') {
+            setAllowComments(data.allowCommentsDefault);
+          }
+          if (typeof data.allowDownloadOriginalDefault === 'boolean') {
+            setAllowDownloadOriginal(data.allowDownloadOriginalDefault);
+          }
+          if (typeof data.allowDownloadProxyDefault === 'boolean') {
+            setAllowDownloadProxy(data.allowDownloadProxyDefault);
+          }
+          if (typeof data.showCompanyWatermarkDefault === 'boolean') {
+            setShowCompanyWatermark(data.showCompanyWatermarkDefault);
+          }
+          if (data.defaultExpiryDays) {
+            setLinkExpiry(String(data.defaultExpiryDays));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load share settings", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  const updateSetting = async (key: string, value: any) => {
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      await apiClient.patch('/organizations/share-settings', {
+        [key]: value
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Settings updated');
+    } catch (err) {
+      console.error(`Failed to update ${key}`, err);
+      toast.error('Failed to update settings');
+    }
+  };
+
+  if (loading) return null;
 
   return (
     <SettingsFormContainer>
@@ -1815,19 +1876,67 @@ export function ShareSettingsSection() {
         action={
           <Switch
             checked={requirePassword}
-            onChange={(event) => setRequirePassword(event.target.checked)}
+            onChange={(event) => {
+              setRequirePassword(event.target.checked);
+              updateSetting('requirePasswordDefault', event.target.checked);
+            }}
             slotProps={{ input: { 'aria-label': 'Require password on share links' } }}
           />
         }
       />
       <SettingsRow
-        title="Allow downloads"
-        description="Let viewers download shared media from the link."
+        title="Allow comments"
+        description="Let viewers add comments on shared media."
         action={
           <Switch
-            checked={allowDownloads}
-            onChange={(event) => setAllowDownloads(event.target.checked)}
-            slotProps={{ input: { 'aria-label': 'Allow downloads on share links' } }}
+            checked={allowComments}
+            onChange={(event) => {
+              setAllowComments(event.target.checked);
+              updateSetting('allowCommentsDefault', event.target.checked);
+            }}
+            slotProps={{ input: { 'aria-label': 'Allow comments on share links' } }}
+          />
+        }
+      />
+      <SettingsRow
+        title="Download original"
+        description="Let viewers download the original high-resolution media."
+        action={
+          <Switch
+            checked={allowDownloadOriginal}
+            onChange={(event) => {
+              setAllowDownloadOriginal(event.target.checked);
+              updateSetting('allowDownloadOriginalDefault', event.target.checked);
+            }}
+            slotProps={{ input: { 'aria-label': 'Allow original downloads on share links' } }}
+          />
+        }
+      />
+      <SettingsRow
+        title="Download proxy"
+        description="Let viewers download the proxy (compressed) media."
+        action={
+          <Switch
+            checked={allowDownloadProxy}
+            onChange={(event) => {
+              setAllowDownloadProxy(event.target.checked);
+              updateSetting('allowDownloadProxyDefault', event.target.checked);
+            }}
+            slotProps={{ input: { 'aria-label': 'Allow proxy downloads on share links' } }}
+          />
+        }
+      />
+      <SettingsRow
+        title="Show company watermark"
+        description="Display your company logo watermark on shared media."
+        action={
+          <Switch
+            checked={showCompanyWatermark}
+            onChange={(event) => {
+              setShowCompanyWatermark(event.target.checked);
+              updateSetting('showCompanyWatermarkDefault', event.target.checked);
+            }}
+            slotProps={{ input: { 'aria-label': 'Show company watermark on share links' } }}
           />
         }
       />
@@ -1838,7 +1947,11 @@ export function ShareSettingsSection() {
           <TextField
             select
             size="small"
-            defaultValue="30"
+            value={linkExpiry}
+            onChange={(event) => {
+              setLinkExpiry(event.target.value);
+              updateSetting('defaultExpiryDays', parseInt(event.target.value, 10));
+            }}
             sx={{ minWidth: 120 }}
             slotProps={textFieldSelectInDialogSlotProps}
           >
