@@ -13,7 +13,7 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ## Demo Credentials (Local / Mock Aut)
 
-When `VITE_API_BASE_URL` is not set, the app uses mock authentication. Use these credentials to sign in:
+When `VITE_API_BASE_URL` is not set, the app uses mock authentication. Use these credentials to sign in
 
 | Field | Value |
 |:------|:------|
