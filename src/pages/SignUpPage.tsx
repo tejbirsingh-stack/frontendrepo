@@ -34,6 +34,7 @@ import {
   sendSignupOtpRequest,
   verifySignupOtpRequest,
   completeSignupRequest,
+  fetchCurrentUserRequest,
   mapAuthUserDtoToSessionUser,
 } from '../api/auth.service';
 import { useUploadManager } from '../context/UploadManagerContext';
@@ -421,6 +422,17 @@ export default function SignUpPage() {
         const mappedUser = mapAuthUserDtoToSessionUser(response?.user || response);
         setSession(activeToken, mappedUser);
         persistSession(activeToken, mappedUser);
+
+        try {
+          const currentUserDto = await fetchCurrentUserRequest();
+          if (currentUserDto) {
+            const updatedUser = mapAuthUserDtoToSessionUser(currentUserDto);
+            setSession(activeToken, updatedUser);
+            persistSession(activeToken, updatedUser);
+          }
+        } catch (fetchUserErr) {
+          console.warn('Failed to fetch full user profile after signup:', fetchUserErr);
+        }
       }
 
       navigate('/home', { replace: true });
