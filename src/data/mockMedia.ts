@@ -45,6 +45,7 @@ export interface MediaItem {
   customMetadata?: Record<string, unknown>;
   status?: 'active' | 'duplicate' | 'archived' | 'trash';
   isProject?: boolean;
+  isSharedByMe?: boolean;
 }
 
 export const initialMediaItems: MediaItem[] = [];

@@ -142,7 +142,7 @@ function AddProjectDialog({
     folderId: string | null,
     inviteAccess?: import('../../data/mockSettingsData').WorkspaceMemberAccess,
     inviteMemberType?: import('../../data/mockSettingsData').WorkspaceMemberType
-  ) => void;
+  ) => Promise<void> | void;
   onSave?: (name: string, workspace: string, visibility: ProjectVisibility) => void;
   workspaces: { id: string; name: string }[];
   initialProject?: { name: string; workspace: string; visibility: ProjectVisibility };
@@ -237,7 +237,7 @@ function AddProjectDialog({
     setWorkspace((current) => current || workspaces[0]?.name || '');
   }, [open, initialProject, workspaces]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
       setNameError('Project name is required');
@@ -251,8 +251,12 @@ function AddProjectDialog({
       onClose();
       return;
     }
-    onAdd(trimmed, workspace, inviteEmails, inviteGroupIds, visibility, folderId || null, inviteAccess, inviteMemberType);
-    onClose();
+    try {
+      await onAdd(trimmed, workspace, inviteEmails, inviteGroupIds, visibility, folderId || null, inviteAccess, inviteMemberType);
+      onClose();
+    } catch (e) {
+      // Error handled by parent toast
+    }
   };
 
   return (
@@ -402,6 +406,15 @@ function AddProjectDialog({
             suggestedUsers={suggestedUsers}
             suggestedGroups={suggestedGroups}
             description="Private projects are invite-only. Add people or groups who should have access."
+            onGuestSearch={async (query) => {
+              try {
+                const { apiClient } = await import('../../api/client');
+                const res = await apiClient.get<any>(`/workspaces/search-guests?q=${encodeURIComponent(query)}`);
+                return Array.isArray(res) ? res : [];
+              } catch {
+                return [];
+              }
+            }}
           />
         ) : null}
         <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary }}>
@@ -1451,8 +1464,11 @@ export function ProjectsAdminSettingsSection() {
           inviteGroupIds,
         ),
       ]);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to add project to backend:", err);
+      const errorMsg = err.response?.data?.message || err.message || "Failed to create project";
+      toast.error(errorMsg);
+      throw err;
     }
   };
 

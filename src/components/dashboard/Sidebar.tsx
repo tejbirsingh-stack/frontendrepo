@@ -2074,22 +2074,22 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
           New folder
         </MenuItem>
         <MenuItem
-          disabled={!user?.permissions?.includes('upload_delete_media')}
+          disabled={!hasPermission(user, PERMISSIONS.UPLOAD_MEDIA)}
           onClick={() => {
-            if (!user?.permissions?.includes('upload_delete_media')) return;
+            if (!hasPermission(user, PERMISSIONS.UPLOAD_MEDIA)) return;
             openAddItemModal('file');
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary,
-            opacity: !user?.permissions?.includes('upload_delete_media') ? 0.6 : 1,
-            cursor: !user?.permissions?.includes('upload_delete_media') ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: !user?.permissions?.includes('upload_delete_media') ? 'transparent' : cv.surfaceHover },
+            color: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary,
+            opacity: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 0.6 : 1,
+            cursor: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <InsertDriveFileOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
+            <InsertDriveFileOutlinedIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           New file
         </MenuItem>
@@ -2166,22 +2166,22 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
           {folderActionsTarget && favorites.has(folderActionsTarget.folderId) ? 'Remove from favorites' : 'Add to favorites'}
         </MenuItem>
         <MenuItem
-          disabled={!user?.permissions?.includes('upload_delete_media')}
+          disabled={!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)}
           onClick={() => {
-            if (!user?.permissions?.includes('upload_delete_media')) return;
+            if (!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
             openRenameFolder();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary,
-            opacity: !user?.permissions?.includes('upload_delete_media') ? 0.6 : 1,
-            cursor: !user?.permissions?.includes('upload_delete_media') ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: !user?.permissions?.includes('upload_delete_media') ? 'transparent' : cv.surfaceHover },
+            color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
+            opacity: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+            cursor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
+            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Rename
         </MenuItem>
