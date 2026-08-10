@@ -11,6 +11,13 @@ export interface StoredUploadItem {
   type: string;
   status: 'pending' | 'uploading' | 'completed' | 'failed';
   loadedBytes: number;
+  title?: string;
+  summary?: string;
+  thumbnail?: string;
+  folderId?: string;
+  tagIds?: string[];
+  visibility?: 'public' | 'private' | string;
+  durationSeconds?: number;
   ownerType?: string;
   ownerId?: string;
   linkedProjectId?: string;

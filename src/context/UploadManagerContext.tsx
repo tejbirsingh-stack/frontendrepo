@@ -29,9 +29,11 @@ export interface EnqueueUploadOptions {
   parentFolderId?: string | null;
   title?: string;
   summary?: string;
+  thumbnail?: string;
   folderId?: string;
   tagIds?: string[];
-  visibility?: 'public' | 'private';
+  visibility?: 'public' | 'private' | string;
+  durationSeconds?: number;
 }
 
 interface UploadManagerContextValue {
@@ -143,12 +145,17 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
 
           // Perform actual upload with byte-level progress reporting
           await uploadMediaFileRequest(currentItem.file, {
-            title: currentItem.name.replace(/\.[^/.]+$/, ''),
+            title: currentItem.title || currentItem.name.replace(/\.[^/.]+$/, ''),
+            summary: currentItem.summary,
+            thumbnail: currentItem.thumbnail,
+            tagIds: currentItem.tagIds,
+            visibility: currentItem.visibility as any,
+            durationSeconds: currentItem.durationSeconds,
             technicalSpecs: fullTechSpecs,
             ownerType: currentItem.ownerType || 'WORKSPACE',
             ownerId: currentItem.ownerId,
             linkedProjectId: currentItem.linkedProjectId,
-            folderId: currentItem.parentFolderId || undefined,
+            folderId: currentItem.folderId || currentItem.parentFolderId || undefined,
             onProgress: ({ loaded, total }) => {
               const filePercent = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
               setQueue((prev) =>
@@ -215,12 +222,19 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
       const newItems: UploadQueueItem[] = files.map((file, idx) => ({
         id: `upload-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
         file,
-        name: file.name,
+        name: options?.title || file.name,
         size: file.size,
         type: file.type || 'application/octet-stream',
         status: 'pending',
         loadedBytes: 0,
         progressPercent: 0,
+        title: options?.title,
+        summary: options?.summary,
+        thumbnail: options?.thumbnail,
+        folderId: options?.folderId,
+        tagIds: options?.tagIds,
+        visibility: options?.visibility,
+        durationSeconds: options?.durationSeconds,
         ownerType: options?.ownerType,
         ownerId: options?.ownerId,
         linkedProjectId: options?.linkedProjectId,

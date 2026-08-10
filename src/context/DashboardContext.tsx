@@ -117,6 +117,7 @@ interface DashboardContextValue {
     onProgress?: (progress: { loaded: number; total: number }) => void,
   ) => Promise<string | null | undefined | void>;
   cancelMediaUpload: () => void;
+  popPendingMediaUpload: () => void;
   /** @deprecated Use pendingMediaUpload */
   pendingVideoUpload: PendingMediaUpload | null;
   /** @deprecated Use pendingMediaUploadCount */
@@ -1933,6 +1934,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const popPendingMediaUpload = useCallback(() => {
+    setPendingMediaQueue((prev) => {
+      if (prev[0]?.previewSrc) {
+        URL.revokeObjectURL(prev[0].previewSrc);
+      }
+      return prev.slice(1);
+    });
+  }, []);
+
   const completeMediaUpload = useCallback(
     async (
       details: MediaUploadDetails,
@@ -2364,6 +2374,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       pendingMediaUploadCount,
       completeMediaUpload,
       cancelMediaUpload,
+      popPendingMediaUpload,
       pendingVideoUpload,
       pendingVideoUploadCount,
       completeVideoUpload,
