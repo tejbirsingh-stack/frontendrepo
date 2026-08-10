@@ -256,10 +256,12 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
 
   const dismissWidget = useCallback(() => {
     setIsWidgetVisible(false);
+    setQueue([]);
+    void clearAllStoredUploads();
   }, []);
 
   const clearCompleted = useCallback(() => {
-    setQueue((prev) => prev.filter((item) => item.status !== 'completed'));
+    setQueue((prev) => prev.filter((item) => item.status !== 'completed' && item.status !== 'failed'));
     void clearAllStoredUploads();
   }, []);
 

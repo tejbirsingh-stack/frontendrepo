@@ -408,17 +408,7 @@ export default function SignUpPage() {
       if (activeToken) {
         localStorage.setItem('accessToken', activeToken);
         localStorage.setItem('token', activeToken);
-      }
 
-      if (uploadedFiles && uploadedFiles.length > 0) {
-        const targetWorkspaceId = response?.workspace?.id || response?.user?.workspace?.id;
-        void enqueueFiles(uploadedFiles, {
-          ownerType: 'WORKSPACE',
-          ownerId: targetWorkspaceId,
-        });
-      }
-
-      if (activeToken) {
         const mappedUser = mapAuthUserDtoToSessionUser(response?.user || response);
         setSession(activeToken, mappedUser);
         persistSession(activeToken, mappedUser);
@@ -433,6 +423,14 @@ export default function SignUpPage() {
         } catch (fetchUserErr) {
           console.warn('Failed to fetch full user profile after signup:', fetchUserErr);
         }
+      }
+
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        const targetWorkspaceId = response?.workspace?.id || response?.user?.workspace?.id || response?.user?.orgId;
+        void enqueueFiles(uploadedFiles, {
+          ownerType: 'WORKSPACE',
+          ownerId: targetWorkspaceId,
+        });
       }
 
       navigate('/home', { replace: true });

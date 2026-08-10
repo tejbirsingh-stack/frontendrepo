@@ -52,6 +52,7 @@ import SettingsDataTable, {
 } from './SettingsDataTable';
 import { SettingsRow, SettingsSectionCard } from './SettingsSectionCard';
 import TruncatedText from '../TruncatedText';
+import { getDynamicPlanDetails } from '../../utils/planHelper';
 import { CURRENT_USER } from '../../constants/currentUser';
 import {
   createProject,
@@ -805,16 +806,18 @@ export function CompanySettingsSection() {
 export { default as UsageSettingsSection } from './UsageSettingsSection';
 
 export function PlanSettingsSection() {
-  const plan = MOCK_CURRENT_PLAN;
+  const { user } = useAuth();
+  const plan = useMemo(() => getDynamicPlanDetails(user), [user]);
 
   return (
     <SettingsFormContainer>
       <SettingsSectionCard
         title="Current Plan"
-        description="Active tier, trial milestone, and subscription line items."
+        description="Active tier, billing cycle term, and subscription line items."
       >
         <SettingsRow title="Plan name" description={plan.planName} />
-        <SettingsRow title="Free trial expiry" description={plan.freeTrialExpiry} />
+        <SettingsRow title="Billing cycle" description={plan.billingTermLabel} />
+        <SettingsRow title="Subscription expiry date" description={plan.expiryDateFormatted} />
         <SettingsRow title="Subtotal" description={plan.subtotal} />
         <SettingsRow
           title="Sales tax"

@@ -89,10 +89,21 @@ function buildSegments(breakdown: StorageBreakdownSegment[], capBytes: number): 
 }
 
 function capLabelFromBytes(bytes: number) {
-  if (bytes >= 1024 ** 4) return `${(bytes / 1024 ** 4).toFixed(1)} TB`;
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  return `${Math.max(bytes / 1024, 0).toFixed(1)} KB`;
+  if (bytes <= 0) return '0 B';
+  const k = 1024;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  if (i === 0) return `${bytes} B`;
+  const val = bytes / Math.pow(k, i);
+  const formattedVal = Math.abs(val - Math.round(val)) < 0.05 ? Math.round(val) : val.toFixed(1);
+  return `${formattedVal} ${units[i]}`;
+}
+
+function formatPercent(val: number): string {
+  if (val <= 0) return '0.0%';
+  if (val < 0.1) return '<0.1%';
+  const formatted = val.toFixed(1);
+  return formatted.endsWith('.0') ? `${Math.round(val)}%` : `${formatted}%`;
 }
 
 export default function StorageConsumptionChart({
@@ -110,7 +121,7 @@ export default function StorageConsumptionChart({
   const innerRadius = chartSize * INNER_RADIUS_RATIO;
   const segments = buildSegments(breakdown, capBytes);
   const chartDescription = segments
-    .map((segment) => `${segment.label}: ${segment.valueLabel} (${segment.percent.toFixed(1)}%)`)
+    .map((segment) => `${segment.label}: ${segment.valueLabel} (${formatPercent(segment.percent)})`)
     .join(', ');
 
   return (
@@ -199,7 +210,7 @@ export default function StorageConsumptionChart({
                 color: warningLevel === 'exceeded' ? cv.errorText : warningLevel === 'warning' ? cv.warning : cv.brandPurple,
               }}
             >
-              {usedPercent < 1 ? usedPercent.toFixed(1) : Math.round(usedPercent)}%
+              {formatPercent(usedPercent)}
             </Typography>
           </Box>
         </Box>
@@ -245,9 +256,7 @@ export default function StorageConsumptionChart({
                     {segment.valueLabel}
                   </Typography>
                   <Typography sx={{ fontSize: '0.6875rem', color: cv.textMuted }}>
-                    {segment.percent < 0.1 && segment.percent > 0
-                      ? '<0.1%'
-                      : `${segment.percent.toFixed(segment.percent < 10 ? 1 : 0)}%`}
+                    {formatPercent(segment.percent)}
                   </Typography>
                 </Box>
               </Box>
