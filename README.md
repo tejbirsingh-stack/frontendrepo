@@ -32,7 +32,7 @@ You can also create a new account at `/signup`. In mock mode, new users are stor
 
 Copy `.env.example` to `.env.local` and configure as needed:
 
-```env
+
 VITE_API_BASE_URL=
 VITE_APP_ORIGIN=http://localhost:5173
 VITE_API_TIMEOUT_MS=30000
