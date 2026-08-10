@@ -1688,7 +1688,10 @@ export function SecurityAdminSettingsSection() {
 
 export function ShareSettingsSection() {
   const [requirePassword, setRequirePassword] = useState(false);
-  const [allowDownloads, setAllowDownloads] = useState(true);
+  const [allowComments, setAllowComments] = useState(false);
+  const [allowDownloadOriginal, setAllowDownloadOriginal] = useState(true);
+  const [allowDownloadProxy, setAllowDownloadProxy] = useState(true);
+  const [showCompanyWatermark, setShowCompanyWatermark] = useState(true);
   const [linkExpiry, setLinkExpiry] = useState('30');
   const [loading, setLoading] = useState(true);
 
@@ -1705,8 +1708,17 @@ export function ShareSettingsSection() {
           if (typeof data.requirePasswordDefault === 'boolean') {
             setRequirePassword(data.requirePasswordDefault);
           }
-          if (typeof data.allowDownloadsDefault === 'boolean') {
-            setAllowDownloads(data.allowDownloadsDefault);
+          if (typeof data.allowCommentsDefault === 'boolean') {
+            setAllowComments(data.allowCommentsDefault);
+          }
+          if (typeof data.allowDownloadOriginalDefault === 'boolean') {
+            setAllowDownloadOriginal(data.allowDownloadOriginalDefault);
+          }
+          if (typeof data.allowDownloadProxyDefault === 'boolean') {
+            setAllowDownloadProxy(data.allowDownloadProxyDefault);
+          }
+          if (typeof data.showCompanyWatermarkDefault === 'boolean') {
+            setShowCompanyWatermark(data.showCompanyWatermarkDefault);
           }
           if (data.defaultExpiryDays) {
             setLinkExpiry(String(data.defaultExpiryDays));
@@ -1737,21 +1749,6 @@ export function ShareSettingsSection() {
     }
   };
 
-  const handleRequirePasswordChange = (checked: boolean) => {
-    setRequirePassword(checked);
-    updateSetting('requirePasswordDefault', checked);
-  };
-
-  const handleAllowDownloadsChange = (checked: boolean) => {
-    setAllowDownloads(checked);
-    updateSetting('allowDownloadsDefault', checked);
-  };
-
-  const handleLinkExpiryChange = (value: string) => {
-    setLinkExpiry(value);
-    updateSetting('defaultExpiryDays', parseInt(value, 10));
-  };
-
   if (loading) return null;
 
   return (
@@ -1766,19 +1763,67 @@ export function ShareSettingsSection() {
         action={
           <Switch
             checked={requirePassword}
-            onChange={(event) => handleRequirePasswordChange(event.target.checked)}
+            onChange={(event) => {
+              setRequirePassword(event.target.checked);
+              updateSetting('requirePasswordDefault', event.target.checked);
+            }}
             slotProps={{ input: { 'aria-label': 'Require password on share links' } }}
           />
         }
       />
       <SettingsRow
-        title="Allow downloads"
-        description="Let viewers download shared media from the link."
+        title="Allow comments"
+        description="Let viewers add comments on shared media."
         action={
           <Switch
-            checked={allowDownloads}
-            onChange={(event) => handleAllowDownloadsChange(event.target.checked)}
-            slotProps={{ input: { 'aria-label': 'Allow downloads on share links' } }}
+            checked={allowComments}
+            onChange={(event) => {
+              setAllowComments(event.target.checked);
+              updateSetting('allowCommentsDefault', event.target.checked);
+            }}
+            slotProps={{ input: { 'aria-label': 'Allow comments on share links' } }}
+          />
+        }
+      />
+      <SettingsRow
+        title="Download original"
+        description="Let viewers download the original high-resolution media."
+        action={
+          <Switch
+            checked={allowDownloadOriginal}
+            onChange={(event) => {
+              setAllowDownloadOriginal(event.target.checked);
+              updateSetting('allowDownloadOriginalDefault', event.target.checked);
+            }}
+            slotProps={{ input: { 'aria-label': 'Allow original downloads on share links' } }}
+          />
+        }
+      />
+      <SettingsRow
+        title="Download proxy"
+        description="Let viewers download the proxy (compressed) media."
+        action={
+          <Switch
+            checked={allowDownloadProxy}
+            onChange={(event) => {
+              setAllowDownloadProxy(event.target.checked);
+              updateSetting('allowDownloadProxyDefault', event.target.checked);
+            }}
+            slotProps={{ input: { 'aria-label': 'Allow proxy downloads on share links' } }}
+          />
+        }
+      />
+      <SettingsRow
+        title="Show company watermark"
+        description="Display your company logo watermark on shared media."
+        action={
+          <Switch
+            checked={showCompanyWatermark}
+            onChange={(event) => {
+              setShowCompanyWatermark(event.target.checked);
+              updateSetting('showCompanyWatermarkDefault', event.target.checked);
+            }}
+            slotProps={{ input: { 'aria-label': 'Show company watermark on share links' } }}
           />
         }
       />
@@ -1790,7 +1835,10 @@ export function ShareSettingsSection() {
             select
             size="small"
             value={linkExpiry}
-            onChange={(event) => handleLinkExpiryChange(event.target.value)}
+            onChange={(event) => {
+              setLinkExpiry(event.target.value);
+              updateSetting('defaultExpiryDays', parseInt(event.target.value, 10));
+            }}
             sx={{ minWidth: 120 }}
             slotProps={textFieldSelectInDialogSlotProps}
           >

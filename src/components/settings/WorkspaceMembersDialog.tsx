@@ -270,12 +270,20 @@ export default function WorkspaceMembersDialog({
                 setShareExpiry('custom');
               }
             }
-            if (settings.requirePasswordDefault === true) {
-              setShareRequirePassword(true);
+            if (settings.requirePasswordDefault !== undefined) {
+              setShareRequirePassword(settings.requirePasswordDefault);
             }
-            if (settings.allowDownloadsDefault !== undefined) {
-              setSharePermDownload(settings.allowDownloadsDefault);
-              setSharePermDownloadProxy(settings.allowDownloadsDefault);
+            if (settings.allowCommentsDefault !== undefined) {
+              setSharePermComment(settings.allowCommentsDefault);
+            }
+            if (settings.allowDownloadOriginalDefault !== undefined) {
+              setSharePermDownload(settings.allowDownloadOriginalDefault);
+            }
+            if (settings.allowDownloadProxyDefault !== undefined) {
+              setSharePermDownloadProxy(settings.allowDownloadProxyDefault);
+            }
+            if (settings.showCompanyWatermarkDefault !== undefined) {
+              setSharePermWatermark(settings.showCompanyWatermarkDefault);
             }
           })
           .catch(err => console.error("Failed to load share settings", err));
@@ -775,7 +783,7 @@ export default function WorkspaceMembersDialog({
             <Switch
               size="small"
               checked={draftVisibility === 'public' ? false : activeShareLink?.permissions?.watermark !== false}
-              disabled={draftVisibility === 'public'}
+              disabled={true}
               onChange={(e) => {
                 if (activeShareLinkId && onShareLinkPermissionsChange) {
                   onShareLinkPermissionsChange(activeShareLinkId, {
@@ -1590,6 +1598,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermComment}
                     onChange={(e) => setSharePermComment(e.target.checked)}
+                    disabled={true}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Comment</Typography>}
@@ -1600,7 +1609,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermDownload}
                     onChange={(e) => setSharePermDownload(e.target.checked)}
-                    disabled={orgShareSettings?.allowDownloadsDefault !== undefined}
+                    disabled={true}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Download original</Typography>}
@@ -1611,7 +1620,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermDownloadProxy}
                     onChange={(e) => setSharePermDownloadProxy(e.target.checked)}
-                    disabled={orgShareSettings?.allowDownloadsDefault !== undefined}
+                    disabled={true}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Download proxy</Typography>}
@@ -1622,6 +1631,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermWatermark}
                     onChange={(e) => setSharePermWatermark(e.target.checked)}
+                    disabled={true}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Show company watermark</Typography>}
@@ -1636,7 +1646,7 @@ export default function WorkspaceMembersDialog({
                 <Switch
                   size="small"
                   checked={shareRequirePassword}
-                  disabled={orgShareSettings?.requirePasswordDefault === true}
+                  disabled={true}
                   onChange={(e) => {
                     setShareRequirePassword(e.target.checked);
                     if (!e.target.checked) setSharePassword('');
