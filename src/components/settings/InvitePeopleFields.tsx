@@ -1,17 +1,21 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { cv } from '../../theme/cssVars';
 import {
+  Avatar,
   Box,
   Button,
+  Checkbox,
+  Chip,
   CircularProgress,
   FormControl,
+  FormControlLabel,
   IconButton,
   MenuItem,
+  Paper,
   Select,
   TextField,
   Tooltip,
   Typography,
-  Avatar,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
@@ -61,6 +65,8 @@ interface InvitePeopleFieldsProps {
   suggestedUsers?: SettingsUserRow[];
   suggestedGroups?: SettingsUserGroup[];
   onGuestSearch?: (query: string) => Promise<GuestUserSuggestion[]>;
+  sendInviteEmail?: boolean;
+  onSendInviteEmailChange?: (send: boolean) => void;
 }
 
 export default function InvitePeopleFields({
@@ -77,13 +83,15 @@ export default function InvitePeopleFields({
   suggestedUsers = [],
   suggestedGroups = MOCK_SETTINGS_USER_GROUPS,
   onGuestSearch,
+  sendInviteEmail = false,
+  onSendInviteEmailChange,
 }: InvitePeopleFieldsProps) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const [guestSuggestions, setGuestSuggestions] = useState<GuestUserSuggestion[]>([]);
   const [isGuestSearching, setIsGuestSearching] = useState(false);
-  const guestSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const guestSearchTimer = useRef<NodeJS.Timeout | null>(null);
 
   const isGroupMode = memberType === 'Group';
   const isGuestMode = memberType === 'Guest';
@@ -166,8 +174,8 @@ export default function InvitePeopleFields({
       return;
     }
 
-    // Guest path: validate via backend API
-    if (memberType === 'Guest') {
+    // Guest mode: validate via backend API
+    if (isGuestMode) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(trimmed)) {
         setError('Enter a valid email address to invite a Guest.');
@@ -201,7 +209,7 @@ export default function InvitePeopleFields({
       return;
     }
 
-    // Member path: must already exist in org suggestions
+    // Member mode: must already exist in org suggestions
     const suggested = suggestedUsers.find(
       (user) =>
         String(user.email || '').toLowerCase() === trimmed.toLowerCase() ||
@@ -221,7 +229,7 @@ export default function InvitePeopleFields({
     onChange([...emails, email]);
     setInput('');
     setError('');
-  }, [input, isGroupMode, isMemberMode, suggestedGroups, groupIds, onGroupIdsChange, memberType, emails, onChange, suggestedUsers]);
+  }, [input, isGroupMode, isMemberMode, isGuestMode, suggestedGroups, groupIds, onGroupIdsChange, emails, onChange, suggestedUsers]);
 
   const handleRemoveEmail = (emailToRemove: string) => {
     onChange(emails.filter((email) => email !== emailToRemove));
@@ -234,12 +242,12 @@ export default function InvitePeopleFields({
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      handleAdd();
+      void handleAdd();
     }
   };
 
-  const inputLabel = isGroupMode ? 'Group name' : memberType === 'Guest' ? 'Guest email' : 'Name or email';
-  const inputPlaceholder = isGroupMode ? 'e.g. Creative Team' : memberType === 'Guest' ? 'user@othercompany.com' : 'name@company.com';
+  const inputLabel = isGroupMode ? 'Group name' : isMemberMode ? 'Member name or email' : 'Guest email';
+  const inputPlaceholder = isGroupMode ? 'e.g. Creative Team' : isMemberMode ? 'Search members...' : 'user@othercompany.com';
 
   return (
     <Box sx={{ position: 'relative' }}>
@@ -285,7 +293,7 @@ export default function InvitePeopleFields({
           <Button
             type="button"
             variant="outlined"
-            onClick={handleAdd}
+            onClick={() => void handleAdd()}
             disabled={isValidating || isGuestSearching}
             startIcon={
               isValidating || isGuestSearching
@@ -304,7 +312,7 @@ export default function InvitePeopleFields({
               '&:hover': { borderColor: cv.borderFocus, backgroundColor: cv.surfaceHover },
             }}
           >
-            Add
+            {isValidating || isGuestSearching ? 'Validating...' : 'Add'}
           </Button>
         </Box>
 
@@ -345,128 +353,178 @@ export default function InvitePeopleFields({
             </FormControl>
           </Box>
         ) : null}
+
+        <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={sendInviteEmail}
+                onChange={(e) => onSendInviteEmailChange?.(e.target.checked)}
+                size="small"
+                sx={{
+                  color: cv.textMuted,
+                  p: 0.5,
+                  mr: 0.5,
+                  '&.Mui-checked': {
+                    color: cv.brandMain,
+                  },
+                }}
+              />
+            }
+            label={
+              <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary }}>
+                Send invitation email
+              </Typography>
+            }
+            sx={{ ml: 0, mr: 0, userSelect: 'none' }}
+          />
+        </Box>
       </Box>
 
-      {/* Member suggestions (only in Member mode) */}
-      {isMemberMode && userSuggestions.length > 0 ? (
-        <Box sx={{ mt: 1.25 }}>
-          <Typography
-            sx={{
-              fontSize: '0.6875rem',
-              fontWeight: 600,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              color: cv.textMuted,
-              mb: 0.75,
-            }}
-          >
-            Suggested
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            {userSuggestions.map((user) => (
-              <Box
-                key={user.id}
-                component="button"
-                type="button"
-                onClick={() => {
-                  const userEmail = user.email.toLowerCase();
-                  if (!emails.some((e) => e.toLowerCase() === userEmail)) {
-                    onChange([...emails, userEmail]);
-                  }
-                  setInput('');
-                  setError('');
-                }}
+      {/* Floating Suggestions Dropdown */}
+      {input.trim() && (
+        (isMemberMode && userSuggestions.length > 0) ||
+        (isGroupMode && groupSuggestions.length > 0)
+      ) ? (
+        <Paper
+          elevation={8}
+          sx={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            mt: 0.5,
+            zIndex: 1400,
+            maxHeight: 220,
+            overflowY: 'auto',
+            bgcolor: cv.elevatedSurface,
+            borderRadius: '10px',
+            border: `1px solid ${cv.border}`,
+            boxShadow: cv.popoverShadow,
+            p: 0.75,
+          }}
+        >
+          {isMemberMode && userSuggestions.length > 0 ? (
+            <Box>
+              <Typography
                 sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  width: '100%',
-                  border: 'none',
-                  borderRadius: '8px',
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: cv.textMuted,
+                  mb: 0.75,
                   px: 1,
-                  py: 1,
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  backgroundColor: 'transparent',
-                  '&:hover': { backgroundColor: cv.surfaceHover },
                 }}
               >
-                <Avatar sx={{ width: 32, height: 32, fontSize: '0.875rem', bgcolor: cv.brandMain, color: '#fff' }}>
-                  {user.name ? user.name[0]?.toUpperCase() : user.email[0]?.toUpperCase()}
-                </Avatar>
-                <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {user.name}
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {user.email}
-                  </Typography>
-                </Box>
+                Suggested
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {userSuggestions.map((user) => (
+                  <Box
+                    key={user.id}
+                    component="button"
+                    type="button"
+                    onClick={() => {
+                      const email = user.email.toLowerCase();
+                      if (!emails.some((e) => e.toLowerCase() === email)) {
+                        onChange([...emails, email]);
+                      }
+                      setInput('');
+                      setError('');
+                    }}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      width: '100%',
+                      border: 'none',
+                      borderRadius: '8px',
+                      px: 1,
+                      py: 1,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      backgroundColor: 'transparent',
+                      '&:hover': { backgroundColor: cv.surfaceHover },
+                    }}
+                  >
+                    <Avatar sx={{ width: 32, height: 32, fontSize: '0.875rem', bgcolor: cv.brandMain, color: '#fff' }}>
+                      {user.name ? user.name[0]?.toUpperCase() : user.email[0]?.toUpperCase()}
+                    </Avatar>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {user.name}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {user.email}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ))}
               </Box>
-            ))}
-          </Box>
-        </Box>
-      ) : null}
+            </Box>
+          ) : null}
 
-      {/* Group suggestions (only in Group mode) */}
-      {isGroupMode && groupSuggestions.length > 0 ? (
-        <Box sx={{ mt: 1.25 }}>
-          <Typography
-            sx={{
-              fontSize: '0.6875rem',
-              fontWeight: 600,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              color: cv.textMuted,
-              mb: 0.75,
-              px: 1,
-            }}
-          >
-            Suggested groups
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            {groupSuggestions.map((group) => (
-              <Box
-                key={group.id}
-                component="button"
-                type="button"
-                onClick={() => {
-                  if (!groupIds.includes(group.id)) {
-                    onGroupIdsChange?.([...groupIds, group.id]);
-                  }
-                  setInput('');
-                  setError('');
-                }}
+          {isGroupMode && groupSuggestions.length > 0 ? (
+            <Box>
+              <Typography
                 sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  width: '100%',
-                  border: 'none',
-                  borderRadius: '8px',
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: cv.textMuted,
+                  mb: 0.75,
                   px: 1,
-                  py: 1,
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  backgroundColor: 'transparent',
-                  '&:hover': { backgroundColor: cv.surfaceHover },
                 }}
               >
-                <Avatar sx={{ width: 32, height: 32, bgcolor: cv.surfaceHighlight, color: cv.textSecondary }}>
-                  <GroupsOutlinedIcon sx={{ fontSize: 20 }} />
-                </Avatar>
-                <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {group.name}
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25, lineHeight: 1.2 }}>
-                    {group.memberIds.length} member{group.memberIds.length === 1 ? '' : 's'}
-                  </Typography>
-                </Box>
+                Suggested groups
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {groupSuggestions.map((group) => (
+                  <Box
+                    key={group.id}
+                    component="button"
+                    type="button"
+                    onClick={() => {
+                      if (!groupIds.includes(group.id)) {
+                        onGroupIdsChange?.([...groupIds, group.id]);
+                      }
+                      setInput('');
+                      setError('');
+                    }}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      width: '100%',
+                      border: 'none',
+                      borderRadius: '8px',
+                      px: 1,
+                      py: 1,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      backgroundColor: 'transparent',
+                      '&:hover': { backgroundColor: cv.surfaceHover },
+                    }}
+                  >
+                    <Avatar sx={{ width: 32, height: 32, bgcolor: cv.surfaceHighlight, color: cv.textSecondary }}>
+                      <GroupsOutlinedIcon sx={{ fontSize: 20 }} />
+                    </Avatar>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {group.name}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25, lineHeight: 1.2 }}>
+                        {group.memberIds.length} member{group.memberIds.length === 1 ? '' : 's'}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ))}
               </Box>
-            ))}
-          </Box>
-        </Box>
+            </Box>
+          ) : null}
+        </Paper>
       ) : null}
 
       {/* Direct Access list (added emails + groups) */}

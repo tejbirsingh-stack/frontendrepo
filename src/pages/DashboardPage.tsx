@@ -1707,7 +1707,7 @@ export default function DashboardPage({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {(() => {
             const sharedWithMe = displayedItems.filter(i => !i.isSharedByMe);
-            const sharedByMe = displayedItems.filter(i => i.isSharedByMe);
+            const sharedByMe = displayedItems.filter(i => i.isSharedByMe && !i.isProject);
 
             const tabSx = {
               minHeight: 40,
