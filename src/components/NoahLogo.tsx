@@ -4,29 +4,41 @@ import { cv } from '../theme/cssVars';
 
 const LOGO_SRC = '/noah-logo.png';
 
-/** Parent wrapper for login / signup flow logos. */
+/** Parent wrapper for login / signup flow logos — fixed height, no extra vertical padding. */
 export const AUTH_LOGO_PARENT_SX = {
-  height: 160,
   width: '100%',
+  height: { xs: 120, sm: 160 },
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   mb: 4,
+  overflow: 'hidden',
+  background: 'transparent',
 } as const;
 
-/** Logo styles when constrained by AUTH_LOGO_PARENT_SX — crop tall PNG canvas, keep width. */
+/**
+ * Auth logo — larger mark inside a fixed ~160px-tall crop.
+ * `cover` + mild scale clips PNG padding without cutting off “CLOUD”.
+ */
 export const AUTH_LOGO_SX = {
   mb: 0,
-  height: '100%',
   width: '100%',
-  maxWidth: 480,
+    maxWidth: { xs: 320, sm: 400 },
+  height: '100%',
   overflow: 'hidden',
+  background: 'transparent',
   '& img': {
-    maxHeight: 'none',
     width: '100%',
     height: '100%',
     objectFit: 'cover',
     objectPosition: 'center',
+    transform: 'scale(1.05)',
+    transformOrigin: 'center center',
+    // Logo asset has an opaque black canvas; lighten makes black transparent on dark UIs.
+    mixBlendMode: 'lighten',
+  },
+  'html[data-theme="light"] & img': {
+    mixBlendMode: 'normal',
   },
 } as const;
 

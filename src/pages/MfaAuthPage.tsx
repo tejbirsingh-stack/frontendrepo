@@ -84,7 +84,7 @@ export default function MfaAuthPage() {
         }}
       >
         <Box sx={AUTH_LOGO_PARENT_SX}>
-          <NoahLogo sx={AUTH_LOGO_SX} />
+          <NoahLogo sx={AUTH_LOGO_SX} showGlow={false} animated={false} />
         </Box>
 
         <GlassCard

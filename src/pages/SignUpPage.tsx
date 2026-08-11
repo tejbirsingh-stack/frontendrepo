@@ -877,7 +877,7 @@ export default function SignUpPage() {
         }}
       >
         <Box sx={AUTH_LOGO_PARENT_SX}>
-          <NoahLogo sx={AUTH_LOGO_SX} />
+          <NoahLogo sx={AUTH_LOGO_SX} showGlow={false} animated={false} />
         </Box>
 
         <GlassCard glow sx={{ width: '100%', maxWidth: phase === 'usage' || phase === 'upload' ? 560 : 440 }}>

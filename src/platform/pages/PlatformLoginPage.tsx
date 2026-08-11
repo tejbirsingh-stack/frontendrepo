@@ -45,7 +45,7 @@ export default function PlatformLoginPage() {
       <WaveBackground />
       <Box sx={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <Box sx={AUTH_LOGO_PARENT_SX}>
-          <NoahLogo sx={AUTH_LOGO_SX} />
+          <NoahLogo sx={AUTH_LOGO_SX} showGlow={false} animated={false} />
         </Box>
         <GlassCard glow sx={{ width: '100%', maxWidth: 420 }}>
           <Box component="form" onSubmit={(e) => void onSubmit(e)} sx={{ p: 4 }}>
