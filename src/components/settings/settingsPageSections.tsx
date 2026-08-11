@@ -7,6 +7,7 @@ import { fetchUserGroups } from '../../api/userGroups.service';
 import { useAuth } from '../../auth/AuthContext';
 import { useLocalizedDate } from '../../hooks/useLocalizedDate';
 import { cv } from '../../theme/cssVars';
+import ChoosePlanScreen from '../onboarding/ChoosePlanScreen';
 import {
   Avatar,
   Box,
@@ -838,61 +839,131 @@ export function CompanySettingsSection() {
 export { default as UsageSettingsSection } from './UsageSettingsSection';
 
 export function PlanSettingsSection() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const plan = useMemo(() => getDynamicPlanDetails(user), [user]);
+  const [choosePlanOpen, setChoosePlanOpen] = useState(false);
+
+  const handleUpgradePlan = async (planId: string, billingCycle: 'annual' | 'monthly') => {
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      const res = await apiClient.post<any>('/auth/upgrade-plan', { planId, billingCycle }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      await refreshUser();
+      toast.success((res as any)?.message || `Upgraded to ${planId.toUpperCase()} plan!`);
+      setChoosePlanOpen(false);
+    } catch (err: any) {
+      console.error('Failed to upgrade plan:', err);
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to upgrade plan';
+      toast.error(errMsg);
+    }
+  };
 
   return (
-    <SettingsFormContainer>
-      <SettingsSectionCard
-        title="Current Plan"
-        description="Active tier, billing cycle term, and subscription line items."
-      >
-        <SettingsRow title="Plan name" description={plan.planName} />
-        <SettingsRow title="Billing cycle" description={plan.billingTermLabel} />
-        <SettingsRow title="Subscription expiry date" description={plan.expiryDateFormatted} />
-        <SettingsRow title="Subtotal" description={plan.subtotal} />
-        <SettingsRow
-          title="Sales tax"
-          description={`${plan.salesTaxPercent}% · ${plan.salesTaxAmount} (US state-level, based on billing address)`}
-        />
-        <SettingsRow title="Total" description={plan.total} showDivider={false} />
-      </SettingsSectionCard>
+    <>
+      <SettingsFormContainer>
+        <SettingsSectionCard
+          title="Current Plan"
+          description="Active tier, billing cycle term, and subscription line items."
+          action={
+            <Button
+              variant="contained"
+              onClick={() => setChoosePlanOpen(true)}
+              sx={{
+                background: cv.brandGradient,
+                color: cv.textOnCta,
+                textTransform: 'none',
+                borderRadius: '10px',
+                fontWeight: 600,
+                px: 2.5,
+                py: 0.75,
+                boxShadow: cv.brandShadowSoft,
+                '&:hover': {
+                  background: cv.brandGradientHover,
+                  boxShadow: cv.brandShadowStrong,
+                },
+              }}
+            >
+              Upgrade Plan
+            </Button>
+          }
+        >
+          <SettingsRow title="Plan name" description={plan.planName} />
+          <SettingsRow title="Billing cycle" description={plan.billingTermLabel} />
+          <SettingsRow title="Subscription expiry date" description={plan.expiryDateFormatted} />
+          <SettingsRow title="Subtotal" description={plan.subtotal} />
+          <SettingsRow
+            title="Sales tax"
+            description={`${plan.salesTaxPercent}% · ${plan.salesTaxAmount} (US state-level, based on billing address)`}
+          />
+          <SettingsRow title="Total" description={plan.total} showDivider={false} />
+        </SettingsSectionCard>
 
-      <SettingsSectionCard title="Line item details" description="Fetched dynamically from subscription terms.">
-        <Box sx={{ px: 2, py: 1.5 }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Description</TableCell>
-                <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Quantity</TableCell>
-                <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Unit price</TableCell>
-                <TableCell align="right" sx={{ color: cv.textMuted, borderColor: cv.border }}>
-                  Subtotal
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {plan.lineItems.map((item) => (
-                <TableRow key={item.description}>
-                  <TableCell sx={{ color: cv.textPrimary, borderColor: cv.border }}>
-                    {item.description}
-                  </TableCell>
-                  <TableCell sx={{ color: cv.textSecondary, borderColor: cv.border }}>
-                    {item.quantity}
-                  </TableCell>
-                  <TableCell sx={{ color: cv.textSecondary, borderColor: cv.border }}>
-                    {item.unitPrice}
-                  </TableCell>
-                  <TableCell align="right" sx={{ color: cv.textPrimary, borderColor: cv.border }}>
-                    {item.subtotal}
+        <SettingsSectionCard title="Line item details" description="Fetched dynamically from subscription terms.">
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Description</TableCell>
+                  <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Quantity</TableCell>
+                  <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Unit price</TableCell>
+                  <TableCell align="right" sx={{ color: cv.textMuted, borderColor: cv.border }}>
+                    Subtotal
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {plan.lineItems.map((item) => (
+                  <TableRow key={item.description}>
+                    <TableCell sx={{ color: cv.textPrimary, borderColor: cv.border }}>
+                      {item.description}
+                    </TableCell>
+                    <TableCell sx={{ color: cv.textSecondary, borderColor: cv.border }}>
+                      {item.quantity}
+                    </TableCell>
+                    <TableCell sx={{ color: cv.textSecondary, borderColor: cv.border }}>
+                      {item.unitPrice}
+                    </TableCell>
+                    <TableCell align="right" sx={{ color: cv.textPrimary, borderColor: cv.border }}>
+                      {item.subtotal}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        </SettingsSectionCard>
+      </SettingsFormContainer>
+
+      {/* Upgrade Plan Modal */}
+      <Dialog
+        fullScreen
+        open={choosePlanOpen}
+        onClose={() => setChoosePlanOpen(false)}
+        sx={{
+          '& .MuiDialog-paper': {
+            background: cv.bg,
+            color: cv.textPrimary,
+          },
+        }}
+      >
+        <Box sx={{ position: 'absolute', top: 20, right: 24, zIndex: 1200 }}>
+          <IconButton
+            onClick={() => setChoosePlanOpen(false)}
+            sx={{
+              color: cv.textSecondary,
+              backgroundColor: cv.surfaceHover,
+              border: `1px solid ${cv.border}`,
+              '&:hover': { backgroundColor: cv.surfaceActive, color: cv.textPrimary },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
         </Box>
-      </SettingsSectionCard>
-    </SettingsFormContainer>
+        <ChoosePlanScreen onSelectPlan={handleUpgradePlan} currentPlanId={plan.planId} />
+      </Dialog>
+    </>
   );
 }
 

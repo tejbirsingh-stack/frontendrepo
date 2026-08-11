@@ -16,7 +16,7 @@ export default function SettingsLayout() {
   const isFreePlan = planDetails.planId === 'free';
   const pathSuffix = location.pathname.replace('/home/settings/', '').replace(/\/$/, '');
   const sectionMeta = getSettingsSectionMeta(pathSuffix);
-  const displayPlan = (user?.planType || user?.organization?.planType || 'free').toUpperCase();
+  const displayPlan = (planDetails.planId || 'free').toUpperCase();
 
   return (
     <Box

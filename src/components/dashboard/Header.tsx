@@ -46,7 +46,7 @@ export default function Header({
   const displayRole = rawRole.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   const displayInitials = user?.initials || 'U';
   const displayAvatar = user?.avatarUrl;
-  const displayPlan = (user?.planType || user?.organization?.planType || 'free').toUpperCase();
+  const displayPlan = (planDetails.planId || 'free').toUpperCase();
   const isSettingsRoute = location.pathname.startsWith('/home/settings');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const profileButtonRef = useRef<HTMLDivElement>(null);

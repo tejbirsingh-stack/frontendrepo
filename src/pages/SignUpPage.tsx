@@ -185,7 +185,11 @@ function SignupStepFooter({
       {showSkip && onSkip ? (
         <Button
           type="button"
-          onClick={onSkip}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onSkip();
+          }}
           sx={{
             color: cv.textSecondary,
             textTransform: 'none',

@@ -115,12 +115,20 @@ function priceForCycle(plan: PlanDefinition, cycle: BillingCycle): number {
 interface ChoosePlanScreenProps {
   /** Called when a plan CTA is clicked. No navigation — parent decides next step. */
   onSelectPlan?: (planId: PlanId, billingCycle: BillingCycle) => void;
+  currentPlanId?: string;
 }
 
-export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps) {
+export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: ChoosePlanScreenProps) {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('annual');
-  const [selectedPlan, setSelectedPlan] = useState<PlanId>(DEFAULT_PLAN);
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>(() => (currentPlanId || DEFAULT_PLAN).toLowerCase());
   const [plans, setPlans] = useState<PlanDefinition[]>(FALLBACK_PLANS);
+  const isSettingsFlow = Boolean(currentPlanId && currentPlanId.trim() !== '');
+
+  useEffect(() => {
+    if (currentPlanId) {
+      setSelectedPlan(currentPlanId.toLowerCase());
+    }
+  }, [currentPlanId]);
 
   useEffect(() => {
     fetchPublicCatalogPlans()
@@ -128,7 +136,7 @@ export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps
         if (!res.plans?.length) return;
         setPlans(
           res.plans.map((p) => ({
-            id: p.id,
+            id: p.name ? p.name.toLowerCase() : p.id.toLowerCase(),
             name: p.name,
             description: p.description || '',
             monthlyPrice: (p.monthlyPriceCents || 0) / 100,
@@ -138,15 +146,20 @@ export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps
             features: Array.isArray(p.features) ? p.features : [],
           })),
         );
-        const free = res.plans.find((p) => p.id === 'free');
-        if (free) setSelectedPlan(free.id);
+        if (!currentPlanId) {
+          setSelectedPlan('free');
+        }
       })
       .catch(() => {
         /* keep fallback catalog */
       });
-  }, []);
+  }, [currentPlanId]);
 
   const handleSelect = (planId: PlanId) => {
+    const pId = String(planId).toLowerCase().trim();
+    if (isSettingsFlow && (pId === 'free' || pId === 'f2fe83c1-d36a-4cd3-b173-7f394a77c6bd')) {
+      return;
+    }
     setSelectedPlan(planId);
     onSelectPlan?.(planId, billingCycle);
   };
@@ -315,10 +328,29 @@ export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps
           }}
         >
           {plans.map((plan) => {
-            const isFree = plan.monthlyPrice === 0;
+            const planKey = (plan.name || plan.id).toLowerCase();
+            const normCurrentPlan = (currentPlanId || '').toLowerCase().trim();
+            const isFree = plan.monthlyPrice === 0 || planKey === 'free';
+
+            let isSelected = false;
+            let isFreeDisabled = false;
+            let isButtonDisabled = false;
+
+            if (isSettingsFlow) {
+              if (normCurrentPlan === planKey) {
+                isSelected = true;
+                isButtonDisabled = true;
+              } else if (isFree) {
+                isFreeDisabled = normCurrentPlan !== 'free';
+                isButtonDisabled = true;
+              }
+            } else {
+              isSelected = selectedPlan.toLowerCase() === planKey;
+              isButtonDisabled = false;
+            }
+
             const price = priceForCycle(plan, billingCycle);
             const isFeatured = Boolean(plan.featured);
-            const isSelected = selectedPlan === plan.id;
             const showAnnualNote = !isFree && billingCycle === 'annual';
 
             return (
@@ -341,6 +373,7 @@ export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps
                       ? `0 0 32px ${cv.purpleGlow24}, ${cv.cardShadow}`
                       : cv.cardShadow,
                   overflow: 'hidden',
+                  opacity: isFreeDisabled ? 0.6 : 1,
                   mt: { lg: isFeatured || isSelected ? 0 : 1.5 },
                   mb: { lg: isFeatured || isSelected ? 0 : 1.5 },
                   transition: 'border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease',
@@ -361,7 +394,7 @@ export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps
                   >
                     Recommended for you
                   </Box>
-                ) : isSelected ? (
+                ) : isSelected && isSettingsFlow ? (
                   <Box
                     sx={{
                       py: 0.85,
@@ -376,6 +409,22 @@ export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps
                     }}
                   >
                     Current selection
+                  </Box>
+                ) : isFreeDisabled ? (
+                  <Box
+                    sx={{
+                      py: 0.85,
+                      px: 2,
+                      textAlign: 'center',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      color: cv.textMuted,
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      letterSpacing: '0.01em',
+                      borderBottom: `1px solid ${cv.border}`,
+                    }}
+                  >
+                    Trial Used
                   </Box>
                 ) : (
                   <Box sx={{ height: { lg: 33 }, display: { xs: 'none', lg: 'block' } }} />
@@ -450,24 +499,37 @@ export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps
                           lineHeight: 1,
                         }}
                       >
-                        {isFree ? '$0' : `$${price}`}
+                        ${price}
                       </Typography>
-                      <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted, fontWeight: 500 }}>
-                        {isFree ? 'forever' : '/month'}
-                      </Typography>
+                      {!isFree && (
+                        <Typography
+                          sx={{
+                            fontSize: '0.8125rem',
+                            color: cv.textMuted,
+                          }}
+                        >
+                          /month
+                        </Typography>
+                      )}
+                      {isFree && (
+                        <Typography
+                          sx={{
+                            fontSize: '0.8125rem',
+                            color: cv.textMuted,
+                            ml: 0.5,
+                          }}
+                        >
+                          forever
+                        </Typography>
+                      )}
                     </Box>
                     <Typography
                       sx={{
-                        mt: 0.75,
-                        fontSize: '0.7rem',
-                        color: showAnnualNote
-                          ? cv.brandOrchid
-                          : isFree
-                            ? cv.textMuted
-                            : 'transparent',
-                        fontWeight: 500,
-                        minHeight: '1.2em',
-                        userSelect: showAnnualNote || isFree ? 'auto' : 'none',
+                        fontSize: '0.75rem',
+                        color: cv.textMuted,
+                        mt: 0.5,
+                        minHeight: '1.4em',
+                        visibility: showAnnualNote || isFree ? 'visible' : 'hidden',
                       }}
                       aria-hidden={!showAnnualNote && !isFree}
                     >
@@ -535,42 +597,46 @@ export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps
                   <Button
                     type="button"
                     fullWidth
+                    disabled={isButtonDisabled}
                     variant={isSelected || isFeatured ? 'contained' : 'outlined'}
                     onClick={() => handleSelect(plan.id)}
                     aria-pressed={isSelected}
-                    sx={
-                      isSelected || isFeatured
+                    sx={{
+                      py: 1,
+                      borderRadius: '10px',
+                      fontWeight: 600,
+                      fontSize: '0.875rem',
+                      textTransform: 'none',
+                      ...(isButtonDisabled
                         ? {
-                            py: 1.2,
-                            textTransform: 'none',
-                            fontWeight: 600,
-                            fontSize: '0.875rem',
-                            borderRadius: '12px',
-                            background: cv.brandGradient,
-                            boxShadow: cv.loginBrandShadow,
-                            color: cv.textOnCta,
-                            '&:hover': {
-                              background: cv.brandGradientHover,
-                              boxShadow: cv.loginBrandShadowHover,
-                            },
+                            borderColor: cv.border,
+                            color: cv.textMuted,
+                            cursor: 'not-allowed',
+                            opacity: 0.6,
                           }
-                        : {
-                            py: 1.2,
-                            textTransform: 'none',
-                            fontWeight: 600,
-                            fontSize: '0.875rem',
-                            borderRadius: '12px',
-                            borderColor: cv.borderStrong,
-                            color: cv.textPrimary,
-                            backgroundColor: cv.surfaceHover,
-                            '&:hover': {
-                              borderColor: cv.brandOrchid,
-                              backgroundColor: cv.purpleSurfaceHover,
-                            },
-                          }
-                    }
+                        : isFeatured
+                          ? {
+                              background: cv.brandGradient,
+                              color: cv.textOnCta,
+                              boxShadow: cv.brandShadowSoft,
+                              '&:hover': {
+                                background: cv.brandGradientHover,
+                                boxShadow: cv.brandShadowStrong,
+                              },
+                            }
+                          : {
+                              borderColor: cv.border,
+                              color: cv.textPrimary,
+                              '&:hover': {
+                                borderColor: cv.borderFocus,
+                                backgroundColor: cv.surfaceHover,
+                              },
+                            }),
+                    }}
                   >
-                    {isSelected ? 'Selected' : plan.cta}
+                    {isSettingsFlow
+                      ? (isFreeDisabled ? 'Trial Used' : isSelected ? 'Active Plan' : (isFree ? 'Active Plan' : plan.cta))
+                      : plan.cta}
                   </Button>
                 </Box>
               </Box>
