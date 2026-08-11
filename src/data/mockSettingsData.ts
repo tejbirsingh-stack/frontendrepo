@@ -61,6 +61,7 @@ export interface WorkspaceInvitePayload {
   memberType: WorkspaceMemberType;
   access: WorkspaceMemberAccess;
   message?: string;
+  sendInviteEmail?: boolean;
 }
 
 export interface BillingPaymentMethod {

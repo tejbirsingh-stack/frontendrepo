@@ -3,8 +3,10 @@ import { cv } from '../../theme/cssVars';
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   FormControl,
+  FormControlLabel,
   IconButton,
   MenuItem,
   Select,
@@ -63,6 +65,8 @@ interface InvitePeopleFieldsProps {
   suggestedUsers?: SettingsUserRow[];
   suggestedGroups?: SettingsUserGroup[];
   onGuestSearch?: (query: string) => Promise<GuestUserSuggestion[]>;
+  sendInviteEmail?: boolean;
+  onSendInviteEmailChange?: (send: boolean) => void;
 }
 
 export default function InvitePeopleFields({
@@ -79,35 +83,16 @@ export default function InvitePeopleFields({
   suggestedUsers = [],
   suggestedGroups = MOCK_SETTINGS_USER_GROUPS,
   onGuestSearch,
+  sendInviteEmail = false,
+  onSendInviteEmailChange,
 }: InvitePeopleFieldsProps) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
-  const [guestSuggestions, setGuestSuggestions] = useState<GuestUserSuggestion[]>([]);
   const [isGuestSearching, setIsGuestSearching] = useState(false);
-  const guestSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isGroupMode = memberType === 'Group';
   const isGuestMode = memberType === 'Guest';
   const isMemberMode = memberType === 'Member';
-
-  // Debounced guest search when in Guest mode
-  useEffect(() => {
-    if (!isGuestMode || !onGuestSearch) { setGuestSuggestions([]); return; }
-    const q = input.trim();
-    if (q.length < 2) { setGuestSuggestions([]); return; }
-    if (guestSearchTimer.current) clearTimeout(guestSearchTimer.current);
-    guestSearchTimer.current = setTimeout(async () => {
-      setIsGuestSearching(true);
-      try {
-        const results = await onGuestSearch(q);
-        const selectedEmails = new Set(emails.map(e => e.toLowerCase()));
-        setGuestSuggestions(results.filter(u => !selectedEmails.has(u.email.toLowerCase())));
-      } catch { setGuestSuggestions([]); }
-      finally { setIsGuestSearching(false); }
-    }, 300);
-    return () => { if (guestSearchTimer.current) clearTimeout(guestSearchTimer.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input, isGuestMode]);
 
   // User suggestions shown only in Member mode
   const userSuggestions = useMemo(() => {
@@ -140,7 +125,7 @@ export default function InvitePeopleFields({
       .slice(0, 5);
   }, [groupIds, input, suggestedGroups, isGroupMode]);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     const trimmed = input.trim();
     if (!trimmed) {
       if (isGroupMode) setError('Enter a group name');
@@ -188,24 +173,44 @@ export default function InvitePeopleFields({
       return;
     }
 
-    // GUEST mode: must match from platform-wide search results
-    const emailLower = trimmed.toLowerCase();
-    const matchedGuest = guestSuggestions.find(
-      (u) => u.email.toLowerCase() === emailLower || u.name.toLowerCase() === trimmed.toLowerCase()
-    );
-    if (!matchedGuest) {
-      setError('Select a user from the suggestions. Only users from other organizations are shown.');
-      return;
+    // GUEST mode: validate entered email exists in platform outside this organization
+    if (isGuestMode) {
+      const emailLower = trimmed.toLowerCase();
+      if (!EMAIL_PATTERN.test(emailLower)) {
+        setError('Enter a valid email address');
+        return;
+      }
+      if (emails.some((entry) => entry.toLowerCase() === emailLower)) {
+        setError('This guest has already been added');
+        return;
+      }
+
+      if (onGuestSearch) {
+        setIsGuestSearching(true);
+        try {
+          const results = await onGuestSearch(emailLower);
+          const matchedGuest = results.find(
+            (u) => u.email.toLowerCase() === emailLower
+          );
+          if (!matchedGuest) {
+            setError('User does not exist on the platform or belongs to your organization.');
+            setIsGuestSearching(false);
+            return;
+          }
+          onChange([...emails, matchedGuest.email.toLowerCase()]);
+          setInput('');
+          setError('');
+        } catch {
+          setError('Failed to validate guest email.');
+        } finally {
+          setIsGuestSearching(false);
+        }
+      } else {
+        onChange([...emails, emailLower]);
+        setInput('');
+        setError('');
+      }
     }
-    const guestEmail = matchedGuest.email.toLowerCase();
-    if (emails.some((entry) => entry.toLowerCase() === guestEmail)) {
-      setError('This guest has already been added');
-      return;
-    }
-    onChange([...emails, guestEmail]);
-    setInput('');
-    setError('');
-    setGuestSuggestions([]);
   };
 
   const handleRemoveEmail = (emailToRemove: string) => {
@@ -219,12 +224,12 @@ export default function InvitePeopleFields({
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      handleAdd();
+      void handleAdd();
     }
   };
 
-  const inputLabel = isGroupMode ? 'Group name' : isMemberMode ? 'Member name or email' : 'Guest name or email';
-  const inputPlaceholder = isGroupMode ? 'e.g. Creative Team' : isMemberMode ? 'Search members...' : 'Search users from other organizations...';
+  const inputLabel = isGroupMode ? 'Group name' : isMemberMode ? 'Member name or email' : 'Guest email';
+  const inputPlaceholder = isGroupMode ? 'e.g. Creative Team' : isMemberMode ? 'Search members...' : 'Enter guest email...';
 
   return (
     <Box sx={{ position: 'relative' }}>
@@ -270,7 +275,8 @@ export default function InvitePeopleFields({
           <Button
             type="button"
             variant="outlined"
-            onClick={handleAdd}
+            onClick={() => void handleAdd()}
+            disabled={isGuestSearching}
             startIcon={<AddIcon sx={{ fontSize: 18 }} />}
             sx={{
               mt: 0.25,
@@ -284,7 +290,7 @@ export default function InvitePeopleFields({
               '&:hover': { borderColor: cv.borderFocus, backgroundColor: cv.surfaceHover },
             }}
           >
-            Add
+            {isGuestSearching ? 'Validating...' : 'Add'}
           </Button>
         </Box>
 
@@ -325,13 +331,38 @@ export default function InvitePeopleFields({
             </FormControl>
           </Box>
         ) : null}
+
+        <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={sendInviteEmail}
+                onChange={(e) => onSendInviteEmailChange?.(e.target.checked)}
+                size="small"
+                sx={{
+                  color: cv.textMuted,
+                  p: 0.5,
+                  mr: 0.5,
+                  '&.Mui-checked': {
+                    color: cv.brandMain,
+                  },
+                }}
+              />
+            }
+            label={
+              <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary }}>
+                Send invitation email
+              </Typography>
+            }
+            sx={{ ml: 0, mr: 0, userSelect: 'none' }}
+          />
+        </Box>
       </Box>
 
       {/* Floating Suggestions Dropdown */}
       {input.trim() && (
         (isMemberMode && userSuggestions.length > 0) ||
-        (isGroupMode && groupSuggestions.length > 0) ||
-        (isGuestMode && (guestSuggestions.length > 0 || isGuestSearching))
+        (isGroupMode && groupSuggestions.length > 0)
       ) ? (
         <Paper
           elevation={8}
@@ -351,50 +382,6 @@ export default function InvitePeopleFields({
             p: 0.75,
           }}
         >
-          {isGuestMode ? (
-            <Box>
-              <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: cv.textMuted, mb: 0.75, px: 1 }}>
-                {isGuestSearching ? 'Searching...' : 'Users from other organizations'}
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                {guestSuggestions.length === 0 && !isGuestSearching ? (
-                  <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted, px: 1, py: 0.5 }}>
-                    No users found from other organizations.
-                  </Typography>
-                ) : null}
-                {guestSuggestions.map((user) => (
-                  <Box
-                    key={user.id}
-                    component="button"
-                    type="button"
-                    onClick={() => {
-                      const email = user.email.toLowerCase();
-                      if (!emails.some((e) => e.toLowerCase() === email)) {
-                        onChange([...emails, email]);
-                      }
-                      setInput('');
-                      setError('');
-                      setGuestSuggestions([]);
-                    }}
-                    sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', border: 'none', borderRadius: '8px', px: 1, py: 1, cursor: 'pointer', textAlign: 'left', backgroundColor: 'transparent', '&:hover': { backgroundColor: cv.surfaceHover } }}
-                  >
-                    <Avatar sx={{ width: 32, height: 32, fontSize: '0.875rem', bgcolor: cv.indigoSurface, color: cv.textPrimary }}>
-                      {user.name ? user.name[0]?.toUpperCase() : user.email[0]?.toUpperCase()}
-                    </Avatar>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {user.name}
-                      </Typography>
-                      <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {user.email}{user.orgName ? ` · ${user.orgName}` : ''}
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
-              </Box>
-            </Box>
-          ) : null}
-
           {!isGroupMode && !isGuestMode && userSuggestions.length > 0 ? (
             <Box>
               <Typography
