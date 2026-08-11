@@ -2,7 +2,9 @@ import { useRef, useState } from 'react';
 import { cv } from '../../theme/cssVars';
 import { Box, Button, Typography } from '@mui/material';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
+import toast from 'react-hot-toast';
 import { UPLOAD_ACCEPT, getUploadableFiles } from '../../utils/fileMediaType';
+import { getUsageSummary } from '../../api/usage.service';
 
 interface UploadPanelProps {
   onUpload: (files: File[]) => number;
@@ -12,8 +14,22 @@ export default function UploadPanel({ onUpload }: UploadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const processFiles = (fileList: FileList | File[] | null) => {
+  const checkStorageBreached = async (): Promise<boolean> => {
+    try {
+      const summary = await getUsageSummary();
+      if (summary.storageWarningLevel === 'exceeded' || summary.storageUsedBytes >= summary.storageQuotaBytes) {
+        toast.error('Storage limit reached — Uploads are blocked until you free space or upgrade your plan.');
+        return true;
+      }
+    } catch (err) {}
+    return false;
+  };
+
+  const processFiles = async (fileList: FileList | File[] | null) => {
     if (!fileList) return;
+    const isBreached = await checkStorageBreached();
+    if (isBreached) return;
+
     const uploadable = getUploadableFiles(fileList);
     if (uploadable.length > 0) {
       onUpload(uploadable);
@@ -43,16 +59,23 @@ export default function UploadPanel({ onUpload }: UploadPanelProps) {
     }
   };
 
-  const handleDrop = (event: React.DragEvent) => {
+  const handleDrop = async (event: React.DragEvent) => {
     event.preventDefault();
     event.stopPropagation();
     setIsDragging(false);
-    processFiles(event.dataTransfer.files);
+    await processFiles(event.dataTransfer.files);
   };
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    processFiles(event.target.files);
+    void processFiles(event.target.files);
     event.target.value = '';
+  };
+
+  const handleBrowseClick = async () => {
+    const isBreached = await checkStorageBreached();
+    if (!isBreached) {
+      inputRef.current?.click();
+    }
   };
 
   return (
@@ -112,7 +135,7 @@ export default function UploadPanel({ onUpload }: UploadPanelProps) {
         <Button
           size="small"
           variant="outlined"
-          onClick={() => inputRef.current?.click()}
+          onClick={handleBrowseClick}
           sx={{
             borderRadius: '8px',
             fontSize: '0.75rem',

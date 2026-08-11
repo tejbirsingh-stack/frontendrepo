@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
+import { getUsageSummary } from '../../api/usage.service';
 import { getCompanyInfoRequest, updateCompanyInfoRequest, uploadCompanyLogoRequest, updateProfileRequest, uploadProfilePhotoRequest } from '../../api';
 import { logoutAllSessions, fetchOrganizationUsers } from '../../api/auth.service';
 import { fetchUserGroups } from '../../api/userGroups.service';
@@ -1415,8 +1416,10 @@ export function ProjectsAdminSettingsSection() {
           });
           setProjects(formatted);
         }
-      } catch (err) {
-        console.error("Failed to load projects", err);
+      } catch (err: any) {
+        console.error("Failed to create project", err);
+        const errorMsg = err?.response?.data?.message || err?.message || 'Failed to create project';
+        toast.error(errorMsg);
       }
     };
     fetchProjects();
@@ -1623,7 +1626,16 @@ export function ProjectsAdminSettingsSection() {
         addLabel="Add new project"
         showBulkActions
         showTeamMembersColumn
-        onAdd={() => setAddOpen(true)}
+        onAdd={async () => {
+          try {
+            const summary = await getUsageSummary();
+            if (summary.projectsTotal != null && summary.projectsCount >= summary.projectsTotal) {
+              toast.error(`Project limit (${summary.projectsTotal}) reached for your current plan. Please upgrade to create more projects.`);
+              return;
+            }
+          } catch (e) {}
+          setAddOpen(true);
+        }}
         onEdit={setEditProjectId}
         onDelete={(ids) => setDeleteDialogIds(ids)}
         onInviteTeamMembers={setInviteProjectId}
@@ -1834,7 +1846,16 @@ export function WorkspacesAdminSettingsSection() {
         showBulkActions
         showProjectColumn={false}
         showTeamMembersColumn
-        onAdd={() => setAddOpen(true)}
+        onAdd={async () => {
+          try {
+            const summary = await getUsageSummary();
+            if (summary.workspacesTotal != null && summary.workspacesCount >= summary.workspacesTotal) {
+              toast.error(`Workspace limit (${summary.workspacesTotal}) reached for your current plan. Please upgrade to create more workspaces.`);
+              return;
+            }
+          } catch (e) {}
+          setAddOpen(true);
+        }}
         onEdit={setEditWorkspaceId}
         onInviteTeamMembers={setInviteWorkspaceId}
       />

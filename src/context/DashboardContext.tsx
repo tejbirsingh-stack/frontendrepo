@@ -49,6 +49,8 @@ import {
   getFavoritesRequest,
   type MediaAssetResponseDto,
 } from '../api';
+import toast from 'react-hot-toast';
+import { getUsageSummary } from '../api/usage.service';
 import { type LibraryListParams, getLibraryItems } from '../api/library.service';
 
 
@@ -971,6 +973,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const createWorkspace = useCallback(async (data: CreateWorkspaceFormData) => {
     try {
+      const summary = await getUsageSummary();
+      if (summary.workspacesTotal != null && summary.workspacesCount >= summary.workspacesTotal) {
+        toast.error(`Workspace limit (${summary.workspacesTotal}) reached for your current plan. Please upgrade to create more workspaces.`);
+        return;
+      }
+    } catch (e) {}
+
+    try {
       const { apiClient } = await import('../api/client');
 
       const payload = {
@@ -992,8 +1002,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       setWorkspaces((prev) => [...prev, sanitizedWorkspace]);
       setActiveWorkspaceId(sanitizedWorkspace.id);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create workspace:', error);
+      const errorMsg = error?.response?.data?.message || error?.message || 'Failed to create workspace';
+      toast.error(errorMsg);
+      throw error;
     }
   }, []);
 
@@ -1925,26 +1938,53 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const uploadable = files.filter((file) => getMediaTypeFromFile(file) !== null);
       if (uploadable.length === 0) return 0;
 
-      const parentFolderId = options?.parentFolderId ?? null;
-      const linkedProjectId = options?.linkedProjectId ?? null;
-      const stagedUploads: PendingMediaUpload[] = uploadable.flatMap((file, index) => {
-        const type = getMediaTypeFromFile(file);
-        if (!type || type === 'folder') return [];
+      void getUsageSummary().then((summary) => {
+        if (summary.storageWarningLevel === 'exceeded' || summary.storageUsedBytes >= summary.storageQuotaBytes) {
+          toast.error('Storage limit reached — Uploads are blocked until you free space or upgrade your plan.');
+          return;
+        }
 
-        return [
-          {
-            id: `pending-media-${Date.now()}-${index}`,
-            type,
-            file,
-            previewSrc: URL.createObjectURL(file),
-            defaultTitle: file.name.replace(/\.[^/.]+$/, '') || file.name,
-            parentFolderId,
-            linkedProjectId,
-          },
-        ];
+        const parentFolderId = options?.parentFolderId ?? null;
+        const linkedProjectId = options?.linkedProjectId ?? null;
+        const stagedUploads: PendingMediaUpload[] = uploadable.flatMap((file, index) => {
+          const type = getMediaTypeFromFile(file);
+          if (!type || type === 'folder') return [];
+
+          return [
+            {
+              id: `pending-media-${Date.now()}-${index}`,
+              type,
+              file,
+              previewSrc: URL.createObjectURL(file),
+              defaultTitle: file.name.replace(/\.[^/.]+$/, '') || file.name,
+              parentFolderId,
+              linkedProjectId,
+            },
+          ];
+        });
+
+        setPendingMediaQueue((prev) => [...prev, ...stagedUploads]);
+      }).catch(() => {
+        const parentFolderId = options?.parentFolderId ?? null;
+        const linkedProjectId = options?.linkedProjectId ?? null;
+        const stagedUploads: PendingMediaUpload[] = uploadable.flatMap((file, index) => {
+          const type = getMediaTypeFromFile(file);
+          if (!type || type === 'folder') return [];
+
+          return [
+            {
+              id: `pending-media-${Date.now()}-${index}`,
+              type,
+              file,
+              previewSrc: URL.createObjectURL(file),
+              defaultTitle: file.name.replace(/\.[^/.]+$/, '') || file.name,
+              parentFolderId,
+              linkedProjectId,
+            },
+          ];
+        });
+        setPendingMediaQueue((prev) => [...prev, ...stagedUploads]);
       });
-
-      setPendingMediaQueue((prev) => [...prev, ...stagedUploads]);
 
       return uploadable.length;
     },
@@ -2035,8 +2075,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           },
           onProgress,
         );
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to upload media file to Backblaze B2 backend:', error);
+        const errMsg = error?.response?.data?.message || error?.message || 'Storage limit reached. Uploads are blocked until you free space or upgrade your plan.';
+        toast.error(errMsg);
+        return;
       }
 
       const itemId = uploadedAssetDto?.id || current.id.replace(/^pending-media-/, 'media-');
@@ -2207,7 +2250,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       defaultTagIds?: string[],
     ) => {
       const trimmed = name.trim();
-      if (!trimmed) return;
+      if (!trimmed) return null;
+
+      try {
+        const summary = await getUsageSummary();
+        if (summary.projectsTotal != null && summary.projectsCount >= summary.projectsTotal) {
+          toast.error(`Project limit (${summary.projectsTotal}) reached for your current plan. Please upgrade to create more projects.`);
+          return null;
+        }
+      } catch (e) {}
 
       try {
         const { apiClient } = await import('../api/client');
@@ -2268,8 +2319,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }
 
         return projectId;
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to create project:', err);
+        const errorMsg = err?.response?.data?.message || err?.message || 'Failed to create project';
+        toast.error(errorMsg);
+        return null;
       }
     },
     [activeWorkspaceId],

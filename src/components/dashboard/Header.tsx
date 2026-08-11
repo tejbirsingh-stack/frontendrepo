@@ -283,10 +283,7 @@ export default function Header({
       </Tooltip>
 
       <Box sx={{ display: { xs: 'none', sm: 'flex' }, flexShrink: 0 }}>
-        <PlanBadge
-          label={displayPlan}
-          expiryText={isFreePlan ? planDetails.expiryDateFormatted : null}
-        />
+        <PlanBadge label={displayPlan} />
       </Box>
 
       <Box

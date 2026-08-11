@@ -540,13 +540,16 @@ function PeopleTab({
   const handleSaveUser = async (userId: string, email: string, role: UserRole, roleId: string) => {
     if (!userId) return;
     try {
-      await updateOrganizationUser(userId, { email, roleId });
+      const res = await updateOrganizationUser(userId, { email, roleId });
+      toast.success(res?.message || 'User updated successfully');
       setUsers((current) =>
         current.map((user) => (user.id === userId ? { ...user, email, role } : user)),
       );
       setSelectedIds(new Set());
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to update user', err);
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to update user';
+      toast.error(errMsg);
     }
   };
 
@@ -812,12 +815,16 @@ function UserGroupsTab({
         const updated = await apiUpdateUserGroup(editGroupId, { name, description, memberIds });
         setGroups((current) => current.map((group) => (group.id === editGroupId ? updated : group)));
         setSelectedIds(new Set());
+        toast.success('User group updated successfully');
       } else {
         const created = await apiCreateUserGroup({ name, description, memberIds });
         setGroups((current) => [created, ...current]);
+        toast.success('User group created successfully');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save group:', err);
+      const msg = err?.response?.data?.message || err?.message || 'Failed to save user group';
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -830,9 +837,12 @@ function UserGroupsTab({
         await apiDeleteUserGroup(id);
       }
       setGroups((current) => current.filter((group) => !selectedIds.has(group.id)));
+      toast.success(`Deleted ${selectedIds.size} user group(s)`);
       setSelectedIds(new Set());
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete groups:', err);
+      const msg = err?.response?.data?.message || err?.message || 'Failed to delete user groups';
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }

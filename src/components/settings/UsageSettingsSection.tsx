@@ -343,14 +343,14 @@ export default function UsageSettingsSection() {
             <UsageStatCard
               icon={<FolderOutlinedIcon />}
               label="Projects"
-              value={String(usage.projectsCount)}
-              detail="Provisioned under this account"
+              value={usage.projectsTotal != null ? `${usage.projectsCount} of ${usage.projectsTotal}` : String(usage.projectsCount)}
+              detail={usage.projectsTotal != null ? `${usage.projectsCount} of ${usage.projectsTotal} projects` : "Provisioned under this account"}
             />
             <UsageStatCard
               icon={<WorkspacesOutlinedIcon />}
               label="Workspaces"
-              value={String(usage.workspacesCount)}
-              detail="Owned by this company profile"
+              value={usage.workspacesTotal != null ? `${usage.workspacesCount} of ${usage.workspacesTotal}` : String(usage.workspacesCount)}
+              detail={usage.workspacesTotal != null ? `${usage.workspacesCount} of ${usage.workspacesTotal} workspaces` : "Owned by this company profile"}
             />
           </Box>
 
@@ -400,7 +400,11 @@ export default function UsageSettingsSection() {
 
           <UsageDetailCard
             title="Projects count"
-            description={`${usage.projectsCount} project${usage.projectsCount === 1 ? '' : 's'} provisioned under this account.`}
+            description={
+              usage.projectsTotal != null
+                ? `${usage.projectsCount} of ${usage.projectsTotal} projects provisioned under this account.`
+                : `${usage.projectsCount} project${usage.projectsCount === 1 ? '' : 's'} provisioned under this account.`
+            }
             action={
               <Button
                 component={RouterLink}
@@ -416,7 +420,11 @@ export default function UsageSettingsSection() {
 
           <UsageDetailCard
             title="Workspaces count"
-            description={`${usage.workspacesCount} workspace tenant${usage.workspacesCount === 1 ? '' : 's'} owned under this company profile.`}
+            description={
+              usage.workspacesTotal != null
+                ? `${usage.workspacesCount} of ${usage.workspacesTotal} workspace tenants owned under this company profile.`
+                : `${usage.workspacesCount} workspace tenant${usage.workspacesCount === 1 ? '' : 's'} owned under this company profile.`
+            }
             action={
               <Button
                 component={RouterLink}

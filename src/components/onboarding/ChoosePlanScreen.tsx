@@ -32,6 +32,7 @@ const FALLBACK_PLANS: PlanDefinition[] = [
     monthlyPrice: 0,
     cta: 'Continue with Free',
     features: [
+      '1 Project & 1 Workspace',
       '0 Storage',
       '5 Members',
       'Basic media library & folders',
@@ -47,6 +48,7 @@ const FALLBACK_PLANS: PlanDefinition[] = [
     monthlyPrice: 10,
     cta: 'Get started',
     features: [
+      '2 Projects & 2 Workspaces',
       '10 GB Storage',
       '5 Members',
       'Media library essentials',
@@ -64,6 +66,7 @@ const FALLBACK_PLANS: PlanDefinition[] = [
     cta: 'Start with Premium',
     featured: true,
     features: [
+      '3 Projects & 3 Workspaces',
       '15 GB Storage',
       '10 Members',
       'Review & annotate video/audio',
@@ -81,6 +84,7 @@ const FALLBACK_PLANS: PlanDefinition[] = [
     monthlyPrice: 50,
     cta: 'Contact Sales',
     features: [
+      '4 Projects & 4 Workspaces',
       '20 GB Storage',
       '15 Members',
       'Dedicated account manager',
