@@ -395,11 +395,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           const isValidSavedId = savedId && sanitizedWorkspaces.some((w: any) => w.id === savedId);
           setActiveWorkspaceId(isValidSavedId ? savedId : sanitizedWorkspaces[0].id);
         } else {
-          setWorkspaces(mergeWorkspaceFolderMetadata(initialWorkspaces));
+          // Empty workspace list — user has no workspaces yet, show nothing instead of mock data
+          setWorkspaces([]);
+          setActiveWorkspaceId(null);
         }
       } catch (err) {
         console.error('Failed to load workspaces from backend:', err);
-        setWorkspaces(mergeWorkspaceFolderMetadata(initialWorkspaces));
+        setWorkspaces([]);
+        setActiveWorkspaceId(null);
       }
     };
 

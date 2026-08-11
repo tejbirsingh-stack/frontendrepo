@@ -782,8 +782,8 @@ export default function WorkspaceMembersDialog({
           control={
             <Switch
               size="small"
-              checked={draftVisibility === 'public' ? false : activeShareLink?.permissions?.watermark !== false}
-              disabled={true}
+              checked={activeShareLink?.permissions?.watermark !== false}
+              disabled={false}
               onChange={(e) => {
                 if (activeShareLinkId && onShareLinkPermissionsChange) {
                   onShareLinkPermissionsChange(activeShareLinkId, {
