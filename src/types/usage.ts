@@ -40,6 +40,8 @@ export interface UsageSummaryResponse {
     classB: number;
   };
   projectsCount: number;
+  projectsTotal?: number;
   workspacesCount: number;
+  workspacesTotal?: number;
   seatGuardrailMax: number;
 }

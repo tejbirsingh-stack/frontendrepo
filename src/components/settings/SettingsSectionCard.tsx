@@ -5,29 +5,33 @@ import { Box, Typography } from '@mui/material';
 interface SettingsSectionCardProps {
   title: string;
   description?: string;
+  action?: ReactNode;
   children: ReactNode;
 }
 
-export function SettingsSectionCard({ title, description, children }: SettingsSectionCardProps) {
+export function SettingsSectionCard({ title, description, action, children }: SettingsSectionCardProps) {
   return (
     <Box sx={{ mb: 3 }}>
-      <Typography
-        sx={{
-          fontSize: '1.125rem',
-          fontWeight: 600,
-          color: cv.textPrimary,
-          letterSpacing: '-0.01em',
-        }}
-      >
-        {title}
-      </Typography>
-      {description ? (
-        <Typography sx={{ mt: 0.5, mb: 1.5, fontSize: '0.875rem', color: cv.textSecondary }}>
-          {description}
-        </Typography>
-      ) : (
-        <Box sx={{ mb: 1.5 }} />
-      )}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: description ? 0.5 : 1.5 }}>
+        <Box>
+          <Typography
+            sx={{
+              fontSize: '1.125rem',
+              fontWeight: 600,
+              color: cv.textPrimary,
+              letterSpacing: '-0.01em',
+            }}
+          >
+            {title}
+          </Typography>
+          {description ? (
+            <Typography sx={{ mt: 0.5, mb: 1.5, fontSize: '0.875rem', color: cv.textSecondary }}>
+              {description}
+            </Typography>
+          ) : null}
+        </Box>
+        {action ? <Box sx={{ flexShrink: 0, mb: description ? 1.5 : 0 }}>{action}</Box> : null}
+      </Box>
       <Box
         sx={{
           borderRadius: '12px',
