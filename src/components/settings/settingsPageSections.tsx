@@ -1294,6 +1294,8 @@ export function ProjectsAdminSettingsSection() {
   const [orgUsersList, setOrgUsersList] = useState<import('../../data/mockSettingsData').SettingsUserRow[]>([]);
   const { formatDate } = useLocalizedDate();
 
+  const [orgGroupsList, setOrgGroupsList] = useState<import('../../data/mockSettingsData').SettingsUserGroup[]>([]);
+
   useEffect(() => {
     fetchOrganizationUsers()
       .then((users) => {
@@ -1317,6 +1319,29 @@ export function ProjectsAdminSettingsSection() {
         setOrgUsersList(rows);
       })
       .catch((err) => console.error('Failed to fetch org users for share dialog:', err));
+
+    const fetchGroups = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await apiClient.get<any>('/user-groups', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = res.data || res;
+        if (Array.isArray(data)) {
+          const mappedGroups = data.map((g: any) => ({
+            id: g.id,
+            name: g.name || 'Unnamed Group',
+            description: g.description || '',
+            memberIds: Array.isArray(g.members) ? g.members.map((m: any) => m.userId || m.id) : [],
+          }));
+          setOrgGroupsList(mappedGroups);
+        }
+      } catch (err) {
+        console.error('Failed to fetch org groups:', err);
+      }
+    };
+    fetchGroups();
   }, []);
 
   useEffect(() => {
@@ -1552,7 +1577,7 @@ export function ProjectsAdminSettingsSection() {
         resourceId={inviteProjectId ?? undefined}
         members={inviteProject?.teamMembers ?? []}
         suggestedUsers={orgUsersList}
-        suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
+        suggestedGroups={orgGroupsList}
         isRestricted={inviteProject?.isRestricted ?? false}
         resourceType="project"
         visibility={inviteProject?.visibility ?? 'private'}
@@ -1575,6 +1600,8 @@ export function WorkspacesAdminSettingsSection() {
   const [inviteWorkspaceId, setInviteWorkspaceId] = useState<string | null>(null);
   const [orgUsersList, setOrgUsersList] = useState<import('../../data/mockSettingsData').SettingsUserRow[]>([]);
   const { formatDate } = useLocalizedDate();
+
+  const [orgGroupsList, setOrgGroupsList] = useState<import('../../data/mockSettingsData').SettingsUserGroup[]>([]);
 
   useEffect(() => {
     fetchOrganizationUsers()
@@ -1599,6 +1626,74 @@ export function WorkspacesAdminSettingsSection() {
         setOrgUsersList(rows);
       })
       .catch((err) => console.error('Failed to fetch org users for share dialog:', err));
+
+    const fetchGroups = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await apiClient.get<any>('/user-groups', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = res.data || res;
+        if (Array.isArray(data)) {
+          const mappedGroups = data.map((g: any) => ({
+            id: g.id,
+            name: g.name || 'Unnamed Group',
+            description: g.description || '',
+            memberIds: Array.isArray(g.members) ? g.members.map((m: any) => m.userId || m.id) : [],
+          }));
+          setOrgGroupsList(mappedGroups);
+        }
+      } catch (err) {
+        console.error('Failed to fetch org groups:', err);
+      }
+    };
+    fetchGroups();
+  }, []);
+
+  useEffect(() => {
+    const fetchWorkspaces = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const response = await apiClient.get<any>('/workspaces/find-all', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = Array.isArray(response) ? response : response.data;
+        if (data && Array.isArray(data)) {
+          const formatted = data.map((w: any) => {
+            const today = formatDate(w.createdAt || Date.now(), {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            });
+            return {
+              id: w.id,
+              workspace: w.name,
+              status: 'Active',
+              lastUpdated: today,
+              creationDate: today,
+              storage: '0 MB',
+              projectAdmin: CURRENT_USER.name,
+              teamMembers: [
+                {
+                  id: `wm-admin-${w.id}`,
+                  name: CURRENT_USER.name,
+                  initials: CURRENT_USER.initials,
+                  access: 'Full Access',
+                  memberType: 'Member',
+                  isCurrentUser: true,
+                }
+              ]
+            } as SettingsProjectRow;
+          });
+          setWorkspaces(formatted);
+        }
+      } catch (err) {
+        console.error("Failed to load workspaces", err);
+      }
+    };
+    fetchWorkspaces();
   }, []);
 
   const inviteWorkspace = workspaces.find((workspace) => workspace.id === inviteWorkspaceId);
@@ -1733,7 +1828,7 @@ export function WorkspacesAdminSettingsSection() {
         resourceId={inviteWorkspaceId ?? undefined}
         members={inviteWorkspace?.teamMembers ?? []}
         suggestedUsers={orgUsersList}
-        suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
+        suggestedGroups={orgGroupsList}
         isRestricted={inviteWorkspace?.isRestricted ?? false}
         onClose={() => setInviteWorkspaceId(null)}
         onInvite={handleInviteMember}

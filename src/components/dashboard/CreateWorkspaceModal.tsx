@@ -23,6 +23,8 @@ export interface CreateWorkspaceFormData {
   color: string;
   inviteEmails?: string[];
   inviteGroupIds?: string[];
+  memberType?: string;
+  accessLevel?: string;
 }
 
 interface CreateWorkspaceModalProps {
@@ -58,6 +60,7 @@ export default function CreateWorkspaceModal({
   const [inviteMemberType, setInviteMemberType] = useState<WorkspaceMemberType>('Member');
   const [inviteAccess, setInviteAccess] = useState<WorkspaceMemberAccess>('Full Access');
   const [orgUsersList, setOrgUsersList] = useState<import('../../data/mockSettingsData').SettingsUserRow[]>([]);
+  const [orgGroupsList, setOrgGroupsList] = useState<import('../../data/mockSettingsData').SettingsUserGroup[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -100,6 +103,29 @@ export default function CreateWorkspaceModal({
           setOrgUsersList(rows);
         })
         .catch((err) => console.error('Failed to fetch org users for workspace creation:', err));
+
+      const fetchGroups = async () => {
+        try {
+          const { apiClient } = await import('../../api/client');
+          const token = localStorage.getItem('token');
+          const res = await apiClient.get<any>('/user-groups', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const data = res.data || res;
+          if (Array.isArray(data)) {
+            const mappedGroups = data.map((g: any) => ({
+              id: g.id,
+              name: g.name || 'Unnamed Group',
+              description: g.description || '',
+              memberIds: Array.isArray(g.members) ? g.members.map((m: any) => m.userId || m.id) : [],
+            }));
+            setOrgGroupsList(mappedGroups);
+          }
+        } catch (err) {
+          console.error('Failed to fetch org groups:', err);
+        }
+      };
+      fetchGroups();
     }
   }, [open, initialWorkspace, isEdit]);
 
@@ -112,6 +138,8 @@ export default function CreateWorkspaceModal({
       color,
       inviteEmails,
       inviteGroupIds,
+      memberType: inviteMemberType.toUpperCase(),
+      accessLevel: inviteAccess === 'Full Access' ? 'FULL_ACCESS' : inviteAccess === 'Can edit' ? 'CAN_EDIT' : 'CAN_VIEW',
     };
     if (isEdit) {
       onSave?.(payload);
@@ -267,7 +295,7 @@ export default function CreateWorkspaceModal({
               access={inviteAccess}
               onAccessChange={setInviteAccess}
               suggestedUsers={orgUsersList}
-              suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
+              suggestedGroups={orgGroupsList}
               description="Optional — invite people or groups to join this workspace."
             />
           </Box>

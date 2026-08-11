@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   FormControl,
   MenuItem,
   Select,
@@ -67,6 +68,7 @@ export default function InvitePeopleFields({
 }: InvitePeopleFieldsProps) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
 
   const isGroupMode = memberType === 'Group';
 
@@ -74,12 +76,12 @@ export default function InvitePeopleFields({
     const normalized = input.trim().toLowerCase();
     const selectedEmails = new Set(emails.map((email) => email.toLowerCase()));
     return suggestedUsers
-      .filter((user) => !selectedEmails.has(user.email.toLowerCase()))
+      .filter((user) => !selectedEmails.has(String(user.email || '').toLowerCase()))
       .filter((user) => {
         if (!normalized) return true;
         return (
-          user.name.toLowerCase().includes(normalized) ||
-          user.email.toLowerCase().includes(normalized)
+          String(user.name || '').toLowerCase().includes(normalized) ||
+          String(user.email || '').toLowerCase().includes(normalized)
         );
       })
       .slice(0, 4);
@@ -92,12 +94,12 @@ export default function InvitePeopleFields({
       .filter((group) => !selectedIds.has(group.id))
       .filter((group) => {
         if (!normalized) return true;
-        return group.name.toLowerCase().includes(normalized);
+        return String(group.name || '').toLowerCase().includes(normalized);
       })
       .slice(0, 4);
   }, [groupIds, input, suggestedGroups]);
 
-  const handleAdd = () => {
+  const handleAdd = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed) {
       setError(isGroupMode ? 'Enter a group name' : 'Enter a name or email address');
@@ -120,18 +122,55 @@ export default function InvitePeopleFields({
       return;
     }
 
-    const emailMatch = trimmed.match(EMAIL_PATTERN);
-    const suggested = suggestedUsers.find(
-      (user) =>
-        user.email.toLowerCase() === trimmed.toLowerCase() ||
-        user.name.toLowerCase() === trimmed.toLowerCase(),
-    );
-    const email = emailMatch ? trimmed.toLowerCase() : suggested?.email;
-
-    if (!email || !EMAIL_PATTERN.test(email)) {
-      setError('Enter a valid email or select a suggested person.');
+    // Guest path: validate via backend API
+    if (memberType === 'Guest') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmed)) {
+        setError('Enter a valid email address to invite a Guest.');
+        return;
+      }
+      if (emails.some((entry) => entry.toLowerCase() === trimmed.toLowerCase())) {
+        setError('This email has already been added');
+        return;
+      }
+      setIsValidating(true);
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await (apiClient as any).get(
+          `/workspaces/validate-guest?email=${encodeURIComponent(trimmed)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = (res as any).data ?? res;
+        if (!data.valid) {
+          setError(data.reason || 'This email cannot be invited as a Guest.');
+          return;
+        }
+        // Valid external user – add to list
+        onChange([...emails, trimmed]);
+        setInput('');
+        setError('');
+      } catch {
+        setError('Could not validate this email. Please try again.');
+      } finally {
+        setIsValidating(false);
+      }
       return;
     }
+
+    // Member path: must already exist in org suggestions
+    const suggested = suggestedUsers.find(
+      (user) =>
+        String(user.email || '').toLowerCase() === trimmed.toLowerCase() ||
+        String(user.name || '').toLowerCase() === trimmed.toLowerCase(),
+    );
+
+    if (!suggested) {
+      setError('User not found in your organization. You can only invite organization members.');
+      return;
+    }
+
+    const email = suggested.email;
     if (emails.some((entry) => entry.toLowerCase() === email.toLowerCase())) {
       setError('This email has already been added');
       return;
@@ -140,7 +179,7 @@ export default function InvitePeopleFields({
     onChange([...emails, email]);
     setInput('');
     setError('');
-  };
+  }, [input, isGroupMode, suggestedGroups, groupIds, onGroupIdsChange, memberType, emails, onChange, suggestedUsers]);
 
   const handleRemoveEmail = (emailToRemove: string) => {
     onChange(emails.filter((email) => email !== emailToRemove));
@@ -157,8 +196,8 @@ export default function InvitePeopleFields({
     }
   };
 
-  const inputLabel = isGroupMode ? 'Group name' : 'Name or email';
-  const inputPlaceholder = isGroupMode ? 'e.g. Creative Team' : 'name@company.com';
+  const inputLabel = isGroupMode ? 'Group name' : memberType === 'Guest' ? 'Guest email' : 'Name or email';
+  const inputPlaceholder = isGroupMode ? 'e.g. Creative Team' : memberType === 'Guest' ? 'user@othercompany.com' : 'name@company.com';
 
   return (
     <Box>
@@ -205,7 +244,8 @@ export default function InvitePeopleFields({
             type="button"
             variant="outlined"
             onClick={handleAdd}
-            startIcon={<AddIcon sx={{ fontSize: 18 }} />}
+            disabled={isValidating}
+            startIcon={isValidating ? <CircularProgress size={16} color="inherit" /> : <AddIcon sx={{ fontSize: 18 }} />}
             sx={{
               mt: 0.25,
               flexShrink: 0,
@@ -261,7 +301,7 @@ export default function InvitePeopleFields({
         ) : null}
       </Box>
 
-      {!isGroupMode && userSuggestions.length > 0 && input.trim() ? (
+      {!isGroupMode && memberType !== 'Guest' && userSuggestions.length > 0 && input.trim() ? (
         <Box sx={{ mt: 1.25 }}>
           <Typography
             sx={{
@@ -411,7 +451,11 @@ export default function InvitePeopleFields({
         </Box>
       ) : null}
 
-      {description ? (
+      {memberType === 'Guest' ? (
+        <Typography sx={{ mt: 1.25, fontSize: '0.8125rem', color: cv.textSecondary }}>
+          Enter the email of an active user from <strong>another organization</strong>. They must already have an account in the system.
+        </Typography>
+      ) : description ? (
         <Typography sx={{ mt: 1.25, fontSize: '0.8125rem', color: cv.textSecondary }}>
           {description}
         </Typography>
