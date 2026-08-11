@@ -1,9 +1,9 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
   Button,
-  Chip,
+  CircularProgress,
   FormControl,
   IconButton,
   MenuItem,
@@ -12,7 +12,6 @@ import {
   Tooltip,
   Typography,
   Avatar,
-  Paper,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
@@ -29,7 +28,6 @@ import {
 } from '../../data/mockSettingsData';
 import { selectInDialogMenuProps } from '../../constants/dropdownMenu';
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ACCESS_OPTIONS: WorkspaceMemberAccess[] = ['Full Access', 'Can edit', 'Can view'];
 
 const dialogSelectSx = {
@@ -82,6 +80,7 @@ export default function InvitePeopleFields({
 }: InvitePeopleFieldsProps) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
   const [guestSuggestions, setGuestSuggestions] = useState<GuestUserSuggestion[]>([]);
   const [isGuestSearching, setIsGuestSearching] = useState(false);
   const guestSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -102,27 +101,28 @@ export default function InvitePeopleFields({
         const results = await onGuestSearch(q);
         const selectedEmails = new Set(emails.map(e => e.toLowerCase()));
         setGuestSuggestions(results.filter(u => !selectedEmails.has(u.email.toLowerCase())));
-      } catch { setGuestSuggestions([]); }
-      finally { setIsGuestSearching(false); }
+      } catch {
+        setGuestSuggestions([]);
+      } finally {
+        setIsGuestSearching(false);
+      }
     }, 300);
     return () => { if (guestSearchTimer.current) clearTimeout(guestSearchTimer.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input, isGuestMode]);
 
   // User suggestions shown only in Member mode
   const userSuggestions = useMemo(() => {
     if (!isMemberMode) return [];
     const normalized = input.trim().toLowerCase();
+    if (!normalized) return [];
     const selectedEmails = new Set(emails.map((email) => email.toLowerCase()));
     return suggestedUsers
-      .filter((user) => !selectedEmails.has(user.email.toLowerCase()))
-      .filter((user) => {
-        if (!normalized) return false; // only show when typing
-        return (
-          user.name.toLowerCase().includes(normalized) ||
-          user.email.toLowerCase().includes(normalized)
-        );
-      })
+      .filter((user) => !selectedEmails.has(String(user.email || '').toLowerCase()))
+      .filter((user) =>
+        String(user.name || '').toLowerCase().includes(normalized) ||
+        String(user.email || '').toLowerCase().includes(normalized)
+      )
       .slice(0, 5);
   }, [emails, input, suggestedUsers, isMemberMode]);
 
@@ -134,13 +134,13 @@ export default function InvitePeopleFields({
     return suggestedGroups
       .filter((group) => !selectedIds.has(group.id))
       .filter((group) => {
-        if (!normalized) return false; // only show when typing
-        return group.name.toLowerCase().includes(normalized);
+        if (!normalized) return true;
+        return String(group.name || '').toLowerCase().includes(normalized);
       })
       .slice(0, 5);
   }, [groupIds, input, suggestedGroups, isGroupMode]);
 
-  const handleAdd = () => {
+  const handleAdd = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed) {
       if (isGroupMode) setError('Enter a group name');
@@ -166,47 +166,62 @@ export default function InvitePeopleFields({
       return;
     }
 
-    // MEMBER mode: must match a known workspace user
-    if (isMemberMode) {
-      const matched = suggestedUsers.find(
-        (user) =>
-          user.email.toLowerCase() === trimmed.toLowerCase() ||
-          user.name.toLowerCase() === trimmed.toLowerCase(),
-      );
-      if (!matched) {
-        setError('Select a member from the suggestions below.');
+    // Guest path: validate via backend API
+    if (memberType === 'Guest') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmed)) {
+        setError('Enter a valid email address to invite a Guest.');
         return;
       }
-      const email = matched.email.toLowerCase();
-      if (emails.some((entry) => entry.toLowerCase() === email)) {
-        setError('This member has already been added');
+      if (emails.some((entry) => entry.toLowerCase() === trimmed.toLowerCase())) {
+        setError('This email has already been added');
         return;
       }
-      onChange([...emails, email]);
-      setInput('');
-      setError('');
+      setIsValidating(true);
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await (apiClient as any).get(
+          `/workspaces/validate-guest?email=${encodeURIComponent(trimmed)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = (res as any).data ?? res;
+        if (!data.valid) {
+          setError(data.reason || 'This email cannot be invited as a Guest.');
+          return;
+        }
+        onChange([...emails, trimmed]);
+        setInput('');
+        setError('');
+      } catch {
+        setError('Could not validate this email. Please try again.');
+      } finally {
+        setIsValidating(false);
+      }
       return;
     }
 
-    // GUEST mode: must match from platform-wide search results
-    const emailLower = trimmed.toLowerCase();
-    const matchedGuest = guestSuggestions.find(
-      (u) => u.email.toLowerCase() === emailLower || u.name.toLowerCase() === trimmed.toLowerCase()
+    // Member path: must already exist in org suggestions
+    const suggested = suggestedUsers.find(
+      (user) =>
+        String(user.email || '').toLowerCase() === trimmed.toLowerCase() ||
+        String(user.name || '').toLowerCase() === trimmed.toLowerCase(),
     );
-    if (!matchedGuest) {
-      setError('Select a user from the suggestions. Only users from other organizations are shown.');
+
+    if (!suggested) {
+      setError('User not found in your organization. You can only invite organization members.');
       return;
     }
-    const guestEmail = matchedGuest.email.toLowerCase();
-    if (emails.some((entry) => entry.toLowerCase() === guestEmail)) {
-      setError('This guest has already been added');
+
+    const email = suggested.email;
+    if (emails.some((entry) => entry.toLowerCase() === email.toLowerCase())) {
+      setError('This email has already been added');
       return;
     }
-    onChange([...emails, guestEmail]);
+    onChange([...emails, email]);
     setInput('');
     setError('');
-    setGuestSuggestions([]);
-  };
+  }, [input, isGroupMode, isMemberMode, suggestedGroups, groupIds, onGroupIdsChange, memberType, emails, onChange, suggestedUsers]);
 
   const handleRemoveEmail = (emailToRemove: string) => {
     onChange(emails.filter((email) => email !== emailToRemove));
@@ -223,8 +238,8 @@ export default function InvitePeopleFields({
     }
   };
 
-  const inputLabel = isGroupMode ? 'Group name' : isMemberMode ? 'Member name or email' : 'Guest name or email';
-  const inputPlaceholder = isGroupMode ? 'e.g. Creative Team' : isMemberMode ? 'Search members...' : 'Search users from other organizations...';
+  const inputLabel = isGroupMode ? 'Group name' : memberType === 'Guest' ? 'Guest email' : 'Name or email';
+  const inputPlaceholder = isGroupMode ? 'e.g. Creative Team' : memberType === 'Guest' ? 'user@othercompany.com' : 'name@company.com';
 
   return (
     <Box sx={{ position: 'relative' }}>
@@ -271,7 +286,12 @@ export default function InvitePeopleFields({
             type="button"
             variant="outlined"
             onClick={handleAdd}
-            startIcon={<AddIcon sx={{ fontSize: 18 }} />}
+            disabled={isValidating || isGuestSearching}
+            startIcon={
+              isValidating || isGuestSearching
+                ? <CircularProgress size={16} color="inherit" />
+                : <AddIcon sx={{ fontSize: 18 }} />
+            }
             sx={{
               mt: 0.25,
               flexShrink: 0,
@@ -327,200 +347,129 @@ export default function InvitePeopleFields({
         ) : null}
       </Box>
 
-      {/* Floating Suggestions Dropdown */}
-      {input.trim() && (
-        (isMemberMode && userSuggestions.length > 0) ||
-        (isGroupMode && groupSuggestions.length > 0) ||
-        (isGuestMode && (guestSuggestions.length > 0 || isGuestSearching))
-      ) ? (
-        <Paper
-          elevation={8}
-          sx={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            mt: 0.5,
-            zIndex: 1400,
-            maxHeight: 220,
-            overflowY: 'auto',
-            bgcolor: cv.elevatedSurface,
-            borderRadius: '10px',
-            border: `1px solid ${cv.border}`,
-            boxShadow: cv.popoverShadow,
-            p: 0.75,
-          }}
-        >
-          {isGuestMode ? (
-            <Box>
-              <Typography sx={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: cv.textMuted, mb: 0.75, px: 1 }}>
-                {isGuestSearching ? 'Searching...' : 'Users from other organizations'}
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                {guestSuggestions.length === 0 && !isGuestSearching ? (
-                  <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted, px: 1, py: 0.5 }}>
-                    No users found from other organizations.
+      {/* Member suggestions (only in Member mode) */}
+      {isMemberMode && userSuggestions.length > 0 ? (
+        <Box sx={{ mt: 1.25 }}>
+          <Typography
+            sx={{
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: cv.textMuted,
+              mb: 0.75,
+            }}
+          >
+            Suggested
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            {userSuggestions.map((user) => (
+              <Box
+                key={user.id}
+                component="button"
+                type="button"
+                onClick={() => {
+                  const userEmail = user.email.toLowerCase();
+                  if (!emails.some((e) => e.toLowerCase() === userEmail)) {
+                    onChange([...emails, userEmail]);
+                  }
+                  setInput('');
+                  setError('');
+                }}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  width: '100%',
+                  border: 'none',
+                  borderRadius: '8px',
+                  px: 1,
+                  py: 1,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  backgroundColor: 'transparent',
+                  '&:hover': { backgroundColor: cv.surfaceHover },
+                }}
+              >
+                <Avatar sx={{ width: 32, height: 32, fontSize: '0.875rem', bgcolor: cv.brandMain, color: '#fff' }}>
+                  {user.name ? user.name[0]?.toUpperCase() : user.email[0]?.toUpperCase()}
+                </Avatar>
+                <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {user.name}
                   </Typography>
-                ) : null}
-                {guestSuggestions.map((user) => (
-                  <Box
-                    key={user.id}
-                    component="button"
-                    type="button"
-                    onClick={() => {
-                      const email = user.email.toLowerCase();
-                      if (!emails.some((e) => e.toLowerCase() === email)) {
-                        onChange([...emails, email]);
-                      }
-                      setInput('');
-                      setError('');
-                      setGuestSuggestions([]);
-                    }}
-                    sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', border: 'none', borderRadius: '8px', px: 1, py: 1, cursor: 'pointer', textAlign: 'left', backgroundColor: 'transparent', '&:hover': { backgroundColor: cv.surfaceHover } }}
-                  >
-                    <Avatar sx={{ width: 32, height: 32, fontSize: '0.875rem', bgcolor: cv.indigoSurface, color: cv.textPrimary }}>
-                      {user.name ? user.name[0]?.toUpperCase() : user.email[0]?.toUpperCase()}
-                    </Avatar>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {user.name}
-                      </Typography>
-                      <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {user.email}{user.orgName ? ` · ${user.orgName}` : ''}
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
+                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {user.email}
+                  </Typography>
+                </Box>
               </Box>
-            </Box>
-          ) : null}
-
-          {!isGroupMode && !isGuestMode && userSuggestions.length > 0 ? (
-            <Box>
-              <Typography
-                sx={{
-                  fontSize: '0.6875rem',
-                  fontWeight: 600,
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                  color: cv.textMuted,
-                  mb: 0.75,
-                  px: 1,
-                }}
-              >
-                Suggested
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                {userSuggestions.map((user) => (
-                  <Box
-                    key={user.id}
-                    component="button"
-                    type="button"
-                    onClick={() => {
-                      // Clicking suggestion immediately adds the member
-                      const email = user.email.toLowerCase();
-                      if (!emails.some((e) => e.toLowerCase() === email)) {
-                        onChange([...emails, email]);
-                      }
-                      setInput('');
-                      setError('');
-                    }}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1.5,
-                      width: '100%',
-                      border: 'none',
-                      borderRadius: '8px',
-                      px: 1,
-                      py: 1,
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      backgroundColor: 'transparent',
-                      '&:hover': { backgroundColor: cv.surfaceHover },
-                    }}
-                  >
-                    <Avatar sx={{ width: 32, height: 32, fontSize: '0.875rem', bgcolor: cv.brandMain, color: '#fff' }}>
-                      {user.name ? user.name[0]?.toUpperCase() : user.email[0]?.toUpperCase()}
-                    </Avatar>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {user.name}
-                      </Typography>
-                      <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {user.email}
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
-              </Box>
-            </Box>
-          ) : null}
-
-          {isGroupMode && groupSuggestions.length > 0 ? (
-            <Box>
-              <Typography
-                sx={{
-                  fontSize: '0.6875rem',
-                  fontWeight: 600,
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                  color: cv.textMuted,
-                  mb: 0.75,
-                  px: 1,
-                }}
-              >
-                Suggested groups
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                {groupSuggestions.map((group) => (
-                  <Box
-                    key={group.id}
-                    component="button"
-                    type="button"
-                    onClick={() => {
-                      // Clicking suggestion immediately adds the group
-                      if (!groupIds.includes(group.id)) {
-                        onGroupIdsChange?.([...groupIds, group.id]);
-                      }
-                      setInput('');
-                      setError('');
-                    }}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1.5,
-                      width: '100%',
-                      border: 'none',
-                      borderRadius: '8px',
-                      px: 1,
-                      py: 1,
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      backgroundColor: 'transparent',
-                      '&:hover': { backgroundColor: cv.surfaceHover },
-                    }}
-                  >
-                    <Avatar sx={{ width: 32, height: 32, bgcolor: cv.surfaceHighlight, color: cv.textSecondary }}>
-                      <GroupsOutlinedIcon sx={{ fontSize: 20 }} />
-                    </Avatar>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {group.name}
-                      </Typography>
-                      <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25, lineHeight: 1.2 }}>
-                        {group.memberIds.length} member{group.memberIds.length === 1 ? '' : 's'}
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
-              </Box>
-            </Box>
-          ) : null}
-        </Paper>
+            ))}
+          </Box>
+        </Box>
       ) : null}
 
+      {/* Group suggestions (only in Group mode) */}
+      {isGroupMode && groupSuggestions.length > 0 ? (
+        <Box sx={{ mt: 1.25 }}>
+          <Typography
+            sx={{
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: cv.textMuted,
+              mb: 0.75,
+              px: 1,
+            }}
+          >
+            Suggested groups
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            {groupSuggestions.map((group) => (
+              <Box
+                key={group.id}
+                component="button"
+                type="button"
+                onClick={() => {
+                  if (!groupIds.includes(group.id)) {
+                    onGroupIdsChange?.([...groupIds, group.id]);
+                  }
+                  setInput('');
+                  setError('');
+                }}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  width: '100%',
+                  border: 'none',
+                  borderRadius: '8px',
+                  px: 1,
+                  py: 1,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  backgroundColor: 'transparent',
+                  '&:hover': { backgroundColor: cv.surfaceHover },
+                }}
+              >
+                <Avatar sx={{ width: 32, height: 32, bgcolor: cv.surfaceHighlight, color: cv.textSecondary }}>
+                  <GroupsOutlinedIcon sx={{ fontSize: 20 }} />
+                </Avatar>
+                <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {group.name}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25, lineHeight: 1.2 }}>
+                    {group.memberIds.length} member{group.memberIds.length === 1 ? '' : 's'}
+                  </Typography>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      ) : null}
 
+      {/* Direct Access list (added emails + groups) */}
       {(emails.length > 0 || groupIds.length > 0) ? (
         <Box sx={{ mt: 1.75 }}>
           <Typography
@@ -540,97 +489,101 @@ export default function InvitePeopleFields({
               borderRadius: '10px',
               border: `1px solid ${cv.border}`,
               overflow: 'hidden',
-              maxHeight: 116, // ~2 rows at ~58px each
+              maxHeight: 116,
               overflowY: 'auto',
             }}
           >
-          {emails.map((email, idx) => {
-            const user = suggestedUsers.find(
-              (u) => u.email.toLowerCase() === email.toLowerCase()
-            );
-            const displayName = user?.name || email.split('@')[0];
-            const initials = displayName[0]?.toUpperCase() || 'U';
-            return (
-              <Box
-                key={email}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  px: 1.5,
-                  py: 1,
-                  borderBottom: idx < emails.length - 1 || groupIds.length > 0 ? `1px solid ${cv.border}` : 'none',
-                  '&:hover': { backgroundColor: cv.surfaceHover },
-                  transition: 'background 0.15s',
-                }}
-              >
-                <Avatar sx={{ width: 30, height: 30, fontSize: '0.8rem', bgcolor: cv.brandMain, color: '#fff', flexShrink: 0 }}>
-                  {initials}
-                </Avatar>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {displayName}
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {email}
-                  </Typography>
+            {emails.map((email, idx) => {
+              const user = suggestedUsers.find(
+                (u) => u.email.toLowerCase() === email.toLowerCase()
+              );
+              const displayName = user?.name || email.split('@')[0];
+              const initials = displayName[0]?.toUpperCase() || 'U';
+              return (
+                <Box
+                  key={email}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    px: 1.5,
+                    py: 1,
+                    borderBottom: idx < emails.length - 1 || groupIds.length > 0 ? `1px solid ${cv.border}` : 'none',
+                    '&:hover': { backgroundColor: cv.surfaceHover },
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  <Avatar sx={{ width: 30, height: 30, fontSize: '0.8rem', bgcolor: cv.brandMain, color: '#fff', flexShrink: 0 }}>
+                    {initials}
+                  </Avatar>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {displayName}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {email}
+                    </Typography>
+                  </Box>
+                  <Tooltip title="Remove">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleRemoveEmail(email)}
+                      sx={{ color: cv.textMuted, '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceActive } }}
+                    >
+                      <CloseIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
                 </Box>
-                <Tooltip title="Remove">
-                  <IconButton
-                    size="small"
-                    onClick={() => handleRemoveEmail(email)}
-                    sx={{ color: cv.textMuted, '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceActive } }}
-                  >
-                    <CloseIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            );
-          })}
-          {groupIds.map((groupId, idx) => {
-            const group = suggestedGroups.find((entry) => entry.id === groupId);
-            return (
-              <Box
-                key={groupId}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.5,
-                  px: 1.5,
-                  py: 1,
-                  borderBottom: idx < groupIds.length - 1 ? `1px solid ${cv.border}` : 'none',
-                  '&:hover': { backgroundColor: cv.surfaceHover },
-                  transition: 'background 0.15s',
-                }}
-              >
-                <Avatar sx={{ width: 30, height: 30, bgcolor: cv.indigoSurface, color: cv.textSecondary, flexShrink: 0 }}>
-                  <GroupsOutlinedIcon sx={{ fontSize: 18 }} />
-                </Avatar>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {group?.name ?? groupId}
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, lineHeight: 1.2 }}>
-                    {group ? `${group.memberIds.length} member${group.memberIds.length === 1 ? '' : 's'}` : 'Group'}
-                  </Typography>
+              );
+            })}
+            {groupIds.map((groupId, idx) => {
+              const group = suggestedGroups.find((entry) => entry.id === groupId);
+              return (
+                <Box
+                  key={groupId}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    px: 1.5,
+                    py: 1,
+                    borderBottom: idx < groupIds.length - 1 ? `1px solid ${cv.border}` : 'none',
+                    '&:hover': { backgroundColor: cv.surfaceHover },
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  <Avatar sx={{ width: 30, height: 30, bgcolor: cv.indigoSurface, color: cv.textSecondary, flexShrink: 0 }}>
+                    <GroupsOutlinedIcon sx={{ fontSize: 18 }} />
+                  </Avatar>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {group?.name ?? groupId}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, lineHeight: 1.2 }}>
+                      {group ? `${group.memberIds.length} member${group.memberIds.length === 1 ? '' : 's'}` : 'Group'}
+                    </Typography>
+                  </Box>
+                  <Tooltip title="Remove">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleRemoveGroup(groupId)}
+                      sx={{ color: cv.textMuted, '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceActive } }}
+                    >
+                      <CloseIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
                 </Box>
-                <Tooltip title="Remove">
-                  <IconButton
-                    size="small"
-                    onClick={() => handleRemoveGroup(groupId)}
-                    sx={{ color: cv.textMuted, '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceActive } }}
-                  >
-                    <CloseIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            );
-          })}
+              );
+            })}
           </Box>
         </Box>
       ) : null}
 
-      {description ? (
+      {memberType === 'Guest' ? (
+        <Typography sx={{ mt: 1.25, fontSize: '0.8125rem', color: cv.textSecondary }}>
+          Enter the email of an active user from <strong>another organization</strong>. They must already have an account in the system.
+        </Typography>
+      ) : description ? (
         <Typography sx={{ mt: 1.25, fontSize: '0.8125rem', color: cv.textSecondary }}>
           {description}
         </Typography>

@@ -979,6 +979,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         color: data.color,
         inviteEmails: data.inviteEmails,
         inviteGroupIds: data.inviteGroupIds,
+        memberType: data.memberType,
+        accessLevel: data.accessLevel,
       };
 
       const response = await apiClient.post<Workspace>('/workspaces/add', payload);

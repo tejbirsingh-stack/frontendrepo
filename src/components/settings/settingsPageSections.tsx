@@ -173,7 +173,7 @@ function AddProjectDialog({
 
     const byParent: Record<string, any[]> = {};
     const roots: any[] = [];
-    
+
     mappedFolders.forEach(f => {
       const pid = f.parentFolderId;
       if (pid) {
@@ -207,7 +207,7 @@ function AddProjectDialog({
                 setFolders(data.folders || []);
               }
             })
-            .catch(() => {});
+            .catch(() => { });
         });
       }
     }
@@ -439,13 +439,13 @@ function AddProjectDialog({
 
 export function PersonalSettingsSection() {
   const { user, refreshUser, logout } = useAuth();
-  
+
   const [profile, setProfile] = useState({
     fullName: user?.name || '',
     timezone: resolveProfileTimezoneOption(user?.timezone),
     avatarUrl: user?.avatarUrl || ''
   });
-  
+
   const [isSaving, setIsSaving] = useState(false);
   const [saveProfileConfirmOpen, setSaveProfileConfirmOpen] = useState(false);
   const [logoutAllConfirmOpen, setLogoutAllConfirmOpen] = useState(false);
@@ -772,64 +772,64 @@ export function CompanySettingsSection() {
 
   return (
     <SettingsFormContainer>
-    <SettingsSectionCard title="Company Info" description="Organization details for your account.">
-      <Box sx={{ px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-          <Avatar
-            src={logoUrl}
-            sx={{ width: 64, height: 64, background: logoUrl ? 'transparent' : cv.brandGradient }}
-          >
-            {!logoUrl ? name.charAt(0).toUpperCase() : null}
-          </Avatar>
-          <Box>
-            <input
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-            />
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<UploadOutlinedIcon />}
-              sx={outlineButtonSx}
-              onClick={() => fileInputRef.current?.click()}
+      <SettingsSectionCard title="Company Info" description="Organization details for your account.">
+        <Box sx={{ px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+            <Avatar
+              src={logoUrl}
+              sx={{ width: 64, height: 64, background: logoUrl ? 'transparent' : cv.brandGradient }}
             >
-              Upload company logo
+              {!logoUrl ? name.charAt(0).toUpperCase() : null}
+            </Avatar>
+            <Box>
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<UploadOutlinedIcon />}
+                sx={outlineButtonSx}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Upload company logo
+              </Button>
+              <Typography sx={{ mt: 0.75, fontSize: '0.75rem', color: cv.textMuted }}>
+                PNG, JPG, or SVG. Used for branding on shared media links.
+              </Typography>
+            </Box>
+          </Box>
+
+          <TextField
+            label="Company name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            fullWidth size="small"
+          />
+          <TextField
+            label="Company website"
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            fullWidth size="small"
+          />
+          <TextField
+            label="Industry"
+            value={industry}
+            onChange={(e) => setIndustry(e.target.value)}
+            fullWidth size="small"
+          />
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+            <Button variant="contained" sx={containedButtonSx} onClick={handleSave} disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save company details'}
             </Button>
-            <Typography sx={{ mt: 0.75, fontSize: '0.75rem', color: cv.textMuted }}>
-              PNG, JPG, or SVG. Used for branding on shared media links.
-            </Typography>
           </Box>
         </Box>
-
-        <TextField 
-          label="Company name" 
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          fullWidth size="small" 
-        />
-        <TextField 
-          label="Company website" 
-          value={website}
-          onChange={(e) => setWebsite(e.target.value)}
-          fullWidth size="small" 
-        />
-        <TextField 
-          label="Industry" 
-          value={industry}
-          onChange={(e) => setIndustry(e.target.value)}
-          fullWidth size="small" 
-        />
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-          <Button variant="contained" sx={containedButtonSx} onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save company details'}
-          </Button>
-        </Box>
-      </Box>
-    </SettingsSectionCard>
+      </SettingsSectionCard>
     </SettingsFormContainer>
   );
 }
@@ -1140,15 +1140,15 @@ function ProjectWorkspaceTable({
   const columns: SettingsTableColumn<SettingsProjectRow>[] = [
     ...(showProjectColumn
       ? [
-          {
-            id: 'project',
-            label: 'Project',
-            width: showTeamMembersColumn ? '14%' : '18%',
-            render: (row: SettingsProjectRow) => (
-              <ProjectNameCell name={row.project} />
-            ),
-          },
-        ]
+        {
+          id: 'project',
+          label: 'Project',
+          width: showTeamMembersColumn ? '14%' : '18%',
+          render: (row: SettingsProjectRow) => (
+            <ProjectNameCell name={row.project} />
+          ),
+        },
+      ]
       : []),
     {
       id: 'workspace',
@@ -1200,95 +1200,95 @@ function ProjectWorkspaceTable({
     },
     ...(showTeamMembersColumn
       ? [
-          {
-            id: 'team',
-            label: 'Team members',
-            width: showProjectColumn ? '22%' : '28%',
-            render: (row: SettingsProjectRow) => (
-              <WorkspaceTeamMembersCell
-                members={row.teamMembers ?? []}
-                canInvite={row.projectAdmin === CURRENT_USER.name}
-                visibility={showProjectColumn ? row.visibility : undefined}
-                shareLink={
-                  showProjectColumn && row.visibility === 'public'
-                    ? getProjectShareLink(row.id, row.project)
-                    : undefined
-                }
-                onInvite={() => onInviteTeamMembers?.(row.id)}
-              />
-            ),
-          },
-        ]
+        {
+          id: 'team',
+          label: 'Team members',
+          width: showProjectColumn ? '22%' : '28%',
+          render: (row: SettingsProjectRow) => (
+            <WorkspaceTeamMembersCell
+              members={row.teamMembers ?? []}
+              canInvite={row.projectAdmin === CURRENT_USER.name}
+              visibility={showProjectColumn ? row.visibility : undefined}
+              shareLink={
+                showProjectColumn && row.visibility === 'public'
+                  ? getProjectShareLink(row.id, row.project)
+                  : undefined
+              }
+              onInvite={() => onInviteTeamMembers?.(row.id)}
+            />
+          ),
+        },
+      ]
       : []),
   ];
 
   return (
     <SettingsTableContainer>
-    <SettingsSectionCard title={title} description={description}>
-      <SettingsAdminToolbar
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search…"
-        onFilter={() => setFilterOpen((open) => !open)}
-        filterOpen={filterOpen}
-        hasActiveFilters={hasActiveFilters}
-        onExport={() => undefined}
-        onAdd={onAdd}
-        addLabel={addLabel}
-      />
-      {showBulkActions && selectedIds.size > 0 ? (
-        <Box
-          sx={{
-            px: 2,
-            py: 1,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            flexWrap: 'wrap',
-            borderBottom: `1px solid ${cv.dividerSubtle}`,
-          }}
-        >
-          <Button
-            size="small"
-            disabled={selectedIds.size !== 1}
-            onClick={() => {
-              const rowId = [...selectedIds][0];
-              if (rowId) onEdit?.(rowId);
-            }}
-            sx={{ textTransform: 'none', color: cv.textPrimary, fontWeight: 500 }}
-          >
-            Edit
-          </Button>
-          <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
-            Mark active
-          </Button>
-          <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
-            Mark inactive
-          </Button>
-          <Button 
-            size="small" 
-            sx={{ textTransform: 'none', color: cv.destructive }}
-            onClick={() => {
-              if (onDelete) onDelete(Array.from(selectedIds));
+      <SettingsSectionCard title={title} description={description}>
+        <SettingsAdminToolbar
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search…"
+          onFilter={() => setFilterOpen((open) => !open)}
+          filterOpen={filterOpen}
+          hasActiveFilters={hasActiveFilters}
+          onExport={() => undefined}
+          onAdd={onAdd}
+          addLabel={addLabel}
+        />
+        {showBulkActions && selectedIds.size > 0 ? (
+          <Box
+            sx={{
+              px: 2,
+              py: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              flexWrap: 'wrap',
+              borderBottom: `1px solid ${cv.dividerSubtle}`,
             }}
           >
-            Mark delete
-          </Button>
-        </Box>
-      ) : null}
-      <Collapse in={filterOpen}>
-        <Box sx={{ px: 2, pb: 1.5 }}>
-          <SettingsTableFilterPanel
-            groups={[
-              {
-                id: 'status',
-                label: 'Status',
-                options: ['Active', 'Inactive'],
-                selected: statusFilter,
-                onToggle: (value) => setStatusFilter((current) => toggleFilterValue(current, value)),
-              },
-              ...(showProjectColumn
-                ? [
+            <Button
+              size="small"
+              disabled={selectedIds.size !== 1}
+              onClick={() => {
+                const rowId = [...selectedIds][0];
+                if (rowId) onEdit?.(rowId);
+              }}
+              sx={{ textTransform: 'none', color: cv.textPrimary, fontWeight: 500 }}
+            >
+              Edit
+            </Button>
+            <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
+              Mark active
+            </Button>
+            <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
+              Mark inactive
+            </Button>
+            <Button
+              size="small"
+              sx={{ textTransform: 'none', color: cv.destructive }}
+              onClick={() => {
+                if (onDelete) onDelete(Array.from(selectedIds));
+              }}
+            >
+              Mark delete
+            </Button>
+          </Box>
+        ) : null}
+        <Collapse in={filterOpen}>
+          <Box sx={{ px: 2, pb: 1.5 }}>
+            <SettingsTableFilterPanel
+              groups={[
+                {
+                  id: 'status',
+                  label: 'Status',
+                  options: ['Active', 'Inactive'],
+                  selected: statusFilter,
+                  onToggle: (value) => setStatusFilter((current) => toggleFilterValue(current, value)),
+                },
+                ...(showProjectColumn
+                  ? [
                     {
                       id: 'workspace',
                       label: 'Workspace',
@@ -1298,16 +1298,16 @@ function ProjectWorkspaceTable({
                         setWorkspaceFilter((current) => toggleFilterValue(current, value)),
                     },
                   ]
-                : []),
-            ]}
-            onClearAll={() => {
-              setStatusFilter(createDefaultFilterSelection());
-              setWorkspaceFilter(createDefaultFilterSelection());
-            }}
-          />
-        </Box>
-      </Collapse>
-      <SettingsDataTable
+                  : []),
+              ]}
+              onClearAll={() => {
+                setStatusFilter(createDefaultFilterSelection());
+                setWorkspaceFilter(createDefaultFilterSelection());
+              }}
+            />
+          </Box>
+        </Collapse>
+        <SettingsDataTable
           columns={columns}
           rows={filtered}
           getRowId={(row) => row.id}
@@ -1315,14 +1315,14 @@ function ProjectWorkspaceTable({
           selectedRowIds={selectedIds}
           onSelectionChange={setSelectedIds}
         />
-      {showBulkActions ? (
-        <Typography sx={{ px: 2, py: 1.25, fontSize: '0.75rem', color: cv.textMuted }}>
-          {selectedIds.size > 0
-            ? `${selectedIds.size} row${selectedIds.size === 1 ? '' : 's'} selected.`
-            : 'Use checkboxes to select one or more rows for bulk actions.'}
-        </Typography>
-      ) : null}
-    </SettingsSectionCard>
+        {showBulkActions ? (
+          <Typography sx={{ px: 2, py: 1.25, fontSize: '0.75rem', color: cv.textMuted }}>
+            {selectedIds.size > 0
+              ? `${selectedIds.size} row${selectedIds.size === 1 ? '' : 's'} selected.`
+              : 'Use checkboxes to select one or more rows for bulk actions.'}
+          </Typography>
+        ) : null}
+      </SettingsSectionCard>
     </SettingsTableContainer>
   );
 }
@@ -1362,16 +1362,28 @@ export function ProjectsAdminSettingsSection() {
       })
       .catch((err) => console.error('Failed to fetch org users for share dialog:', err));
 
-    fetchUserGroups()
-      .then((groups) => {
-        const mappedGroups = groups.map((g) => ({
-          id: g.id,
-          name: g.name,
-          memberIds: g.members?.map((m) => m.userId) || [],
-        }));
-        setOrgGroupsList(mappedGroups);
-      })
-      .catch((err) => console.error('Failed to fetch org groups:', err));
+    const fetchGroups = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await apiClient.get<any>('/user-groups', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = res.data || res;
+        if (Array.isArray(data)) {
+          const mappedGroups = data.map((g: any) => ({
+            id: g.id,
+            name: g.name || 'Unnamed Group',
+            description: g.description || '',
+            memberIds: Array.isArray(g.members) ? g.members.map((m: any) => m.userId || m.id) : [],
+          }));
+          setOrgGroupsList(mappedGroups);
+        }
+      } catch (err) {
+        console.error('Failed to fetch org groups:', err);
+      }
+    };
+    fetchGroups();
   }, []);
 
   useEffect(() => {
@@ -1511,13 +1523,13 @@ export function ProjectsAdminSettingsSection() {
         current.map((project) =>
           project.id === editProjectId
             ? {
-                ...project,
-                project: name,
-                workspace,
-                visibility,
-                isRestricted: visibility === 'private',
-                lastUpdated: today,
-              }
+              ...project,
+              project: name,
+              workspace,
+              visibility,
+              isRestricted: visibility === 'private',
+              lastUpdated: today,
+            }
             : project,
         ),
       );
@@ -1532,7 +1544,7 @@ export function ProjectsAdminSettingsSection() {
     try {
       const { apiClient } = await import('../../api/client');
       const token = localStorage.getItem('token');
-      
+
       // Delete projects sequentially
       for (const id of deleteDialogIds) {
         await apiClient.delete(`/workspaces/project/delete/${id}`, {
@@ -1570,11 +1582,11 @@ export function ProjectsAdminSettingsSection() {
       current.map((project) =>
         project.id === inviteProjectId
           ? {
-              ...project,
-              teamMembers: project.teamMembers?.map((member) =>
-                member.id === memberId ? { ...member, access } : member,
-              ),
-            }
+            ...project,
+            teamMembers: project.teamMembers?.map((member) =>
+              member.id === memberId ? { ...member, access } : member,
+            ),
+          }
           : project,
       ),
     );
@@ -1586,9 +1598,9 @@ export function ProjectsAdminSettingsSection() {
       current.map((project) =>
         project.id === inviteProjectId
           ? {
-              ...project,
-              teamMembers: project.teamMembers?.filter((member) => member.id !== memberId),
-            }
+            ...project,
+            teamMembers: project.teamMembers?.filter((member) => member.id !== memberId),
+          }
           : project,
       ),
     );
@@ -1640,17 +1652,17 @@ export function ProjectsAdminSettingsSection() {
         initialProject={
           editProject
             ? {
-                name: editProject.project,
-                workspace: editProject.workspace,
-                visibility: editProject.visibility ?? 'public',
-              }
+              name: editProject.project,
+              workspace: editProject.workspace,
+              visibility: editProject.visibility ?? 'public',
+            }
             : undefined
         }
         suggestedUsers={orgUsersList}
         suggestedGroups={orgGroupsList}
       />
-      <Dialog 
-        open={deleteDialogIds.length > 0} 
+      <Dialog
+        open={deleteDialogIds.length > 0}
         onClose={() => setDeleteDialogIds([])}
         PaperProps={{ sx: { bgcolor: cv.bgLayer, color: cv.textPrimary, backgroundImage: 'none', border: `1px solid ${cv.borderPrimary}` } }}
       >
@@ -1699,6 +1711,8 @@ export function WorkspacesAdminSettingsSection() {
   const [orgUsersList, setOrgUsersList] = useState<import('../../data/mockSettingsData').SettingsUserRow[]>([]);
   const { formatDate } = useLocalizedDate();
 
+  const [orgGroupsList, setOrgGroupsList] = useState<import('../../data/mockSettingsData').SettingsUserGroup[]>([]);
+
   useEffect(() => {
     fetchOrganizationUsers()
       .then((users) => {
@@ -1722,6 +1736,74 @@ export function WorkspacesAdminSettingsSection() {
         setOrgUsersList(rows);
       })
       .catch((err) => console.error('Failed to fetch org users for share dialog:', err));
+
+    const fetchGroups = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await apiClient.get<any>('/user-groups', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = res.data || res;
+        if (Array.isArray(data)) {
+          const mappedGroups = data.map((g: any) => ({
+            id: g.id,
+            name: g.name || 'Unnamed Group',
+            description: g.description || '',
+            memberIds: Array.isArray(g.members) ? g.members.map((m: any) => m.userId || m.id) : [],
+          }));
+          setOrgGroupsList(mappedGroups);
+        }
+      } catch (err) {
+        console.error('Failed to fetch org groups:', err);
+      }
+    };
+    fetchGroups();
+  }, []);
+
+  useEffect(() => {
+    const fetchWorkspaces = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const response = await apiClient.get<any>('/workspaces/find-all', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = Array.isArray(response) ? response : response.data;
+        if (data && Array.isArray(data)) {
+          const formatted = data.map((w: any) => {
+            const today = formatDate(w.createdAt || Date.now(), {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            });
+            return {
+              id: w.id,
+              workspace: w.name,
+              status: 'Active',
+              lastUpdated: today,
+              creationDate: today,
+              storage: '0 MB',
+              projectAdmin: CURRENT_USER.name,
+              teamMembers: [
+                {
+                  id: `wm-admin-${w.id}`,
+                  name: CURRENT_USER.name,
+                  initials: CURRENT_USER.initials,
+                  access: 'Full Access',
+                  memberType: 'Member',
+                  isCurrentUser: true,
+                }
+              ]
+            } as SettingsProjectRow;
+          });
+          setWorkspaces(formatted);
+        }
+      } catch (err) {
+        console.error("Failed to load workspaces", err);
+      }
+    };
+    fetchWorkspaces();
   }, []);
 
   const inviteWorkspace = workspaces.find((workspace) => workspace.id === inviteWorkspaceId);
@@ -1791,11 +1873,11 @@ export function WorkspacesAdminSettingsSection() {
       current.map((workspace) =>
         workspace.id === inviteWorkspaceId
           ? {
-              ...workspace,
-              teamMembers: workspace.teamMembers?.map((member) =>
-                member.id === memberId ? { ...member, access } : member,
-              ),
-            }
+            ...workspace,
+            teamMembers: workspace.teamMembers?.map((member) =>
+              member.id === memberId ? { ...member, access } : member,
+            ),
+          }
           : workspace,
       ),
     );
@@ -1807,9 +1889,9 @@ export function WorkspacesAdminSettingsSection() {
       current.map((workspace) =>
         workspace.id === inviteWorkspaceId
           ? {
-              ...workspace,
-              teamMembers: workspace.teamMembers?.filter((member) => member.id !== memberId),
-            }
+            ...workspace,
+            teamMembers: workspace.teamMembers?.filter((member) => member.id !== memberId),
+          }
           : workspace,
       ),
     );
@@ -1856,7 +1938,7 @@ export function WorkspacesAdminSettingsSection() {
         resourceId={inviteWorkspaceId ?? undefined}
         members={inviteWorkspace?.teamMembers ?? []}
         suggestedUsers={orgUsersList}
-        suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
+        suggestedGroups={orgGroupsList}
         isRestricted={inviteWorkspace?.isRestricted ?? false}
         onClose={() => setInviteWorkspaceId(null)}
         onInvite={handleInviteMember}
@@ -1885,22 +1967,22 @@ export function FieldsAdminSettingsSection() {
 
   return (
     <SettingsTableContainer>
-    <SettingsSectionCard title="Fields" description="Custom metadata fields for your library.">
-      <SettingsAdminToolbar
-        searchValue={search}
-        onSearchChange={setSearch}
-        onAdd={() => undefined}
-        addLabel="Add field"
-      />
-      <SettingsDataTable
-        columns={columns}
-        rows={rows}
-        getRowId={(row) => row.id}
-        selectable
-        selectedRowIds={selectedIds}
-        onSelectionChange={setSelectedIds}
-      />
-    </SettingsSectionCard>
+      <SettingsSectionCard title="Fields" description="Custom metadata fields for your library.">
+        <SettingsAdminToolbar
+          searchValue={search}
+          onSearchChange={setSearch}
+          onAdd={() => undefined}
+          addLabel="Add field"
+        />
+        <SettingsDataTable
+          columns={columns}
+          rows={rows}
+          getRowId={(row) => row.id}
+          selectable
+          selectedRowIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+        />
+      </SettingsSectionCard>
     </SettingsTableContainer>
   );
 }
@@ -1908,16 +1990,16 @@ export function FieldsAdminSettingsSection() {
 export function SecurityAdminSettingsSection() {
   return (
     <SettingsFormContainer>
-    <SettingsSectionCard title="Security" description="Authentication, sessions, and content security.">
-      <SettingsRow title="Single sign-on (SSO)" description="Not configured" action={<Button size="small" sx={outlineButtonSx} variant="outlined">Configure</Button>} />
-      <SettingsRow title="Session timeout" description="30 days of inactivity" action={<Button size="small" sx={outlineButtonSx} variant="outlined">Edit</Button>} />
-      <SettingsRow
-        title="Content Security Policy"
-        description="Restrict embedded media origins for share links."
-        action={<Button size="small" sx={outlineButtonSx} variant="outlined">Manage</Button>}
-        showDivider={false}
-      />
-    </SettingsSectionCard>
+      <SettingsSectionCard title="Security" description="Authentication, sessions, and content security.">
+        <SettingsRow title="Single sign-on (SSO)" description="Not configured" action={<Button size="small" sx={outlineButtonSx} variant="outlined">Configure</Button>} />
+        <SettingsRow title="Session timeout" description="30 days of inactivity" action={<Button size="small" sx={outlineButtonSx} variant="outlined">Edit</Button>} />
+        <SettingsRow
+          title="Content Security Policy"
+          description="Restrict embedded media origins for share links."
+          action={<Button size="small" sx={outlineButtonSx} variant="outlined">Manage</Button>}
+          showDivider={false}
+        />
+      </SettingsSectionCard>
     </SettingsFormContainer>
   );
 }
@@ -1989,105 +2071,105 @@ export function ShareSettingsSection() {
 
   return (
     <SettingsFormContainer>
-    <SettingsSectionCard
-      title="Share Settings"
-      description="Default share link options · Admin and Super Admin only"
-    >
-      <SettingsRow
-        title="Require password"
-        description="Protect new share links with a password by default."
-        action={
-          <Switch
-            checked={requirePassword}
-            onChange={(event) => {
-              setRequirePassword(event.target.checked);
-              updateSetting('requirePasswordDefault', event.target.checked);
-            }}
-            slotProps={{ input: { 'aria-label': 'Require password on share links' } }}
-          />
-        }
-      />
-      <SettingsRow
-        title="Allow comments"
-        description="Let viewers add comments on shared media."
-        action={
-          <Switch
-            checked={allowComments}
-            onChange={(event) => {
-              setAllowComments(event.target.checked);
-              updateSetting('allowCommentsDefault', event.target.checked);
-            }}
-            slotProps={{ input: { 'aria-label': 'Allow comments on share links' } }}
-          />
-        }
-      />
-      <SettingsRow
-        title="Download original"
-        description="Let viewers download the original high-resolution media."
-        action={
-          <Switch
-            checked={allowDownloadOriginal}
-            onChange={(event) => {
-              setAllowDownloadOriginal(event.target.checked);
-              updateSetting('allowDownloadOriginalDefault', event.target.checked);
-            }}
-            slotProps={{ input: { 'aria-label': 'Allow original downloads on share links' } }}
-          />
-        }
-      />
-      <SettingsRow
-        title="Download proxy"
-        description="Let viewers download the proxy (compressed) media."
-        action={
-          <Switch
-            checked={allowDownloadProxy}
-            onChange={(event) => {
-              setAllowDownloadProxy(event.target.checked);
-              updateSetting('allowDownloadProxyDefault', event.target.checked);
-            }}
-            slotProps={{ input: { 'aria-label': 'Allow proxy downloads on share links' } }}
-          />
-        }
-      />
-      <SettingsRow
-        title="Show company watermark"
-        description="Display your company logo watermark on shared media."
-        action={
-          <Switch
-            checked={showCompanyWatermark}
-            onChange={(event) => {
-              setShowCompanyWatermark(event.target.checked);
-              updateSetting('showCompanyWatermarkDefault', event.target.checked);
-            }}
-            slotProps={{ input: { 'aria-label': 'Show company watermark on share links' } }}
-          />
-        }
-      />
-      <SettingsRow
-        title="Link expiry"
-        description="Default expiration for new share links."
-        action={
-          <TextField
-            select
-            size="small"
-            value={linkExpiry}
-            onChange={(event) => {
-              setLinkExpiry(event.target.value);
-              updateSetting('defaultExpiryDays', parseInt(event.target.value, 10));
-            }}
-            sx={{ minWidth: 120 }}
-            slotProps={textFieldSelectInDialogSlotProps}
-          >
-            {['7', '14', '30', '90'].map((days) => (
-              <MenuItem key={days} value={days} sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
-                {days} days
-              </MenuItem>
-            ))}
-          </TextField>
-        }
-        showDivider={false}
-      />
-    </SettingsSectionCard>
+      <SettingsSectionCard
+        title="Share Settings"
+        description="Default share link options · Admin and Super Admin only"
+      >
+        <SettingsRow
+          title="Require password"
+          description="Protect new share links with a password by default."
+          action={
+            <Switch
+              checked={requirePassword}
+              onChange={(event) => {
+                setRequirePassword(event.target.checked);
+                updateSetting('requirePasswordDefault', event.target.checked);
+              }}
+              slotProps={{ input: { 'aria-label': 'Require password on share links' } }}
+            />
+          }
+        />
+        <SettingsRow
+          title="Allow comments"
+          description="Let viewers add comments on shared media."
+          action={
+            <Switch
+              checked={allowComments}
+              onChange={(event) => {
+                setAllowComments(event.target.checked);
+                updateSetting('allowCommentsDefault', event.target.checked);
+              }}
+              slotProps={{ input: { 'aria-label': 'Allow comments on share links' } }}
+            />
+          }
+        />
+        <SettingsRow
+          title="Download original"
+          description="Let viewers download the original high-resolution media."
+          action={
+            <Switch
+              checked={allowDownloadOriginal}
+              onChange={(event) => {
+                setAllowDownloadOriginal(event.target.checked);
+                updateSetting('allowDownloadOriginalDefault', event.target.checked);
+              }}
+              slotProps={{ input: { 'aria-label': 'Allow original downloads on share links' } }}
+            />
+          }
+        />
+        <SettingsRow
+          title="Download proxy"
+          description="Let viewers download the proxy (compressed) media."
+          action={
+            <Switch
+              checked={allowDownloadProxy}
+              onChange={(event) => {
+                setAllowDownloadProxy(event.target.checked);
+                updateSetting('allowDownloadProxyDefault', event.target.checked);
+              }}
+              slotProps={{ input: { 'aria-label': 'Allow proxy downloads on share links' } }}
+            />
+          }
+        />
+        <SettingsRow
+          title="Show company watermark"
+          description="Display your company logo watermark on shared media."
+          action={
+            <Switch
+              checked={showCompanyWatermark}
+              onChange={(event) => {
+                setShowCompanyWatermark(event.target.checked);
+                updateSetting('showCompanyWatermarkDefault', event.target.checked);
+              }}
+              slotProps={{ input: { 'aria-label': 'Show company watermark on share links' } }}
+            />
+          }
+        />
+        <SettingsRow
+          title="Link expiry"
+          description="Default expiration for new share links."
+          action={
+            <TextField
+              select
+              size="small"
+              value={linkExpiry}
+              onChange={(event) => {
+                setLinkExpiry(event.target.value);
+                updateSetting('defaultExpiryDays', parseInt(event.target.value, 10));
+              }}
+              sx={{ minWidth: 120 }}
+              slotProps={textFieldSelectInDialogSlotProps}
+            >
+              {['7', '14', '30', '90'].map((days) => (
+                <MenuItem key={days} value={days} sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
+                  {days} days
+                </MenuItem>
+              ))}
+            </TextField>
+          }
+          showDivider={false}
+        />
+      </SettingsSectionCard>
     </SettingsFormContainer>
   );
 }
