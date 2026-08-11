@@ -3,7 +3,7 @@ import { Box, Button, Typography, keyframes } from '@mui/material';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import LiquidBackground from '../LiquidBackground';
 import WaveBackground from '../WaveBackground';
-import NoahLogo from '../NoahLogo';
+import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../NoahLogo';
 import { cv } from '../../theme/cssVars';
 import { fetchPublicCatalogPlans } from '../../platform/api/platformApi';
 
@@ -32,7 +32,8 @@ const FALLBACK_PLANS: PlanDefinition[] = [
     monthlyPrice: 0,
     cta: 'Continue with Free',
     features: [
-      'Up to 5 GB media storage',
+      '0 Storage',
+      '5 Members',
       'Basic media library & folders',
       'Share links with view access',
       'Mobile & desktop access',
@@ -46,6 +47,8 @@ const FALLBACK_PLANS: PlanDefinition[] = [
     monthlyPrice: 10,
     cta: 'Get started',
     features: [
+      '10 GB Storage',
+      '5 Members',
       'Media library essentials',
       'Share links & file comments',
       'Activity feed & project overview',
@@ -61,6 +64,8 @@ const FALLBACK_PLANS: PlanDefinition[] = [
     cta: 'Start with Premium',
     featured: true,
     features: [
+      '15 GB Storage',
+      '10 Members',
       'Review & annotate video/audio',
       'Advanced filters & reporting',
       'Custom labels, priorities & checklists',
@@ -76,10 +81,11 @@ const FALLBACK_PLANS: PlanDefinition[] = [
     monthlyPrice: 50,
     cta: 'Contact Sales',
     features: [
+      '20 GB Storage',
+      '15 Members',
       'Dedicated account manager',
       'Custom integrations & automation',
       'SSO & role-based access control',
-      'Unlimited projects & users',
       'KPI dashboards & reporting tools',
       'Onboarding support',
     ],
@@ -171,13 +177,14 @@ export default function ChoosePlanScreen({ onSelectPlan }: ChoosePlanScreenProps
           animation: `${fadeUp} 0.55s ease`,
         }}
       >
-        <NoahLogo
-          align="center"
-          width={{ xs: 120, sm: 150 }}
-          animated={false}
-          showGlow={false}
-          sx={{ mb: { xs: 3, md: 3.5 } }}
-        />
+        <Box sx={{ ...AUTH_LOGO_PARENT_SX, mb: { xs: 3, md: 3.5 } }}>
+          <NoahLogo
+            align="center"
+            animated={false}
+            showGlow={false}
+            sx={AUTH_LOGO_SX}
+          />
+        </Box>
 
         <Typography
           component="h1"

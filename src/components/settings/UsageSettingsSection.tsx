@@ -18,7 +18,7 @@ import { cv } from '../../theme/cssVars';
 import { SETTINGS_BASE_PATH } from '../../constants/settingsNav';
 import { getUsageSummary } from '../../api/usage.service';
 import type { UsageSummaryResponse } from '../../types/usage';
-import { progressBarColor, warningCopy } from '../../utils/usageWarning';
+import { progressBarColor, warningBanners } from '../../utils/usageWarning';
 import { SettingsTableContainer } from './SettingsContentLayout';
 import StorageConsumptionChart from './StorageConsumptionChart';
 
@@ -152,57 +152,86 @@ function UsageDetailCard({
   );
 }
 
+function formatPercent(val: number): string {
+  if (val <= 0) return '0.0%';
+  if (val < 0.1) return '<0.1%';
+  const formatted = val.toFixed(1);
+  return formatted.endsWith('.0') ? `${Math.round(val)}%` : `${formatted}%`;
+}
+
+function formatCleanCapBytes(bytes?: number, fallbackLabel?: string): string {
+  if (!bytes || bytes <= 0) return fallbackLabel || '0 B';
+  const k = 1024;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  if (i === 0) return `${bytes} B`;
+  const val = bytes / Math.pow(k, i);
+  const formattedVal = Math.abs(val - Math.round(val)) < 0.05 ? Math.round(val) : val.toFixed(1);
+  return `${formattedVal} ${units[i]}`;
+}
+
 export default function UsageSettingsSection() {
   const [usage, setUsage] = useState<UsageSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    let isCancelled = false;
-    (async () => {
+    let active = true;
+    async function loadUsage() {
       try {
+        setLoading(true);
         const data = await getUsageSummary();
-        if (!isCancelled) {
+        if (active) {
           setUsage(data);
+          setError('');
         }
       } catch (err: any) {
-        if (!isCancelled) {
-          console.error('Failed to load usage summary:', err);
-          toast.error(err?.message || 'Failed to load usage summary');
+        if (active) {
+          const msg = err?.response?.data?.message || err?.message || 'Failed to fetch usage summary.';
+          setError(msg);
+          toast.error(msg);
         }
       } finally {
-        if (!isCancelled) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
-    })();
+    }
 
+    void loadUsage();
     return () => {
-      isCancelled = true;
+      active = false;
     };
   }, []);
 
   if (loading) {
     return (
       <SettingsTableContainer>
-        <Skeleton variant="rectangular" height={40} sx={{ mb: 2, borderRadius: 2 }} />
-        <Skeleton variant="rectangular" height={320} sx={{ borderRadius: 4 }} />
+        <Box sx={{ display: 'grid', gap: 2 }}>
+          <Skeleton variant="rectangular" height={40} sx={{ borderRadius: '12px' }} />
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.5 }}>
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <Skeleton key={idx} variant="rectangular" height={100} sx={{ borderRadius: '14px' }} />
+            ))}
+          </Box>
+          <Skeleton variant="rectangular" height={260} sx={{ borderRadius: '16px' }} />
+        </Box>
       </SettingsTableContainer>
     );
   }
 
-  if (!usage) {
+  if (error || !usage) {
     return (
       <SettingsTableContainer>
-        <Typography sx={{ color: cv.errorText }}>
-          Failed to load usage data. Please refresh or try again later.
-        </Typography>
+        <Alert severity="error" sx={{ borderRadius: '12px' }}>
+          {error || 'Unable to load usage details.'}
+        </Alert>
       </SettingsTableContainer>
     );
   }
 
-  const banner = warningCopy(usage);
+  const banners = warningBanners(usage);
   const membersPercent = (usage.membersUsed / Math.max(usage.membersTotal, 1)) * 100;
   const primarySystem = usage.storageSystems?.[0];
+  const displayCapLabel = formatCleanCapBytes(usage.storageQuotaBytes, usage.storageCapLabel);
 
   return (
     <SettingsTableContainer>
@@ -222,15 +251,15 @@ export default function UsageSettingsSection() {
         </Typography>
       </Box>
 
-      {banner ? (
+      {banners.map((b) => (
         <Alert
-          severity={usage.warningLevel === 'exceeded' ? 'error' : 'warning'}
+          key={b.id}
+          severity={b.severity}
           sx={{
-            mb: 2.5,
+            mb: 2,
             borderRadius: '12px',
-            backgroundColor:
-              usage.warningLevel === 'exceeded' ? cv.errorSurface : cv.warningSurface,
-            border: `1px solid ${usage.warningLevel === 'exceeded' ? cv.errorText : cv.warning}`,
+            backgroundColor: b.severity === 'error' ? cv.errorSurface : cv.warningSurface,
+            border: `1px solid ${b.severity === 'error' ? cv.errorText : cv.warning}`,
           }}
           action={
             <Button
@@ -244,9 +273,9 @@ export default function UsageSettingsSection() {
             </Button>
           }
         >
-          <strong>{banner.title}</strong> — {banner.body}
+          <strong>{b.title}</strong> — {b.body}
         </Alert>
-      ) : null}
+      ))}
 
       <Box
         sx={{
@@ -280,7 +309,7 @@ export default function UsageSettingsSection() {
           <StorageConsumptionChart
             compact
             usedLabel={usage.storageUsedLabel}
-            capLabel={usage.storageCapLabel}
+            capLabel={displayCapLabel}
             usedPercent={usage.storageUsedPercent}
             breakdown={usage.storageBreakdown}
             capBytes={usage.storageQuotaBytes}
@@ -309,7 +338,7 @@ export default function UsageSettingsSection() {
               icon={<StorageOutlinedIcon />}
               label="Storage used"
               value={usage.storageUsedLabel}
-              detail={`${usage.storageUsedPercent < 1 ? usage.storageUsedPercent.toFixed(1) : Math.round(usage.storageUsedPercent)}% of ${usage.storageCapLabel}`}
+              detail={`${formatPercent(usage.storageUsedPercent)} of ${displayCapLabel}`}
             />
             <UsageStatCard
               icon={<FolderOutlinedIcon />}

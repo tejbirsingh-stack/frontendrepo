@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import PageSuspense from '../components/loading/PageSuspense';
 import SettingsContentSkeleton from '../components/loading/SettingsContentSkeleton';
@@ -6,10 +7,13 @@ import { Box, Typography } from '@mui/material';
 import PlanBadge from '../components/dashboard/PlanBadge';
 import { getSettingsSectionMeta } from '../constants/settingsNav';
 import { useAuth } from '../auth/AuthContext';
+import { getDynamicPlanDetails } from '../utils/planHelper';
 
 export default function SettingsLayout() {
   const location = useLocation();
   const { user } = useAuth();
+  const planDetails = useMemo(() => getDynamicPlanDetails(user), [user]);
+  const isFreePlan = planDetails.planId === 'free';
   const pathSuffix = location.pathname.replace('/home/settings/', '').replace(/\/$/, '');
   const sectionMeta = getSettingsSectionMeta(pathSuffix);
   const displayPlan = (user?.planType || user?.organization?.planType || 'free').toUpperCase();
@@ -51,7 +55,11 @@ export default function SettingsLayout() {
             </Typography>
           ) : null}
         </Box>
-        <PlanBadge label={displayPlan} size="md" />
+        <PlanBadge
+          label={displayPlan}
+          size="md"
+          expiryText={isFreePlan ? planDetails.expiryDateFormatted : null}
+        />
       </Box>
 
       <Box sx={{ width: '100%', minWidth: 0 }}>

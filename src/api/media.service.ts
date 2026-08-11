@@ -343,6 +343,16 @@ export async function updateAssetTagsRequest(id: string, tags: string[]): Promis
   await apiClient.post(`/media/${encodeURIComponent(id)}/tags`, { tags });
 }
 
+export async function updateAssetReviewStatusRequest(
+  id: string,
+  reviewStatus: string,
+): Promise<{ success: boolean; reviewStatus: string }> {
+  return apiClient.patch<{ success: boolean; reviewStatus: string }>(
+    `/media/${encodeURIComponent(id)}/review-status`,
+    { reviewStatus },
+  );
+}
+
 /**
  * Retry transcode for a failed media asset.
  */

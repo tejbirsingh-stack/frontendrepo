@@ -12,12 +12,12 @@ import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import CheckIcon from '@mui/icons-material/Check';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
-import KeyboardOutlinedIcon from '@mui/icons-material/KeyboardOutlined';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
@@ -84,7 +84,7 @@ import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../auth/AuthContext';
 
 import { SAMPLE_VIDEO_SRC } from '../constants/sampleVideos';
-import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, HEADER_LOGO_WIDTH, SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
+import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, HEADER_LOGO_BOX_HEIGHT_DESKTOP, HEADER_LOGO_BOX_HEIGHT_MOBILE, HEADER_LOGO_BOX_WIDTH_DESKTOP, HEADER_LOGO_BOX_WIDTH_MOBILE, SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
 import { TOAST_Z_INDEX } from '../constants/dropdownMenu';
 import type { AnnotationHistoryEntry, AnnotationHistoryType } from '../types/annotationHistory';
 import type { AnnotationAccessGroup, AnnotationVisibility } from '../types/annotationVisibility';
@@ -143,6 +143,13 @@ import { buildTimelineItems } from '../utils/buildTimelineItems';
 import { createDefaultAnnotationEndTime } from '../utils/annotationTimeRange';
 import type { TimelineAnnotationType } from '../types/annotationTimeline';
 import { formatFileSize } from '../utils/formatFileSize';
+import {
+  DEFAULT_FILE_REVIEW_STATUS,
+  FILE_REVIEW_STATUSES,
+  getFileReviewStatusColor,
+  parseFileReviewStatus,
+  type FileReviewStatus,
+} from '../constants/fileReviewStatus';
 import { formatVideoTimestamp, parseMediaDurationLabel } from '../utils/formatVideoTimestamp';
 import {
   extractPlaybackQualityMetadata,
@@ -167,7 +174,7 @@ import {
 } from '../utils/playerToolUtils';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
-import { getMediaAssetByIdRequest, updateAssetTagsRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride, updateAssetGroupAccessOverride, removeAssetGroupAccessOverride, getCompanyInfoRequest } from '../api';
+import { getMediaAssetByIdRequest, updateAssetTagsRequest, updateAssetReviewStatusRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride, updateAssetGroupAccessOverride, removeAssetGroupAccessOverride, getCompanyInfoRequest } from '../api';
 import { fetchUserGroups } from '../api/userGroups.service';
 import type { MediaItem, MediaType } from '../data/mockMedia';
 
@@ -276,14 +283,14 @@ export default function VideoPlayerPage({
     theme.breakpoints.up(SIDEBAR_DESKTOP_BREAKPOINT),
   );
 
-  let dashboardData: any = { mediaItems: [], updateMediaTags: () => { }, favorites: new Set<string>(), toggleFavorite: () => { } };
+  let dashboardData: any = { mediaItems: [], updateMediaTags: () => { }, updateMediaReviewStatus: () => { }, favorites: new Set<string>(), toggleFavorite: () => { } };
   try {
     const dashboard = useDashboard();
     if (dashboard) dashboardData = dashboard;
   } catch {
     // Guest mode outside DashboardProvider
   }
-  const { mediaItems = [], sharedMediaItems = [], updateMediaTags = () => { }, favorites, toggleFavorite = () => { } } = dashboardData;
+  const { mediaItems = [], sharedMediaItems = [], updateMediaTags = () => { }, updateMediaReviewStatus = () => { }, favorites, toggleFavorite = () => { } } = dashboardData;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoStageRef = useRef<HTMLDivElement>(null);
@@ -351,12 +358,17 @@ export default function VideoPlayerPage({
         thumbnail: contextItem.thumbnail || fetchedItem.thumbnail,
         compressionStatus: fetchedItem.compressionStatus || contextItem.compressionStatus,
         duration: contextItem.duration || fetchedItem.duration,
-        customMetadata: fetchedItem.customMetadata || contextItem.customMetadata,
+        customMetadata: {
+          ...(contextItem.customMetadata || {}),
+          ...(fetchedItem.customMetadata || {}),
+        },
         resolution_tier: (contextItem as any).resolution_tier || (fetchedItem as any).resolution_tier,
         resolutionTier: (contextItem as any).resolutionTier || (fetchedItem as any).resolutionTier,
         fps: (contextItem as any).fps || (fetchedItem as any).fps,
         file_size: (contextItem as any).file_size || (fetchedItem as any).file_size,
         sizeBytes: (contextItem as any).sizeBytes || (fetchedItem as any).sizeBytes,
+        proxySizeBytes: fetchedItem.proxySizeBytes ?? contextItem.proxySizeBytes,
+        hasProxy: fetchedItem.hasProxy ?? contextItem.hasProxy,
       }
       : contextItem || fetchedItem;
   }, [isGuestMode, guestItem, contextItem, fetchedItem]);
@@ -454,6 +466,8 @@ export default function VideoPlayerPage({
             workspaceId: 'default',
             createdAt: asset.uploadDate || new Date().toISOString(),
             sizeBytes: asset.size,
+            proxySizeBytes: Number((asset as any).proxySize || (asset.customMetadata as any)?.proxySize || 0) || undefined,
+            hasProxy: Boolean((asset as any).hasProxy ?? (asset.customMetadata as any)?.hasProxy),
             storageProvider: 'b2',
             uploadedBy: (asset as any).uploadedBy?.name || user?.name || (user?.email ? user.email.split('@')[0] : 'Uploader'),
             uploadedByUserId: (asset as any).uploadedBy?.id || undefined,
@@ -567,6 +581,43 @@ export default function VideoPlayerPage({
   const canDownloadOriginal = isAssetAdmin;
   const canShare = isAssetAdmin;
 
+  const triggerMediaDownload = useCallback((variant: 'original' | 'proxy') => {
+    if (!item?.id) return;
+    const a = document.createElement('a');
+    a.href =
+      variant === 'original'
+        ? `/api/media/${encodeURIComponent(item.id)}/download?raw=true`
+        : `/api/media/${encodeURIComponent(item.id)}/download`;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }, [item?.id]);
+
+  const originalDownloadSizeLabel = useMemo(() => {
+    const bytes = Number((item as any)?.file_size ?? item?.sizeBytes ?? (item as any)?.size ?? 0);
+    return bytes > 0 ? formatFileSize(bytes) : '—';
+  }, [item]);
+
+  const proxyDownloadSizeLabel = useMemo(() => {
+    const bytes = Number(
+      item?.proxySizeBytes ??
+      (item?.customMetadata as any)?.proxySize ??
+      0,
+    );
+    return bytes > 0 ? formatFileSize(bytes) : '—';
+  }, [item]);
+
+  const canDownloadProxy = Boolean(
+    item?.type === 'video' || item?.type === 'audio'
+      ? item?.hasProxy ||
+        Number(item?.proxySizeBytes || (item?.customMetadata as any)?.proxySize || 0) > 0 ||
+        (item?.compressionStatus === 'completed' || item?.compressionStatus === 'active')
+      : false,
+  );
+
+  const canEditReviewStatus = !isGuestMode && (isAssetAdmin || !isViewer);
+
   const headerPermissions = useMemo(() => {
     const rawRole = (user?.role || user?.roleRelation?.name || '').trim().toLowerCase();
     const isViewerRole = isViewer || rawRole === 'viewer' || rawRole === 'guest';
@@ -588,7 +639,52 @@ export default function VideoPlayerPage({
   const prevShapesRef = useRef<VideoShape[]>([]);
   const prevDrawingsRef = useRef<VideoDrawingStroke[]>([]);
   const prevStampsRef = useRef<VideoStamp[]>([]);
-  const [moreMenuAnchor, setMoreMenuAnchor] = useState<HTMLElement | null>(null);
+  const [downloadMenuAnchor, setDownloadMenuAnchor] = useState<HTMLElement | null>(null);
+  const downloadMenuOpen = Boolean(downloadMenuAnchor);
+  const [reviewStatusMenuAnchor, setReviewStatusMenuAnchor] = useState<HTMLElement | null>(null);
+  const reviewStatusMenuOpen = Boolean(reviewStatusMenuAnchor);
+  const [fileReviewStatus, setFileReviewStatus] = useState<FileReviewStatus>(DEFAULT_FILE_REVIEW_STATUS);
+
+  useEffect(() => {
+    const fromMeta =
+      (item?.customMetadata as any)?.reviewStatus ??
+      (fetchedItem?.customMetadata as any)?.reviewStatus;
+    setFileReviewStatus(parseFileReviewStatus(fromMeta));
+  }, [item?.id, item?.customMetadata, fetchedItem?.customMetadata]);
+
+  const handleSelectFileReviewStatus = useCallback(
+    async (next: FileReviewStatus) => {
+      setReviewStatusMenuAnchor(null);
+      if (!item?.id || next === fileReviewStatus) return;
+      const previous = fileReviewStatus;
+      setFileReviewStatus(next);
+      setFetchedItem((prev) =>
+        prev && prev.id === item.id
+          ? {
+              ...prev,
+              customMetadata: {
+                ...(prev.customMetadata || {}),
+                reviewStatus: next,
+              },
+            }
+          : prev,
+      );
+      try {
+        await updateAssetReviewStatusRequest(item.id, next);
+        updateMediaReviewStatus(item.id, next);
+      } catch (err) {
+        console.error('Failed to update review status:', err);
+        setFileReviewStatus(previous);
+        setStatusToast({
+          open: true,
+          message: 'Failed to update file status',
+          variant: 'error',
+        });
+      }
+    },
+    [item?.id, fileReviewStatus, updateMediaReviewStatus],
+  );
+
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isIdle, setIsIdle] = useState(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3449,11 +3545,13 @@ export default function VideoPlayerPage({
           </Tooltip>
           <NoahLogo
             to="/home"
-            width={{ xs: HEADER_LOGO_WIDTH, [SIDEBAR_DESKTOP_BREAKPOINT]: 108 }}
+            boxWidth={{ xs: HEADER_LOGO_BOX_WIDTH_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_WIDTH_DESKTOP }}
+            height={{ xs: HEADER_LOGO_BOX_HEIGHT_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_HEIGHT_DESKTOP }}
+            objectFit="cover"
             animated={false}
             showGlow={false}
             align="left"
-            sx={{ mb: 0, flexShrink: 0, display: 'flex', alignItems: 'center' }}
+            sx={{ mb: 0, flexShrink: 0 }}
           />
           <Box
             sx={{
@@ -3620,6 +3718,118 @@ export default function VideoPlayerPage({
             )}
           </Box>
 
+          {!isGuestMode && item?.id ? (
+            <>
+              <Tooltip title="File status" arrow placement="bottom">
+                <Box sx={{ display: 'inline-flex' }}>
+                  <Button
+                    type="button"
+                    size="small"
+                    disabled={!canEditReviewStatus}
+                    aria-label="File status"
+                    aria-haspopup="menu"
+                    aria-expanded={reviewStatusMenuOpen}
+                    aria-controls={reviewStatusMenuOpen ? 'header-review-status-menu' : undefined}
+                    onClick={(e) => {
+                      if (!canEditReviewStatus) return;
+                      setReviewStatusMenuAnchor(e.currentTarget);
+                    }}
+                    endIcon={<KeyboardArrowDownIcon sx={{ fontSize: 16 }} />}
+                    sx={{
+                      minHeight: 36,
+                      height: 36,
+                      py: 0,
+                      px: 1.5,
+                      borderRadius: '999px',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.8125rem',
+                      letterSpacing: '0.01em',
+                      color: getFileReviewStatusColor(fileReviewStatus),
+                      border: `1px solid ${cv.border}`,
+                      backgroundColor: cv.surface,
+                      '& .MuiButton-endIcon': {
+                        color: 'inherit',
+                        ml: 0.5,
+                      },
+                      '&:hover': canEditReviewStatus
+                        ? {
+                            backgroundColor: cv.surfaceHover,
+                            borderColor: cv.borderStrong,
+                          }
+                        : {},
+                      '&.Mui-disabled': {
+                        opacity: 0.6,
+                        color: getFileReviewStatusColor(fileReviewStatus),
+                        borderColor: cv.border,
+                      },
+                    }}
+                  >
+                    {fileReviewStatus}
+                  </Button>
+                </Box>
+              </Tooltip>
+
+              <Menu
+                id="header-review-status-menu"
+                anchorEl={reviewStatusMenuAnchor}
+                open={reviewStatusMenuOpen}
+                onClose={() => setReviewStatusMenuAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                slotProps={{
+                  paper: {
+                    sx: {
+                      mt: 1,
+                      minWidth: 220,
+                      borderRadius: '12px',
+                      border: `1px solid ${cv.border}`,
+                      background: cv.drawerSurface,
+                      boxShadow: cv.dropdownShadow || cv.popoverShadow,
+                      color: cv.textPrimary,
+                      py: 0.5,
+                    },
+                  },
+                }}
+              >
+                {FILE_REVIEW_STATUSES.map((status) => {
+                  const selected = status === fileReviewStatus;
+                  return (
+                    <MenuItem
+                      key={status}
+                      selected={selected}
+                      onClick={() => void handleSelectFileReviewStatus(status)}
+                      sx={{
+                        fontSize: '0.875rem',
+                        fontWeight: selected ? 600 : 500,
+                        py: 1.05,
+                        px: 1.75,
+                        minHeight: 40,
+                        borderRadius: '8px',
+                        mx: 0.5,
+                        '&.Mui-selected': {
+                          backgroundColor: cv.purpleSurface,
+                          color: cv.textPrimary,
+                          '&:hover': {
+                            backgroundColor: cv.purpleSurfaceHover,
+                          },
+                        },
+                      }}
+                    >
+                      <ListItemText
+                        primary={status}
+                        primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: selected ? 600 : 500 }}
+                      />
+                      {selected ? (
+                        <CheckIcon sx={{ fontSize: 18, color: cv.brandPurple, ml: 1.5 }} />
+                      ) : null}
+                    </MenuItem>
+                  );
+                })}
+              </Menu>
+            </>
+          ) : null}
+
           {isGuestMode ? (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {(guestPermissions.download || guestPermissions.downloadProxy) && shareToken ? (
@@ -3647,83 +3857,173 @@ export default function VideoPlayerPage({
           ) : (
             <>
               {item?.id && headerPermissions.canDownload && (
-                <Tooltip
-                  title={
-                    canDownloadOriginal
-                      ? "Download original file"
-                      : "Viewer role does not have permission to download"
-                  }
-                  arrow
-                  placement="bottom"
-                >
-                  <Box sx={{ display: 'inline-flex' }}>
-                    <IconButton
-                      component={canDownloadOriginal ? 'a' : 'button'}
-                      href={canDownloadOriginal ? `/api/media/${encodeURIComponent(item.id)}/download?raw=true` : undefined}
-                      download={canDownloadOriginal ? true : undefined}
-                      disabled={!canDownloadOriginal}
-                      size="small"
-                      aria-label="Download original file"
-                      sx={{
-                        display: { xs: 'inline-flex', lg: 'none' },
-                        width: 36,
-                        height: 36,
-                        borderRadius: '10px',
-                        color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
-                        border: `1px solid ${cv.border}`,
-                        backgroundColor: cv.surface,
-                        '&:hover': canDownloadOriginal
-                          ? {
-                            backgroundColor: cv.surfaceHover,
-                            borderColor: cv.borderStrong,
-                          }
-                          : {},
-                        '&.Mui-disabled': {
-                          opacity: 0.5,
-                          color: cv.textMuted,
+                <>
+                  <Tooltip
+                    title={
+                      canDownloadOriginal
+                        ? 'Download'
+                        : 'Viewer role does not have permission to download'
+                    }
+                    arrow
+                    placement="bottom"
+                  >
+                    <Box sx={{ display: 'inline-flex' }}>
+                      <IconButton
+                        type="button"
+                        disabled={!canDownloadOriginal}
+                        size="small"
+                        aria-label="Download"
+                        aria-haspopup="menu"
+                        aria-expanded={downloadMenuOpen}
+                        aria-controls={downloadMenuOpen ? 'header-download-menu' : undefined}
+                        onClick={(e) => {
+                          if (!canDownloadOriginal) return;
+                          setDownloadMenuAnchor(e.currentTarget);
+                        }}
+                        sx={{
+                          width: 'auto',
+                          minWidth: 36,
+                          height: 36,
+                          px: 0.75,
+                          gap: 0.15,
+                          borderRadius: '10px',
+                          color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
+                          border: `1px solid ${cv.border}`,
+                          backgroundColor: cv.surface,
+                          '&:hover': canDownloadOriginal
+                            ? {
+                              backgroundColor: cv.surfaceHover,
+                              borderColor: cv.borderStrong,
+                            }
+                            : {},
+                          '&.Mui-disabled': {
+                            opacity: 0.5,
+                            color: cv.textMuted,
+                          },
+                        }}
+                      >
+                        <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
+                        <KeyboardArrowDownIcon sx={{ fontSize: 16, ml: -0.25 }} />
+                      </IconButton>
+                    </Box>
+                  </Tooltip>
+
+                  <Menu
+                    id="header-download-menu"
+                    anchorEl={downloadMenuAnchor}
+                    open={downloadMenuOpen}
+                    onClose={() => setDownloadMenuAnchor(null)}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                    transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                    slotProps={{
+                      paper: {
+                        sx: {
+                          mt: 1,
+                          minWidth: 260,
+                          borderRadius: '12px',
+                          border: `1px solid ${cv.border}`,
+                          background: cv.drawerSurface,
+                          boxShadow: cv.dropdownShadow || cv.popoverShadow,
+                          color: cv.textPrimary,
+                          py: 0.5,
                         },
+                      },
+                    }}
+                  >
+                    <MenuItem
+                      disabled={!canDownloadOriginal}
+                      onClick={() => {
+                        setDownloadMenuAnchor(null);
+                        triggerMediaDownload('original');
+                      }}
+                      sx={{
+                        fontSize: '0.875rem',
+                        py: 1.1,
+                        px: 1.75,
+                        gap: 1.25,
+                        minHeight: 44,
                       }}
                     >
-                      <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
-                    </IconButton>
-                    <Button
-                      component={canDownloadOriginal ? 'a' : 'button'}
-                      href={canDownloadOriginal ? `/api/media/${encodeURIComponent(item.id)}/download?raw=true` : undefined}
-                      download={canDownloadOriginal ? true : undefined}
-                      disabled={!canDownloadOriginal}
-                      size="small"
-                      variant="outlined"
-                      startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
-                      sx={{
-                        display: { xs: 'none', lg: 'inline-flex' },
-                        minHeight: 36,
-                        height: 36,
-                        py: 0,
-                        px: 1.5,
-                        borderRadius: '10px',
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        fontSize: '0.8125rem',
-                        letterSpacing: '0.01em',
-                        color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
-                        borderColor: cv.border,
-                        backgroundColor: cv.surface,
-                        '&:hover': canDownloadOriginal
-                          ? {
-                            backgroundColor: cv.surfaceHover,
-                            borderColor: cv.borderStrong,
-                          }
-                          : {},
-                        '&.Mui-disabled': {
-                          opacity: 0.5,
+                      <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                        <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary="Download Original"
+                        primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                      />
+                      <Typography
+                        component="span"
+                        sx={{
+                          ml: 2,
+                          fontSize: '0.75rem',
                           color: cv.textMuted,
-                          borderColor: cv.border,
-                        },
+                          fontVariantNumeric: 'tabular-nums',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {originalDownloadSizeLabel}
+                      </Typography>
+                    </MenuItem>
+                    <MenuItem
+                      disabled={!canDownloadOriginal || !canDownloadProxy}
+                      onClick={() => {
+                        setDownloadMenuAnchor(null);
+                        triggerMediaDownload('proxy');
+                      }}
+                      sx={{
+                        fontSize: '0.875rem',
+                        py: 1.1,
+                        px: 1.75,
+                        gap: 1.25,
+                        minHeight: 44,
                       }}
                     >
-                      Download Original
-                    </Button>
-                  </Box>
+                      <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                        <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary="Download Proxy"
+                        primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                      />
+                      <Typography
+                        component="span"
+                        sx={{
+                          ml: 2,
+                          fontSize: '0.75rem',
+                          color: cv.textMuted,
+                          fontVariantNumeric: 'tabular-nums',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {canDownloadProxy ? proxyDownloadSizeLabel : '—'}
+                      </Typography>
+                    </MenuItem>
+                  </Menu>
+                </>
+              )}
+
+              {item?.id && !isGuestMode && (
+                <Tooltip title="Copy asset link" arrow placement="bottom">
+                  <IconButton
+                    type="button"
+                    size="small"
+                    aria-label="Copy asset link"
+                    onClick={handleCopyAssetLink}
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: '10px',
+                      color: cv.textPrimary,
+                      border: `1px solid ${cv.border}`,
+                      backgroundColor: cv.surface,
+                      '&:hover': {
+                        backgroundColor: cv.surfaceHover,
+                        borderColor: cv.borderStrong,
+                      },
+                    }}
+                  >
+                    <ContentCopyOutlinedIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
                 </Tooltip>
               )}
 
@@ -3804,118 +4104,6 @@ export default function VideoPlayerPage({
                   </Tooltip>
                 );
               })()}
-
-              <Tooltip title="More options" arrow placement="bottom">
-                <IconButton
-                  type="button"
-                  size="small"
-                  aria-label="More actions"
-                  aria-controls={Boolean(moreMenuAnchor) ? 'header-more-menu' : undefined}
-                  aria-haspopup="true"
-                  aria-expanded={Boolean(moreMenuAnchor)}
-                  onClick={(e) => setMoreMenuAnchor(e.currentTarget)}
-                  sx={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: '10px',
-                    color: cv.textPrimary,
-                    border: `1px solid ${cv.border}`,
-                    backgroundColor: cv.surface,
-                    '&:hover': {
-                      backgroundColor: cv.surfaceHover,
-                      borderColor: cv.borderStrong,
-                    },
-                  }}
-                >
-                  <MoreVertIcon sx={{ fontSize: 18 }} />
-                </IconButton>
-              </Tooltip>
-
-              <Menu
-                id="header-more-menu"
-                anchorEl={moreMenuAnchor}
-                open={Boolean(moreMenuAnchor)}
-                onClose={() => setMoreMenuAnchor(null)}
-                slotProps={{
-                  paper: {
-                    sx: {
-                      borderRadius: '12px',
-                      backgroundColor: cv.surface,
-                      border: `1px solid ${cv.border}`,
-                      boxShadow: cv.dropdownShadow,
-                      color: cv.textPrimary,
-                      minWidth: 190,
-                      py: 0.5,
-                    },
-                  },
-                }}
-                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-              >
-                {item?.id && headerPermissions.canDownload && (
-                  <MenuItem
-                    disabled={!canDownloadOriginal}
-                    onClick={() => {
-                      setMoreMenuAnchor(null);
-                      if (canDownloadOriginal && item?.id) {
-                        const a = document.createElement('a');
-                        a.href = `/api/media/${encodeURIComponent(item.id)}/download?raw=true`;
-                        a.download = '';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                      }
-                    }}
-                    sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
-                      <FileDownloadOutlinedIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText primary="Download Original" />
-                  </MenuItem>
-                )}
-
-                <MenuItem
-                  onClick={() => {
-                    setMoreMenuAnchor(null);
-                    handleCopyAssetLink();
-                  }}
-                  sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
-                >
-                  <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
-                    <ContentCopyOutlinedIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText primary="Copy Asset Link" />
-                </MenuItem>
-
-                {headerPermissions.canViewTechnicalDetails && (
-                  <MenuItem
-                    onClick={() => {
-                      setMoreMenuAnchor(null);
-                      handleOpenTechnicalDetails();
-                    }}
-                    sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
-                      <InfoOutlinedIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText primary="Technical Details" />
-                  </MenuItem>
-                )}
-
-                <MenuItem
-                  onClick={() => {
-                    setMoreMenuAnchor(null);
-                    setKeyboardShortcutsOpen(true);
-                  }}
-                  sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
-                >
-                  <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
-                    <KeyboardOutlinedIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText primary="Keyboard Shortcuts" />
-                </MenuItem>
-              </Menu>
             </>
           )}
 
@@ -4663,17 +4851,6 @@ export default function VideoPlayerPage({
           onDeleteAnnotationGroup={handleDeleteAnnotationGroup}
           onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
           onAddCollaborator={handleAddCollaboratorForGroup}
-          canDownload={headerPermissions.canDownload && canDownloadOriginal}
-          onDownloadOriginal={() => {
-            if (item?.id && canDownloadOriginal) {
-              const a = document.createElement('a');
-              a.href = `/api/media/${encodeURIComponent(item.id)}/download?raw=true`;
-              a.download = '';
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-            }
-          }}
         />
       </Box>
 

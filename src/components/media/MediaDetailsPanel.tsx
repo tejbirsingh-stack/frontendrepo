@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
-  Button,
   Chip,
   Typography,
 } from '@mui/material';
@@ -10,7 +9,6 @@ import {
   LayersOutlined as LayersOutlinedIcon,
   LocalOfferOutlined as LocalOfferOutlinedIcon,
   MovieOutlined as MovieOutlinedIcon,
-  FileDownloadOutlined as FileDownloadOutlinedIcon,
 } from '@mui/icons-material';
 import type { MediaItem } from '../../data/mockMedia';
 import { formatFileSize } from '../../utils/formatFileSize';
@@ -84,8 +82,6 @@ interface MediaDetailsPanelProps {
   onTagsChange: (tags: string[]) => void;
   activeSection?: MediaDetailsSection;
   onSectionChange?: (section: MediaDetailsSection) => void;
-  onDownloadOriginal?: () => void;
-  canDownload?: boolean;
 }
 
 const sectionCardSx = {
@@ -282,8 +278,6 @@ export default function MediaDetailsPanel({
   onTagsChange,
   activeSection: controlledSection,
   onSectionChange,
-  onDownloadOriginal,
-  canDownload = true,
 }: MediaDetailsPanelProps) {
   const { managedTags, tagScopeColors } = useDashboard();
   const [internalSection, setInternalSection] = useState<MediaDetailsSection>('file');
@@ -402,44 +396,6 @@ export default function MediaDetailsPanel({
             value={mediaItem.summary?.trim() || (mediaItem.customMetadata as any)?.summary || (technicalDetails as any)?.summary}
             multiline
           />
-          {canDownload && (
-            <Box sx={{ px: 1.5, py: 1.5, borderTop: `1px solid ${cv.dividerSubtle}` }}>
-              <Button
-                variant="contained"
-                fullWidth
-                startIcon={<FileDownloadOutlinedIcon />}
-                onClick={() => {
-                  if (onDownloadOriginal) {
-                    onDownloadOriginal();
-                  } else if (mediaItem?.id) {
-                    const downloadUrl = `/api/media/${encodeURIComponent(mediaItem.id)}/download?raw=true`;
-                    const a = document.createElement('a');
-                    a.href = downloadUrl;
-                    a.download = '';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                  }
-                }}
-                sx={{
-                  py: 1.1,
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  fontSize: '0.875rem',
-                  textTransform: 'none',
-                  backgroundColor: cv.purpleAccent || '#9333ea',
-                  color: '#ffffff',
-                  boxShadow: '0 4px 12px rgba(147, 51, 234, 0.25)',
-                  '&:hover': {
-                    backgroundColor: cv.purpleHover || '#7e22ce',
-                    boxShadow: '0 6px 16px rgba(147, 51, 234, 0.35)',
-                  },
-                }}
-              >
-                Download Original File
-              </Button>
-            </Box>
-          )}
         </DetailsSection>
       )}
 

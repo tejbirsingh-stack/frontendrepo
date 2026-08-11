@@ -45,16 +45,16 @@ export default function FloatingUploadProgressWidget() {
   const isAllComplete = totalFiles > 0 && completedCount === totalFiles;
   const hasFailed = queue.some((item) => item.status === 'failed');
 
-  // Auto hide 6 seconds after all complete
+  // Auto hide 4 seconds after all complete
   useEffect(() => {
-    if (isAllComplete && !hasFailed) {
+    if (isAllComplete) {
       const timer = window.setTimeout(() => {
         dismissWidget();
-      }, 6000);
+      }, 4000);
       setAutoHideTimer(timer);
       return () => window.clearTimeout(timer);
     }
-  }, [isAllComplete, hasFailed, dismissWidget]);
+  }, [isAllComplete, dismissWidget]);
 
   if (!isWidgetVisible || totalFiles === 0) {
     return null;

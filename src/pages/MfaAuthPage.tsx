@@ -11,7 +11,7 @@ import {
 import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
-import NoahLogo from '../components/NoahLogo';
+import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
 import { useAuth } from '../auth/AuthContext';
 
 export default function MfaAuthPage() {
@@ -77,18 +77,21 @@ export default function MfaAuthPage() {
           position: 'relative',
           zIndex: 1,
           width: '100%',
-          maxWidth: 440,
+          maxWidth: 640,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
         }}
       >
-        <NoahLogo />
+        <Box sx={AUTH_LOGO_PARENT_SX}>
+          <NoahLogo sx={AUTH_LOGO_SX} />
+        </Box>
 
         <GlassCard
           glow
           sx={{
             width: '100%',
+            maxWidth: 440,
           }}
         >
           <Box

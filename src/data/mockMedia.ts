@@ -43,6 +43,9 @@ export interface MediaItem {
   originallyCreatedAt?: string;
   compressionStatus?: string;
   customMetadata?: Record<string, unknown>;
+  /** Proxy/compressed file size when available */
+  proxySizeBytes?: number;
+  hasProxy?: boolean;
   status?: 'active' | 'duplicate' | 'archived' | 'trash';
   isProject?: boolean;
 }

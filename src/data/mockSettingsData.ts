@@ -305,12 +305,50 @@ export const DEFAULT_BRANDING_SETTINGS: BrandingSettingsData = {
 };
 
 export const PROFILE_TIMEZONE_OPTIONS = [
-  '(UTC-08:00) America / Los Angeles',
-  '(UTC-05:00) America / New York',
-  '(UTC+00:00) Europe / London',
-  '(UTC+05:30) Asia / Kolkata',
-  '(UTC+09:00) Asia / Tokyo',
+  { value: 'America/Los_Angeles', label: '(UTC-08:00) America / Los Angeles' },
+  { value: 'America/New_York', label: '(UTC-05:00) America / New York' },
+  { value: 'Europe/London', label: '(UTC+00:00) Europe / London' },
+  { value: 'UTC', label: '(UTC+00:00) UTC' },
+  { value: 'Asia/Kolkata', label: '(UTC+05:30) Asia / Kolkata' },
+  { value: 'Asia/Tokyo', label: '(UTC+09:00) Asia / Tokyo' },
 ] as const;
+
+export type ProfileTimezoneValue = (typeof PROFILE_TIMEZONE_OPTIONS)[number]['value'];
+
+const PROFILE_TIMEZONE_VALUES = new Set<string>(
+  PROFILE_TIMEZONE_OPTIONS.map((option) => option.value),
+);
+
+/** Map API/legacy timezone strings onto a Select option value MUI can render. */
+export function resolveProfileTimezoneOption(timezone?: string | null): ProfileTimezoneValue {
+  if (!timezone) return 'UTC';
+
+  if (PROFILE_TIMEZONE_VALUES.has(timezone)) {
+    return timezone as ProfileTimezoneValue;
+  }
+
+  const byLabel = PROFILE_TIMEZONE_OPTIONS.find((option) => option.label === timezone);
+  if (byLabel) return byLabel.value;
+
+  // Legacy display labels: "(UTC+00:00) Europe / London" → Europe/London
+  if (timezone.includes(') ')) {
+    const parsed = timezone.split(') ')[1]?.replace(/\s*\/\s*/g, '/').trim();
+    if (parsed && PROFILE_TIMEZONE_VALUES.has(parsed)) {
+      return parsed as ProfileTimezoneValue;
+    }
+  }
+
+  // Common aliases
+  if (timezone === 'Asia/Calcutta') return 'Asia/Kolkata';
+  if (timezone === 'US/Pacific' || timezone === 'PST' || timezone === 'PDT') {
+    return 'America/Los_Angeles';
+  }
+  if (timezone === 'US/Eastern' || timezone === 'EST' || timezone === 'EDT') {
+    return 'America/New_York';
+  }
+
+  return 'UTC';
+}
 
 export interface PersonalProfileSettings {
   fullName: string;
@@ -320,7 +358,7 @@ export interface PersonalProfileSettings {
 
 export const MOCK_PERSONAL_PROFILE: PersonalProfileSettings = {
   fullName: CURRENT_USER.name,
-  timezone: '(UTC+05:30) Asia / Kolkata',
+  timezone: 'Asia/Kolkata',
   avatarUrl: CURRENT_USER.avatarUrl,
 };
 

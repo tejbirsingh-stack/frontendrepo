@@ -44,6 +44,16 @@
   --noah-blue-selection-hover: #{rgba($noah-royal-purple, 0.06)};
   --noah-blue-drag-surface: #{rgba($noah-royal-purple, 0.08)};
   --noah-blue-accent-surface: #{rgba($noah-royal-purple, 0.1)};
+  // Blue/AI chip text was dark-theme pastel (#c9a0e8 / #e4c4f7) — unreadable on light surfaces
+  --noah-palette-blue-light: #{$noah-royal-purple-dark};
+  --noah-blue-200: #{$noah-royal-purple-dark};
+  --noah-blue-glow-strong: #{rgba($noah-royal-purple, 0.16)};
+  --noah-blue-glow-18: #{rgba($noah-royal-purple, 0.1)};
+  --noah-blue-glow-24: #{rgba($noah-royal-purple, 0.14)};
+  --noah-blue-glow-30: #{rgba($noah-royal-purple, 0.18)};
+  --noah-blue-glow-35: #{rgba($noah-royal-purple, 0.22)};
+  --noah-blue-border-strong: #{rgba($noah-royal-purple, 0.45)};
+  --noah-blue-border-soft: #{rgba($noah-royal-purple, 0.32)};
 
   // Purple selection — readable text on light tinted surfaces
   --noah-purple-light: #{$noah-royal-purple-dark};

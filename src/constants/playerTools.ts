@@ -2,10 +2,8 @@ import type { SvgIconComponent } from '@mui/icons-material';
 import AspectRatioOutlinedIcon from '@mui/icons-material/AspectRatioOutlined';
 import ClosedCaptionOutlinedIcon from '@mui/icons-material/ClosedCaptionOutlined';
 import CompareOutlinedIcon from '@mui/icons-material/CompareOutlined';
-import FirstPageOutlinedIcon from '@mui/icons-material/FirstPageOutlined';
 import FlipOutlinedIcon from '@mui/icons-material/FlipOutlined';
 import GraphicEqOutlinedIcon from '@mui/icons-material/GraphicEqOutlined';
-import LastPageOutlinedIcon from '@mui/icons-material/LastPageOutlined';
 import LoopOutlinedIcon from '@mui/icons-material/LoopOutlined';
 import RotateLeftOutlinedIcon from '@mui/icons-material/RotateLeftOutlined';
 import RotateRightOutlinedIcon from '@mui/icons-material/RotateRightOutlined';
@@ -28,8 +26,6 @@ export interface PlayerToolDefinition {
 export const PLAYER_TOOL_SECTIONS: PlayerToolDefinition[][] = [
   [{ id: 'audio-meter', label: 'Audio meter', icon: GraphicEqOutlinedIcon, shortcut: 'M' }],
   [
-    { id: 'set-in-point', label: 'Set in point', icon: FirstPageOutlinedIcon, shortcut: 'I' },
-    { id: 'set-out-point', label: 'Set out point', icon: LastPageOutlinedIcon, shortcut: 'O' },
     { id: 'read-timecode', label: 'Read timecode from file', icon: TimerOutlinedIcon, shortcut: 'G' },
     { id: 'toggle-range', label: 'Toggle range', icon: UnfoldMoreDoubleOutlinedIcon, shortcut: 'R' },
     { id: 'loop', label: 'Loop', icon: LoopOutlinedIcon, shortcut: 'L' },

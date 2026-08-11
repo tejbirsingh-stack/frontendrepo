@@ -43,6 +43,7 @@ import { SettingsTableContainer } from './SettingsContentLayout';
 import TruncatedText from '../TruncatedText';
 import { ROLE_IDS, USER_ROLES, type UserRole } from '../../constants/userRoles';
 import { fetchRoles, registerRole, fetchOrganizationUsers, updateOrganizationUser, bulkUpdateOrganizationUsersRequest } from '../../api/auth.service';
+import { getUsageSummary } from '../../api/usage.service';
 import { useAuth } from '../../auth/AuthContext';
 import type { RoleItem } from '../../api/types';
 import {
@@ -499,9 +500,11 @@ function UserGroupDialog({
 function PeopleTab({
   users,
   setUsers,
+  membersTotal = 5,
 }: {
   users: SettingsUserRow[];
   setUsers: Dispatch<SetStateAction<SettingsUserRow[]>>;
+  membersTotal?: number;
 }) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
@@ -620,7 +623,13 @@ function PeopleTab({
               ])
             );
           }}
-          onAdd={() => setAddOpen(true)}
+          onAdd={() => {
+            if (users.length >= membersTotal) {
+              toast.error('All member seats are in use. Upgrade your plan to invite more members.');
+              return;
+            }
+            setAddOpen(true);
+          }}
           addLabel="New user"
           exportDisabled={user?.role === 'Editor'}
           addDisabled={user?.role === 'Editor'}
@@ -980,6 +989,21 @@ export default function UserAdminSettingsSection() {
   const [activeTab, setActiveTab] = useState(0);
   const [users, setUsers] = useState<SettingsUserRow[]>([]);
   const [groups, setGroups] = useState<UserGroup[]>([]);
+  const [membersTotal, setMembersTotal] = useState<number>(5);
+
+  useEffect(() => {
+    let mounted = true;
+    getUsageSummary()
+      .then((summary) => {
+        if (mounted && summary && typeof summary.membersTotal === 'number') {
+          setMembersTotal(summary.membersTotal);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -1100,7 +1124,7 @@ export default function UserAdminSettingsSection() {
         </Tabs>
 
         {activeTab === 0 ? (
-          <PeopleTab users={users} setUsers={setUsers} />
+          <PeopleTab users={users} setUsers={setUsers} membersTotal={membersTotal} />
         ) : (
           <UserGroupsTab users={users} groups={groups} setGroups={setGroups} />
         )}

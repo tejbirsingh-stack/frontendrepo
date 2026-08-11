@@ -15,6 +15,7 @@ import MediaUploadDetailsModal from '../components/dashboard/MediaUploadDetailsM
 import FloatingUploadProgressWidget from '../components/dashboard/FloatingUploadProgressWidget';
 import { SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
 import { DashboardProvider, useDashboard } from '../context/DashboardContext';
+import { useUploadManager } from '../context/UploadManagerContext';
 import type { MediaUploadDetails } from '../types/mediaUpload';
 
 function DashboardLayoutContent() {
@@ -26,11 +27,13 @@ function DashboardLayoutContent() {
     theme.breakpoints.up(SIDEBAR_DESKTOP_BREAKPOINT),
   );
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const { enqueueFiles } = useUploadManager();
   const {
     pendingMediaUpload,
     pendingMediaUploadCount,
-    completeMediaUpload,
+    activeWorkspaceId,
     cancelMediaUpload,
+    popPendingMediaUpload,
   } = useDashboard();
 
   useEffect(() => {
@@ -39,16 +42,49 @@ function DashboardLayoutContent() {
 
   const handleCompleteMediaUpload = async (
     details: MediaUploadDetails,
-    onProgress?: (progress: { loaded: number; total: number }) => void,
   ) => {
-    const parentFolderId = pendingMediaUpload?.parentFolderId ?? null;
-    const linkedProjectId = pendingMediaUpload?.linkedProjectId ?? null;
-    const resolvedFolderId = await completeMediaUpload(details, onProgress);
+    if (!pendingMediaUpload) return;
+
+    const parentFolderId = pendingMediaUpload.parentFolderId ?? null;
+    const linkedProjectId = pendingMediaUpload.linkedProjectId ?? null;
+
+    let durationSecs: number | undefined;
+    if (details.duration) {
+      const parts = details.duration.split(':').map(Number);
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        durationSecs = parts[0] * 60 + parts[1];
+      } else if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+        durationSecs = parts[0] * 3600 + parts[1] * 60 + parts[2];
+      } else if (!isNaN(Number(details.duration))) {
+        durationSecs = Number(details.duration);
+      }
+    }
+
+    const targetFolderId = details.folderId || parentFolderId || undefined;
+
+    // Enqueue file for background chunked upload & floating progress widget
+    await enqueueFiles([pendingMediaUpload.file], {
+      title: details.title.trim(),
+      summary: details.summary?.trim() || undefined,
+      thumbnail: details.thumbnail || undefined,
+      folderId: targetFolderId,
+      tagIds: details.tagIds,
+      visibility: details.visibility,
+      durationSeconds: durationSecs,
+      ownerType: parentFolderId ? 'FOLDER' : 'WORKSPACE',
+      ownerId: parentFolderId || activeWorkspaceId || undefined,
+      linkedProjectId: linkedProjectId || undefined,
+      parentFolderId: parentFolderId,
+    });
+
+    // Close/advance current modal item
+    popPendingMediaUpload();
+
     if (pendingMediaUploadCount <= 1) {
       if (linkedProjectId) {
         navigate(`/home/project/${linkedProjectId}`);
-      } else if (parentFolderId || resolvedFolderId) {
-        navigate(getMediaFolderPath((parentFolderId || resolvedFolderId) as string));
+      } else if (parentFolderId || details.folderId) {
+        navigate(getMediaFolderPath((parentFolderId || details.folderId) as string));
       } else {
         navigate('/home');
       }

@@ -22,7 +22,7 @@ import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
-import NoahLogo from '../components/NoahLogo';
+import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
 import ChoosePlanScreen from '../components/onboarding/ChoosePlanScreen';
 import { useAuth } from '../auth/AuthContext';
 import { persistSession } from '../auth/authStorage';
@@ -34,6 +34,7 @@ import {
   sendSignupOtpRequest,
   verifySignupOtpRequest,
   completeSignupRequest,
+  fetchCurrentUserRequest,
   mapAuthUserDtoToSessionUser,
 } from '../api/auth.service';
 import { useUploadManager } from '../context/UploadManagerContext';
@@ -407,20 +408,29 @@ export default function SignUpPage() {
       if (activeToken) {
         localStorage.setItem('accessToken', activeToken);
         localStorage.setItem('token', activeToken);
+
+        const mappedUser = mapAuthUserDtoToSessionUser(response?.user || response);
+        setSession(activeToken, mappedUser);
+        persistSession(activeToken, mappedUser);
+
+        try {
+          const currentUserDto = await fetchCurrentUserRequest();
+          if (currentUserDto) {
+            const updatedUser = mapAuthUserDtoToSessionUser(currentUserDto);
+            setSession(activeToken, updatedUser);
+            persistSession(activeToken, updatedUser);
+          }
+        } catch (fetchUserErr) {
+          console.warn('Failed to fetch full user profile after signup:', fetchUserErr);
+        }
       }
 
       if (uploadedFiles && uploadedFiles.length > 0) {
-        const targetWorkspaceId = response?.workspace?.id || response?.user?.workspace?.id;
+        const targetWorkspaceId = response?.workspace?.id || response?.user?.workspace?.id || response?.user?.orgId;
         void enqueueFiles(uploadedFiles, {
           ownerType: 'WORKSPACE',
           ownerId: targetWorkspaceId,
         });
-      }
-
-      if (activeToken) {
-        const mappedUser = mapAuthUserDtoToSessionUser(response?.user || response);
-        setSession(activeToken, mappedUser);
-        persistSession(activeToken, mappedUser);
       }
 
       navigate('/home', { replace: true });
@@ -730,13 +740,14 @@ export default function SignUpPage() {
           }}
         >
           <Box>
-            <NoahLogo
-              align="left"
-              width={{ xs: 140, sm: 180 }}
-              animated={false}
-              showGlow={false}
-              sx={{ mb: { xs: 3, md: 4 } }}
-            />
+            <Box sx={{ ...AUTH_LOGO_PARENT_SX, justifyContent: 'flex-start', mb: { xs: 3, md: 4 } }}>
+              <NoahLogo
+                align="left"
+                animated={false}
+                showGlow={false}
+                sx={AUTH_LOGO_SX}
+              />
+            </Box>
             <Typography
               sx={{
                 color: cv.textPrimary,
@@ -811,15 +822,17 @@ export default function SignUpPage() {
           position: 'relative',
           zIndex: 1,
           width: '100%',
-          maxWidth: phase === 'usage' || phase === 'upload' ? 560 : 440,
+          maxWidth: 640,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
         }}
       >
-        <NoahLogo />
+        <Box sx={AUTH_LOGO_PARENT_SX}>
+          <NoahLogo sx={AUTH_LOGO_SX} />
+        </Box>
 
-        <GlassCard glow sx={{ width: '100%' }}>
+        <GlassCard glow sx={{ width: '100%', maxWidth: phase === 'usage' || phase === 'upload' ? 560 : 440 }}>
           {phase === 'email' ? (
             <Box
               component="form"

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cv } from '../../theme/cssVars';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -26,6 +26,7 @@ import {
 import { fetchNotifications } from '../../api/notification.service';
 import { useGlobalSearchKeyboard } from '../../hooks/useGlobalSearchKeyboard';
 import { useAuth } from '../../auth/AuthContext';
+import { getDynamicPlanDetails } from '../../utils/planHelper';
 import { env } from '../../config/env';
 
 export default function Header({
@@ -38,6 +39,8 @@ export default function Header({
   const navigate = useNavigate();
   const location = useLocation();
   const { clearSession, user } = useAuth();
+  const planDetails = useMemo(() => getDynamicPlanDetails(user), [user]);
+  const isFreePlan = planDetails.planId === 'free';
   const displayName = user?.name ? user.name.split(' ')[0] : 'User';
   const rawRole = user?.role || 'Member';
   const displayRole = rawRole.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -280,7 +283,10 @@ export default function Header({
       </Tooltip>
 
       <Box sx={{ display: { xs: 'none', sm: 'flex' }, flexShrink: 0 }}>
-        <PlanBadge label={displayPlan} />
+        <PlanBadge
+          label={displayPlan}
+          expiryText={isFreePlan ? planDetails.expiryDateFormatted : null}
+        />
       </Box>
 
       <Box

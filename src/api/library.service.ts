@@ -19,6 +19,8 @@ export interface LibraryListParams {
   dateTo?: string;
   tagIds?: string[];
   aiTags?: string[];
+  /** File review status filter; `all` or a FileReviewStatus value */
+  reviewStatus?: string;
   sortBy?: 'date' | 'name' | 'size' | 'type';
   sortOrder?: 'asc' | 'desc';
 }

@@ -7,29 +7,55 @@ export function progressBarColor(level: UsageWarningLevel): string {
   return cv.brandGradient;
 }
 
-export function warningCopy(summary: UsageSummaryResponse): { title: string; body: string } | null {
-  if (summary.warningLevel === 'ok') return null;
+export interface BannerItem {
+  id: string;
+  title: string;
+  body: string;
+  severity: 'error' | 'warning';
+}
 
+export function warningBanners(summary: UsageSummaryResponse): BannerItem[] {
+  const banners: BannerItem[] = [];
+
+  // 1. Storage warnings/limits
   if (summary.storageWarningLevel === 'exceeded') {
-    return {
+    banners.push({
+      id: 'storage-exceeded',
       title: 'Storage limit reached',
       body: 'Uploads are blocked until you free space or upgrade your plan.',
-    };
-  }
-  if (summary.seatsWarningLevel === 'exceeded') {
-    return {
-      title: 'Member seats full',
-      body: `All ${summary.membersTotal} seats are in use. Upgrade your plan to invite more members.`,
-    };
-  }
-  if (summary.storageWarningLevel === 'warning') {
-    return {
+      severity: 'error',
+    });
+  } else if (summary.storageWarningLevel === 'warning') {
+    banners.push({
+      id: 'storage-warning',
       title: 'Approaching storage limit',
       body: `You have used ${Math.round(summary.storageUsedPercent)}% of your storage. Consider upgrading soon.`,
-    };
+      severity: 'warning',
+    });
   }
-  return {
-    title: 'Approaching seat limit',
-    body: `${summary.membersUsed} of ${summary.membersTotal} seats used. Adding more members may require a plan upgrade.`,
-  };
+
+  // 2. Member seats warnings/limits
+  if (summary.seatsWarningLevel === 'exceeded') {
+    banners.push({
+      id: 'seats-exceeded',
+      title: 'Member seats full',
+      body: `All ${summary.membersTotal} seats are in use. Upgrade your plan to invite more members.`,
+      severity: 'error',
+    });
+  } else if (summary.seatsWarningLevel === 'warning') {
+    const seatsPct = Math.round(summary.seatsUsedPercent ?? ((summary.membersUsed / Math.max(summary.membersTotal, 1)) * 100));
+    banners.push({
+      id: 'seats-warning',
+      title: 'Approaching member seat limit',
+      body: `${summary.membersUsed} of ${summary.membersTotal} seats used (${seatsPct}%). Adding more members will require a plan upgrade.`,
+      severity: 'warning',
+    });
+  }
+
+  return banners;
+}
+
+export function warningCopy(summary: UsageSummaryResponse): { title: string; body: string } | null {
+  const banners = warningBanners(summary);
+  return banners[0] ? { title: banners[0].title, body: banners[0].body } : null;
 }
