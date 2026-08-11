@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Avatar,
@@ -6,51 +6,132 @@ import {
   Divider,
   List,
   ListItemButton,
+  ListItemIcon,
   ListItemText,
   ListSubheader,
   Menu,
   MenuItem,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
+import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
+import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
+import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
+import WorkspacesOutlinedIcon from '@mui/icons-material/WorkspacesOutlined';
+import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
+import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
+import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
+import FolderCopyOutlinedIcon from '@mui/icons-material/FolderCopyOutlined';
 import NoahLogo from '../../components/NoahLogo';
 import { DASHBOARD_TOP_BAR_HEIGHT } from '../../constants/layout';
 import { cv } from '../../theme/cssVars';
 import { usePlatformAuth } from '../auth/PlatformAuthContext';
 
-const SIDEBAR_WIDTH = 240;
+const SIDEBAR_WIDTH = 264;
 const HEADER_HEIGHT = DASHBOARD_TOP_BAR_HEIGHT;
 
-type NavItem = { to: string; label: string; end?: boolean };
+type NavItem = { to: string; label: string; end?: boolean; icon: ReactNode; hint?: string };
 type NavSection = { title: string; items: NavItem[] };
+
+const iconSx = { fontSize: 18 } as const;
 
 const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Overview',
-    items: [{ to: '/platform', label: 'Dashboard', end: true }],
+    items: [
+      {
+        to: '/platform',
+        label: 'Dashboard',
+        end: true,
+        icon: <SpaceDashboardOutlinedIcon sx={iconSx} />,
+        hint: 'Platform command center',
+      },
+    ],
+  },
+  {
+    title: 'Tenant admin',
+    items: [
+      {
+        to: '/platform/organizations',
+        label: 'Organizations',
+        icon: <BusinessOutlinedIcon sx={iconSx} />,
+        hint: 'Manage tenant organizations',
+      },
+      {
+        to: '/platform/users',
+        label: 'Users & roles',
+        icon: <PeopleAltOutlinedIcon sx={iconSx} />,
+        hint: 'People directory and roles',
+      },
+      {
+        to: '/platform/workspaces',
+        label: 'Workspaces',
+        icon: <WorkspacesOutlinedIcon sx={iconSx} />,
+        hint: 'Workspaces and projects',
+      },
+    ],
   },
   {
     title: 'Commercial',
     items: [
-      { to: '/platform/organizations', label: 'Organizations' },
-      { to: '/platform/plans', label: 'Plans' },
-      { to: '/platform/billing', label: 'Billing' },
-      { to: '/platform/usage', label: 'Usage' },
+      {
+        to: '/platform/plans',
+        label: 'Plans',
+        icon: <LocalOfferOutlinedIcon sx={iconSx} />,
+        hint: 'Plan catalog',
+      },
+      {
+        to: '/platform/billing',
+        label: 'Billing',
+        icon: <ReceiptLongOutlinedIcon sx={iconSx} />,
+        hint: 'Subscriptions and MRR',
+      },
+      {
+        to: '/platform/usage',
+        label: 'Usage',
+        icon: <BarChartOutlinedIcon sx={iconSx} />,
+        hint: 'Seats, storage, and quotas',
+      },
     ],
   },
   {
     title: 'Operations',
     items: [
-      { to: '/platform/moderation', label: 'Moderation' },
-      { to: '/platform/media', label: 'Media matrix' },
-      { to: '/platform/activity', label: 'Activity' },
-      { to: '/platform/reporting', label: 'Reporting' },
+      {
+        to: '/platform/activity',
+        label: 'Activity',
+        icon: <HistoryOutlinedIcon sx={iconSx} />,
+        hint: 'Audit trail',
+      },
+      {
+        to: '/platform/reporting',
+        label: 'Reporting',
+        icon: <AssessmentOutlinedIcon sx={iconSx} />,
+        hint: 'Filters and CSV exports',
+      },
     ],
   },
   {
     title: 'Website',
-    items: [{ to: '/platform/landing', label: 'Landing page' }],
+    items: [
+      {
+        to: '/platform/landing',
+        label: 'Landing page',
+        icon: <LanguageOutlinedIcon sx={iconSx} />,
+        hint: 'Public marketing CMS',
+      },
+      {
+        to: '/platform/default-content',
+        label: 'Default content',
+        icon: <FolderCopyOutlinedIcon sx={iconSx} />,
+        hint: 'Starter files for new users',
+      },
+    ],
   },
 ];
 
@@ -97,25 +178,26 @@ export default function PlatformLayout() {
           width: SIDEBAR_WIDTH,
           flexShrink: 0,
           borderRight: `1px solid ${cv.border}`,
-          background: cv.sidebarSurface,
+          background: `linear-gradient(180deg, ${cv.sidebarSurface} 0%, ${cv.bg} 100%)`,
           display: 'flex',
           flexDirection: 'column',
           position: 'sticky',
           top: 0,
           height: '100vh',
-          overflow: 'auto',
+          overflow: 'hidden',
         }}
       >
         <Box
           sx={{
             height: HEADER_HEIGHT,
             minHeight: HEADER_HEIGHT,
-            px: 2,
+            px: 2.25,
             display: 'flex',
             alignItems: 'center',
             borderBottom: `1px solid ${cv.border}`,
             flexShrink: 0,
             overflow: 'hidden',
+            background: cv.headerBackground,
           }}
         >
           <NoahLogo
@@ -130,20 +212,33 @@ export default function PlatformLayout() {
           />
         </Box>
 
-        <Box sx={{ px: 2, pt: 2, pb: 1 }}>
-          <Typography
+        <Box sx={{ px: 2.25, pt: 2, pb: 1.5 }}>
+          <Box
             sx={{
-              fontSize: '0.7rem',
-              color: cv.brandOrchid,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
+              px: 1.25,
+              py: 1.1,
+              borderRadius: '6px',
+              border: `1px solid ${cv.purpleChipBorder}`,
+              background: cv.purpleSurface,
             }}
           >
-            PLATFORM ADMIN
-          </Typography>
+            <Typography
+              sx={{
+                fontSize: '0.65rem',
+                color: cv.brandOrchid,
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+              }}
+            >
+              PLATFORM ADMIN
+            </Typography>
+            <Typography sx={{ fontSize: '0.7rem', color: cv.textMuted, mt: 0.35, lineHeight: 1.35 }}>
+              Global console for Super Admin & Admin
+            </Typography>
+          </Box>
         </Box>
 
-        <Box sx={{ flex: 1, px: 1.25, pb: 2, pt: 0, overflow: 'auto' }}>
+        <Box sx={{ flex: 1, px: 1.5, pb: 2, pt: 0, overflow: 'auto' }}>
           {NAV_SECTIONS.map((section) => (
             <List
               key={section.title}
@@ -153,46 +248,97 @@ export default function PlatformLayout() {
                 <ListSubheader
                   disableSticky
                   sx={{
-                    px: 1.25,
-                    py: 0.75,
-                    mt: section.title === 'Overview' ? 0 : 0.75,
+                    px: 1.5,
+                    py: 1,
+                    mt: section.title === 'Overview' ? 0 : 1,
                     lineHeight: 1.2,
                     background: 'transparent',
                     color: cv.textMuted,
                     fontSize: '0.65rem',
                     fontWeight: 700,
-                    letterSpacing: '0.08em',
+                    letterSpacing: '0.1em',
                     textTransform: 'uppercase',
                   }}
                 >
                   {section.title}
                 </ListSubheader>
               }
-              sx={{ mb: 0.5 }}
+              sx={{ mb: 0.25 }}
             >
               {section.items.map((item) => (
-                <ListItemButton
+                <Tooltip
                   key={item.to}
-                  component={NavLink}
-                  to={item.to}
-                  end={item.end}
-                  sx={{
-                    borderRadius: 1.5,
-                    mb: 0.25,
-                    '&.active': {
-                      background: cv.purpleSurface,
-                      color: cv.textPrimary,
-                    },
-                  }}
+                  title={item.hint || item.label}
+                  placement="right"
+                  enterDelay={500}
+                  arrow
                 >
-                  <ListItemText
-                    primary={item.label}
-                    primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
-                  />
-                </ListItemButton>
+                  <ListItemButton
+                    component={NavLink}
+                    to={item.to}
+                    end={item.end}
+                    sx={{
+                      borderRadius: '6px',
+                      mb: 0.35,
+                      px: 1.25,
+                      py: 0.85,
+                      gap: 0.5,
+                      position: 'relative',
+                      color: cv.textSecondary,
+                      transition: 'background 0.15s ease, color 0.15s ease',
+                      '&:hover': {
+                        background: cv.surfaceHover,
+                        color: cv.textPrimary,
+                      },
+                      '&.active': {
+                        background: cv.purpleSelection,
+                        color: cv.textPrimary,
+                        boxShadow: `inset 3px 0 0 ${cv.brandOrchid}`,
+                        '& .MuiListItemIcon-root': {
+                          color: cv.brandOrchid,
+                        },
+                      },
+                      '&:focus-visible': {
+                        outline: `2px solid ${cv.brandOrchid}`,
+                        outlineOffset: 1,
+                      },
+                    }}
+                  >
+                    <ListItemIcon
+                      sx={{
+                        minWidth: 34,
+                        color: 'inherit',
+                        opacity: 0.9,
+                      }}
+                    >
+                      {item.icon}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.label}
+                      primaryTypographyProps={{
+                        fontSize: '0.875rem',
+                        fontWeight: 500,
+                        letterSpacing: '-0.01em',
+                      }}
+                    />
+                  </ListItemButton>
+                </Tooltip>
               ))}
             </List>
           ))}
+        </Box>
+
+        <Box
+          sx={{
+            px: 2,
+            py: 1.75,
+            borderTop: `1px solid ${cv.border}`,
+            flexShrink: 0,
+          }}
+        >
+          <Typography sx={{ fontSize: '0.65rem', color: cv.textMuted, letterSpacing: '0.04em' }}>
+            NOAH Cloud · Global Admin
+          </Typography>
         </Box>
       </Box>
 
@@ -209,15 +355,16 @@ export default function PlatformLayout() {
             gap: 2,
             borderBottom: `1px solid ${cv.border}`,
             background: cv.headerBackground,
+            backdropFilter: 'blur(12px)',
             zIndex: 2,
           }}
         >
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontWeight: 700, fontSize: '1rem', lineHeight: 1.2 }}>
-              NOAH Platform Console
+            <Typography sx={{ fontWeight: 700, fontSize: '1rem', lineHeight: 1.2, letterSpacing: '-0.02em' }}>
+              NOAH Global Admin
             </Typography>
             <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25 }}>
-              Operator tools across all organizations
+              Organizations · users · workspaces · billing · operations
             </Typography>
           </Box>
 
@@ -232,14 +379,17 @@ export default function PlatformLayout() {
               display: 'flex',
               alignItems: 'center',
               gap: 1,
+              height: 40,
+              boxSizing: 'border-box',
               border: `1px solid ${cv.border}`,
               background: cv.surface,
-              borderRadius: '999px',
-              py: 0.5,
+              borderRadius: '6px',
+              py: 0,
               pl: 0.5,
               pr: 1.25,
               cursor: 'pointer',
               color: cv.textPrimary,
+              transition: 'background 0.15s ease, border-color 0.15s ease',
               '&:hover': {
                 background: cv.surfaceHover,
                 borderColor: cv.borderStrong,
@@ -300,7 +450,7 @@ export default function PlatformLayout() {
                 sx: {
                   mt: 1,
                   minWidth: 240,
-                  borderRadius: '12px',
+                  borderRadius: '6px',
                   border: `1px solid ${cv.border}`,
                   background: cv.drawerSurface,
                   boxShadow: cv.popoverShadow,
@@ -335,6 +485,11 @@ export default function PlatformLayout() {
             minHeight: 0,
             overflow: 'auto',
             p: { xs: 2, md: 3 },
+            background: `
+              radial-gradient(ellipse 80% 50% at 100% -20%, rgba(210, 140, 255, 0.07), transparent 55%),
+              radial-gradient(ellipse 60% 40% at 0% 0%, rgba(22, 160, 133, 0.04), transparent 50%),
+              ${cv.bg}
+            `,
           }}
         >
           <Outlet />
