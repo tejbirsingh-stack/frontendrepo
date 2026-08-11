@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { Box, Button, MenuItem, TextField, Typography } from '@mui/material';
 import { fetchLanding, updateLanding } from '../api/platformApi';
 import { PageHeader, Panel } from '../components/PlatformUi';
+import { PlatformPlansCatalogSection } from '../components/PlatformPlansCatalogSection';
 import { cv } from '../../theme/cssVars';
+
+function asString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
 
 export default function PlatformLandingPage() {
   const [form, setForm] = useState({
@@ -11,7 +16,6 @@ export default function PlatformLandingPage() {
     heroSubtitle: '',
     ctaLabel: '',
     ctaHref: '',
-    sectionsJson: '[]',
   });
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -21,12 +25,11 @@ export default function PlatformLandingPage() {
       .then((res) => {
         const page = res.page;
         setForm({
-          status: String(page.status || 'draft'),
-          heroTitle: String(page.heroTitle || page.heroHeadline || ''),
-          heroSubtitle: String(page.heroSubtitle || page.heroSubheadline || ''),
-          ctaLabel: String(page.ctaLabel || page.heroCtaLabel || ''),
-          ctaHref: String(page.ctaHref || page.heroCtaUrl || ''),
-          sectionsJson: JSON.stringify(page.sections || [], null, 2),
+          status: asString(page.status, 'draft'),
+          heroTitle: asString(page.heroTitle || page.heroHeadline),
+          heroSubtitle: asString(page.heroSubtitle || page.heroSubheadline),
+          ctaLabel: asString(page.ctaLabel || page.heroCtaLabel),
+          ctaHref: asString(page.ctaHref || page.heroCtaUrl),
         });
       })
       .catch((err: Error) => setError(err.message));
@@ -36,19 +39,12 @@ export default function PlatformLandingPage() {
     setError('');
     setSaved(false);
     try {
-      let sections: unknown = [];
-      try {
-        sections = JSON.parse(form.sectionsJson);
-      } catch {
-        throw new Error('Sections must be valid JSON');
-      }
       await updateLanding('main', {
         status: form.status,
         heroTitle: form.heroTitle,
         heroSubtitle: form.heroSubtitle,
         ctaLabel: form.ctaLabel,
         ctaHref: form.ctaHref,
-        sections,
       });
       setSaved(true);
     } catch (err: unknown) {
@@ -63,7 +59,8 @@ export default function PlatformLandingPage() {
       {saved ? (
         <Typography sx={{ color: cv.success, mb: 2, fontSize: '0.875rem' }}>Saved</Typography>
       ) : null}
-      <Panel>
+
+      <Panel title="Hero content" sx={{ mb: 3 }}>
         <Box sx={{ display: 'grid', gap: 1.5, maxWidth: 720 }}>
           <TextField
             select
@@ -101,19 +98,13 @@ export default function PlatformLandingPage() {
             value={form.ctaHref}
             onChange={(e) => setForm((f) => ({ ...f, ctaHref: e.target.value }))}
           />
-          <TextField
-            size="small"
-            label="Sections JSON"
-            multiline
-            minRows={8}
-            value={form.sectionsJson}
-            onChange={(e) => setForm((f) => ({ ...f, sectionsJson: e.target.value }))}
-          />
           <Button variant="contained" onClick={() => void save()} sx={{ textTransform: 'none', width: 140 }}>
             Save
           </Button>
         </Box>
       </Panel>
+
+      <PlatformPlansCatalogSection />
     </Box>
   );
 }

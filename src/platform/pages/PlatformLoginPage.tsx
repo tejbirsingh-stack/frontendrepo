@@ -84,7 +84,9 @@ export default function PlatformLoginPage() {
               variant="contained"
               disabled={loading}
               sx={{
-                py: 1.4,
+                height: 40,
+                minHeight: 40,
+                py: 0,
                 background: cv.brandGradient,
                 boxShadow: cv.loginBrandShadow,
               }}
