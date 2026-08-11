@@ -1,8 +1,10 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import AuthPageSkeleton from '../components/loading/AuthPageSkeleton';
+import { useForcedDarkTheme } from '../context/ThemePreferenceContext';
 import { useAuth } from './AuthContext';
 
 export default function GuestRoute({ children }: { children: React.ReactNode }) {
+  useForcedDarkTheme();
   const { isAuthenticated, isInitializing } = useAuth();
   const location = useLocation();
   const redirectPath =

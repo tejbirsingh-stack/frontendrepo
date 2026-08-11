@@ -17,10 +17,12 @@ import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
 import { cv } from '../theme/cssVars';
+import { useForcedDarkTheme } from '../context/ThemePreferenceContext';
 import { validatePassword } from '../utils/authValidation';
 import { resetPasswordRequest } from '../api/auth.service';
 
 export default function ResetPasswordPage() {
+  useForcedDarkTheme();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') || '';

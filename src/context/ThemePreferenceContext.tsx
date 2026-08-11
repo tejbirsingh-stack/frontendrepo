@@ -16,8 +16,12 @@ const AppColorsContext = createContext<AppColors>(colors);
 
 interface ThemePreferenceContextValue {
   mode: ThemeMode;
+  /** Effective UI mode (forced dark on auth screens overrides stored preference). */
+  effectiveMode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
   toggleMode: () => void;
+  /** Keep document + MUI on dark until the returned disposer runs. */
+  acquireForcedDark: () => () => void;
 }
 
 const ThemePreferenceContext = createContext<ThemePreferenceContextValue | null>(null);
@@ -48,10 +52,15 @@ function applyDocumentTheme(mode: ThemeMode): void {
 
 export function ThemePreferenceProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>(() => readStoredMode());
+  const [forcedDarkCount, setForcedDarkCount] = useState(0);
+
+  const effectiveMode: ThemeMode = forcedDarkCount > 0 ? 'dark' : mode;
 
   useEffect(() => {
-    applyDocumentTheme(mode);
+    applyDocumentTheme(effectiveMode);
+  }, [effectiveMode]);
 
+  useEffect(() => {
     try {
       window.localStorage.setItem(STORAGE_KEY, mode);
     } catch {
@@ -67,15 +76,24 @@ export function ThemePreferenceProvider({ children }: { children: ReactNode }) {
     setModeState((current) => (current === 'light' ? 'dark' : 'light'));
   }, []);
 
-  const muiTheme = useMemo(() => createAppTheme(mode), [mode]);
+  const acquireForcedDark = useCallback(() => {
+    setForcedDarkCount((count) => count + 1);
+    return () => {
+      setForcedDarkCount((count) => Math.max(0, count - 1));
+    };
+  }, []);
+
+  const muiTheme = useMemo(() => createAppTheme(effectiveMode), [effectiveMode]);
 
   const preferenceValue = useMemo(
     () => ({
       mode,
+      effectiveMode,
       setMode,
       toggleMode,
+      acquireForcedDark,
     }),
-    [mode, setMode, toggleMode],
+    [mode, effectiveMode, setMode, toggleMode, acquireForcedDark],
   );
 
   return (
@@ -96,6 +114,13 @@ export function useThemePreference(): ThemePreferenceContextValue {
     throw new Error('useThemePreference must be used within ThemePreferenceProvider');
   }
   return context;
+}
+
+/** Force document + MUI dark theme for the lifetime of the calling component (auth screens). */
+export function useForcedDarkTheme(): void {
+  const { acquireForcedDark } = useThemePreference();
+
+  useEffect(() => acquireForcedDark(), [acquireForcedDark]);
 }
 
 /** Prefer cv (CSS variables) in module-level styles; use this hook inside components when needed. */
