@@ -22,6 +22,7 @@ export interface AuthSessionUser {
     storageQuotaBytes?: string | number;
     storageUsedBytes?: string | number;
     features?: any;
+    isFreeTrialUsed?: boolean;
     metadata?: Record<string, any>;
   };
   planType?: string;
