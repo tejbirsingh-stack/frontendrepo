@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
+import { getUsageSummary } from '../../api/usage.service';
+import { downloadCSV } from '../../utils/csvExport';
 import { getCompanyInfoRequest, updateCompanyInfoRequest, uploadCompanyLogoRequest, updateProfileRequest, uploadProfilePhotoRequest } from '../../api';
 import { logoutAllSessions, fetchOrganizationUsers } from '../../api/auth.service';
 import { fetchUserGroups } from '../../api/userGroups.service';
 import { useAuth } from '../../auth/AuthContext';
 import { useLocalizedDate } from '../../hooks/useLocalizedDate';
 import { cv } from '../../theme/cssVars';
+import ChoosePlanScreen from '../onboarding/ChoosePlanScreen';
 import {
   Avatar,
   Box,
@@ -143,7 +146,8 @@ function AddProjectDialog({
     visibility: ProjectVisibility,
     folderId: string | null,
     inviteAccess?: import('../../data/mockSettingsData').WorkspaceMemberAccess,
-    inviteMemberType?: import('../../data/mockSettingsData').WorkspaceMemberType
+    inviteMemberType?: import('../../data/mockSettingsData').WorkspaceMemberType,
+    sendInviteEmail?: boolean
   ) => Promise<void> | void;
   onSave?: (name: string, workspace: string, visibility: ProjectVisibility) => void;
   workspaces: { id: string; name: string }[];
@@ -160,6 +164,7 @@ function AddProjectDialog({
   const [inviteGroupIds, setInviteGroupIds] = useState<string[]>([]);
   const [inviteMemberType, setInviteMemberType] = useState<WorkspaceMemberType>('Member');
   const [inviteAccess, setInviteAccess] = useState<WorkspaceMemberAccess>('Full Access');
+  const [sendInviteEmail, setSendInviteEmail] = useState(false);
   const [visibility, setVisibility] = useState<ProjectVisibility>('public');
   const [nameError, setNameError] = useState('');
 
@@ -223,6 +228,7 @@ function AddProjectDialog({
       setInviteGroupIds([]);
       setInviteMemberType('Member');
       setInviteAccess('Full Access');
+      setSendInviteEmail(false);
       setVisibility('public');
       setNameError('');
       return;
@@ -233,6 +239,7 @@ function AddProjectDialog({
       setVisibility(initialProject.visibility);
       setInviteEmails([]);
       setInviteGroupIds([]);
+      setSendInviteEmail(false);
       setNameError('');
       return;
     }
@@ -254,7 +261,7 @@ function AddProjectDialog({
       return;
     }
     try {
-      await onAdd(trimmed, workspace, inviteEmails, inviteGroupIds, visibility, folderId || null, inviteAccess, inviteMemberType);
+      await onAdd(trimmed, workspace, inviteEmails, inviteGroupIds, visibility, folderId || null, inviteAccess, inviteMemberType, sendInviteEmail);
       onClose();
     } catch (e) {
       // Error handled by parent toast
@@ -337,41 +344,39 @@ function AddProjectDialog({
               Folder
             </InputLabel>
             <Box sx={{ maxHeight: 200, overflowY: 'auto', border: `1px solid ${cv.border}`, borderRadius: '10px', p: 1 }}>
-              {rootFolders.length === 0 && (
-                <Box
-                  component="button"
-                  type="button"
-                  onClick={() => setFolderId('')}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    width: '100%',
-                    textAlign: 'left',
-                    border: folderId === '' ? `1px solid ${cv.purpleFocusBorder}` : '1px solid transparent',
-                    borderRadius: '10px',
-                    px: 1,
-                    py: 0.5,
-                    mb: 0.5,
-                    cursor: 'pointer',
-                    backgroundColor: folderId === '' ? cv.purpleSelectionSoft : 'transparent',
-                    color: cv.textPrimary,
-                    '&:hover': {
-                      backgroundColor: folderId === '' ? cv.purpleSelectionHover : cv.surfaceHover,
-                    },
-                  }}
-                >
-                  <FolderOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted, flexShrink: 0, ml: 1 }} />
-                  <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: folderId === '' ? 600 : 500, color: cv.textMuted }}>
-                    {(() => {
-                      const now = new Date();
-                      const currentYear = new Intl.DateTimeFormat('en-US', { year: 'numeric' }).format(now);
-                      const currentMonth = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(now);
-                      return `${currentYear} / ${currentMonth}`;
-                    })()}
-                  </Typography>
-                </Box>
-              )}
+              <Box
+                component="button"
+                type="button"
+                onClick={() => setFolderId('')}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  width: '100%',
+                  textAlign: 'left',
+                  border: folderId === '' ? `1px solid ${cv.purpleFocusBorder}` : '1px solid transparent',
+                  borderRadius: '10px',
+                  px: 1,
+                  py: 0.5,
+                  mb: 0.5,
+                  cursor: 'pointer',
+                  backgroundColor: folderId === '' ? cv.purpleSelectionSoft : 'transparent',
+                  color: cv.textPrimary,
+                  '&:hover': {
+                    backgroundColor: folderId === '' ? cv.purpleSelectionHover : cv.surfaceHover,
+                  },
+                }}
+              >
+                <FolderOutlinedIcon sx={{ fontSize: 18, color: folderId === '' ? cv.brandMain : cv.textMuted, flexShrink: 0, ml: 0.5 }} />
+                <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: folderId === '' ? 600 : 500, color: folderId === '' ? cv.textPrimary : cv.textMuted }}>
+                  {(() => {
+                    const now = new Date();
+                    const currentYear = new Intl.DateTimeFormat('en-US', { year: 'numeric' }).format(now);
+                    const currentMonth = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(now);
+                    return `Default (${currentYear} / ${currentMonth})`;
+                  })()}
+                </Typography>
+              </Box>
               {rootFolders.map((folder) => (
                 <FolderTreeNode
                   key={folder.id}
@@ -384,16 +389,18 @@ function AddProjectDialog({
             </Box>
           </Box>
         )}
-        <ProjectVisibilityPicker
-          value={visibility}
-          onChange={(next) => {
-            setVisibility(next);
-            if (next === 'public') {
-              setInviteEmails([]);
-              setInviteGroupIds([]);
-            }
-          }}
-        />
+        {!isEdit && (
+          <ProjectVisibilityPicker
+            value={visibility}
+            onChange={(next) => {
+              setVisibility(next);
+              if (next === 'public') {
+                setInviteEmails([]);
+                setInviteGroupIds([]);
+              }
+            }}
+          />
+        )}
         {visibility === 'private' && !isEdit ? (
           <InvitePeopleFields
             emails={inviteEmails}
@@ -405,6 +412,8 @@ function AddProjectDialog({
             onMemberTypeChange={setInviteMemberType}
             access={inviteAccess}
             onAccessChange={setInviteAccess}
+            sendInviteEmail={sendInviteEmail}
+            onSendInviteEmailChange={setSendInviteEmail}
             suggestedUsers={suggestedUsers}
             suggestedGroups={suggestedGroups}
             description="Private projects are invite-only. Add people or groups who should have access."
@@ -421,7 +430,7 @@ function AddProjectDialog({
         ) : null}
         <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary }}>
           {isEdit
-            ? 'Update project details and visibility.'
+            ? 'Update project name and workspace.'
             : 'New projects start as active. You will be assigned as project admin.'}
         </Typography>
       </DialogContent>
@@ -837,61 +846,131 @@ export function CompanySettingsSection() {
 export { default as UsageSettingsSection } from './UsageSettingsSection';
 
 export function PlanSettingsSection() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const plan = useMemo(() => getDynamicPlanDetails(user), [user]);
+  const [choosePlanOpen, setChoosePlanOpen] = useState(false);
+
+  const handleUpgradePlan = async (planId: string, billingCycle: 'annual' | 'monthly') => {
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      const res = await apiClient.post<any>('/auth/upgrade-plan', { planId, billingCycle }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      await refreshUser();
+      toast.success((res as any)?.message || `Upgraded to ${planId.toUpperCase()} plan!`);
+      setChoosePlanOpen(false);
+    } catch (err: any) {
+      console.error('Failed to upgrade plan:', err);
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to upgrade plan';
+      toast.error(errMsg);
+    }
+  };
 
   return (
-    <SettingsFormContainer>
-      <SettingsSectionCard
-        title="Current Plan"
-        description="Active tier, billing cycle term, and subscription line items."
-      >
-        <SettingsRow title="Plan name" description={plan.planName} />
-        <SettingsRow title="Billing cycle" description={plan.billingTermLabel} />
-        <SettingsRow title="Subscription expiry date" description={plan.expiryDateFormatted} />
-        <SettingsRow title="Subtotal" description={plan.subtotal} />
-        <SettingsRow
-          title="Sales tax"
-          description={`${plan.salesTaxPercent}% · ${plan.salesTaxAmount} (US state-level, based on billing address)`}
-        />
-        <SettingsRow title="Total" description={plan.total} showDivider={false} />
-      </SettingsSectionCard>
+    <>
+      <SettingsFormContainer>
+        <SettingsSectionCard
+          title="Current Plan"
+          description="Active tier, billing cycle term, and subscription line items."
+          action={
+            <Button
+              variant="contained"
+              onClick={() => setChoosePlanOpen(true)}
+              sx={{
+                background: cv.brandGradient,
+                color: cv.textOnCta,
+                textTransform: 'none',
+                borderRadius: '10px',
+                fontWeight: 600,
+                px: 2.5,
+                py: 0.75,
+                boxShadow: cv.brandShadowSoft,
+                '&:hover': {
+                  background: cv.brandGradientHover,
+                  boxShadow: cv.brandShadowStrong,
+                },
+              }}
+            >
+              Upgrade Plan
+            </Button>
+          }
+        >
+          <SettingsRow title="Plan name" description={plan.planName} />
+          <SettingsRow title="Billing cycle" description={plan.billingTermLabel} />
+          <SettingsRow title="Subscription expiry date" description={plan.expiryDateFormatted} />
+          <SettingsRow title="Subtotal" description={plan.subtotal} />
+          <SettingsRow
+            title="Sales tax"
+            description={`${plan.salesTaxPercent}% · ${plan.salesTaxAmount} (US state-level, based on billing address)`}
+          />
+          <SettingsRow title="Total" description={plan.total} showDivider={false} />
+        </SettingsSectionCard>
 
-      <SettingsSectionCard title="Line item details" description="Fetched dynamically from subscription terms.">
-        <Box sx={{ px: 2, py: 1.5 }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Description</TableCell>
-                <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Quantity</TableCell>
-                <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Unit price</TableCell>
-                <TableCell align="right" sx={{ color: cv.textMuted, borderColor: cv.border }}>
-                  Subtotal
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {plan.lineItems.map((item) => (
-                <TableRow key={item.description}>
-                  <TableCell sx={{ color: cv.textPrimary, borderColor: cv.border }}>
-                    {item.description}
-                  </TableCell>
-                  <TableCell sx={{ color: cv.textSecondary, borderColor: cv.border }}>
-                    {item.quantity}
-                  </TableCell>
-                  <TableCell sx={{ color: cv.textSecondary, borderColor: cv.border }}>
-                    {item.unitPrice}
-                  </TableCell>
-                  <TableCell align="right" sx={{ color: cv.textPrimary, borderColor: cv.border }}>
-                    {item.subtotal}
+        <SettingsSectionCard title="Line item details" description="Fetched dynamically from subscription terms.">
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Description</TableCell>
+                  <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Quantity</TableCell>
+                  <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Unit price</TableCell>
+                  <TableCell align="right" sx={{ color: cv.textMuted, borderColor: cv.border }}>
+                    Subtotal
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {plan.lineItems.map((item) => (
+                  <TableRow key={item.description}>
+                    <TableCell sx={{ color: cv.textPrimary, borderColor: cv.border }}>
+                      {item.description}
+                    </TableCell>
+                    <TableCell sx={{ color: cv.textSecondary, borderColor: cv.border }}>
+                      {item.quantity}
+                    </TableCell>
+                    <TableCell sx={{ color: cv.textSecondary, borderColor: cv.border }}>
+                      {item.unitPrice}
+                    </TableCell>
+                    <TableCell align="right" sx={{ color: cv.textPrimary, borderColor: cv.border }}>
+                      {item.subtotal}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        </SettingsSectionCard>
+      </SettingsFormContainer>
+
+      {/* Upgrade Plan Modal */}
+      <Dialog
+        fullScreen
+        open={choosePlanOpen}
+        onClose={() => setChoosePlanOpen(false)}
+        sx={{
+          '& .MuiDialog-paper': {
+            background: cv.bg,
+            color: cv.textPrimary,
+          },
+        }}
+      >
+        <Box sx={{ position: 'absolute', top: 20, right: 24, zIndex: 1200 }}>
+          <IconButton
+            onClick={() => setChoosePlanOpen(false)}
+            sx={{
+              color: cv.textSecondary,
+              backgroundColor: cv.surfaceHover,
+              border: `1px solid ${cv.border}`,
+              '&:hover': { backgroundColor: cv.surfaceActive, color: cv.textPrimary },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
         </Box>
-      </SettingsSectionCard>
-    </SettingsFormContainer>
+        <ChoosePlanScreen onSelectPlan={handleUpgradePlan} currentPlanId={plan.planId} />
+      </Dialog>
+    </>
   );
 }
 
@@ -1096,7 +1175,10 @@ function ProjectWorkspaceTable({
   onAdd,
   onEdit,
   onDelete,
+  onMarkActive,
+  onMarkInactive,
   onInviteTeamMembers,
+  onExport,
 }: {
   title: string;
   description: string;
@@ -1108,7 +1190,10 @@ function ProjectWorkspaceTable({
   onAdd?: () => void;
   onEdit?: (rowId: string) => void;
   onDelete?: (ids: string[]) => void;
+  onMarkActive?: (ids: string[]) => void;
+  onMarkInactive?: (ids: string[]) => void;
   onInviteTeamMembers?: (workspaceId: string) => void;
+  onExport?: (filteredRows: SettingsProjectRow[]) => void;
 }) {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -1177,48 +1262,42 @@ function ProjectWorkspaceTable({
     {
       id: 'created',
       label: 'Creation date',
-      width: showTeamMembersColumn ? (showProjectColumn ? '12%' : '12%') : '14%',
+      width: showTeamMembersColumn ? (showProjectColumn ? '14%' : '14%') : '16%',
       render: (row) => row.creationDate,
-    },
-    {
-      id: 'storage',
-      label: 'Storage',
-      width: showTeamMembersColumn ? (showProjectColumn ? '8%' : '9%') : '10%',
-      render: (row) => row.storage,
     },
     {
       id: 'admin',
       label: showProjectColumn ? 'Project admin' : 'Workspace admin',
       width: showProjectColumn
         ? showTeamMembersColumn
-          ? '13%'
-          : '18%'
+          ? '15%'
+          : '20%'
         : showTeamMembersColumn
-          ? '14%'
-          : '22%',
+          ? '16%'
+          : '24%',
       render: (row) => tableText(row.projectAdmin),
     },
     ...(showTeamMembersColumn
       ? [
-        {
-          id: 'team',
-          label: 'Team members',
-          width: showProjectColumn ? '22%' : '28%',
-          render: (row: SettingsProjectRow) => (
-            <WorkspaceTeamMembersCell
-              members={row.teamMembers ?? []}
-              canInvite={row.projectAdmin === CURRENT_USER.name}
-              visibility={showProjectColumn ? row.visibility : undefined}
-              shareLink={
-                showProjectColumn && row.visibility === 'public'
-                  ? getProjectShareLink(row.id, row.project)
-                  : undefined
-              }
-              onInvite={() => onInviteTeamMembers?.(row.id)}
-            />
-          ),
-        },
-      ]
+          {
+            id: 'team',
+            label: 'Team members',
+            width: showProjectColumn ? '22%' : '28%',
+            render: (row: SettingsProjectRow) => (
+              <WorkspaceTeamMembersCell
+                members={row.teamMembers ?? []}
+                canInvite={true}
+                visibility={showProjectColumn ? row.visibility : undefined}
+                shareLink={
+                  showProjectColumn && row.visibility === 'public'
+                    ? getProjectShareLink(row.id, row.project)
+                    : undefined
+                }
+                onInvite={() => onInviteTeamMembers?.(row.id)}
+              />
+            ),
+          },
+        ]
       : []),
   ];
 
@@ -1232,7 +1311,7 @@ function ProjectWorkspaceTable({
           onFilter={() => setFilterOpen((open) => !open)}
           filterOpen={filterOpen}
           hasActiveFilters={hasActiveFilters}
-          onExport={() => undefined}
+          onExport={onExport ? () => onExport(filtered) : undefined}
           onAdd={onAdd}
           addLabel={addLabel}
         />
@@ -1259,22 +1338,36 @@ function ProjectWorkspaceTable({
             >
               Edit
             </Button>
-            <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
-              Mark active
-            </Button>
-            <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
-              Mark inactive
-            </Button>
-            <Button
-              size="small"
-              sx={{ textTransform: 'none', color: cv.destructive }}
-              onClick={() => {
-                if (onDelete) onDelete(Array.from(selectedIds));
-              }}
-            >
-              Mark delete
-            </Button>
-          </Box>
+          <Button
+            size="small"
+            onClick={() => {
+              if (onMarkActive) onMarkActive(Array.from(selectedIds));
+              setSelectedIds(new Set());
+            }}
+            sx={{ textTransform: 'none', color: cv.textSecondary }}
+          >
+            Mark active
+          </Button>
+          <Button
+            size="small"
+            onClick={() => {
+              if (onMarkInactive) onMarkInactive(Array.from(selectedIds));
+              setSelectedIds(new Set());
+            }}
+            sx={{ textTransform: 'none', color: cv.textSecondary }}
+          >
+            Mark inactive
+          </Button>
+          <Button 
+            size="small" 
+            sx={{ textTransform: 'none', color: cv.destructive }}
+            onClick={() => {
+              if (onDelete) onDelete(Array.from(selectedIds));
+            }}
+          >
+            Mark delete
+          </Button>
+        </Box>
         ) : null}
         <Collapse in={filterOpen}>
           <Box sx={{ px: 2, pb: 1.5 }}>
@@ -1402,33 +1495,72 @@ export function ProjectsAdminSettingsSection() {
               day: 'numeric',
               year: 'numeric',
             });
+            const vis: ProjectVisibility = p.visibility?.toLowerCase() === 'private' ? 'private' : 'public';
+
+            const userMembers: import('../../data/mockSettingsData').WorkspaceTeamMember[] = (p.users || []).map((pu: any) => {
+              const uName = pu.user?.name || pu.user?.email || 'User';
+              const initials = uName.split(/\s+/).filter(Boolean).slice(0, 2).map((part: string) => part[0]?.toUpperCase() ?? '').join('') || 'U';
+              return {
+                id: pu.userId || pu.id,
+                name: uName,
+                initials,
+                email: pu.user?.email,
+                avatarUrl: pu.user?.avatarUrl || undefined,
+                access: (pu.accessLevel as import('../../data/mockSettingsData').WorkspaceMemberAccess) || 'Can view',
+                memberType: (pu.memberType as import('../../data/mockSettingsData').WorkspaceMemberType) || 'Member',
+                isCurrentUser: pu.userId === CURRENT_USER.id || 
+                               pu.user?.email === CURRENT_USER.email || 
+                               pu.user?.name === CURRENT_USER.name ||
+                               pu.user?.name === 'Super Admin' ||
+                               pu.user?.email === 'anil.jangra@mtxeurope.com',
+              };
+            });
+
+            const groupMembers: import('../../data/mockSettingsData').WorkspaceTeamMember[] = (p.groups || []).map((pg: any) => {
+              const gName = pg.group?.name || 'Group';
+              const initials = gName.split(/\s+/).filter(Boolean).slice(0, 2).map((part: string) => part[0]?.toUpperCase() ?? '').join('') || 'G';
+              return {
+                id: pg.groupId || pg.id,
+                name: gName,
+                initials,
+                access: (pg.accessLevel as import('../../data/mockSettingsData').WorkspaceMemberAccess) || 'Can view',
+                memberType: 'Group' as const,
+                isCurrentUser: false,
+              };
+            });
+
+            const teamMembers = [...userMembers, ...groupMembers];
+            if (teamMembers.length === 0) {
+              teamMembers.push({
+                id: `pm-admin-${p.id}`,
+                name: CURRENT_USER.name,
+                initials: CURRENT_USER.initials,
+                access: 'Full Access',
+                memberType: 'Member',
+                isCurrentUser: true,
+              });
+            }
+
             return {
               id: p.id,
               project: p.name,
               workspace: p.workspace?.name || 'Unknown',
-              status: 'Active',
+              status: p.status?.toLowerCase() === 'inactive' ? 'Inactive' : 'Active',
               lastUpdated: today,
               creationDate: today,
-              storage: '0 MB', // mock for now
-              projectAdmin: CURRENT_USER.name,
-              visibility: 'public',
-              isRestricted: false,
-              teamMembers: [
-                {
-                  id: `pm-admin-${p.id}`,
-                  name: CURRENT_USER.name,
-                  initials: CURRENT_USER.initials,
-                  access: 'Full Access',
-                  memberType: 'Member',
-                  isCurrentUser: true,
-                }
-              ]
+              storage: '0 MB',
+              projectAdmin: p.createdBy?.name || p.createdBy?.email || CURRENT_USER.name,
+              visibility: vis,
+              isRestricted: vis === 'private',
+              teamMembers,
             } as SettingsProjectRow;
           });
           setProjects(formatted);
         }
-      } catch (err) {
-        console.error("Failed to load projects", err);
+      } catch (err: any) {
+        console.error("Failed to create project", err);
+        const errorMsg = err?.response?.data?.message || err?.message || 'Failed to create project';
+        toast.error(errorMsg);
       }
     };
     fetchProjects();
@@ -1447,7 +1579,8 @@ export function ProjectsAdminSettingsSection() {
     visibility: ProjectVisibility,
     folderId: string | null,
     inviteAccess?: import('../../data/mockSettingsData').WorkspaceMemberAccess,
-    inviteMemberType?: import('../../data/mockSettingsData').WorkspaceMemberType
+    inviteMemberType?: import('../../data/mockSettingsData').WorkspaceMemberType,
+    sendInviteEmail?: boolean
   ) => {
     try {
       const workspaceObj = workspaces.find((w) => w.name === workspace);
@@ -1465,7 +1598,8 @@ export function ProjectsAdminSettingsSection() {
         inviteEmails,
         inviteGroupIds,
         inviteAccess,
-        inviteMemberType
+        inviteMemberType,
+        sendInviteEmail,
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -1511,11 +1645,11 @@ export function ProjectsAdminSettingsSection() {
       const workspaceObj = workspaces.find((w) => w.name === workspace);
       const { apiClient } = await import('../../api/client');
       const token = localStorage.getItem('token');
-      await apiClient.put(`/workspaces/project/update/${editProjectId}`, {
-        name,
-        workspaceId: workspaceObj?.id,
-        visibility
-      }, {
+      const payload: any = { name };
+      if (workspaceObj?.id) {
+        payload.workspaceId = workspaceObj.id;
+      }
+      await apiClient.put(`/workspaces/project/update/${editProjectId}`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -1533,8 +1667,10 @@ export function ProjectsAdminSettingsSection() {
             : project,
         ),
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to update project in backend:", err);
+      const { toast } = await import('react-hot-toast');
+      toast.error(err.response?.data?.message || "Failed to update project.");
     }
     setEditProjectId(null);
   };
@@ -1566,6 +1702,26 @@ export function ProjectsAdminSettingsSection() {
     const newMember = resolveWorkspaceInvite(payload, target?.teamMembers ?? []);
     if (!newMember) return false;
 
+    (async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        await apiClient.post(
+          `/workspaces/project/${inviteProjectId}/member`,
+          {
+            email: payload.email,
+            memberType: payload.memberType,
+            accessLevel: payload.access,
+            groupId: payload.groupId,
+            sendInviteEmail: payload.sendInviteEmail ?? false,
+          },
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      } catch (err) {
+        console.error('Failed to persist project member to backend:', err);
+      }
+    })();
+
     setProjects((current) =>
       current.map((project) =>
         project.id === inviteProjectId
@@ -1576,8 +1732,20 @@ export function ProjectsAdminSettingsSection() {
     return true;
   };
 
-  const handleUpdateMemberAccess = (memberId: string, access: WorkspaceMemberAccess) => {
+  const handleUpdateMemberAccess = async (memberId: string, access: WorkspaceMemberAccess) => {
     if (!inviteProjectId) return;
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      await apiClient.put(
+        `/workspaces/project/${inviteProjectId}/member/${memberId}`,
+        { accessLevel: access },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+    } catch (err) {
+      console.error('Failed to update project member access level in backend:', err);
+    }
+
     setProjects((current) =>
       current.map((project) =>
         project.id === inviteProjectId
@@ -1592,18 +1760,28 @@ export function ProjectsAdminSettingsSection() {
     );
   };
 
-  const handleRemoveMember = (memberId: string) => {
+  const handleRemoveMember = async (memberId: string) => {
     if (!inviteProjectId) return;
-    setProjects((current) =>
-      current.map((project) =>
-        project.id === inviteProjectId
-          ? {
-            ...project,
-            teamMembers: project.teamMembers?.filter((member) => member.id !== memberId),
-          }
-          : project,
-      ),
-    );
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      await apiClient.delete(`/workspaces/project/${inviteProjectId}/member/${memberId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setProjects((current) =>
+        current.map((project) =>
+          project.id === inviteProjectId
+            ? {
+                ...project,
+                teamMembers: project.teamMembers?.filter((member) => member.id !== memberId),
+              }
+            : project,
+        ),
+      );
+    } catch (err) {
+      console.error("Failed to remove project member in backend:", err);
+    }
   };
 
   const handleRestrictedChange = (restricted: boolean) => {
@@ -1615,14 +1793,82 @@ export function ProjectsAdminSettingsSection() {
     );
   };
 
-  const handleVisibilityChange = (visibility: ProjectVisibility) => {
+  const handleVisibilityChange = async (visibility: ProjectVisibility) => {
     if (!inviteProjectId) return;
-    setProjects((current) =>
-      current.map((project) =>
-        project.id === inviteProjectId
-          ? { ...project, visibility, isRestricted: visibility === 'private' }
-          : project,
-      ),
+    try {
+      const targetProj = projects.find((p) => p.id === inviteProjectId);
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      await apiClient.put(`/workspaces/project/update/${inviteProjectId}`, {
+        name: targetProj?.project,
+        visibility
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setProjects((current) =>
+        current.map((project) =>
+          project.id === inviteProjectId
+            ? { ...project, visibility, isRestricted: visibility === 'private' }
+            : project,
+        ),
+      );
+    } catch (err) {
+      console.error("Failed to update project visibility:", err);
+    }
+  };
+
+  const handleMarkActiveProjects = async (ids: string[]) => {
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      for (const id of ids) {
+        await apiClient.put(`/workspaces/project/update/${id}`, { status: 'active' }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      setProjects((current) =>
+        current.map((p) => (ids.includes(p.id) ? { ...p, status: 'Active' } : p)),
+      );
+      toast.success(`Marked ${ids.length} project${ids.length > 1 ? 's' : ''} as Active`);
+    } catch (err: any) {
+      console.error("Failed to mark projects active:", err);
+      toast.error("Failed to update project status in backend.");
+    }
+  };
+
+  const handleMarkInactiveProjects = async (ids: string[]) => {
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      for (const id of ids) {
+        await apiClient.put(`/workspaces/project/update/${id}`, { status: 'inactive' }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      setProjects((current) =>
+        current.map((p) => (ids.includes(p.id) ? { ...p, status: 'Inactive' } : p)),
+      );
+      toast.success(`Marked ${ids.length} project${ids.length > 1 ? 's' : ''} as Inactive`);
+    } catch (err: any) {
+      console.error("Failed to mark projects inactive:", err);
+      toast.error("Failed to update project status in backend.");
+    }
+  };
+
+  const handleExportProjects = (rowsToExport: SettingsProjectRow[]) => {
+    downloadCSV(
+      'Projects',
+      ['Project', 'Workspace', 'Status', 'Last updated', 'Creation date', 'Project admin', 'Team members'],
+      rowsToExport.map((row) => [
+        row.project,
+        row.workspace,
+        row.status,
+        row.lastUpdated,
+        row.creationDate,
+        row.projectAdmin,
+        (row.teamMembers || []).map((m) => m.name).join('; '),
+      ])
     );
   };
 
@@ -1635,10 +1881,22 @@ export function ProjectsAdminSettingsSection() {
         addLabel="Add new project"
         showBulkActions
         showTeamMembersColumn
-        onAdd={() => setAddOpen(true)}
+        onAdd={async () => {
+          try {
+            const summary = await getUsageSummary();
+            if (summary.projectsTotal != null && summary.projectsCount >= summary.projectsTotal) {
+              toast.error(`Project limit (${summary.projectsTotal}) reached for your current plan. Please upgrade to create more projects.`);
+              return;
+            }
+          } catch (e) {}
+          setAddOpen(true);
+        }}
         onEdit={setEditProjectId}
         onDelete={(ids) => setDeleteDialogIds(ids)}
+        onMarkActive={handleMarkActiveProjects}
+        onMarkInactive={handleMarkInactiveProjects}
         onInviteTeamMembers={setInviteProjectId}
+        onExport={handleExportProjects}
       />
       <AddProjectDialog
         open={addOpen || Boolean(editProjectId)}
@@ -1916,7 +2174,16 @@ export function WorkspacesAdminSettingsSection() {
         showBulkActions
         showProjectColumn={false}
         showTeamMembersColumn
-        onAdd={() => setAddOpen(true)}
+        onAdd={async () => {
+          try {
+            const summary = await getUsageSummary();
+            if (summary.workspacesTotal != null && summary.workspacesCount >= summary.workspacesTotal) {
+              toast.error(`Workspace limit (${summary.workspacesTotal}) reached for your current plan. Please upgrade to create more workspaces.`);
+              return;
+            }
+          } catch (e) {}
+          setAddOpen(true);
+        }}
         onEdit={setEditWorkspaceId}
         onInviteTeamMembers={setInviteWorkspaceId}
       />

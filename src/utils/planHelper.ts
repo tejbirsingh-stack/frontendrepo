@@ -21,22 +21,33 @@ export interface DynamicPlanDetails {
 
 export function getDynamicPlanDetails(user: AuthSessionUser | null | undefined): DynamicPlanDetails {
   const org = user?.organization;
-  const rawPlanId = (org?.planType || user?.planType || 'free').toLowerCase();
   const metadata = (org?.metadata as Record<string, any>) || {};
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let rawPlanId = (org?.planType || user?.planType || 'free').toLowerCase();
+  if (uuidRegex.test(rawPlanId)) {
+    const metaPlan = (metadata?.planId || metadata?.planName || '').toLowerCase();
+    if (metaPlan && !uuidRegex.test(metaPlan)) {
+      rawPlanId = metaPlan;
+    } else {
+      rawPlanId = 'free';
+    }
+  }
   const rawBillingCycle = (metadata?.billingCycle || 'annual').toLowerCase();
   const isMonthly = rawBillingCycle === 'monthly';
 
-  // For Free plan, expiry date is strictly 3 days from creation/signup date (e.g., Aug 10 -> Aug 13)
+  // Expiry date calculation: Prefer database planExpiresAt field first
   let expiryDate: Date;
-  if (rawPlanId === 'free') {
-    const creationDateStr = metadata?.planSelectedAt || org?.createdAt || user?.createdAt || new Date().toISOString();
+  if (org?.planExpiresAt) {
+    expiryDate = new Date(org.planExpiresAt);
+  } else if (rawPlanId === 'free') {
+    const creationDateStr = metadata?.planSelectedAt || (org as any)?.createdAt || (user as any)?.createdAt || new Date().toISOString();
     const creationDate = new Date(creationDateStr);
     expiryDate = new Date(isNaN(creationDate.getTime()) ? Date.now() : creationDate.getTime());
     expiryDate.setDate(expiryDate.getDate() + 3);
   } else if (metadata?.expiresAt) {
     expiryDate = new Date(metadata.expiresAt);
   } else {
-    const planSelectedAt = metadata?.planSelectedAt || org?.createdAt || new Date().toISOString();
+    const planSelectedAt = metadata?.planSelectedAt || (org as any)?.createdAt || new Date().toISOString();
     const startDate = new Date(planSelectedAt);
     expiryDate = new Date(startDate);
     if (isNaN(expiryDate.getTime())) {

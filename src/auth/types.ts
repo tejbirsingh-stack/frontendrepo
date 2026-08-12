@@ -15,6 +15,7 @@ export interface AuthSessionUser {
     name?: string;
     slug?: string;
     planType?: string;
+    planExpiresAt?: string | Date;
   };
   planType?: string;
   timezone?: string;

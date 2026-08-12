@@ -17,6 +17,8 @@ import {
 } from '../services/uploadQueueStorage';
 import { uploadMediaFileRequest } from '../api';
 import { extractAudioMetadata, extractImageMetadata } from '../utils/mediaMetadataExtractors';
+import toast from 'react-hot-toast';
+import { getUsageSummary } from '../api/usage.service';
 
 export interface UploadQueueItem extends StoredUploadItem {
   progressPercent: number;
@@ -185,6 +187,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
         } catch (err: any) {
           console.error('[UploadManager] Upload failed for file:', currentItem.name, err);
           const errorMsg = err?.response?.data?.message || err?.message || 'Upload failed';
+          toast.error(errorMsg);
 
           setQueue((prev) =>
             prev.map((item) =>
@@ -218,6 +221,16 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
   const enqueueFiles = useCallback(
     async (files: File[], options?: EnqueueUploadOptions) => {
       if (!files || files.length === 0) return;
+
+      try {
+        const summary = await getUsageSummary();
+        if (summary.storageWarningLevel === 'exceeded' || summary.storageUsedBytes >= summary.storageQuotaBytes) {
+          toast.error('Storage limit reached — Uploads are blocked until you free space or upgrade your plan.');
+          return;
+        }
+      } catch (err) {
+        /* proceed if summary fetch fails */
+      }
 
       const newItems: UploadQueueItem[] = files.map((file, idx) => ({
         id: `upload-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`,

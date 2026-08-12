@@ -56,6 +56,8 @@ import AddSidebarItemModal, { type SidebarItemMode } from './AddSidebarItemModal
 import CreateWorkspaceModal, { type CreateWorkspaceFormData } from './CreateWorkspaceModal';
 import RenameMediaModal from './RenameMediaModal';
 import TrashConfirmModal from './TrashConfirmModal';
+import toast from 'react-hot-toast';
+import { getUsageSummary } from '../../api/usage.service';
 import UploadPanel from './UploadPanel';
 import GlobalSearchField from './GlobalSearchField';
 import type { MediaItem, MediaType, SidebarFolder } from '../../data/mockMedia';
@@ -1396,8 +1398,15 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     setColorPickerWorkspaceId(null);
   };
 
-  const openCreateModal = () => {
+  const openCreateModal = async () => {
     closeWorkspaceMenu();
+    try {
+      const summary = await getUsageSummary();
+      if (summary.workspacesTotal != null && summary.workspacesCount >= summary.workspacesTotal) {
+        toast.error(`Workspace limit (${summary.workspacesTotal}) reached for your current plan. Please upgrade to create more workspaces.`);
+        return;
+      }
+    } catch (e) {}
     setCreateModalOpen(true);
   };
 
@@ -1883,9 +1892,16 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
             }}
           />
           <Box
-            onDragOver={(event) => {
+            onDragOver={async (event) => {
               if (!event.dataTransfer.types.includes('Files')) return;
               event.preventDefault();
+              try {
+                const summary = await getUsageSummary();
+                if (summary.storageWarningLevel === 'exceeded' || summary.storageUsedBytes >= summary.storageQuotaBytes) {
+                  toast.error('Storage limit reached — Uploads are blocked until you free space or upgrade your plan.');
+                  return;
+                }
+              } catch (e) {}
               setUploadPanelOpen(true);
             }}
           >
@@ -1893,7 +1909,17 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
               icon={<UploadOutlinedIcon />}
               label="Upload"
               active={uploadPanelOpen}
-              onClick={() => setUploadPanelOpen((open) => !open)}
+              onClick={async () => {
+                try {
+                  const summary = await getUsageSummary();
+                  if (summary.storageWarningLevel === 'exceeded' || summary.storageUsedBytes >= summary.storageQuotaBytes) {
+                    toast.error('Storage limit reached — Uploads are blocked until you free space or upgrade your plan.');
+                    setUploadPanelOpen(false);
+                    return;
+                  }
+                } catch (e) {}
+                setUploadPanelOpen((open) => !open);
+              }}
             />
           </Box>
         </List>
