@@ -233,7 +233,7 @@ export default function WorkspaceMembersDialog({
   const [query, setQuery] = useState('');
   const [access, setAccess] = useState<WorkspaceMemberAccess>('Can view');
   const [error, setError] = useState('');
-  const [sendInviteEmail, setSendInviteEmail] = useState(false);
+  const [sendInviteEmail, setSendInviteEmail] = useState(true);
   const [typeaheadOpen, setTypeaheadOpen] = useState(false);
   // External email — single recipient for secure share
   const [pendingExternalEmail, setPendingExternalEmail] = useState<string | null>(null);
@@ -265,9 +265,18 @@ export default function WorkspaceMembersDialog({
         const res = await (apiClient as any).get('/workspaces/access-levels', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        const data = Array.isArray(res) ? res : res?.data || res;
+        const data = Array.isArray(res) ? res : (res as any)?.data ?? [];
         if (Array.isArray(data)) {
           setAccessOptions(data);
+          const defaultCanView = data.find((o: any) => o.name === 'CAN_VIEW' || o.title === 'Can View');
+          if (defaultCanView) {
+            setAccess((current) => {
+              if (!current || current === 'Can view' || current === 'Can View' || current === 'Viewer') {
+                return defaultCanView.id as WorkspaceMemberAccess;
+              }
+              return current;
+            });
+          }
         }
       } catch (err) {
         console.error('Failed to fetch access levels:', err);
@@ -638,6 +647,10 @@ export default function WorkspaceMembersDialog({
     );
     if (matchedUser) {
       const memberType = isOrganizationUser(matchedUser) ? 'Member' : 'Guest';
+      if (memberType === 'Guest') {
+        openSecureShare(matchedUser.email);
+        return;
+      }
       inviteUser(matchedUser.email, matchedUser.name, memberType);
       return;
     }
@@ -649,6 +662,10 @@ export default function WorkspaceMembersDialog({
 
     const email = trimmed.toLowerCase();
     const memberType = resolveMemberType(email);
+    if (memberType === 'Guest') {
+      openSecureShare(email);
+      return;
+    }
     inviteUser(email, undefined, memberType);
   };
 
@@ -669,6 +686,10 @@ export default function WorkspaceMembersDialog({
     }
 
     const memberType = isOrganizationUser(option.user) ? 'Member' : 'Guest';
+    if (memberType === 'Guest') {
+      openSecureShare(option.user.email);
+      return;
+    }
     inviteUser(option.user.email, option.user.name, memberType);
   };
 
@@ -879,7 +900,10 @@ export default function WorkspaceMembersDialog({
   ) : null;
 
   const handleMemberAccessChange = (member: WorkspaceTeamMember, value: string) => {
-    onUpdateMemberAccess(member.id, value as WorkspaceMemberAccess);
+    // value is the option UUID — resolve it to the name/title for role mapping downstream
+    const option = accessOptions.find((o) => o.id === value);
+    const resolvedAccess = (option?.name || option?.title || value) as WorkspaceMemberAccess;
+    onUpdateMemberAccess(member.id, resolvedAccess);
   };
 
   const inviteFormSection = (
@@ -914,7 +938,22 @@ export default function WorkspaceMembersDialog({
                 endAdornment: !queryIsExternal ? (
                   <InputAdornment position="end" sx={{ ml: 0, height: '100%' }}>
                     <Select
-                      value={access}
+                      value={
+                        accessOptions.find(
+                          (o) =>
+                            o.id === access ||
+                            o.name === access ||
+                            o.title === access ||
+                            (o.name === 'FULL_ACCESS' &&
+                              (access === 'Full Access' || access === 'Admin' || access === '10f1fe4a-f28f-4d76-a7c2-6175dfe04c9b')) ||
+                            (o.name === 'CAN_EDIT' &&
+                              (access === 'Can edit' || access === 'Can Edit' || access === 'Editor' || access === 'd321a6c5-c28a-4dc4-900e-4dc57fe276bf')) ||
+                            (o.name === 'CAN_VIEW' &&
+                              (access === 'Can view' || access === 'Can View' || access === 'Viewer' || access === 'eef95f55-9cf3-490a-bf4c-0af6292c191d'))
+                        )?.id ??
+                        accessOptions.find((o) => o.name === 'CAN_VIEW' || o.title === 'Can View')?.id ??
+                        (accessOptions[0]?.id || '')
+                      }
                       onChange={(event: SelectChangeEvent) =>
                         setAccess(event.target.value as WorkspaceMemberAccess)
                       }
@@ -1093,26 +1132,6 @@ export default function WorkspaceMembersDialog({
           Invite
         </Button>
       </Box>
-      <FormControlLabel
-        control={
-          <Checkbox
-            checked={sendInviteEmail}
-            onChange={(event) => setSendInviteEmail(event.target.checked)}
-            size="small"
-            sx={{
-              p: 0.5,
-              color: cv.textMuted,
-              '&.Mui-checked': { color: cv.purpleLight },
-            }}
-          />
-        }
-        label={
-          <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary }}>
-            Notify via email
-          </Typography>
-        }
-        sx={{ ml: 0, gap: 0.5, userSelect: 'none' }}
-      />
     </Box>
   );
 
@@ -1272,7 +1291,22 @@ export default function WorkspaceMembersDialog({
                       <Select
                         labelId={`access-${member.id}`}
                         label="Access"
-                        value={member.access ?? 'Full Access'}
+                        value={
+                          accessOptions.find(
+                            (o) =>
+                              o.id === member.access ||
+                              o.name === member.access ||
+                              o.title === member.access ||
+                              (o.name === 'FULL_ACCESS' &&
+                                (member.access === 'Full Access' || member.access === 'Admin' || member.access === '10f1fe4a-f28f-4d76-a7c2-6175dfe04c9b')) ||
+                              (o.name === 'CAN_EDIT' &&
+                                (member.access === 'Can edit' || member.access === 'Can Edit' || member.access === 'Editor' || member.access === 'd321a6c5-c28a-4dc4-900e-4dc57fe276bf')) ||
+                              (o.name === 'CAN_VIEW' &&
+                                (member.access === 'Can view' || member.access === 'Can View' || member.access === 'Viewer' || member.access === 'eef95f55-9cf3-490a-bf4c-0af6292c191d'))
+                          )?.id ??
+                          accessOptions.find((o) => o.name === 'CAN_VIEW' || o.title === 'Can View')?.id ??
+                          ''
+                        }
                         onChange={(event: SelectChangeEvent) =>
                           handleMemberAccessChange(member, event.target.value)
                         }
@@ -1650,7 +1684,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermComment}
                     onChange={(e) => setSharePermComment(e.target.checked)}
-                    disabled={true}
+                    disabled={Boolean(orgShareSettings?.lockAllowComments)}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Comment</Typography>}
@@ -1661,7 +1695,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermDownload}
                     onChange={(e) => setSharePermDownload(e.target.checked)}
-                    disabled={true}
+                    disabled={Boolean(orgShareSettings?.lockAllowDownloadOriginal)}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Download original</Typography>}
@@ -1672,7 +1706,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermDownloadProxy}
                     onChange={(e) => setSharePermDownloadProxy(e.target.checked)}
-                    disabled={true}
+                    disabled={Boolean(orgShareSettings?.lockAllowDownloadProxy)}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Download proxy</Typography>}
@@ -1683,7 +1717,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermWatermark}
                     onChange={(e) => setSharePermWatermark(e.target.checked)}
-                    disabled={true}
+                    disabled={Boolean(orgShareSettings?.lockShowCompanyWatermark)}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Show company watermark</Typography>}
@@ -1698,7 +1732,7 @@ export default function WorkspaceMembersDialog({
                 <Switch
                   size="small"
                   checked={shareRequirePassword}
-                  disabled={true}
+                  disabled={Boolean(orgShareSettings?.lockRequirePassword)}
                   onChange={(e) => {
                     setShareRequirePassword(e.target.checked);
                     if (!e.target.checked) setSharePassword('');
@@ -1780,6 +1814,7 @@ export default function WorkspaceMembersDialog({
               const config = {
                 mode: 'email' as const,
                 email: pendingExternalEmail,
+                visibility: shareRequirePassword ? ('private' as const) : ('public' as const),
                 expiresInDays: shareExpiry !== 'custom' ? Number(shareExpiry) : undefined,
                 expiresAt: shareExpiry === 'custom' ? shareCustomDate : undefined,
                 permissions: {
@@ -1796,13 +1831,12 @@ export default function WorkspaceMembersDialog({
                 if (activeAssetId) {
                   await createShareLinkApi(activeAssetId, config);
                   await fetchBackendShareLinks();
-                } else {
-                  onInvite({
-                    email: pendingExternalEmail,
-                    memberType: 'Guest',
-                    access: 'Can view',
-                  });
                 }
+                onInvite({
+                  email: pendingExternalEmail,
+                  memberType: 'Guest',
+                  access: 'Can view',
+                });
               } catch (err) {
                 console.error('Failed to create secure share link:', err);
               } finally {
