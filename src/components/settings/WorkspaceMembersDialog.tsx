@@ -432,6 +432,25 @@ export default function WorkspaceMembersDialog({
     return list;
   }, [apiShareLinks, shareLinks]);
 
+  // Filter out individual email share links from general share links list (left panel)
+  const visibleShareLinks = useMemo(() => {
+    return (shareLinks || []).filter((link) => link.mode !== 'email');
+  }, [shareLinks]);
+
+  // Filter direct access members so guests are exclusively listed in guestInvitesList section below
+  const directAccessOrgMembers = useMemo(() => {
+    return members.filter((member) => {
+      if (member.memberType === 'Guest') return false;
+      if (
+        member.email &&
+        guestInvitesList.some((g) => g.email.toLowerCase() === member.email?.toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [members, guestInvitesList]);
+
   const inviteCopyLinkUrl = useMemo(() => {
     if (!resourceId || showShareLinks) return undefined;
     if (resourceType === 'project') {
@@ -834,7 +853,7 @@ export default function WorkspaceMembersDialog({
             <Switch
               size="small"
               checked={activeShareLink?.permissions?.watermark !== false}
-              disabled={false}
+              disabled={Boolean(orgShareSettings?.lockShowCompanyWatermark)}
               onChange={(e) => {
                 if (activeShareLinkId && onShareLinkPermissionsChange) {
                   onShareLinkPermissionsChange(activeShareLinkId, {
@@ -886,7 +905,7 @@ export default function WorkspaceMembersDialog({
 
   const shareLinksPanel = showShareLinks ? (
     <ShareLinksSection
-      shareLinks={shareLinks}
+      shareLinks={visibleShareLinks}
       activeShareLinkId={activeShareLinkId}
       editingShareLinkId={editingShareLinkId}
       onNewShareLink={handleCreateShareLink}
@@ -1188,7 +1207,7 @@ export default function WorkspaceMembersDialog({
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           {/* 1. Render Organization Members */}
-          {members.map((member) => {
+          {directAccessOrgMembers.map((member) => {
             const memberGroup = member.groupId
               ? suggestedGroups.find((group) => group.id === member.groupId)
               : undefined;
