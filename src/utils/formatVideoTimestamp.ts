@@ -31,8 +31,9 @@ export function formatVideoTimecode(seconds: number, fps: number = 24): string {
 }
 
 /** Parses display labels like `0:05`, `1:58`, or `1:02:30` into seconds. */
-export function parseMediaDurationLabel(value?: string): number | undefined {
-  if (!value?.trim()) return undefined;
+export function parseMediaDurationLabel(value?: string | number): number | undefined {
+  if (typeof value === 'number') return value;
+  if (!value || typeof value !== 'string' || !value.trim()) return undefined;
 
   const parts = value.trim().split(':').map((part) => Number(part));
   if (parts.length === 0 || parts.some((part) => !Number.isFinite(part))) {

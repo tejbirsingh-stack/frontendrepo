@@ -13,18 +13,25 @@ export default function ProjectPage() {
     }
   }, [projectId, fetchProjectData]);
 
-  const project = mediaItems.find(
-    (item) =>
-      item.id === projectId &&
-      item.type === 'folder' &&
-      item.isProject &&
-      item.workspaceId === activeWorkspaceId,
+  const foundProject = mediaItems.find(
+    (item) => item.id === projectId && (item.type === 'folder' || item.isProject),
   );
 
-  if (!project) {
-    if (mediaItems.length === 0) return null;
-    return null;
-  }
+  const project = foundProject || (projectId ? {
+    id: projectId,
+    title: 'Project',
+    type: 'folder' as const,
+    isProject: true,
+    workspaceId: activeWorkspaceId || '',
+    parentFolderId: null,
+    createdAt: new Date().toISOString(),
+    sizeBytes: 0,
+    storageProvider: 'b2',
+    uploadedBy: '',
+    status: 'active' as const,
+  } : null);
+
+  if (!project) return null;
 
   return <DashboardPage folderMedia={project} />;
 }

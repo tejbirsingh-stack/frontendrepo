@@ -24,35 +24,16 @@ export default function WorkspaceTeamMembersCell({
   shareLink,
   onInvite,
 }: WorkspaceTeamMembersCellProps) {
-  const isPublicProject = visibility === 'public';
-
-  if (isPublicProject) {
-    return (
-      <Box
-        sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        {shareLink ? <CopyLinkButton shareLink={shareLink} /> : null}
-        {canInvite ? <InviteTeamMemberButton onClick={onInvite} /> : null}
-      </Box>
-    );
-  }
-
-  if (members.length === 0) {
-    return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-        <TypographyMuted>No members</TypographyMuted>
-        {canInvite ? <InviteTeamMemberButton onClick={onInvite} /> : null}
-      </Box>
-    );
-  }
+  const isPublic = visibility === 'public';
 
   return (
     <Box
       sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}
       onClick={(event) => event.stopPropagation()}
     >
-      <TeamMemberAvatarStack members={members} />
+      {!isPublic && members.length > 0 ? (
+        <TeamMemberAvatarStack members={members} />
+      ) : null}
       {canInvite ? <InviteTeamMemberButton onClick={onInvite} /> : null}
     </Box>
   );

@@ -34,6 +34,7 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import CloseIcon from '@mui/icons-material/Close';
+import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useLocalizedDate } from '../../hooks/useLocalizedDate';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
@@ -78,7 +79,7 @@ type InviteTypeaheadOption =
   | { kind: 'user'; id: string; user: SettingsUserRow }
   | { kind: 'group'; id: string; group: SettingsUserGroup };
 
-const ACCESS_OPTIONS: WorkspaceMemberAccess[] = ['Full Access', 'Can edit', 'Can view'];
+// Dynamic options fetched from API
 
 const inlineAccessSelectSx = {
   fontSize: '0.8125rem',
@@ -232,6 +233,7 @@ export default function WorkspaceMembersDialog({
   const [query, setQuery] = useState('');
   const [access, setAccess] = useState<WorkspaceMemberAccess>('Can view');
   const [error, setError] = useState('');
+  const [sendInviteEmail, setSendInviteEmail] = useState(true);
   const [typeaheadOpen, setTypeaheadOpen] = useState(false);
   // External email — single recipient for secure share
   const [pendingExternalEmail, setPendingExternalEmail] = useState<string | null>(null);
@@ -250,6 +252,89 @@ export default function WorkspaceMembersDialog({
   const [sharePassword, setSharePassword] = useState('');
   const [sharePasswordVisible, setSharePasswordVisible] = useState(false);
   const [sharePasswordCopied, setSharePasswordCopied] = useState(false);
+  
+  // Organization Share Settings State for locking UI
+  const [orgShareSettings, setOrgShareSettings] = useState<any>(null);
+
+  const [accessOptions, setAccessOptions] = useState<any[]>([]);
+  useEffect(() => {
+    const fetchAccessLevels = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await (apiClient as any).get('/workspaces/access-levels', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = Array.isArray(res) ? res : (res as any)?.data ?? [];
+        if (Array.isArray(data)) {
+          setAccessOptions(data);
+          const defaultCanView = data.find((o: any) => o.name === 'CAN_VIEW' || o.title === 'Can View');
+          if (defaultCanView) {
+            setAccess((current) => {
+              if (!current || current === 'Can view' || current === 'Can View' || current === 'Viewer') {
+                return defaultCanView.id as WorkspaceMemberAccess;
+              }
+              return current;
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch access levels:', err);
+      }
+    };
+    if (open) {
+      fetchAccessLevels();
+    }
+  }, [open]);
+
+  const [selectedVisibility, setSelectedVisibility] = useState<ProjectVisibility>(visibility);
+  const [showVisibilityConfirm, setShowVisibilityConfirm] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setSelectedVisibility(visibility);
+    }
+  }, [open, visibility]);
+
+  useEffect(() => {
+    if (secureShareOpen) {
+      import('../../api/client').then(({ apiClient }) => {
+        apiClient.get<any>('/organizations/share-settings')
+          .then(res => {
+            const settings = res.data || res;
+            setOrgShareSettings(settings);
+            
+            if (settings.defaultExpiryDays) {
+              const daysStr = String(settings.defaultExpiryDays);
+              if (['7', '15', '30'].includes(daysStr)) {
+                setShareExpiry(daysStr as any);
+              } else {
+                setShareExpiry('custom');
+              }
+            }
+            if (settings.requirePasswordDefault !== undefined) {
+              setShareRequirePassword(settings.requirePasswordDefault);
+            }
+            if (settings.allowCommentsDefault !== undefined) {
+              setSharePermComment(settings.allowCommentsDefault);
+            }
+            if (settings.allowDownloadOriginalDefault !== undefined) {
+              setSharePermDownload(settings.allowDownloadOriginalDefault);
+            }
+            if (settings.allowDownloadProxyDefault !== undefined) {
+              setSharePermDownloadProxy(settings.allowDownloadProxyDefault);
+            }
+            if (settings.showCompanyWatermarkDefault !== undefined) {
+              setSharePermWatermark(settings.showCompanyWatermarkDefault);
+            }
+          })
+          .catch(err => console.error("Failed to load share settings", err));
+      });
+    } else {
+      setOrgShareSettings(null); // clear when closed
+    }
+  }, [secureShareOpen]);
+
   // Legacy state
   const [pendingMemberRemove, setPendingMemberRemove] = useState<WorkspaceTeamMember | null>(null);
   const [pendingShareLinkDelete, setPendingShareLinkDelete] = useState<ShareLink | null>(null);
@@ -347,6 +432,25 @@ export default function WorkspaceMembersDialog({
     return list;
   }, [apiShareLinks, shareLinks]);
 
+  // Filter out individual email share links from general share links list (left panel)
+  const visibleShareLinks = useMemo(() => {
+    return (shareLinks || []).filter((link) => link.mode !== 'email');
+  }, [shareLinks]);
+
+  // Filter direct access members so guests are exclusively listed in guestInvitesList section below
+  const directAccessOrgMembers = useMemo(() => {
+    return members.filter((member) => {
+      if (member.memberType === 'Guest') return false;
+      if (
+        member.email &&
+        guestInvitesList.some((g) => g.email.toLowerCase() === member.email?.toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [members, guestInvitesList]);
+
   const inviteCopyLinkUrl = useMemo(() => {
     if (!resourceId || showShareLinks) return undefined;
     if (resourceType === 'project') {
@@ -359,7 +463,7 @@ export default function WorkspaceMembersDialog({
   }, [resourceId, resourceType, showShareLinks, workspaceName]);
 
   const copyableLinkUrl = showShareLinks ? activeShareLink?.url : inviteCopyLinkUrl;
-  const showCopyLinkButton = Boolean(copyableLinkUrl);
+  const showCopyLinkButton = false;
 
   useEffect(() => {
     if (!open || isEditingShareLink) return;
@@ -387,6 +491,7 @@ export default function WorkspaceMembersDialog({
       setQuery('');
       setAccess('Can view');
       setError('');
+      setSendInviteEmail(false);
       setTypeaheadOpen(false);
       setPendingExternalEmail(null);
       setSecureShareOpen(false);
@@ -485,6 +590,7 @@ export default function WorkspaceMembersDialog({
       groupName: group.name,
       memberType: 'Group',
       access,
+      sendInviteEmail,
     });
 
     if (!success) {
@@ -504,6 +610,7 @@ export default function WorkspaceMembersDialog({
       name,
       memberType,
       access,
+      sendInviteEmail,
     });
 
     if (!success) {
@@ -543,12 +650,6 @@ export default function WorkspaceMembersDialog({
       return;
     }
 
-    // External email typed — open secure share popup directly
-    if (EMAIL_PATTERN.test(trimmed) && isExternalEmail(trimmed.toLowerCase())) {
-      openSecureShare(trimmed.toLowerCase());
-      return;
-    }
-
     const matchedGroup = suggestedGroups.find(
       (group) =>
         !memberGroupIds.has(group.id) && group.name.toLowerCase() === trimmed.toLowerCase(),
@@ -564,11 +665,12 @@ export default function WorkspaceMembersDialog({
         user.name.toLowerCase() === trimmed.toLowerCase(),
     );
     if (matchedUser) {
-      if (!isOrganizationUser(matchedUser)) {
-        openSecureShare(matchedUser.email.toLowerCase());
+      const memberType = isOrganizationUser(matchedUser) ? 'Member' : 'Guest';
+      if (memberType === 'Guest') {
+        openSecureShare(matchedUser.email);
         return;
       }
-      inviteUser(matchedUser.email, matchedUser.name, 'Member');
+      inviteUser(matchedUser.email, matchedUser.name, memberType);
       return;
     }
 
@@ -578,12 +680,12 @@ export default function WorkspaceMembersDialog({
     }
 
     const email = trimmed.toLowerCase();
-    if (isExternalEmail(email)) {
+    const memberType = resolveMemberType(email);
+    if (memberType === 'Guest') {
       openSecureShare(email);
       return;
     }
-
-    inviteUser(email, undefined, 'Member');
+    inviteUser(email, undefined, memberType);
   };
 
   const handleInviteKeyDown = (event: KeyboardEvent) => {
@@ -602,12 +704,12 @@ export default function WorkspaceMembersDialog({
       return;
     }
 
-    if (!isOrganizationUser(option.user)) {
-      openSecureShare(option.user.email.toLowerCase());
+    const memberType = isOrganizationUser(option.user) ? 'Member' : 'Guest';
+    if (memberType === 'Guest') {
+      openSecureShare(option.user.email);
       return;
     }
-
-    inviteUser(option.user.email, option.user.name, 'Member');
+    inviteUser(option.user.email, option.user.name, memberType);
   };
 
   const handleInviteInputBlur = () => {
@@ -615,7 +717,7 @@ export default function WorkspaceMembersDialog({
   };
 
   const handleVisibilityChange = (nextVisibility: ProjectVisibility) => {
-    onVisibilityChange?.(nextVisibility);
+    setSelectedVisibility(nextVisibility);
     if (nextVisibility === 'public') {
       setError('');
     }
@@ -647,14 +749,25 @@ export default function WorkspaceMembersDialog({
 
   const handleDraftVisibilityChange = (nextVisibility: ProjectVisibility) => {
     setDraftVisibility(nextVisibility);
-    onVisibilityChange?.(nextVisibility);
   };
 
   const handleShareLinkNameBlur = () => {
     setIsEditingShareLink(false);
   };
 
+  const confirmVisibilityChange = () => {
+    onVisibilityChange?.(selectedVisibility);
+    setShowVisibilityConfirm(false);
+    setIsEditingShareLink(false);
+    onClose();
+  };
+
   const handleShare = async () => {
+    if (isProject && selectedVisibility !== visibility) {
+      setShowVisibilityConfirm(true);
+      return;
+    }
+
     let didSave = false;
 
     if (showShareLinks && activeShareLinkId) {
@@ -739,8 +852,8 @@ export default function WorkspaceMembersDialog({
           control={
             <Switch
               size="small"
-              checked={draftVisibility === 'public' ? false : activeShareLink?.permissions?.watermark !== false}
-              disabled={draftVisibility === 'public'}
+              checked={activeShareLink?.permissions?.watermark !== false}
+              disabled={Boolean(orgShareSettings?.lockShowCompanyWatermark)}
               onChange={(e) => {
                 if (activeShareLinkId && onShareLinkPermissionsChange) {
                   onShareLinkPermissionsChange(activeShareLinkId, {
@@ -759,7 +872,7 @@ export default function WorkspaceMembersDialog({
   const visibilitySection =
     isProject && onVisibilityChange && !showShareLinks ? (
     <ProjectVisibilityPicker
-      value={visibility}
+      value={selectedVisibility}
       onChange={handleVisibilityChange}
       publicDescription="Anyone with the link can view this project."
       privateDescription="Only you and invited members can access this project."
@@ -792,7 +905,7 @@ export default function WorkspaceMembersDialog({
 
   const shareLinksPanel = showShareLinks ? (
     <ShareLinksSection
-      shareLinks={shareLinks}
+      shareLinks={visibleShareLinks}
       activeShareLinkId={activeShareLinkId}
       editingShareLinkId={editingShareLinkId}
       onNewShareLink={handleCreateShareLink}
@@ -806,218 +919,238 @@ export default function WorkspaceMembersDialog({
   ) : null;
 
   const handleMemberAccessChange = (member: WorkspaceTeamMember, value: string) => {
-    onUpdateMemberAccess(member.id, value as WorkspaceMemberAccess);
+    // value is the option UUID — resolve it to the name/title for role mapping downstream
+    const option = accessOptions.find((o) => o.id === value);
+    const resolvedAccess = (option?.name || option?.title || value) as WorkspaceMemberAccess;
+    onUpdateMemberAccess(member.id, resolvedAccess);
   };
 
   const inviteFormSection = (
-    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-      <Box sx={{ position: 'relative', flex: 1, minWidth: 0 }}>
-        <TextField
-          fullWidth
-          size="small"
-          placeholder="Name, email, or group"
-          value={query}
-          onChange={(event) => {
-            const value = event.target.value;
-            setQuery(value);
-            setTypeaheadOpen(true);
-            if (error) setError('');
-          }}
-          onFocus={() => setTypeaheadOpen(true)}
-          onBlur={handleInviteInputBlur}
-          onKeyDown={handleInviteKeyDown}
-          error={Boolean(error)}
-          helperText={
-            error
-              ? error
-              : queryIsExternal
-              ? 'External email — click Invite to set sharing permissions.'
-              : 'Type to search people and groups, or enter an email to invite.'
-          }
-          autoFocus={!showShareLinks}
-          slotProps={{
-            input: {
-              endAdornment: !queryIsExternal ? (
-                <InputAdornment position="end" sx={{ ml: 0, height: '100%' }}>
-                  <Select
-                    value={access}
-                    onChange={(event: SelectChangeEvent) =>
-                      setAccess(event.target.value as WorkspaceMemberAccess)
-                    }
-                    MenuProps={selectInDialogMenuProps}
-                    size="small"
-                    sx={inlineAccessSelectSx}
-                    aria-label="Access level"
-                  >
-                    {ACCESS_OPTIONS.map((option) => (
-                      <MenuItem key={option} value={option} sx={{ fontSize: '0.875rem' }}>
-                        {option}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </InputAdornment>
-              ) : undefined,
-            },
-          }}
-        />
-
-        {showTypeahead ? (
-          <Box
-            role="listbox"
-            aria-label="Invite suggestions"
-            sx={{
-              position: 'absolute',
-              top: 'calc(100% + 4px)',
-              left: 0,
-              right: 0,
-              zIndex: 2,
-              borderRadius: '10px',
-              border: `1px solid ${cv.border}`,
-              backgroundColor: cv.dialogSurface,
-              boxShadow: '0 12px 32px rgba(0, 0, 0, 0.35)',
-              overflow: 'hidden',
-              maxHeight: 240,
-              overflowY: 'auto',
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+        <Box sx={{ position: 'relative', flex: 1, minWidth: 0 }}>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Name, email, or group"
+            value={query}
+            onChange={(event) => {
+              const value = event.target.value;
+              setQuery(value);
+              setTypeaheadOpen(true);
+              if (error) setError('');
             }}
-          >
-            {typeaheadOptions.map((option) =>
-              option.kind === 'group' ? (
-                <Box
-                  key={option.id}
-                  component="button"
-                  type="button"
-                  role="option"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleSelectTypeaheadOption(option)}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.25,
-                    width: '100%',
-                    border: 'none',
-                    px: 1.25,
-                    py: 1,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    backgroundColor: 'transparent',
-                    '&:hover': { backgroundColor: cv.surfaceHover },
-                  }}
-                >
+            onFocus={() => setTypeaheadOpen(true)}
+            onBlur={handleInviteInputBlur}
+            onKeyDown={handleInviteKeyDown}
+            error={Boolean(error)}
+            helperText={
+              error
+                ? error
+                : queryIsExternal
+                ? 'External email — click Invite to set sharing permissions.'
+                : 'Type to search people and groups, or enter an email to invite.'
+            }
+            autoFocus={!showShareLinks}
+            slotProps={{
+              input: {
+                endAdornment: !queryIsExternal ? (
+                  <InputAdornment position="end" sx={{ ml: 0, height: '100%' }}>
+                    <Select
+                      value={
+                        accessOptions.find(
+                          (o) =>
+                            o.id === access ||
+                            o.name === access ||
+                            o.title === access ||
+                            (o.name === 'FULL_ACCESS' &&
+                              (access === 'Full Access' || access === 'Admin' || access === '10f1fe4a-f28f-4d76-a7c2-6175dfe04c9b')) ||
+                            (o.name === 'CAN_EDIT' &&
+                              (access === 'Can edit' || access === 'Can Edit' || access === 'Editor' || access === 'd321a6c5-c28a-4dc4-900e-4dc57fe276bf')) ||
+                            (o.name === 'CAN_VIEW' &&
+                              (access === 'Can view' || access === 'Can View' || access === 'Viewer' || access === 'eef95f55-9cf3-490a-bf4c-0af6292c191d'))
+                        )?.id ??
+                        accessOptions.find((o) => o.name === 'CAN_VIEW' || o.title === 'Can View')?.id ??
+                        (accessOptions[0]?.id || '')
+                      }
+                      onChange={(event: SelectChangeEvent) =>
+                        setAccess(event.target.value as WorkspaceMemberAccess)
+                      }
+                      MenuProps={selectInDialogMenuProps}
+                      size="small"
+                      sx={inlineAccessSelectSx}
+                      aria-label="Access level"
+                    >
+                      {accessOptions.map((option) => (
+                        <MenuItem key={option.id} value={option.id} sx={{ fontSize: '0.875rem' }}>
+                          {option.title || option.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </InputAdornment>
+                ) : undefined,
+              },
+            }}
+          />
+
+          {showTypeahead ? (
+            <Box
+              role="listbox"
+              aria-label="Invite suggestions"
+              sx={{
+                position: 'absolute',
+                top: 'calc(100% + 4px)',
+                left: 0,
+                right: 0,
+                zIndex: 2,
+                borderRadius: '10px',
+                border: `1px solid ${cv.border}`,
+                backgroundColor: cv.dialogSurface,
+                boxShadow: '0 12px 32px rgba(0, 0, 0, 0.35)',
+                overflow: 'hidden',
+                maxHeight: 240,
+                overflowY: 'auto',
+              }}
+            >
+              {typeaheadOptions.map((option) =>
+                option.kind === 'group' ? (
                   <Box
+                    key={option.id}
+                    component="button"
+                    type="button"
+                    role="option"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleSelectTypeaheadOption(option)}
                     sx={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: '8px',
-                      display: 'inline-flex',
+                      display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      bgcolor: cv.indigoSurface,
-                      flexShrink: 0,
+                      gap: 1.25,
+                      width: '100%',
+                      border: 'none',
+                      px: 1.25,
+                      py: 1,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      backgroundColor: 'transparent',
+                      '&:hover': { backgroundColor: cv.surfaceHover },
                     }}
                   >
-                    <GroupsOutlinedIcon sx={{ fontSize: 16, color: cv.indigoLight }} />
-                  </Box>
-                  <Box sx={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
-                    <Typography
+                    <Box
                       sx={{
-                        fontSize: '0.875rem',
-                        fontWeight: 500,
-                        color: cv.textPrimary,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        width: 28,
+                        height: 28,
+                        borderRadius: '8px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        bgcolor: cv.indigoSurface,
+                        flexShrink: 0,
                       }}
                     >
-                      {option.group.name}
-                    </Typography>
-                    <Typography
-                      sx={{
-                        fontSize: '0.75rem',
-                        color: cv.textMuted,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {option.group.description}
-                    </Typography>
+                      <GroupsOutlinedIcon sx={{ fontSize: 16, color: cv.indigoLight }} />
+                    </Box>
+                    <Box sx={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                      <Typography
+                        sx={{
+                          fontSize: '0.875rem',
+                          fontWeight: 500,
+                          color: cv.textPrimary,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {option.group.name}
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontSize: '0.75rem',
+                          color: cv.textMuted,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {option.group.description}
+                      </Typography>
+                    </Box>
                   </Box>
-                </Box>
-              ) : (
-                <Box
-                  key={option.id}
-                  component="button"
-                  type="button"
-                  role="option"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleSelectTypeaheadOption(option)}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.25,
-                    width: '100%',
-                    border: 'none',
-                    px: 1.25,
-                    py: 1,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    backgroundColor: 'transparent',
-                    '&:hover': { backgroundColor: cv.surfaceHover },
-                  }}
-                >
-                  <MemberAvatar
-                    member={{
-                      initials: option.user.initials,
-                      avatarUrl: option.user.isCurrentUser ? CURRENT_USER.avatarUrl : undefined,
-                      name: option.user.name,
+                ) : (
+                  <Box
+                    key={option.id}
+                    component="button"
+                    type="button"
+                    role="option"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleSelectTypeaheadOption(option)}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.25,
+                      width: '100%',
+                      border: 'none',
+                      px: 1.25,
+                      py: 1,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      backgroundColor: 'transparent',
+                      '&:hover': { backgroundColor: cv.surfaceHover },
                     }}
-                  />
-                  <Box sx={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
-                    <Typography
-                      sx={{
-                        fontSize: '0.875rem',
-                        fontWeight: 500,
-                        color: cv.textPrimary,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                  >
+                    <MemberAvatar
+                      member={{
+                        initials: option.user.initials,
+                        avatarUrl: option.user.isCurrentUser ? CURRENT_USER.avatarUrl : undefined,
+                        name: option.user.name,
                       }}
-                    >
-                      {option.user.name}
-                    </Typography>
-                    <Typography
-                      sx={{
-                        fontSize: '0.75rem',
-                        color: cv.textMuted,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {option.user.email}
-                    </Typography>
+                    />
+                    <Box sx={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                      <Typography
+                        sx={{
+                          fontSize: '0.875rem',
+                          fontWeight: 500,
+                          color: cv.textPrimary,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {option.user.name}
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontSize: '0.75rem',
+                          color: cv.textMuted,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {option.user.email}
+                      </Typography>
+                    </Box>
                   </Box>
-                </Box>
-              ),
-            )}
-          </Box>
-        ) : null}
-      </Box>
+                ),
+              )}
+            </Box>
+          ) : null}
+        </Box>
 
-      <Button
-        variant="contained"
-        disabled={!canAdd}
-        onClick={handleAdd}
-        sx={{
-          ...containedButtonSx,
-          flexShrink: 0,
-          minWidth: 88,
-          height: 40,
-          px: 2,
-        }}
-      >
-        Invite
-      </Button>
+        <Button
+          variant="contained"
+          disabled={!canAdd}
+          onClick={handleAdd}
+          sx={{
+            ...containedButtonSx,
+            flexShrink: 0,
+            minWidth: 88,
+            height: 40,
+            px: 2,
+          }}
+        >
+          Invite
+        </Button>
+      </Box>
     </Box>
   );
 
@@ -1074,7 +1207,7 @@ export default function WorkspaceMembersDialog({
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           {/* 1. Render Organization Members */}
-          {members.map((member) => {
+          {directAccessOrgMembers.map((member) => {
             const memberGroup = member.groupId
               ? suggestedGroups.find((group) => group.id === member.groupId)
               : undefined;
@@ -1140,22 +1273,7 @@ export default function WorkspaceMembersDialog({
                   </Typography>
                 </Box>
               </Box>
-              {member.memberType === 'Guest' ? (
-                <Typography
-                  sx={{
-                    fontSize: '0.8125rem',
-                    fontWeight: 500,
-                    color: cv.textSecondary,
-                    px: 1.5,
-                    py: 0.5,
-                    borderRadius: '8px',
-                    backgroundColor: cv.surfaceMuted,
-                    border: `1px solid ${cv.border}`,
-                  }}
-                >
-                  Guest Access
-                </Typography>
-              ) : isCurrentMember ? (
+              {isCurrentMember ? (
                 <Typography
                   sx={{
                     fontSize: '0.8125rem',
@@ -1168,39 +1286,75 @@ export default function WorkspaceMembersDialog({
                   Owner
                 </Typography>
               ) : (
-                <FormControl size="small">
-                  <InputLabel id={`access-${member.id}`} shrink>
-                    Access
-                  </InputLabel>
-                  <Select
-                    labelId={`access-${member.id}`}
-                    label="Access"
-                    value={member.access ?? 'Full Access'}
-                    onChange={(event: SelectChangeEvent) =>
-                      handleMemberAccessChange(member, event.target.value)
-                    }
-                    MenuProps={selectInDialogMenuProps}
-                    sx={{ ...dialogSelectSx, minWidth: 140 }}
-                  >
-                    {ACCESS_OPTIONS.map((option) => (
-                      <MenuItem key={option} value={option} sx={{ fontSize: '0.875rem' }}>
-                        {option}
-                      </MenuItem>
-                    ))}
-                    {onRemoveMember && !isCurrentMember ? (
-                      <>
-                        <Divider sx={{ my: 0.5, borderColor: cv.divider }} />
-                        <MenuItem
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => beginMemberRemove(member)}
-                          sx={{ fontSize: '0.875rem', color: cv.destructive }}
-                        >
-                          Remove
-                        </MenuItem>
-                      </>
-                    ) : null}
-                  </Select>
-                </FormControl>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  {member.memberType === 'Guest' ? (
+                    <Typography
+                      sx={{
+                        fontSize: '0.8125rem',
+                        fontWeight: 500,
+                        color: cv.textSecondary,
+                        px: 1.5,
+                        py: 0.5,
+                        borderRadius: '8px',
+                        backgroundColor: cv.surfaceMuted,
+                        border: `1px solid ${cv.border}`,
+                      }}
+                    >
+                      Guest Access
+                    </Typography>
+                  ) : (
+                    <FormControl size="small">
+                      <InputLabel id={`access-${member.id}`} shrink>
+                        Access
+                      </InputLabel>
+                      <Select
+                        labelId={`access-${member.id}`}
+                        label="Access"
+                        value={
+                          accessOptions.find(
+                            (o) =>
+                              o.id === member.access ||
+                              o.name === member.access ||
+                              o.title === member.access ||
+                              (o.name === 'FULL_ACCESS' &&
+                                (member.access === 'Full Access' || member.access === 'Admin' || member.access === '10f1fe4a-f28f-4d76-a7c2-6175dfe04c9b')) ||
+                              (o.name === 'CAN_EDIT' &&
+                                (member.access === 'Can edit' || member.access === 'Can Edit' || member.access === 'Editor' || member.access === 'd321a6c5-c28a-4dc4-900e-4dc57fe276bf')) ||
+                              (o.name === 'CAN_VIEW' &&
+                                (member.access === 'Can view' || member.access === 'Can View' || member.access === 'Viewer' || member.access === 'eef95f55-9cf3-490a-bf4c-0af6292c191d'))
+                          )?.id ??
+                          accessOptions.find((o) => o.name === 'CAN_VIEW' || o.title === 'Can View')?.id ??
+                          ''
+                        }
+                        onChange={(event: SelectChangeEvent) =>
+                          handleMemberAccessChange(member, event.target.value)
+                        }
+                        MenuProps={selectInDialogMenuProps}
+                        sx={{ ...dialogSelectSx, minWidth: 140 }}
+                      >
+                        {accessOptions.map((option) => (
+                          <MenuItem key={option.id} value={option.id} sx={{ fontSize: '0.875rem' }}>
+                            {option.title || option.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+                  {onRemoveMember && !isCurrentMember ? (
+                    <IconButton
+                      size="small"
+                      onClick={() => beginMemberRemove(member)}
+                      sx={{
+                        color: cv.textMuted,
+                        '&:hover': { color: cv.destructive, backgroundColor: 'rgba(239, 68, 68, 0.1)' },
+                      }}
+                      title="Remove access"
+                      aria-label="Remove access"
+                    >
+                      <DeleteOutlineOutlinedIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  ) : null}
+                </Box>
               )}
             </Box>
             );
@@ -1282,29 +1436,21 @@ export default function WorkspaceMembersDialog({
                     </Typography>
                   </Box>
                 </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-                  <Button
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                  <IconButton
                     size="small"
-                    onClick={async () => {
-                      try {
-                        await deleteShareLinkApi(item.linkId);
-                        void fetchBackendShareLinks();
-                      } catch {
-                        // ignore
-                      }
+                    onClick={() => {
+                      setPendingShareLinkDelete({ id: item.linkId, name: item.email } as any);
                     }}
                     sx={{
-                      fontSize: '0.75rem',
-                      color: cv.destructive,
-                      textTransform: 'none',
-                      px: 1.25,
-                      py: 0.4,
-                      borderRadius: '6px',
-                      '&:hover': { backgroundColor: cv.destructiveHover },
+                      color: cv.textMuted,
+                      '&:hover': { color: cv.destructive, backgroundColor: 'rgba(239, 68, 68, 0.1)' },
                     }}
+                    title="Revoke guest access"
+                    aria-label="Revoke guest access"
                   >
-                    Revoke
-                  </Button>
+                    <DeleteOutlineOutlinedIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
                 </Box>
               </Box>
             );
@@ -1325,7 +1471,9 @@ export default function WorkspaceMembersDialog({
 
   const footerMembersSummary = (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
-      <TeamMemberAvatarStack members={members} borderColor={cv.dialogSurface} />
+      {selectedVisibility !== 'public' ? (
+        <TeamMemberAvatarStack members={members} borderColor={cv.dialogSurface} />
+      ) : null}
       <Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
         {members.length} Member{members.length === 1 ? '' : 's'}
       </Typography>
@@ -1500,6 +1648,7 @@ export default function WorkspaceMembersDialog({
               exclusive
               onChange={(_e, val) => { if (val) setShareExpiry(val as typeof shareExpiry); }}
               size="small"
+              disabled={Boolean(orgShareSettings?.defaultExpiryDays)}
               sx={{ flexWrap: 'wrap', gap: 0.5 }}
             >
               {(['7', '15', '30', 'custom'] as const).map((opt) => (
@@ -1554,6 +1703,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermComment}
                     onChange={(e) => setSharePermComment(e.target.checked)}
+                    disabled={Boolean(orgShareSettings?.lockAllowComments)}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Comment</Typography>}
@@ -1564,6 +1714,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermDownload}
                     onChange={(e) => setSharePermDownload(e.target.checked)}
+                    disabled={Boolean(orgShareSettings?.lockAllowDownloadOriginal)}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Download original</Typography>}
@@ -1574,6 +1725,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermDownloadProxy}
                     onChange={(e) => setSharePermDownloadProxy(e.target.checked)}
+                    disabled={Boolean(orgShareSettings?.lockAllowDownloadProxy)}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Download proxy</Typography>}
@@ -1584,6 +1736,7 @@ export default function WorkspaceMembersDialog({
                     size="small"
                     checked={sharePermWatermark}
                     onChange={(e) => setSharePermWatermark(e.target.checked)}
+                    disabled={Boolean(orgShareSettings?.lockShowCompanyWatermark)}
                   />
                 }
                 label={<Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>Show company watermark</Typography>}
@@ -1598,6 +1751,7 @@ export default function WorkspaceMembersDialog({
                 <Switch
                   size="small"
                   checked={shareRequirePassword}
+                  disabled={Boolean(orgShareSettings?.lockRequirePassword)}
                   onChange={(e) => {
                     setShareRequirePassword(e.target.checked);
                     if (!e.target.checked) setSharePassword('');
@@ -1679,6 +1833,7 @@ export default function WorkspaceMembersDialog({
               const config = {
                 mode: 'email' as const,
                 email: pendingExternalEmail,
+                visibility: shareRequirePassword ? ('private' as const) : ('public' as const),
                 expiresInDays: shareExpiry !== 'custom' ? Number(shareExpiry) : undefined,
                 expiresAt: shareExpiry === 'custom' ? shareCustomDate : undefined,
                 permissions: {
@@ -1695,13 +1850,12 @@ export default function WorkspaceMembersDialog({
                 if (activeAssetId) {
                   await createShareLinkApi(activeAssetId, config);
                   await fetchBackendShareLinks();
-                } else {
-                  onInvite({
-                    email: pendingExternalEmail,
-                    memberType: 'Guest',
-                    access: 'Can view',
-                  });
                 }
+                onInvite({
+                  email: pendingExternalEmail,
+                  memberType: 'Guest',
+                  access: 'Can view',
+                });
               } catch (err) {
                 console.error('Failed to create secure share link:', err);
               } finally {
@@ -1805,6 +1959,41 @@ export default function WorkspaceMembersDialog({
             }}
           >
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={showVisibilityConfirm}
+        onClose={() => setShowVisibilityConfirm(false)}
+        maxWidth="xs"
+        fullWidth
+        aria-labelledby="visibility-confirm-title"
+        slotProps={noahNestedDialogSlotProps()}
+      >
+        <DialogTitle id="visibility-confirm-title" sx={{ color: cv.textPrimary, fontWeight: 600 }}>
+          Update project visibility?
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: cv.textSecondary, fontSize: '0.9375rem', lineHeight: 1.55 }}>
+            {selectedVisibility === 'public'
+              ? 'Are you sure you want to change project visibility to Public? All members in this workspace will be able to view and access this project.'
+              : 'Are you sure you want to change project visibility to Private? Only invited members will be able to access this project.'}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, pt: 0, gap: 1 }}>
+          <Button
+            onClick={() => setShowVisibilityConfirm(false)}
+            sx={{ textTransform: 'none', color: cv.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={confirmVisibilityChange}
+            sx={containedButtonSx}
+          >
+            Update
           </Button>
         </DialogActions>
       </Dialog>

@@ -43,3 +43,19 @@ body {
     color: var(--noah-text-on-cta);
   }
 }
+
+// Custom Glassmorphic Toast Theme Styling
+div[data-react-hot-toast] {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.01em !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+}
+
+[data-theme='dark'] div[data-react-hot-toast],
+body:not([data-theme='light']) div[data-react-hot-toast] {
+  color: var(--noah-text-primary, #f3f4f6) !important;
+}

@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
-  Backdrop,
   Box,
   Button,
-  CircularProgress,
   Divider,
   IconButton,
   InputAdornment,
@@ -24,7 +22,7 @@ import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
-import NoahLogo from '../components/NoahLogo';
+import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
 import ChoosePlanScreen from '../components/onboarding/ChoosePlanScreen';
 import { useAuth } from '../auth/AuthContext';
 import { persistSession } from '../auth/authStorage';
@@ -36,10 +34,10 @@ import {
   sendSignupOtpRequest,
   verifySignupOtpRequest,
   completeSignupRequest,
+  fetchCurrentUserRequest,
   mapAuthUserDtoToSessionUser,
 } from '../api/auth.service';
-import { uploadMediaFileRequest } from '../api/media.service';
-import { extractImageMetadata, extractAudioMetadata } from '../utils/mediaMetadataExtractors';
+import { useUploadManager } from '../context/UploadManagerContext';
 
 type SignupPhase = 'email' | 'verify' | 'workspace' | 'usage' | 'upload' | 'done' | 'plans';
 
@@ -187,7 +185,11 @@ function SignupStepFooter({
       {showSkip && onSkip ? (
         <Button
           type="button"
-          onClick={onSkip}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onSkip();
+          }}
           sx={{
             color: cv.textSecondary,
             textTransform: 'none',
@@ -251,8 +253,7 @@ export default function SignUpPage() {
   const [error, setError] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [isSsoLoading, setIsSsoLoading] = useState(false);
-  const [isUploadingOnboardingFiles, setIsUploadingOnboardingFiles] = useState(false);
-  const [uploadProgressText, setUploadProgressText] = useState('');
+  const { enqueueFiles } = useUploadManager();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const workspaceSlug = useMemo(() => slugifyWorkspaceName(workspaceName), [workspaceName]);
@@ -411,49 +412,35 @@ export default function SignUpPage() {
       if (activeToken) {
         localStorage.setItem('accessToken', activeToken);
         localStorage.setItem('token', activeToken);
-      }
 
-      if (uploadedFiles && uploadedFiles.length > 0) {
-        setIsUploadingOnboardingFiles(true);
-        let currentCount = 0;
-        for (const file of uploadedFiles) {
-          currentCount++;
-          setUploadProgressText(`Uploading onboarding file ${currentCount} of ${uploadedFiles.length}: ${file.name}`);
-          try {
-            let fullTechSpecs: Record<string, any> = {};
-            const mime = file.type || '';
-            if (mime.startsWith('image/')) {
-              fullTechSpecs = await extractImageMetadata(file);
-            } else if (mime.startsWith('audio/')) {
-              fullTechSpecs = await extractAudioMetadata(file);
-            }
-
-            const targetWorkspaceId = response?.workspace?.id || response?.user?.workspace?.id;
-            const uploadedAsset = await uploadMediaFileRequest(file, {
-              title: file.name.replace(/\.[^/.]+$/, ''),
-              technicalSpecs: fullTechSpecs,
-              ownerType: 'WORKSPACE',
-              ownerId: targetWorkspaceId,
-            });
-            console.log('Successfully saved onboarding asset to DB:', file.name, uploadedAsset);
-          } catch (uploadErr) {
-            console.error('Failed to upload onboarding media file with EXIF specs:', file.name, uploadErr);
-          }
-        }
-        setIsUploadingOnboardingFiles(false);
-      }
-
-      if (activeToken) {
         const mappedUser = mapAuthUserDtoToSessionUser(response?.user || response);
         setSession(activeToken, mappedUser);
         persistSession(activeToken, mappedUser);
+
+        try {
+          const currentUserDto = await fetchCurrentUserRequest();
+          if (currentUserDto) {
+            const updatedUser = mapAuthUserDtoToSessionUser(currentUserDto);
+            setSession(activeToken, updatedUser);
+            persistSession(activeToken, updatedUser);
+          }
+        } catch (fetchUserErr) {
+          console.warn('Failed to fetch full user profile after signup:', fetchUserErr);
+        }
+      }
+
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        const targetWorkspaceId = response?.workspace?.id || response?.user?.workspace?.id || response?.user?.orgId;
+        void enqueueFiles(uploadedFiles, {
+          ownerType: 'WORKSPACE',
+          ownerId: targetWorkspaceId,
+        });
       }
 
       navigate('/home', { replace: true });
     } catch (err: any) {
       console.error('Failed to complete signup:', err);
       setError(err.response?.data?.message || err.message || 'Failed to complete signup. Please try again.');
-      setIsUploadingOnboardingFiles(false);
     } finally {
       setIsChecking(false);
     }
@@ -718,41 +705,11 @@ export default function SignUpPage() {
     };
   }, [phase]);
 
-  const renderUploadBackdropLoader = () => (
-    <Backdrop
-      open={isUploadingOnboardingFiles}
-      sx={{
-        color: '#fff',
-        zIndex: (theme) => theme.zIndex.drawer + 9999,
-        backgroundColor: 'rgba(15, 23, 42, 0.88)',
-        backdropFilter: 'blur(10px)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 2.5,
-      }}
-    >
-      <CircularProgress size={56} sx={{ color: '#818cf8' }} />
-      <Box sx={{ textAlign: 'center', maxWidth: 420, px: 2 }}>
-        <Typography variant="h6" sx={{ color: '#f8fafc', fontWeight: 600, mb: 0.5 }}>
-          Uploading your media files...
-        </Typography>
-        <Typography variant="body2" sx={{ color: '#94a3b8' }}>
-          {uploadProgressText || 'Please wait while we complete setting up your workspace.'}
-        </Typography>
-      </Box>
-    </Backdrop>
-  );
-
   if (phase === 'plans') {
     return (
-      <>
-        <ChoosePlanScreen
-          onSelectPlan={(planId, billingCycle) => void handleFinalPlanSelect(planId, billingCycle)}
-        />
-        {renderUploadBackdropLoader()}
-      </>
+      <ChoosePlanScreen
+        onSelectPlan={(planId, billingCycle) => void handleFinalPlanSelect(planId, billingCycle)}
+      />
     );
   }
 
@@ -787,13 +744,14 @@ export default function SignUpPage() {
           }}
         >
           <Box>
-            <NoahLogo
-              align="left"
-              width={{ xs: 140, sm: 180 }}
-              animated={false}
-              showGlow={false}
-              sx={{ mb: { xs: 3, md: 4 } }}
-            />
+            <Box sx={{ ...AUTH_LOGO_PARENT_SX, justifyContent: 'flex-start', mb: { xs: 3, md: 4 } }}>
+              <NoahLogo
+                align="left"
+                animated={false}
+                showGlow={false}
+                sx={AUTH_LOGO_SX}
+              />
+            </Box>
             <Typography
               sx={{
                 color: cv.textPrimary,
@@ -844,7 +802,6 @@ export default function SignUpPage() {
             })}
           </Box>
         </Box>
-        {renderUploadBackdropLoader()}
       </Box>
     );
   }
@@ -869,15 +826,17 @@ export default function SignUpPage() {
           position: 'relative',
           zIndex: 1,
           width: '100%',
-          maxWidth: phase === 'usage' || phase === 'upload' ? 560 : 440,
+          maxWidth: 640,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
         }}
       >
-        <NoahLogo />
+        <Box sx={AUTH_LOGO_PARENT_SX}>
+          <NoahLogo sx={AUTH_LOGO_SX} />
+        </Box>
 
-        <GlassCard glow sx={{ width: '100%' }}>
+        <GlassCard glow sx={{ width: '100%', maxWidth: phase === 'usage' || phase === 'upload' ? 560 : 440 }}>
           {phase === 'email' ? (
             <Box
               component="form"
@@ -1671,8 +1630,6 @@ export default function SignUpPage() {
           ) : null}
         </GlassCard>
       </Box>
-
-      {renderUploadBackdropLoader()}
     </Box>
   );
 }

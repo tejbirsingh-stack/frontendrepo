@@ -12,12 +12,12 @@ import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import CheckIcon from '@mui/icons-material/Check';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
-import KeyboardOutlinedIcon from '@mui/icons-material/KeyboardOutlined';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
@@ -84,7 +84,7 @@ import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../auth/AuthContext';
 
 import { SAMPLE_VIDEO_SRC } from '../constants/sampleVideos';
-import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, HEADER_LOGO_WIDTH, SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
+import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, HEADER_LOGO_BOX_HEIGHT_DESKTOP, HEADER_LOGO_BOX_HEIGHT_MOBILE, HEADER_LOGO_BOX_WIDTH_DESKTOP, HEADER_LOGO_BOX_WIDTH_MOBILE, SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
 import { TOAST_Z_INDEX } from '../constants/dropdownMenu';
 import type { AnnotationHistoryEntry, AnnotationHistoryType } from '../types/annotationHistory';
 import type { AnnotationAccessGroup, AnnotationVisibility } from '../types/annotationVisibility';
@@ -143,6 +143,13 @@ import { buildTimelineItems } from '../utils/buildTimelineItems';
 import { createDefaultAnnotationEndTime } from '../utils/annotationTimeRange';
 import type { TimelineAnnotationType } from '../types/annotationTimeline';
 import { formatFileSize } from '../utils/formatFileSize';
+import {
+  DEFAULT_FILE_REVIEW_STATUS,
+  FILE_REVIEW_STATUSES,
+  getFileReviewStatusColor,
+  parseFileReviewStatus,
+  type FileReviewStatus,
+} from '../constants/fileReviewStatus';
 import { formatVideoTimestamp, parseMediaDurationLabel } from '../utils/formatVideoTimestamp';
 import {
   extractPlaybackQualityMetadata,
@@ -167,21 +174,44 @@ import {
 } from '../utils/playerToolUtils';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
-import { getMediaAssetByIdRequest, updateAssetTagsRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride, updateAssetGroupAccessOverride, removeAssetGroupAccessOverride, getCompanyInfoRequest } from '../api';
+import { getMediaAssetByIdRequest, updateAssetTagsRequest, updateAssetReviewStatusRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride, updateAssetGroupAccessOverride, removeAssetGroupAccessOverride, getCompanyInfoRequest } from '../api';
 import { fetchUserGroups } from '../api/userGroups.service';
 import type { MediaItem, MediaType } from '../data/mockMedia';
 
+function parseAccessLevelToRole(val?: string): 'Admin' | 'Editor' | 'Viewer' {
+  if (!val) return 'Viewer';
+  const str = val.trim();
+  if (
+    str === '10f1fe4a-f28f-4d76-a7c2-6175dfe04c9b' ||
+    str === 'FULL_ACCESS' ||
+    str.toLowerCase() === 'full access' ||
+    str.toLowerCase() === 'full_access' ||
+    str === 'Admin'
+  ) {
+    return 'Admin';
+  }
+  if (
+    str === 'd321a6c5-c28a-4dc4-900e-4dc57fe276bf' ||
+    str === 'CAN_EDIT' ||
+    str.toLowerCase() === 'can edit' ||
+    str.toLowerCase() === 'can_edit' ||
+    str === 'Editor'
+  ) {
+    return 'Editor';
+  }
+  return 'Viewer';
+}
+
+function parseAccessLevelToTitle(val?: string): WorkspaceMemberAccess {
+  const role = parseAccessLevelToRole(val);
+  if (role === 'Admin') return 'Full Access';
+  if (role === 'Editor') return 'Can edit';
+  return 'Can view';
+}
+
 function collaboratorsToTeamMembers(collaborators: MediaCollaborator[]): WorkspaceTeamMember[] {
   return collaborators.map((collaborator) => {
-    // Map the backend role to the frontend dropdown options
-    let access: WorkspaceMemberAccess = 'Full Access';
-    if (collaborator.role) {
-      const normalizedRole = collaborator.role.toLowerCase();
-      if (normalizedRole.includes('viewer')) access = 'Can view';
-      else if (normalizedRole.includes('collaborator')) access = 'Can edit';
-      else if (normalizedRole.includes('editor')) access = 'Can edit';
-    }
-
+    const access = parseAccessLevelToTitle(collaborator.role);
     return {
       id: collaborator.id,
       name: collaborator.name,
@@ -276,14 +306,14 @@ export default function VideoPlayerPage({
     theme.breakpoints.up(SIDEBAR_DESKTOP_BREAKPOINT),
   );
 
-  let dashboardData: any = { mediaItems: [], updateMediaTags: () => { }, favorites: new Set<string>(), toggleFavorite: () => { } };
+  let dashboardData: any = { mediaItems: [], updateMediaTags: () => { }, updateMediaReviewStatus: () => { }, favorites: new Set<string>(), toggleFavorite: () => { } };
   try {
     const dashboard = useDashboard();
     if (dashboard) dashboardData = dashboard;
   } catch {
     // Guest mode outside DashboardProvider
   }
-  const { mediaItems = [], sharedMediaItems = [], updateMediaTags = () => { }, favorites, toggleFavorite = () => { } } = dashboardData;
+  const { mediaItems = [], sharedMediaItems = [], updateMediaTags = () => { }, updateMediaReviewStatus = () => { }, favorites, toggleFavorite = () => { } } = dashboardData;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoStageRef = useRef<HTMLDivElement>(null);
@@ -351,12 +381,17 @@ export default function VideoPlayerPage({
         thumbnail: contextItem.thumbnail || fetchedItem.thumbnail,
         compressionStatus: fetchedItem.compressionStatus || contextItem.compressionStatus,
         duration: contextItem.duration || fetchedItem.duration,
-        customMetadata: fetchedItem.customMetadata || contextItem.customMetadata,
+        customMetadata: {
+          ...(contextItem.customMetadata || {}),
+          ...(fetchedItem.customMetadata || {}),
+        },
         resolution_tier: (contextItem as any).resolution_tier || (fetchedItem as any).resolution_tier,
         resolutionTier: (contextItem as any).resolutionTier || (fetchedItem as any).resolutionTier,
         fps: (contextItem as any).fps || (fetchedItem as any).fps,
         file_size: (contextItem as any).file_size || (fetchedItem as any).file_size,
         sizeBytes: (contextItem as any).sizeBytes || (fetchedItem as any).sizeBytes,
+        proxySizeBytes: fetchedItem.proxySizeBytes ?? contextItem.proxySizeBytes,
+        hasProxy: fetchedItem.hasProxy ?? contextItem.hasProxy,
       }
       : contextItem || fetchedItem;
   }, [isGuestMode, guestItem, contextItem, fetchedItem]);
@@ -454,6 +489,8 @@ export default function VideoPlayerPage({
             workspaceId: 'default',
             createdAt: asset.uploadDate || new Date().toISOString(),
             sizeBytes: asset.size,
+            proxySizeBytes: Number((asset as any).proxySize || (asset.customMetadata as any)?.proxySize || 0) || undefined,
+            hasProxy: Boolean((asset as any).hasProxy ?? (asset.customMetadata as any)?.hasProxy),
             storageProvider: 'b2',
             uploadedBy: (asset as any).uploadedBy?.name || user?.name || (user?.email ? user.email.split('@')[0] : 'Uploader'),
             uploadedByUserId: (asset as any).uploadedBy?.id || undefined,
@@ -545,38 +582,106 @@ export default function VideoPlayerPage({
   );
   const [collaborators, setCollaborators] = useState<MediaCollaborator[]>([]);
   const [orgUsersList, setOrgUsersList] = useState<SettingsUserRow[]>([]);
+  const currentUserCollab = useMemo(() => {
+    return collaborators.find((c) => c.isCurrentUser || (c.email && user?.email && c.email.toLowerCase() === user.email.toLowerCase()));
+  }, [collaborators, user?.email]);
+
   const isAssetAdmin = useMemo(() => {
     if (isGuestMode) return false;
-    const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
     if (currentUserCollab?.role === 'Admin') return true;
     if (item?.uploadedByUserId === user?.id || item?.uploadedBy?.id === user?.id) return true;
-    if (isSharedWithUser) return false;
-    return user?.role === 'Super Admin' || user?.role === 'Admin';
-  }, [isGuestMode, collaborators, isSharedWithUser, user, item?.uploadedByUserId, item?.uploadedBy?.id]);
+    if (user?.role === 'Super Admin' || user?.role === 'Admin') return true;
+    return false;
+  }, [isGuestMode, currentUserCollab, user, item?.uploadedByUserId, item?.uploadedBy?.id]);
+
+  const isAssetEditor = useMemo(() => {
+    if (isGuestMode) return false;
+    if (isAssetAdmin) return true;
+    return currentUserCollab?.role === 'Editor';
+  }, [isGuestMode, isAssetAdmin, currentUserCollab]);
 
   const isViewer = useMemo(() => {
-    if (isAssetAdmin) return false;
     if (isGuestMode) {
       return !guestPermissions?.comment;
     }
-    const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
-    const isAssetViewer = currentUserCollab?.role === 'Viewer';
-    return isAssetViewer || !user?.permissions?.includes('timeline_annotations');
-  }, [isGuestMode, guestPermissions?.comment, collaborators, user?.permissions, isAssetAdmin]);
+    if (isAssetAdmin || isAssetEditor) return false;
+    if (currentUserCollab?.role === 'Viewer') return true;
+    const rawRole = (user?.role || user?.roleRelation?.name || '').trim().toLowerCase();
+    if (rawRole === 'admin' || rawRole === 'super admin' || rawRole === 'editor') return false;
+    return true;
+  }, [isGuestMode, guestPermissions?.comment, currentUserCollab, isAssetAdmin, isAssetEditor, user]);
 
-  const canDownloadOriginal = isAssetAdmin;
-  const canShare = isAssetAdmin;
+  const canDownloadOriginal = isGuestMode
+    ? Boolean(guestPermissions?.download)
+    : (isAssetAdmin || isAssetEditor || !isViewer);
+
+  const canShare = isGuestMode ? false : (isAssetAdmin || isAssetEditor);
+
+  const triggerMediaDownload = useCallback((variant: 'original' | 'proxy') => {
+    if (isGuestMode && shareToken) {
+      const a = document.createElement('a');
+      a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${shareToken}/stream?download=true`;
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+    if (!item?.id) return;
+    const a = document.createElement('a');
+    a.href =
+      variant === 'original'
+        ? `/api/media/${encodeURIComponent(item.id)}/download?raw=true`
+        : `/api/media/${encodeURIComponent(item.id)}/download`;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }, [isGuestMode, shareToken, item?.id]);
+
+  const originalDownloadSizeLabel = useMemo(() => {
+    const bytes = Number((item as any)?.file_size ?? item?.sizeBytes ?? (item as any)?.size ?? 0);
+    return bytes > 0 ? formatFileSize(bytes) : '—';
+  }, [item]);
+
+  const proxyDownloadSizeLabel = useMemo(() => {
+    const bytes = Number(
+      item?.proxySizeBytes ??
+      (item?.customMetadata as any)?.proxySize ??
+      0,
+    );
+    return bytes > 0 ? formatFileSize(bytes) : '—';
+  }, [item]);
+
+  const canDownloadProxy = isGuestMode
+    ? Boolean(guestPermissions?.downloadProxy || guestPermissions?.download)
+    : Boolean(
+        item?.type === 'video' || item?.type === 'audio'
+          ? item?.hasProxy ||
+            Number(item?.proxySizeBytes || (item?.customMetadata as any)?.proxySize || 0) > 0 ||
+            (item?.compressionStatus === 'completed' || item?.compressionStatus === 'active')
+          : false,
+      );
+
+  const canEditReviewStatus = !isGuestMode && (isAssetAdmin || isAssetEditor || !isViewer);
 
   const headerPermissions = useMemo(() => {
-    const rawRole = (user?.role || user?.roleRelation?.name || '').trim().toLowerCase();
-    const isViewerRole = isViewer || rawRole === 'viewer' || rawRole === 'guest';
+    if (isGuestMode) {
+      return {
+        canShare: false,
+        canFavorite: false,
+        canDownload: Boolean(guestPermissions?.download || guestPermissions?.downloadProxy),
+        canViewTechnicalDetails: true,
+      };
+    }
+    const hasEditOrAdminAccess = isAssetAdmin || isAssetEditor || !isViewer;
     return {
-      canShare: (canShare || isAssetAdmin) && (!isViewerRole || isAssetAdmin) && !isGuestMode,
-      canFavorite: (!isViewerRole || isAssetAdmin) && !isGuestMode,
-      canDownload: (canDownloadOriginal || isAssetAdmin) && (!isViewerRole || isAssetAdmin) && !isGuestMode,
-      canViewTechnicalDetails: !isViewerRole || isAssetAdmin,
+      canShare: hasEditOrAdminAccess,
+      canFavorite: true,
+      canDownload: hasEditOrAdminAccess,
+      canViewTechnicalDetails: true,
     };
-  }, [isViewer, user, isGuestMode, canDownloadOriginal, canShare, isAssetAdmin]);
+  }, [isGuestMode, guestPermissions, isAssetAdmin, isAssetEditor, isViewer]);
   const [comments, setComments] = useState<VideoComment[]>([]);
   const [drawings, setDrawings] = useState<VideoDrawingStroke[]>([]);
   const [shapes, setShapes] = useState<VideoShape[]>([]);
@@ -588,7 +693,52 @@ export default function VideoPlayerPage({
   const prevShapesRef = useRef<VideoShape[]>([]);
   const prevDrawingsRef = useRef<VideoDrawingStroke[]>([]);
   const prevStampsRef = useRef<VideoStamp[]>([]);
-  const [moreMenuAnchor, setMoreMenuAnchor] = useState<HTMLElement | null>(null);
+  const [downloadMenuAnchor, setDownloadMenuAnchor] = useState<HTMLElement | null>(null);
+  const downloadMenuOpen = Boolean(downloadMenuAnchor);
+  const [reviewStatusMenuAnchor, setReviewStatusMenuAnchor] = useState<HTMLElement | null>(null);
+  const reviewStatusMenuOpen = Boolean(reviewStatusMenuAnchor);
+  const [fileReviewStatus, setFileReviewStatus] = useState<FileReviewStatus>(DEFAULT_FILE_REVIEW_STATUS);
+
+  useEffect(() => {
+    const fromMeta =
+      (item?.customMetadata as any)?.reviewStatus ??
+      (fetchedItem?.customMetadata as any)?.reviewStatus;
+    setFileReviewStatus(parseFileReviewStatus(fromMeta));
+  }, [item?.id, item?.customMetadata, fetchedItem?.customMetadata]);
+
+  const handleSelectFileReviewStatus = useCallback(
+    async (next: FileReviewStatus) => {
+      setReviewStatusMenuAnchor(null);
+      if (!item?.id || next === fileReviewStatus) return;
+      const previous = fileReviewStatus;
+      setFileReviewStatus(next);
+      setFetchedItem((prev) =>
+        prev && prev.id === item.id
+          ? {
+              ...prev,
+              customMetadata: {
+                ...(prev.customMetadata || {}),
+                reviewStatus: next,
+              },
+            }
+          : prev,
+      );
+      try {
+        await updateAssetReviewStatusRequest(item.id, next);
+        updateMediaReviewStatus(item.id, next);
+      } catch (err) {
+        console.error('Failed to update review status:', err);
+        setFileReviewStatus(previous);
+        setStatusToast({
+          open: true,
+          message: 'Failed to update file status',
+          variant: 'error',
+        });
+      }
+    },
+    [item?.id, fileReviewStatus, updateMediaReviewStatus],
+  );
+
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isIdle, setIsIdle] = useState(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1599,7 +1749,6 @@ export default function VideoPlayerPage({
       setShareLinks(links || []);
     });
   }, [mediaId]);
-
   useEffect(() => {
     if (!mediaId) {
       setCollaborators([]);
@@ -1607,100 +1756,120 @@ export default function VideoPlayerPage({
     }
     const fetchOrgUsers = async () => {
       try {
-        const [users, overridesData] = await Promise.all([
-          fetchOrganizationUsers(),
+        const [usersResult, overridesData] = await Promise.all([
+          fetchOrganizationUsers().catch(() => []),
           getAssetAccessOverrides(mediaId).catch(() => ({ overrides: [], groupOverrides: [] }))
         ]);
 
-        const { overrides = [], groupOverrides = [] } = overridesData as { overrides: any[], groupOverrides: any[] };
+        const users = Array.isArray(usersResult) ? usersResult : [];
+        const { overrides = [], groupOverrides = [] } = (overridesData || {}) as { overrides: any[], groupOverrides: any[] };
 
-        if (users && users.length > 0) {
-          const activeUsers = users.filter((u) => u.status?.toLowerCase() === 'active');
-          const mapped: MediaCollaborator[] = activeUsers.map((u) => {
-            const displayName = u.name || u.email.split('@')[0] || 'User';
-            const initials = displayName
-              .split(/\s+/)
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((part) => part[0]?.toUpperCase() ?? '')
-              .join('') || u.email[0]?.toUpperCase() || 'U';
+        // Ensure current user is in baseUsers list even if fetchOrganizationUsers didn't return them
+        let baseUsers = [...users];
+        if (user && !baseUsers.some((u) => u.id === user.id || (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase()))) {
+          baseUsers.push({
+            id: user.id,
+            name: user.name || user.email?.split('@')[0] || 'User',
+            email: user.email,
+            role: user.role,
+            roleRelation: user.roleRelation,
+            status: 'active',
+          } as any);
+        }
 
-            // Check if there is an explicit role override for this asset
-            const override = overrides.find((o) => o.userId === u.id);
-            let finalRole = u.role || u.roleRelation?.name;
-            let hasAnyOverride = false;
+        // Also add any user IDs from overrides if missing
+        overrides.forEach((ov: any) => {
+          if (ov.userId && !baseUsers.some((u) => u.id === ov.userId)) {
+            baseUsers.push({
+              id: ov.userId,
+              name: 'User',
+              email: '',
+              role: 'Viewer',
+              status: 'active',
+            } as any);
+          }
+        });
 
-            if (override && override.accessLevel) {
-              hasAnyOverride = true;
-              if (override.accessLevel === 'Can edit') {
-                finalRole = 'Editor';
-              } else if (override.accessLevel === 'Can view') {
-                finalRole = 'Viewer';
-              } else if (override.accessLevel === 'Full Access') {
+        const mapped: MediaCollaborator[] = baseUsers.map((u) => {
+          const displayName = u.name || u.email?.split('@')[0] || 'User';
+          const initials = displayName
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part[0]?.toUpperCase() ?? '')
+            .join('') || u.email?.[0]?.toUpperCase() || 'U';
+
+          // Check if there is an explicit role override for this asset
+          const override = overrides.find((o: any) => o.userId === u.id);
+          let finalRole = u.role || u.roleRelation?.name;
+          let hasAnyOverride = false;
+
+          if (override && override.accessLevel) {
+            hasAnyOverride = true;
+            finalRole = parseAccessLevelToRole(override.accessLevel);
+          } else {
+            // Check if user is in any shared groups and find the most permissive access level
+            const userGroups = groupOverrides.filter((go: any) =>
+              go.group?.members?.some((m: any) => m.userId === u.id)
+            );
+
+            if (userGroups.length > 0) {
+              const roles = userGroups.map((go: any) => parseAccessLevelToRole(go.accessLevel));
+              if (roles.includes('Admin')) {
                 finalRole = 'Admin';
-              }
-            } else {
-              // Check if user is in any shared groups and find the most permissive access level
-              const userGroups = groupOverrides.filter((go) =>
-                go.group?.members?.some((m: any) => m.userId === u.id)
-              );
-
-              if (userGroups.length > 0) {
-                const accessLevels = userGroups.map(go => go.accessLevel);
-                if (accessLevels.includes('Full Access')) {
-                  finalRole = 'Admin';
-                } else if (accessLevels.includes('Can edit')) {
-                  finalRole = 'Editor';
-                } else if (accessLevels.includes('Can view')) {
-                  finalRole = 'Viewer';
-                }
+                hasAnyOverride = true;
+              } else if (roles.includes('Editor')) {
+                finalRole = 'Editor';
+                hasAnyOverride = true;
+              } else if (roles.includes('Viewer')) {
+                finalRole = 'Viewer';
+                hasAnyOverride = true;
               }
             }
+          }
 
-            return {
-              id: u.id,
-              name: displayName,
-              email: u.email,
-              initials,
-              isCurrentUser: u.email === user?.email,
-              hasOverride: hasAnyOverride,
-              role: finalRole,
-            };
-          });
-          // Also map group overrides
-          const groupCollaborators: MediaCollaborator[] = groupOverrides.map(go => {
-            const groupName = go.group?.name || 'Group';
-            let finalRole = 'Viewer';
-            if (go.accessLevel === 'Can edit') finalRole = 'Editor';
-            else if (go.accessLevel === 'Full Access') finalRole = 'Admin';
+          const isCurrUser = Boolean(
+            (user?.email && u.email && u.email.toLowerCase() === user.email.toLowerCase()) ||
+            (user?.id && u.id && u.id === user.id)
+          );
 
-            return {
-              id: go.group?.id || go.groupId,
-              name: groupName,
-              initials: groupName.substring(0, 2).toUpperCase(),
-              isCurrentUser: false,
-              hasOverride: true,
-              role: finalRole,
-              groupId: go.group?.id || go.groupId
-            };
-          });
+          return {
+            id: u.id,
+            name: displayName,
+            email: u.email || '',
+            initials,
+            isCurrentUser: isCurrUser,
+            hasOverride: hasAnyOverride,
+            role: finalRole,
+          };
+        });
 
-          setCollaborators([...mapped, ...groupCollaborators]);
+        // Map group overrides
+        const groupCollaborators: MediaCollaborator[] = groupOverrides.map((go: any) => {
+          const groupName = go.group?.name || 'Group';
+          const finalRole = parseAccessLevelToRole(go.accessLevel);
 
-          // Map real org users to SettingsUserRow[] for the share invite dropdown
+          return {
+            id: go.group?.id || go.groupId,
+            name: groupName,
+            initials: groupName.substring(0, 2).toUpperCase(),
+            isCurrentUser: false,
+            hasOverride: true,
+            role: finalRole,
+            groupId: go.group?.id || go.groupId,
+          };
+        });
+
+        setCollaborators([...mapped, ...groupCollaborators]);
+
+        // Map real org users to SettingsUserRow[] for the share invite dropdown
+        if (users.length > 0) {
           const userRows: SettingsUserRow[] = users.map((u) => {
-            const displayName = u.name || u.email.split('@')[0] || 'User';
-            const initials = displayName
-              .split(/\s+/)
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((part: string) => part[0]?.toUpperCase() ?? '')
-              .join('') || u.email[0]?.toUpperCase() || 'U';
+            const displayName = u.name || u.email?.split('@')[0] || 'User';
             const roleName = (u.roleRelation?.name || u.role || 'Collaborator') as SettingsUserRow['role'];
             return {
               id: u.id,
               name: displayName,
-              initials,
               email: u.email,
               lastActive: u.lastActiveAt || u.lastLoginAt || 'Never',
               joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—',
@@ -1708,21 +1877,18 @@ export default function VideoPlayerPage({
               roleId: u.roleId,
               roleRelation: u.roleRelation,
               status: (u.status?.toLowerCase() === 'active' ? 'Active' : 'Pending') as 'Active' | 'Pending',
-              isCurrentUser: u.email === user?.email,
+              isCurrentUser: Boolean(user?.email && u.email && u.email.toLowerCase() === user.email.toLowerCase()) || u.id === user?.id,
               isOrganizationMember: true,
             };
           });
           setOrgUsersList(userRows);
-        } else {
-          setCollaborators(loadMediaCollaborators(mediaId));
         }
       } catch (err) {
         console.error('Failed to fetch organization users for collaborators:', err);
-        setCollaborators(loadMediaCollaborators(mediaId));
       }
     };
     fetchOrgUsers();
-  }, [mediaId, user?.email]);
+  }, [mediaId, user?.email, user?.id]);
 
   useEffect(() => {
     if (!mediaId) return;
@@ -2910,12 +3076,15 @@ export default function VideoPlayerPage({
 
   const handleShareUpdateMemberAccess = useCallback(
     async (memberId: string, access: WorkspaceMemberAccess) => {
-      const member = shareTeamMembers.find(m => m.id === memberId);
+      const member = shareTeamMembers.find((m) => m.id === memberId);
+      const newRole = parseAccessLevelToRole(access);
+      const titleAccess = parseAccessLevelToTitle(access);
+
       setShareTeamMembers((current) =>
-        current.map((m) => (m.id === memberId ? { ...m, access } : m)),
+        current.map((m) => (m.id === memberId ? { ...m, access: titleAccess, hasOverride: true } : m)),
       );
       setCollaborators((current) =>
-        current.map((c) => (c.id === memberId ? { ...c, role: access === 'Can edit' ? 'Editor' : 'Viewer' } : c))
+        current.map((c) => (c.id === memberId ? { ...c, role: newRole, hasOverride: true } : c)),
       );
 
       if (!mediaId) return;
@@ -3449,11 +3618,13 @@ export default function VideoPlayerPage({
           </Tooltip>
           <NoahLogo
             to="/home"
-            width={{ xs: HEADER_LOGO_WIDTH, [SIDEBAR_DESKTOP_BREAKPOINT]: 108 }}
+            boxWidth={{ xs: HEADER_LOGO_BOX_WIDTH_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_WIDTH_DESKTOP }}
+            height={{ xs: HEADER_LOGO_BOX_HEIGHT_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_HEIGHT_DESKTOP }}
+            objectFit="cover"
             animated={false}
             showGlow={false}
             align="left"
-            sx={{ mb: 0, flexShrink: 0, display: 'flex', alignItems: 'center' }}
+            sx={{ mb: 0, flexShrink: 0 }}
           />
           <Box
             sx={{
@@ -3620,306 +3791,363 @@ export default function VideoPlayerPage({
             )}
           </Box>
 
-          {isGuestMode ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {(guestPermissions.download || guestPermissions.downloadProxy) && shareToken ? (
-                <Button
-                  variant="contained"
-                  size="small"
-                  startIcon={<FileDownloadOutlinedIcon />}
-                  component="a"
-                  href={`/api/share/${shareToken}/stream?download=true`}
-                  download
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    borderRadius: '10px',
-                    background: cv.brandGradient,
-                    color: '#fff',
-                    minHeight: 36,
-                    px: 2,
-                  }}
-                >
-                  Download
-                </Button>
-              ) : null}
-            </Box>
-          ) : (
+          {!isGuestMode && item?.id ? (
             <>
-              {item?.id && headerPermissions.canDownload && (
-                <Tooltip
-                  title={
-                    canDownloadOriginal
-                      ? "Download original file"
-                      : "Viewer role does not have permission to download"
-                  }
-                  arrow
-                  placement="bottom"
-                >
-                  <Box sx={{ display: 'inline-flex' }}>
-                    <IconButton
-                      component={canDownloadOriginal ? 'a' : 'button'}
-                      href={canDownloadOriginal ? `/api/media/${encodeURIComponent(item.id)}/download?raw=true` : undefined}
-                      download={canDownloadOriginal ? true : undefined}
-                      disabled={!canDownloadOriginal}
-                      size="small"
-                      aria-label="Download original file"
-                      sx={{
-                        display: { xs: 'inline-flex', lg: 'none' },
-                        width: 36,
-                        height: 36,
-                        borderRadius: '10px',
-                        color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
-                        border: `1px solid ${cv.border}`,
-                        backgroundColor: cv.surface,
-                        '&:hover': canDownloadOriginal
-                          ? {
+              <Tooltip title="File status" arrow placement="bottom">
+                <Box sx={{ display: 'inline-flex' }}>
+                  <Button
+                    type="button"
+                    size="small"
+                    disabled={!canEditReviewStatus}
+                    aria-label="File status"
+                    aria-haspopup="menu"
+                    aria-expanded={reviewStatusMenuOpen}
+                    aria-controls={reviewStatusMenuOpen ? 'header-review-status-menu' : undefined}
+                    onClick={(e) => {
+                      if (!canEditReviewStatus) return;
+                      setReviewStatusMenuAnchor(e.currentTarget);
+                    }}
+                    endIcon={<KeyboardArrowDownIcon sx={{ fontSize: 16 }} />}
+                    sx={{
+                      minHeight: 36,
+                      height: 36,
+                      py: 0,
+                      px: 1.5,
+                      borderRadius: '999px',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.8125rem',
+                      letterSpacing: '0.01em',
+                      color: getFileReviewStatusColor(fileReviewStatus),
+                      border: `1px solid ${cv.border}`,
+                      backgroundColor: cv.surface,
+                      '& .MuiButton-endIcon': {
+                        color: 'inherit',
+                        ml: 0.5,
+                      },
+                      '&:hover': canEditReviewStatus
+                        ? {
                             backgroundColor: cv.surfaceHover,
                             borderColor: cv.borderStrong,
                           }
-                          : {},
-                        '&.Mui-disabled': {
-                          opacity: 0.5,
-                          color: cv.textMuted,
-                        },
-                      }}
-                    >
-                      <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
-                    </IconButton>
-                    <Button
-                      component={canDownloadOriginal ? 'a' : 'button'}
-                      href={canDownloadOriginal ? `/api/media/${encodeURIComponent(item.id)}/download?raw=true` : undefined}
-                      download={canDownloadOriginal ? true : undefined}
-                      disabled={!canDownloadOriginal}
-                      size="small"
-                      variant="outlined"
-                      startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
-                      sx={{
-                        display: { xs: 'none', lg: 'inline-flex' },
-                        minHeight: 36,
-                        height: 36,
-                        py: 0,
-                        px: 1.5,
-                        borderRadius: '10px',
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        fontSize: '0.8125rem',
-                        letterSpacing: '0.01em',
-                        color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
+                        : {},
+                      '&.Mui-disabled': {
+                        opacity: 0.6,
+                        color: getFileReviewStatusColor(fileReviewStatus),
                         borderColor: cv.border,
-                        backgroundColor: cv.surface,
-                        '&:hover': canDownloadOriginal
-                          ? {
-                            backgroundColor: cv.surfaceHover,
-                            borderColor: cv.borderStrong,
-                          }
-                          : {},
-                        '&.Mui-disabled': {
-                          opacity: 0.5,
-                          color: cv.textMuted,
-                          borderColor: cv.border,
-                        },
-                      }}
-                    >
-                      Download Original
-                    </Button>
-                  </Box>
-                </Tooltip>
-              )}
-
-              {canShare && (
-                <PeopleCollaboratorsPopover
-                  collaborators={collaborators}
-                  onCollaboratorsChange={setCollaborators}
-                  onInvited={(name) =>
-                    setStatusToast({
-                      open: true,
-                      message: `Invite sent to ${name}`,
-                      variant: 'resolved',
-                    })
-                  }
-                />
-              )}
-
-              {headerPermissions.canShare && (() => {
-                const assetMediaType = item?.type || 'video';
-                const shareControlLabel = assetMediaType === 'image' ? 'Share image' : assetMediaType === 'audio' ? 'Share audio' : 'Share video';
-                return (
-                  <Tooltip title={shareControlLabel} arrow placement="bottom">
-                    <Box sx={{ display: 'inline-flex' }}>
-                      <IconButton
-                        type="button"
-                        size="small"
-                        aria-haspopup="dialog"
-                        aria-expanded={shareDialogOpen}
-                        aria-label={shareControlLabel}
-                        onClick={handleOpenShareDialog}
-                        sx={{
-                          display: { xs: 'inline-flex', lg: 'none' },
-                          width: 36,
-                          height: 36,
-                          borderRadius: '10px',
-                          color: cv.textPrimary,
-                          background: cv.brandGradient,
-                          boxShadow: cv.brandShadowSoft,
-                          '&:hover': {
-                            background: cv.brandGradient,
-                            filter: 'brightness(1.08)',
-                          },
-                        }}
-                      >
-                        <ShareOutlinedIcon sx={{ fontSize: 18 }} />
-                      </IconButton>
-                      <Button
-                        type="button"
-                        size="small"
-                        variant="contained"
-                        aria-haspopup="dialog"
-                        aria-expanded={shareDialogOpen}
-                        startIcon={<ShareOutlinedIcon sx={{ fontSize: 16 }} />}
-                        onClick={handleOpenShareDialog}
-                        sx={{
-                          display: { xs: 'none', lg: 'inline-flex' },
-                          minHeight: 36,
-                          height: 36,
-                          py: 0,
-                          px: 1.5,
-                          borderRadius: '10px',
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          fontSize: '0.8125rem',
-                          letterSpacing: '0.01em',
-                          color: cv.textPrimary,
-                          background: cv.brandGradient,
-                          boxShadow: cv.brandShadowSoft,
-                          '&:hover': {
-                            background: cv.brandGradient,
-                            filter: 'brightness(1.08)',
-                          },
-                        }}
-                      >
-                        Share
-                      </Button>
-                    </Box>
-                  </Tooltip>
-                );
-              })()}
-
-              <Tooltip title="More options" arrow placement="bottom">
-                <IconButton
-                  type="button"
-                  size="small"
-                  aria-label="More actions"
-                  aria-controls={Boolean(moreMenuAnchor) ? 'header-more-menu' : undefined}
-                  aria-haspopup="true"
-                  aria-expanded={Boolean(moreMenuAnchor)}
-                  onClick={(e) => setMoreMenuAnchor(e.currentTarget)}
-                  sx={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: '10px',
-                    color: cv.textPrimary,
-                    border: `1px solid ${cv.border}`,
-                    backgroundColor: cv.surface,
-                    '&:hover': {
-                      backgroundColor: cv.surfaceHover,
-                      borderColor: cv.borderStrong,
-                    },
-                  }}
-                >
-                  <MoreVertIcon sx={{ fontSize: 18 }} />
-                </IconButton>
+                      },
+                    }}
+                  >
+                    {fileReviewStatus}
+                  </Button>
+                </Box>
               </Tooltip>
 
               <Menu
-                id="header-more-menu"
-                anchorEl={moreMenuAnchor}
-                open={Boolean(moreMenuAnchor)}
-                onClose={() => setMoreMenuAnchor(null)}
+                id="header-review-status-menu"
+                anchorEl={reviewStatusMenuAnchor}
+                open={reviewStatusMenuOpen}
+                onClose={() => setReviewStatusMenuAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                 slotProps={{
                   paper: {
                     sx: {
+                      mt: 1,
+                      minWidth: 220,
                       borderRadius: '12px',
-                      backgroundColor: cv.surface,
                       border: `1px solid ${cv.border}`,
-                      boxShadow: cv.dropdownShadow,
+                      background: cv.drawerSurface,
+                      boxShadow: cv.dropdownShadow || cv.popoverShadow,
                       color: cv.textPrimary,
-                      minWidth: 190,
                       py: 0.5,
                     },
                   },
                 }}
-                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
               >
-                {item?.id && headerPermissions.canDownload && (
-                  <MenuItem
-                    disabled={!canDownloadOriginal}
-                    onClick={() => {
-                      setMoreMenuAnchor(null);
-                      if (canDownloadOriginal && item?.id) {
-                        const a = document.createElement('a');
-                        a.href = `/api/media/${encodeURIComponent(item.id)}/download?raw=true`;
-                        a.download = '';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                      }
-                    }}
-                    sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
-                      <FileDownloadOutlinedIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText primary="Download Original" />
-                  </MenuItem>
-                )}
+                {FILE_REVIEW_STATUSES.map((status) => {
+                  const selected = status === fileReviewStatus;
+                  return (
+                    <MenuItem
+                      key={status}
+                      selected={selected}
+                      onClick={() => void handleSelectFileReviewStatus(status)}
+                      sx={{
+                        fontSize: '0.875rem',
+                        fontWeight: selected ? 600 : 500,
+                        py: 1.05,
+                        px: 1.75,
+                        minHeight: 40,
+                        borderRadius: '8px',
+                        mx: 0.5,
+                        '&.Mui-selected': {
+                          backgroundColor: cv.purpleSurface,
+                          color: cv.textPrimary,
+                          '&:hover': {
+                            backgroundColor: cv.purpleSurfaceHover,
+                          },
+                        },
+                      }}
+                    >
+                      <ListItemText
+                        primary={status}
+                        primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: selected ? 600 : 500 }}
+                      />
+                      {selected ? (
+                        <CheckIcon sx={{ fontSize: 18, color: cv.brandPurple, ml: 1.5 }} />
+                      ) : null}
+                    </MenuItem>
+                  );
+                })}
+              </Menu>
+            </>
+          ) : null}
 
+          {headerPermissions.canDownload && (
+            <>
+              <Tooltip
+                title="Download"
+                arrow
+                placement="bottom"
+              >
+                <Box sx={{ display: 'inline-flex' }}>
+                  <IconButton
+                    type="button"
+                    size="small"
+                    aria-label="Download"
+                    aria-haspopup="menu"
+                    aria-expanded={downloadMenuOpen}
+                    aria-controls={downloadMenuOpen ? 'header-download-menu' : undefined}
+                    onClick={(e) => {
+                      if (!canDownloadOriginal) return;
+                      setDownloadMenuAnchor(e.currentTarget);
+                    }}
+                    sx={{
+                      width: 'auto',
+                      minWidth: 36,
+                      height: 36,
+                      px: 0.75,
+                      gap: 0.15,
+                      borderRadius: '10px',
+                      color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
+                      border: `1px solid ${cv.border}`,
+                      backgroundColor: cv.surface,
+                      '&:hover': canDownloadOriginal
+                        ? {
+                            backgroundColor: cv.surfaceHover,
+                            borderColor: cv.borderStrong,
+                          }
+                        : {},
+                      '&.Mui-disabled': {
+                        opacity: 0.5,
+                        color: cv.textMuted,
+                      },
+                    }}
+                  >
+                    <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
+                    <KeyboardArrowDownIcon sx={{ fontSize: 16, ml: -0.25 }} />
+                  </IconButton>
+                </Box>
+              </Tooltip>
+
+              <Menu
+                id="header-download-menu"
+                anchorEl={downloadMenuAnchor}
+                open={downloadMenuOpen}
+                onClose={() => setDownloadMenuAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                slotProps={{
+                  paper: {
+                    sx: {
+                      mt: 1,
+                      minWidth: 260,
+                      borderRadius: '12px',
+                      border: `1px solid ${cv.border}`,
+                      background: cv.drawerSurface,
+                      boxShadow: cv.dropdownShadow || cv.popoverShadow,
+                      color: cv.textPrimary,
+                      py: 0.5,
+                    },
+                  },
+                }}
+              >
                 <MenuItem
+                  disabled={!canDownloadOriginal}
                   onClick={() => {
-                    setMoreMenuAnchor(null);
-                    handleCopyAssetLink();
+                    setDownloadMenuAnchor(null);
+                    triggerMediaDownload('original');
                   }}
-                  sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
+                  sx={{
+                    fontSize: '0.875rem',
+                    py: 1.1,
+                    px: 1.75,
+                    gap: 1.25,
+                    minHeight: 44,
+                  }}
                 >
                   <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
-                    <ContentCopyOutlinedIcon fontSize="small" />
+                    <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
                   </ListItemIcon>
-                  <ListItemText primary="Copy Asset Link" />
+                  <ListItemText
+                    primary="Download Original"
+                    primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                  />
+                  <Typography
+                    component="span"
+                    sx={{
+                      ml: 2,
+                      fontSize: '0.75rem',
+                      color: cv.textMuted,
+                      fontVariantNumeric: 'tabular-nums',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {originalDownloadSizeLabel}
+                  </Typography>
                 </MenuItem>
-
-                {headerPermissions.canViewTechnicalDetails && (
-                  <MenuItem
-                    onClick={() => {
-                      setMoreMenuAnchor(null);
-                      handleOpenTechnicalDetails();
-                    }}
-                    sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
-                      <InfoOutlinedIcon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText primary="Technical Details" />
-                  </MenuItem>
-                )}
-
                 <MenuItem
+                  disabled={!canDownloadOriginal || !canDownloadProxy}
                   onClick={() => {
-                    setMoreMenuAnchor(null);
-                    setKeyboardShortcutsOpen(true);
+                    setDownloadMenuAnchor(null);
+                    triggerMediaDownload('proxy');
                   }}
-                  sx={{ fontSize: '0.8125rem', py: 1, px: 1.5, gap: 1.5 }}
+                  sx={{
+                    fontSize: '0.875rem',
+                    py: 1.1,
+                    px: 1.75,
+                    gap: 1.25,
+                    minHeight: 44,
+                  }}
                 >
                   <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
-                    <KeyboardOutlinedIcon fontSize="small" />
+                    <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
                   </ListItemIcon>
-                  <ListItemText primary="Keyboard Shortcuts" />
+                  <ListItemText
+                    primary="Download Proxy"
+                    primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                  />
+                  <Typography
+                    component="span"
+                    sx={{
+                      ml: 2,
+                      fontSize: '0.75rem',
+                      color: cv.textMuted,
+                      fontVariantNumeric: 'tabular-nums',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {canDownloadProxy ? proxyDownloadSizeLabel : '—'}
+                  </Typography>
                 </MenuItem>
               </Menu>
             </>
           )}
 
-          {!historyOpen ? (
+          {item?.id && !isGuestMode && (
+            <Tooltip title="Copy asset link" arrow placement="bottom">
+              <IconButton
+                type="button"
+                size="small"
+                aria-label="Copy asset link"
+                onClick={handleCopyAssetLink}
+                sx={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: '10px',
+                  color: cv.textPrimary,
+                  border: `1px solid ${cv.border}`,
+                  backgroundColor: cv.surface,
+                  '&:hover': {
+                    backgroundColor: cv.surfaceHover,
+                    borderColor: cv.borderStrong,
+                  },
+                }}
+              >
+                <ContentCopyOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+
+          {canShare && (
+            <PeopleCollaboratorsPopover
+              collaborators={collaborators}
+              onCollaboratorsChange={setCollaborators}
+              onInvited={(name) =>
+                setStatusToast({
+                  open: true,
+                  message: `Invite sent to ${name}`,
+                  variant: 'resolved',
+                })
+              }
+            />
+          )}
+
+          {headerPermissions.canShare && (() => {
+            const assetMediaType = item?.type || 'video';
+            const shareControlLabel = assetMediaType === 'image' ? 'Share image' : assetMediaType === 'audio' ? 'Share audio' : 'Share video';
+            return (
+              <Tooltip title={shareControlLabel} arrow placement="bottom">
+                <Box sx={{ display: 'inline-flex' }}>
+                  <IconButton
+                    type="button"
+                    size="small"
+                    aria-haspopup="dialog"
+                    aria-expanded={shareDialogOpen}
+                    aria-label={shareControlLabel}
+                    onClick={handleOpenShareDialog}
+                    sx={{
+                      display: { xs: 'inline-flex', lg: 'none' },
+                      width: 36,
+                      height: 36,
+                      borderRadius: '10px',
+                      color: cv.textPrimary,
+                      background: cv.brandGradient,
+                      boxShadow: cv.brandShadowSoft,
+                      '&:hover': {
+                        background: cv.brandGradient,
+                        filter: 'brightness(1.08)',
+                      },
+                    }}
+                  >
+                    <ShareOutlinedIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                  <Button
+                    type="button"
+                    size="small"
+                    variant="contained"
+                    aria-haspopup="dialog"
+                    aria-expanded={shareDialogOpen}
+                    startIcon={<ShareOutlinedIcon sx={{ fontSize: 16 }} />}
+                    onClick={handleOpenShareDialog}
+                    sx={{
+                      display: { xs: 'none', lg: 'inline-flex' },
+                      minHeight: 36,
+                      height: 36,
+                      py: 0,
+                      px: 1.5,
+                      borderRadius: '10px',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.8125rem',
+                      letterSpacing: '0.01em',
+                      color: cv.textPrimary,
+                      background: cv.brandGradient,
+                      boxShadow: cv.brandShadowSoft,
+                      '&:hover': {
+                        background: cv.brandGradient,
+                        filter: 'brightness(1.08)',
+                      },
+                    }}
+                  >
+                    Share
+                  </Button>
+                </Box>
+              </Tooltip>
+            );
+          })()}
+
+          {(!isGuestMode || guestPermissions?.comment) && !historyOpen ? (
             <Tooltip title="Show annotation history" arrow placement="bottom">
               <IconButton
                 type="button"
@@ -4342,7 +4570,9 @@ export default function VideoPlayerPage({
                   </Box>
                 ) : null}
 
-                <VideoAnnotationSurface
+                {(!isGuestMode || guestPermissions?.comment) && (
+                  <>
+                    <VideoAnnotationSurface
                   activeTool={isViewer ? 'select' : activeTool}
                   enabled={surfaceEnabled && !isViewer}
                   annotationsVisible={annotationsVisible}
@@ -4412,6 +4642,8 @@ export default function VideoPlayerPage({
                   onMoveComment={handleMoveComment}
                   onPanActionStart={handleAnnotationActionStart}
                 />
+                  </>
+                )}
               </Box>
             </Box>
 
@@ -4419,10 +4651,10 @@ export default function VideoPlayerPage({
               <VideoPlayerControls
                 videoRef={videoRef}
                 fullscreenTargetRef={videoStageRef}
-                annotationCount={history.length}
+                annotationCount={!isGuestMode || guestPermissions?.comment ? history.length : undefined}
                 annotationsVisible={annotationsVisible}
                 onToggleAnnotationsVisible={() => setAnnotationsVisible((visible) => !visible)}
-                timelineItems={timelineItems}
+                timelineItems={!isGuestMode || guestPermissions?.comment ? timelineItems : []}
                 timelineFallbackDuration={timelineFallbackDuration}
                 onAnnotationRangeChange={handleAnnotationRangeChange}
                 onAnnotationClick={handleAnnotationClick}
@@ -4627,8 +4859,9 @@ export default function VideoPlayerPage({
           </Box>
         </GlassCard>
 
-        <AnnotationHistoryDrawer
-          open={historyOpen}
+        {(!isGuestMode || guestPermissions?.comment) && (
+          <AnnotationHistoryDrawer
+            open={historyOpen}
           activeHistoryEntryId={activeHistoryEntryId}
           entries={history}
           comments={comments}
@@ -4663,18 +4896,8 @@ export default function VideoPlayerPage({
           onDeleteAnnotationGroup={handleDeleteAnnotationGroup}
           onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
           onAddCollaborator={handleAddCollaboratorForGroup}
-          canDownload={headerPermissions.canDownload && canDownloadOriginal}
-          onDownloadOriginal={() => {
-            if (item?.id && canDownloadOriginal) {
-              const a = document.createElement('a');
-              a.href = `/api/media/${encodeURIComponent(item.id)}/download?raw=true`;
-              a.download = '';
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-            }
-          }}
         />
+        )}
       </Box>
 
       <PlayerToolsDrawer

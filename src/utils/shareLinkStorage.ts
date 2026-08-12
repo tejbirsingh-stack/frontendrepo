@@ -5,18 +5,6 @@ import { env } from '../config/env';
 
 export function buildShareLinkUrl(token: string, visibility: string = 'public'): string {
   const appBase = window.location.origin;
-  if (visibility === 'public') {
-    let apiBase = env.apiBaseUrl || '';
-    if (!apiBase.startsWith('http')) {
-      apiBase = `${appBase}${apiBase.startsWith('/') ? '' : '/'}${apiBase}`;
-    }
-    apiBase = apiBase.replace(/\/$/, '');
-    
-    if (apiBase.endsWith('/api')) {
-      return `${apiBase}/share/${token}/stream`;
-    }
-    return `${apiBase}/api/share/${token}/stream`;
-  }
   return `${appBase}/s/${token}`;
 }
 

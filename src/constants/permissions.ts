@@ -1,4 +1,5 @@
 import type { AuthSessionUser } from '../auth/types';
+import { ROLE_IDS } from './userRoles';
 
 export const PERMISSIONS = {
   VIEW_SEARCH_MEDIA: 'view_search_media',
@@ -22,15 +23,23 @@ export const PERMISSIONS = {
 export type PermissionSlug = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
 export function hasPermission(
-  user: Pick<AuthSessionUser, 'permissions'> | null | undefined,
+  user: Partial<AuthSessionUser> | null | undefined,
   slug: PermissionSlug | string,
 ): boolean {
-  if (!user || !user.permissions) return false;
+  if (!user) return false;
+  if (
+    user.role === 'Super Admin' ||
+    user.roleId === ROLE_IDS.SUPER_ADMIN ||
+    user.role === 'super_admin'
+  ) {
+    return true;
+  }
+  if (!user.permissions) return false;
   return user.permissions.includes(slug);
 }
 
 export function hasAnyPermission(
-  user: Pick<AuthSessionUser, 'permissions'> | null | undefined,
+  user: Partial<AuthSessionUser> | null | undefined,
   slugs: (PermissionSlug | string)[],
 ): boolean {
   return slugs.some((slug) => hasPermission(user, slug));

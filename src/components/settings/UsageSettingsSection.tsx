@@ -1,18 +1,24 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
+  Alert,
   Box,
   Button,
   LinearProgress,
+  Skeleton,
   Typography,
 } from '@mui/material';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined';
 import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined';
 import WorkspacesOutlinedIcon from '@mui/icons-material/WorkspacesOutlined';
+import toast from 'react-hot-toast';
+
 import { cv } from '../../theme/cssVars';
 import { SETTINGS_BASE_PATH } from '../../constants/settingsNav';
-import { MOCK_USAGE_SUMMARY } from '../../data/mockSettingsData';
+import { getUsageSummary } from '../../api/usage.service';
+import type { UsageSummaryResponse } from '../../types/usage';
+import { progressBarColor, warningBanners } from '../../utils/usageWarning';
 import { SettingsTableContainer } from './SettingsContentLayout';
 import StorageConsumptionChart from './StorageConsumptionChart';
 
@@ -146,9 +152,86 @@ function UsageDetailCard({
   );
 }
 
+function formatPercent(val: number): string {
+  if (val <= 0) return '0.0%';
+  if (val < 0.1) return '<0.1%';
+  const formatted = val.toFixed(1);
+  return formatted.endsWith('.0') ? `${Math.round(val)}%` : `${formatted}%`;
+}
+
+function formatCleanCapBytes(bytes?: number, fallbackLabel?: string): string {
+  if (!bytes || bytes <= 0) return fallbackLabel || '0 B';
+  const k = 1024;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  if (i === 0) return `${bytes} B`;
+  const val = bytes / Math.pow(k, i);
+  const formattedVal = Math.abs(val - Math.round(val)) < 0.05 ? Math.round(val) : val.toFixed(1);
+  return `${formattedVal} ${units[i]}`;
+}
+
 export default function UsageSettingsSection() {
-  const usage = MOCK_USAGE_SUMMARY;
-  const membersPercent = (usage.membersUsed / usage.membersTotal) * 100;
+  const [usage, setUsage] = useState<UsageSummaryResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    async function loadUsage() {
+      try {
+        setLoading(true);
+        const data = await getUsageSummary();
+        if (active) {
+          setUsage(data);
+          setError('');
+        }
+      } catch (err: any) {
+        if (active) {
+          const msg = err?.response?.data?.message || err?.message || 'Failed to fetch usage summary.';
+          setError(msg);
+          toast.error(msg);
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void loadUsage();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <SettingsTableContainer>
+        <Box sx={{ display: 'grid', gap: 2 }}>
+          <Skeleton variant="rectangular" height={40} sx={{ borderRadius: '12px' }} />
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.5 }}>
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <Skeleton key={idx} variant="rectangular" height={100} sx={{ borderRadius: '14px' }} />
+            ))}
+          </Box>
+          <Skeleton variant="rectangular" height={260} sx={{ borderRadius: '16px' }} />
+        </Box>
+      </SettingsTableContainer>
+    );
+  }
+
+  if (error || !usage) {
+    return (
+      <SettingsTableContainer>
+        <Alert severity="error" sx={{ borderRadius: '12px' }}>
+          {error || 'Unable to load usage details.'}
+        </Alert>
+      </SettingsTableContainer>
+    );
+  }
+
+  const banners = warningBanners(usage);
+  const membersPercent = (usage.membersUsed / Math.max(usage.membersTotal, 1)) * 100;
+  const primarySystem = usage.storageSystems?.[0];
+  const displayCapLabel = formatCleanCapBytes(usage.storageQuotaBytes, usage.storageCapLabel);
 
   return (
     <SettingsTableContainer>
@@ -167,6 +250,32 @@ export default function UsageSettingsSection() {
           Seat allotment, storage, projects, and workspaces for this account shell.
         </Typography>
       </Box>
+
+      {banners.map((b) => (
+        <Alert
+          key={b.id}
+          severity={b.severity}
+          sx={{
+            mb: 2,
+            borderRadius: '12px',
+            backgroundColor: b.severity === 'error' ? cv.errorSurface : cv.warningSurface,
+            border: `1px solid ${b.severity === 'error' ? cv.errorText : cv.warning}`,
+          }}
+          action={
+            <Button
+              component={RouterLink}
+              to={`${SETTINGS_BASE_PATH}/accounts/billing`}
+              color="inherit"
+              size="small"
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              View billing
+            </Button>
+          }
+        >
+          <strong>{b.title}</strong> — {b.body}
+        </Alert>
+      ))}
 
       <Box
         sx={{
@@ -192,16 +301,19 @@ export default function UsageSettingsSection() {
             Storage consumption
           </Typography>
           <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, mb: 2 }}>
-            Core repository streams from Backblaze B2.
+            {primarySystem
+              ? `Core repository streams from ${primarySystem.name}.`
+              : 'Core repository streams from Backblaze B2.'}
           </Typography>
 
           <StorageConsumptionChart
             compact
             usedLabel={usage.storageUsedLabel}
-            capLabel={usage.storageCapLabel}
+            capLabel={displayCapLabel}
             usedPercent={usage.storageUsedPercent}
             breakdown={usage.storageBreakdown}
-            capBytes={usage.storageCapBytes}
+            capBytes={usage.storageQuotaBytes}
+            warningLevel={usage.storageWarningLevel}
           />
         </Box>
 
@@ -226,19 +338,19 @@ export default function UsageSettingsSection() {
               icon={<StorageOutlinedIcon />}
               label="Storage used"
               value={usage.storageUsedLabel}
-              detail={`${usage.storageUsedPercent < 1 ? usage.storageUsedPercent.toFixed(1) : Math.round(usage.storageUsedPercent)}% of ${usage.storageCapLabel}`}
+              detail={`${formatPercent(usage.storageUsedPercent)} of ${displayCapLabel}`}
             />
             <UsageStatCard
               icon={<FolderOutlinedIcon />}
               label="Projects"
-              value={String(usage.projectsCount)}
-              detail="Provisioned under this account"
+              value={usage.projectsTotal != null ? `${usage.projectsCount} of ${usage.projectsTotal}` : String(usage.projectsCount)}
+              detail={usage.projectsTotal != null ? `${usage.projectsCount} of ${usage.projectsTotal} projects` : "Provisioned under this account"}
             />
             <UsageStatCard
               icon={<WorkspacesOutlinedIcon />}
               label="Workspaces"
-              value={String(usage.workspacesCount)}
-              detail="Owned by this company profile"
+              value={usage.workspacesTotal != null ? `${usage.workspacesCount} of ${usage.workspacesTotal}` : String(usage.workspacesCount)}
+              detail={usage.workspacesTotal != null ? `${usage.workspacesCount} of ${usage.workspacesTotal} workspaces` : "Owned by this company profile"}
             />
           </Box>
 
@@ -267,19 +379,32 @@ export default function UsageSettingsSection() {
                 backgroundColor: cv.surfaceRaised,
                 '& .MuiLinearProgress-bar': {
                   borderRadius: 999,
-                  background: cv.brandGradient,
+                  background: progressBarColor(usage.seatsWarningLevel),
                 },
               }}
             />
             <Typography sx={{ mt: 1, fontSize: '0.75rem', color: cv.textMuted, lineHeight: 1.5 }}>
-              Admin & Super Admin only. Adding a {usage.seatGuardrailMax + 1}th member triggers a billing
-              upgrade roadblock.
+              {usage.seatsWarningLevel === 'exceeded'
+                ? 'All seats are in use. Upgrade your plan to invite more members.'
+                : `Adding a ${usage.membersTotal + 1}th member requires a plan upgrade.`}{' '}
+              <Button
+                component={RouterLink}
+                to={`${SETTINGS_BASE_PATH}/accounts/plan`}
+                size="small"
+                sx={{ textTransform: 'none', p: 0, minWidth: 0 }}
+              >
+                View plans
+              </Button>
             </Typography>
           </UsageDetailCard>
 
           <UsageDetailCard
             title="Projects count"
-            description={`${usage.projectsCount} project${usage.projectsCount === 1 ? '' : 's'} provisioned under this account.`}
+            description={
+              usage.projectsTotal != null
+                ? `${usage.projectsCount} of ${usage.projectsTotal} projects provisioned under this account.`
+                : `${usage.projectsCount} project${usage.projectsCount === 1 ? '' : 's'} provisioned under this account.`
+            }
             action={
               <Button
                 component={RouterLink}
@@ -295,7 +420,11 @@ export default function UsageSettingsSection() {
 
           <UsageDetailCard
             title="Workspaces count"
-            description={`${usage.workspacesCount} workspace tenant${usage.workspacesCount === 1 ? '' : 's'} owned under this company profile.`}
+            description={
+              usage.workspacesTotal != null
+                ? `${usage.workspacesCount} of ${usage.workspacesTotal} workspace tenants owned under this company profile.`
+                : `${usage.workspacesCount} workspace tenant${usage.workspacesCount === 1 ? '' : 's'} owned under this company profile.`
+            }
             action={
               <Button
                 component={RouterLink}

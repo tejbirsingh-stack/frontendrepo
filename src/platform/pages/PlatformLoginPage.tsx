@@ -4,7 +4,7 @@ import { Box, Button, TextField, Typography } from '@mui/material';
 import GlassCard from '../../components/GlassCard';
 import LiquidBackground from '../../components/LiquidBackground';
 import WaveBackground from '../../components/WaveBackground';
-import NoahLogo from '../../components/NoahLogo';
+import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../../components/NoahLogo';
 import { cv } from '../../theme/cssVars';
 import { usePlatformAuth } from '../auth/PlatformAuthContext';
 
@@ -43,9 +43,11 @@ export default function PlatformLoginPage() {
     >
       <LiquidBackground />
       <WaveBackground />
-      <Box sx={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 420 }}>
-        <NoahLogo />
-        <GlassCard glow sx={{ width: '100%' }}>
+      <Box sx={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Box sx={AUTH_LOGO_PARENT_SX}>
+          <NoahLogo sx={AUTH_LOGO_SX} />
+        </Box>
+        <GlassCard glow sx={{ width: '100%', maxWidth: 420 }}>
           <Box component="form" onSubmit={(e) => void onSubmit(e)} sx={{ p: 4 }}>
             <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
               Platform Admin

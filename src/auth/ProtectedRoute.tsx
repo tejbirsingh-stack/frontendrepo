@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { getSkeletonForPath } from '../components/loading/RouteLoadingFallback';
 import { useAuth } from './AuthContext';
+import PlanExpiredModal from '../components/common/PlanExpiredModal';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isInitializing } = useAuth();
@@ -14,5 +15,10 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     return <Navigate to="/" replace state={{ from: `${location.pathname}${location.search}` }} />;
   }
 
-  return children;
+  return (
+    <>
+      <PlanExpiredModal />
+      {children}
+    </>
+  );
 }

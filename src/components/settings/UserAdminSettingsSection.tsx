@@ -43,6 +43,7 @@ import { SettingsTableContainer } from './SettingsContentLayout';
 import TruncatedText from '../TruncatedText';
 import { ROLE_IDS, USER_ROLES, type UserRole } from '../../constants/userRoles';
 import { fetchRoles, registerRole, fetchOrganizationUsers, updateOrganizationUser, bulkUpdateOrganizationUsersRequest } from '../../api/auth.service';
+import { getUsageSummary } from '../../api/usage.service';
 import { useAuth } from '../../auth/AuthContext';
 import type { RoleItem } from '../../api/types';
 import {
@@ -499,9 +500,11 @@ function UserGroupDialog({
 function PeopleTab({
   users,
   setUsers,
+  membersTotal = 5,
 }: {
   users: SettingsUserRow[];
   setUsers: Dispatch<SetStateAction<SettingsUserRow[]>>;
+  membersTotal?: number;
 }) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
@@ -537,13 +540,16 @@ function PeopleTab({
   const handleSaveUser = async (userId: string, email: string, role: UserRole, roleId: string) => {
     if (!userId) return;
     try {
-      await updateOrganizationUser(userId, { email, roleId });
+      const res = await updateOrganizationUser(userId, { email, roleId });
+      toast.success(res?.message || 'User updated successfully');
       setUsers((current) =>
         current.map((user) => (user.id === userId ? { ...user, email, role } : user)),
       );
       setSelectedIds(new Set());
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to update user', err);
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to update user';
+      toast.error(errMsg);
     }
   };
 
@@ -620,7 +626,13 @@ function PeopleTab({
               ])
             );
           }}
-          onAdd={() => setAddOpen(true)}
+          onAdd={() => {
+            if (users.length >= membersTotal) {
+              toast.error('All member seats are in use. Upgrade your plan to invite more members.');
+              return;
+            }
+            setAddOpen(true);
+          }}
           addLabel="New user"
           exportDisabled={user?.role === 'Editor'}
           addDisabled={user?.role === 'Editor'}
@@ -803,12 +815,16 @@ function UserGroupsTab({
         const updated = await apiUpdateUserGroup(editGroupId, { name, description, memberIds });
         setGroups((current) => current.map((group) => (group.id === editGroupId ? updated : group)));
         setSelectedIds(new Set());
+        toast.success('User group updated successfully');
       } else {
         const created = await apiCreateUserGroup({ name, description, memberIds });
         setGroups((current) => [created, ...current]);
+        toast.success('User group created successfully');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save group:', err);
+      const msg = err?.response?.data?.message || err?.message || 'Failed to save user group';
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -821,9 +837,12 @@ function UserGroupsTab({
         await apiDeleteUserGroup(id);
       }
       setGroups((current) => current.filter((group) => !selectedIds.has(group.id)));
+      toast.success(`Deleted ${selectedIds.size} user group(s)`);
       setSelectedIds(new Set());
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete groups:', err);
+      const msg = err?.response?.data?.message || err?.message || 'Failed to delete user groups';
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -980,6 +999,21 @@ export default function UserAdminSettingsSection() {
   const [activeTab, setActiveTab] = useState(0);
   const [users, setUsers] = useState<SettingsUserRow[]>([]);
   const [groups, setGroups] = useState<UserGroup[]>([]);
+  const [membersTotal, setMembersTotal] = useState<number>(5);
+
+  useEffect(() => {
+    let mounted = true;
+    getUsageSummary()
+      .then((summary) => {
+        if (mounted && summary && typeof summary.membersTotal === 'number') {
+          setMembersTotal(summary.membersTotal);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -1100,7 +1134,7 @@ export default function UserAdminSettingsSection() {
         </Tabs>
 
         {activeTab === 0 ? (
-          <PeopleTab users={users} setUsers={setUsers} />
+          <PeopleTab users={users} setUsers={setUsers} membersTotal={membersTotal} />
         ) : (
           <UserGroupsTab users={users} groups={groups} setGroups={setGroups} />
         )}

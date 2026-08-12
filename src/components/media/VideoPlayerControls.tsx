@@ -11,12 +11,12 @@ import {
   type SvgIconProps,
 } from '@mui/material';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
-import ChevronLeftOutlinedIcon from '@mui/icons-material/ChevronLeftOutlined';
-import ChevronRightOutlinedIcon from '@mui/icons-material/ChevronRightOutlined';
+import FirstPageOutlinedIcon from '@mui/icons-material/FirstPageOutlined';
 import Forward5OutlinedIcon from '@mui/icons-material/Forward5Outlined';
 import FullscreenExitOutlinedIcon from '@mui/icons-material/FullscreenExitOutlined';
 import FullscreenOutlinedIcon from '@mui/icons-material/FullscreenOutlined';
 import KeyboardArrowDownOutlinedIcon from '@mui/icons-material/KeyboardArrowDownOutlined';
+import LastPageOutlinedIcon from '@mui/icons-material/LastPageOutlined';
 import PauseOutlinedIcon from '@mui/icons-material/PauseOutlined';
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import Replay5OutlinedIcon from '@mui/icons-material/Replay5Outlined';
@@ -505,7 +505,7 @@ export default function VideoPlayerControls({
               onClick={() => seekFrames(-1)}
               sx={controlButtonSx}
             >
-              <ChevronLeftOutlinedIcon sx={{ fontSize: 22 }} />
+              <FirstPageOutlinedIcon sx={{ fontSize: 22 }} />
             </IconButton>
           </span>
         </ShortcutTooltip>
@@ -518,7 +518,7 @@ export default function VideoPlayerControls({
               onClick={() => seekFrames(1)}
               sx={controlButtonSx}
             >
-              <ChevronRightOutlinedIcon sx={{ fontSize: 22 }} />
+              <LastPageOutlinedIcon sx={{ fontSize: 22 }} />
             </IconButton>
           </span>
         </ShortcutTooltip>

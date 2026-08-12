@@ -8,16 +8,20 @@ interface RouteErrorBoundaryProps {
 
 interface RouteErrorBoundaryState {
   hasError: boolean;
+  errorMessage: string | null;
 }
 
 export default class RouteErrorBoundary extends Component<
   RouteErrorBoundaryProps,
   RouteErrorBoundaryState
 > {
-  state: RouteErrorBoundaryState = { hasError: false };
+  state: RouteErrorBoundaryState = { hasError: false, errorMessage: null };
 
-  static getDerivedStateFromError(): RouteErrorBoundaryState {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): RouteErrorBoundaryState {
+    return {
+      hasError: true,
+      errorMessage: error?.message || 'Unknown render error',
+    };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
@@ -25,7 +29,7 @@ export default class RouteErrorBoundary extends Component<
   }
 
   private handleRetry = () => {
-    this.setState({ hasError: false });
+    this.setState({ hasError: false, errorMessage: null });
     window.location.reload();
   };
 
@@ -49,9 +53,22 @@ export default class RouteErrorBoundary extends Component<
           <Typography sx={{ fontSize: '1.125rem', fontWeight: 600, color: cv.textPrimary, mb: 1 }}>
             Something went wrong
           </Typography>
-          <Typography sx={{ fontSize: '0.875rem', color: cv.textSecondary, mb: 2.5 }}>
+          <Typography sx={{ fontSize: '0.875rem', color: cv.textSecondary, mb: 1.5 }}>
             This section encountered an unexpected error. Reload to continue.
           </Typography>
+          {this.state.errorMessage ? (
+            <Typography
+              sx={{
+                fontSize: '0.75rem',
+                color: cv.textMuted,
+                mb: 2.5,
+                wordBreak: 'break-word',
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+              }}
+            >
+              {this.state.errorMessage}
+            </Typography>
+          ) : null}
           <Button
             variant="contained"
             onClick={this.handleRetry}

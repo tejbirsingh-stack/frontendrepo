@@ -15,8 +15,15 @@ import {
 } from '@mui/icons-material';
 import { cv } from '../../theme/cssVars';
 import { useDashboard } from '../../context/DashboardContext';
-import type { ManagedTag, TagScope } from '../../types/managedTag';
+import type { TagScope } from '../../types/managedTag';
+import {
+  buildTagForest,
+  countDescendants,
+  groupForestByRootScope,
+  type TagTreeNode,
+} from '../../utils/tagHierarchy';
 import { getTagScopeColor } from '../../utils/tagScopeColorsStorage';
+import { getTagScopeBadgeSx } from '../../utils/managedTagStyles';
 import { normalizeTagName } from '../../utils/tagRegistryStorage';
 
 interface HierarchicalTagPickerProps {
@@ -50,48 +57,10 @@ export default function HierarchicalTagPicker({
     [getAssignableTags, workspaceId],
   );
 
-  // Group tags into parent/child hierarchy per scope
-  const hierarchicalTagsByScope = useMemo(() => {
-    const scopes: Record<TagScope, { parents: ManagedTag[]; childrenMap: Map<string, ManagedTag[]>; standalone: ManagedTag[] }> = {
-      company: { parents: [], childrenMap: new Map(), standalone: [] },
-      project: { parents: [], childrenMap: new Map(), standalone: [] },
-      personal: { parents: [], childrenMap: new Map(), standalone: [] },
-    };
-
-    const tagsById = new Map<string, ManagedTag>(assignableTags.map((t) => [t.id, t]));
-
-    assignableTags.forEach((tag) => {
-      const scopeData = scopes[tag.scope] || scopes.personal;
-      if (tag.parentId && tagsById.has(tag.parentId)) {
-        const existing = scopeData.childrenMap.get(tag.parentId) || [];
-        existing.push(tag);
-        scopeData.childrenMap.set(tag.parentId, existing);
-      } else {
-        // Tag is a root/parent candidate
-        scopeData.parents.push(tag);
-      }
-    });
-
-    // Separate parents into those with children vs standalone
-    tagScopeOrder.forEach((scope) => {
-      const scopeData = scopes[scope];
-      const realParents: ManagedTag[] = [];
-      const standalone: ManagedTag[] = [];
-
-      scopeData.parents.forEach((tag) => {
-        if (scopeData.childrenMap.has(tag.id)) {
-          realParents.push(tag);
-        } else {
-          standalone.push(tag);
-        }
-      });
-
-      scopeData.parents = realParents;
-      scopeData.standalone = standalone;
-    });
-
-    return scopes;
-  }, [assignableTags]);
+  const scopedTagTrees = useMemo(
+    () => groupForestByRootScope(buildTagForest(assignableTags)),
+    [assignableTags],
+  );
 
   const toggleParentExpand = (parentId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -115,6 +84,98 @@ export default function HierarchicalTagPicker({
 
   const open = Boolean(anchorEl);
   const filteredQuery = searchQuery.trim().toLowerCase();
+
+  const nodeMatchesQuery = (node: TagTreeNode): boolean => {
+    if (!filteredQuery) return true;
+    if (node.tag.name.toLowerCase().includes(filteredQuery)) return true;
+    return node.children.some(nodeMatchesQuery);
+  };
+
+  const renderNode = (node: TagTreeNode, depth: number, scopeColor: string): React.ReactNode => {
+    if (filteredQuery && !nodeMatchesQuery(node)) return null;
+
+    const { tag, children } = node;
+    const hasChildren = children.length > 0;
+    const isApplied = appliedTags.includes(tag.name);
+    const isExpanded = expandedParents[tag.id] || Boolean(filteredQuery);
+    const descendantCount = countDescendants(node);
+
+    return (
+      <Box key={tag.id} sx={{ mb: 0.5 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            py: 0.5,
+            px: 0.75,
+            borderRadius: '6px',
+            cursor: 'pointer',
+            backgroundColor: isApplied ? cv.purpleSelectionHover : 'transparent',
+            '&:hover': { backgroundColor: cv.glassBackground || 'rgba(255,255,255,0.04)' },
+          }}
+          onClick={() => handleSelectTag(tag.name)}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+            {hasChildren ? (
+              <IconButton
+                size="small"
+                onClick={(e) => toggleParentExpand(tag.id, e)}
+                sx={{ p: 0.2, color: cv.textMuted }}
+              >
+                {isExpanded ? (
+                  <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
+                ) : (
+                  <KeyboardArrowRightIcon sx={{ fontSize: 16 }} />
+                )}
+              </IconButton>
+            ) : (
+              <Box sx={{ width: 24 }} />
+            )}
+            <Box sx={{ minWidth: 0 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexWrap: 'wrap' }}>
+                <Typography
+                  sx={{
+                    fontSize: depth === 0 ? '0.8125rem' : '0.78125rem',
+                    fontWeight: depth === 0 && hasChildren ? 600 : 500,
+                    color: isApplied ? cv.textSecondary : cv.textPrimary,
+                  }}
+                >
+                  {tag.name}
+                </Typography>
+                <Box component="span" sx={getTagScopeBadgeSx(tag.scope, tagScopeColors)}>
+                  {tagScopeLabels[tag.scope].replace(' Tags', '')}
+                </Box>
+              </Box>
+              {hasChildren && !filteredQuery ? (
+                <Typography sx={{ fontSize: '0.625rem', color: cv.textSecondary }}>
+                  {descendantCount} subtag{descendantCount === 1 ? '' : 's'}
+                </Typography>
+              ) : null}
+            </Box>
+          </Box>
+          {!isApplied && (
+            <AddOutlinedIcon sx={{ fontSize: 14, color: depth === 0 ? cv.textSecondary : scopeColor }} />
+          )}
+        </Box>
+
+        {hasChildren ? (
+          <Collapse in={isExpanded} timeout="auto">
+            <Box
+              sx={{
+                pl: 2.75,
+                pt: 0.25,
+                borderLeft: `1px solid ${cv.dividerSubtle}`,
+                ml: 1.25,
+              }}
+            >
+              {children.map((child) => renderNode(child, depth + 1, scopeColor))}
+            </Box>
+          </Collapse>
+        ) : null}
+      </Box>
+    );
+  };
 
   return (
     <Box sx={{ mt: 1 }}>
@@ -189,11 +250,13 @@ export default function HierarchicalTagPicker({
         </Typography>
 
         {tagScopeOrder.map((scope) => {
-          const scopeData = hierarchicalTagsByScope[scope];
+          const trees = scopedTagTrees[scope];
           const scopeColor = getTagScopeColor(scope, tagScopeColors);
-          const hasTags = scopeData.parents.length > 0 || scopeData.standalone.length > 0;
+          const visibleTrees = filteredQuery
+            ? trees.filter(nodeMatchesQuery)
+            : trees;
 
-          if (!hasTags && !filteredQuery) return null;
+          if (visibleTrees.length === 0) return null;
 
           return (
             <Box key={scope} sx={{ mb: 1.5, '&:last-of-type': { mb: 0 } }}>
@@ -214,131 +277,7 @@ export default function HierarchicalTagPicker({
                 {tagScopeLabels[scope]}
               </Typography>
 
-              {/* Parent Categories with Children */}
-              {scopeData.parents.map((parentTag) => {
-                const children = scopeData.childrenMap.get(parentTag.id) || [];
-                const isParentExpanded = expandedParents[parentTag.id] || Boolean(filteredQuery);
-                const isParentApplied = appliedTags.includes(parentTag.name);
-
-                const matchingChildren = filteredQuery
-                  ? children.filter((c) => c.name.toLowerCase().includes(filteredQuery))
-                  : children;
-
-                if (filteredQuery && !parentTag.name.toLowerCase().includes(filteredQuery) && matchingChildren.length === 0) {
-                  return null;
-                }
-
-                return (
-                  <Box key={parentTag.id} sx={{ mb: 0.5 }}>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        py: 0.5,
-                        px: 0.75,
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        backgroundColor: isParentApplied ? cv.purpleSelectionHover : 'transparent',
-                        '&:hover': { backgroundColor: cv.glassBackground || 'rgba(255,255,255,0.04)' },
-                      }}
-                      onClick={() => handleSelectTag(parentTag.name)}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
-                        <IconButton
-                          size="small"
-                          onClick={(e) => toggleParentExpand(parentTag.id, e)}
-                          sx={{ p: 0.2, color: cv.textMuted }}
-                        >
-                          {isParentExpanded ? (
-                            <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
-                          ) : (
-                            <KeyboardArrowRightIcon sx={{ fontSize: 16 }} />
-                          )}
-                        </IconButton>
-                        <Typography
-                          sx={{
-                            fontSize: '0.8125rem',
-                            fontWeight: 600,
-                            color: isParentApplied ? cv.textMuted : cv.textPrimary,
-                          }}
-                        >
-                          {parentTag.name}
-                        </Typography>
-                      </Box>
-                      {!isParentApplied && (
-                        <AddOutlinedIcon sx={{ fontSize: 14, color: cv.textSecondary }} />
-                      )}
-                    </Box>
-
-                    {/* Nested Child Tags */}
-                    <Collapse in={isParentExpanded} timeout="auto">
-                      <Box sx={{ pl: 2.75, pt: 0.25, borderLeft: `1px solid ${cv.dividerSubtle}`, ml: 1.25 }}>
-                        {matchingChildren.map((childTag) => {
-                          const isChildApplied = appliedTags.includes(childTag.name);
-                          return (
-                            <Box
-                              key={childTag.id}
-                              sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                py: 0.4,
-                                px: 0.75,
-                                my: 0.2,
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                opacity: isChildApplied ? 0.5 : 1,
-                                '&:hover': { backgroundColor: cv.purpleSelectionHover },
-                              }}
-                              onClick={() => handleSelectTag(childTag.name)}
-                            >
-                              <Typography sx={{ fontSize: '0.78125rem', color: cv.textSecondary, fontWeight: 500 }}>
-                                {childTag.name}
-                              </Typography>
-                              {!isChildApplied && (
-                                <AddOutlinedIcon sx={{ fontSize: 14, color: scopeColor }} />
-                              )}
-                            </Box>
-                          );
-                        })}
-                      </Box>
-                    </Collapse>
-                  </Box>
-                );
-              })}
-
-              {/* Standalone Tags (No children) */}
-              {scopeData.standalone.map((tag) => {
-                if (filteredQuery && !tag.name.toLowerCase().includes(filteredQuery)) {
-                  return null;
-                }
-                const isApplied = appliedTags.includes(tag.name);
-
-                return (
-                  <Box
-                    key={tag.id}
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      py: 0.5,
-                      px: 0.75,
-                      my: 0.2,
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      opacity: isApplied ? 0.5 : 1,
-                      '&:hover': { backgroundColor: cv.glassBackground || 'rgba(255,255,255,0.04)' },
-                    }}
-                    onClick={() => handleSelectTag(tag.name)}
-                  >
-                    <Typography sx={{ fontSize: '0.8125rem', color: cv.textPrimary }}>
-                      {tag.name}
-                    </Typography>
-                    {!isApplied && <AddOutlinedIcon sx={{ fontSize: 14, color: cv.textSecondary }} />}
-                  </Box>
-                );
-              })}
+              {visibleTrees.map((node) => renderNode(node, 0, scopeColor))}
             </Box>
           );
         })}

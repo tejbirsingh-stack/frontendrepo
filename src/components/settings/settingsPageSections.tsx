@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
+import { getUsageSummary } from '../../api/usage.service';
+import { downloadCSV } from '../../utils/csvExport';
 import { getCompanyInfoRequest, updateCompanyInfoRequest, uploadCompanyLogoRequest, updateProfileRequest, uploadProfilePhotoRequest } from '../../api';
 import { logoutAllSessions, fetchOrganizationUsers } from '../../api/auth.service';
+import { fetchUserGroups } from '../../api/userGroups.service';
 import { useAuth } from '../../auth/AuthContext';
 import { useLocalizedDate } from '../../hooks/useLocalizedDate';
 import { cv } from '../../theme/cssVars';
+import ChoosePlanScreen from '../onboarding/ChoosePlanScreen';
 import {
   Avatar,
   Box,
@@ -52,6 +56,7 @@ import SettingsDataTable, {
 } from './SettingsDataTable';
 import { SettingsRow, SettingsSectionCard } from './SettingsSectionCard';
 import TruncatedText from '../TruncatedText';
+import { getDynamicPlanDetails } from '../../utils/planHelper';
 import { CURRENT_USER } from '../../constants/currentUser';
 import {
   createProject,
@@ -66,6 +71,7 @@ import {
   DEFAULT_PRIVACY_SETTINGS,
   MOCK_PERSONAL_PROFILE,
   PROFILE_TIMEZONE_OPTIONS,
+  resolveProfileTimezoneOption,
   resolveWorkspaceInvite,
   type BrandingSettingsData,
   type SettingsProjectRow,
@@ -128,6 +134,7 @@ function AddProjectDialog({
   workspaces,
   initialProject,
   suggestedUsers,
+  suggestedGroups,
 }: {
   open: boolean;
   onClose: () => void;
@@ -137,12 +144,16 @@ function AddProjectDialog({
     inviteEmails: string[],
     inviteGroupIds: string[],
     visibility: ProjectVisibility,
-    folderId: string | null
-  ) => void;
+    folderId: string | null,
+    inviteAccess?: import('../../data/mockSettingsData').WorkspaceMemberAccess,
+    inviteMemberType?: import('../../data/mockSettingsData').WorkspaceMemberType,
+    sendInviteEmail?: boolean
+  ) => Promise<void> | void;
   onSave?: (name: string, workspace: string, visibility: ProjectVisibility) => void;
   workspaces: { id: string; name: string }[];
   initialProject?: { name: string; workspace: string; visibility: ProjectVisibility };
   suggestedUsers: import('../../data/mockSettingsData').SettingsUserRow[];
+  suggestedGroups?: import('../../data/mockSettingsData').SettingsUserGroup[];
 }) {
   const isEdit = Boolean(initialProject);
   const [name, setName] = useState('');
@@ -153,6 +164,7 @@ function AddProjectDialog({
   const [inviteGroupIds, setInviteGroupIds] = useState<string[]>([]);
   const [inviteMemberType, setInviteMemberType] = useState<WorkspaceMemberType>('Member');
   const [inviteAccess, setInviteAccess] = useState<WorkspaceMemberAccess>('Full Access');
+  const [sendInviteEmail, setSendInviteEmail] = useState(false);
   const [visibility, setVisibility] = useState<ProjectVisibility>('public');
   const [nameError, setNameError] = useState('');
 
@@ -166,7 +178,7 @@ function AddProjectDialog({
 
     const byParent: Record<string, any[]> = {};
     const roots: any[] = [];
-    
+
     mappedFolders.forEach(f => {
       const pid = f.parentFolderId;
       if (pid) {
@@ -200,7 +212,7 @@ function AddProjectDialog({
                 setFolders(data.folders || []);
               }
             })
-            .catch(() => {});
+            .catch(() => { });
         });
       }
     }
@@ -216,6 +228,7 @@ function AddProjectDialog({
       setInviteGroupIds([]);
       setInviteMemberType('Member');
       setInviteAccess('Full Access');
+      setSendInviteEmail(false);
       setVisibility('public');
       setNameError('');
       return;
@@ -226,13 +239,14 @@ function AddProjectDialog({
       setVisibility(initialProject.visibility);
       setInviteEmails([]);
       setInviteGroupIds([]);
+      setSendInviteEmail(false);
       setNameError('');
       return;
     }
     setWorkspace((current) => current || workspaces[0]?.name || '');
   }, [open, initialProject, workspaces]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
       setNameError('Project name is required');
@@ -246,8 +260,12 @@ function AddProjectDialog({
       onClose();
       return;
     }
-    onAdd(trimmed, workspace, inviteEmails, inviteGroupIds, visibility, folderId || null);
-    onClose();
+    try {
+      await onAdd(trimmed, workspace, inviteEmails, inviteGroupIds, visibility, folderId || null, inviteAccess, inviteMemberType, sendInviteEmail);
+      onClose();
+    } catch (e) {
+      // Error handled by parent toast
+    }
   };
 
   return (
@@ -283,7 +301,8 @@ function AddProjectDialog({
           gap: 2,
           pt: '8px !important',
           backgroundColor: cv.dialogSurface,
-          overflow: 'visible',
+          overflowY: 'auto',
+          maxHeight: 'calc(90vh - 120px)',
         }}
       >
         <TextField
@@ -322,44 +341,42 @@ function AddProjectDialog({
         {!isEdit && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <InputLabel id="add-project-folder-label" shrink sx={{ fontSize: '0.875rem', mb: -0.5 }}>
-              Folder (Optional)
+              Folder
             </InputLabel>
             <Box sx={{ maxHeight: 200, overflowY: 'auto', border: `1px solid ${cv.border}`, borderRadius: '10px', p: 1 }}>
-              {rootFolders.length === 0 && (
-                <Box
-                  component="button"
-                  type="button"
-                  onClick={() => setFolderId('')}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    width: '100%',
-                    textAlign: 'left',
-                    border: folderId === '' ? `1px solid ${cv.purpleFocusBorder}` : '1px solid transparent',
-                    borderRadius: '10px',
-                    px: 1,
-                    py: 0.5,
-                    mb: 0.5,
-                    cursor: 'pointer',
-                    backgroundColor: folderId === '' ? cv.purpleSelectionSoft : 'transparent',
-                    color: cv.textPrimary,
-                    '&:hover': {
-                      backgroundColor: folderId === '' ? cv.purpleSelectionHover : cv.surfaceHover,
-                    },
-                  }}
-                >
-                  <FolderOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted, flexShrink: 0, ml: 1 }} />
-                  <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: folderId === '' ? 600 : 500, color: cv.textMuted }}>
-                    {(() => {
-                      const now = new Date();
-                      const currentYear = new Intl.DateTimeFormat('en-US', { year: 'numeric' }).format(now);
-                      const currentMonth = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(now);
-                      return `${currentYear} / ${currentMonth}`;
-                    })()}
-                  </Typography>
-                </Box>
-              )}
+              <Box
+                component="button"
+                type="button"
+                onClick={() => setFolderId('')}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  width: '100%',
+                  textAlign: 'left',
+                  border: folderId === '' ? `1px solid ${cv.purpleFocusBorder}` : '1px solid transparent',
+                  borderRadius: '10px',
+                  px: 1,
+                  py: 0.5,
+                  mb: 0.5,
+                  cursor: 'pointer',
+                  backgroundColor: folderId === '' ? cv.purpleSelectionSoft : 'transparent',
+                  color: cv.textPrimary,
+                  '&:hover': {
+                    backgroundColor: folderId === '' ? cv.purpleSelectionHover : cv.surfaceHover,
+                  },
+                }}
+              >
+                <FolderOutlinedIcon sx={{ fontSize: 18, color: folderId === '' ? cv.brandMain : cv.textMuted, flexShrink: 0, ml: 0.5 }} />
+                <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: folderId === '' ? 600 : 500, color: folderId === '' ? cv.textPrimary : cv.textMuted }}>
+                  {(() => {
+                    const now = new Date();
+                    const currentYear = new Intl.DateTimeFormat('en-US', { year: 'numeric' }).format(now);
+                    const currentMonth = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(now);
+                    return `Default (${currentYear} / ${currentMonth})`;
+                  })()}
+                </Typography>
+              </Box>
               {rootFolders.map((folder) => (
                 <FolderTreeNode
                   key={folder.id}
@@ -372,16 +389,18 @@ function AddProjectDialog({
             </Box>
           </Box>
         )}
-        <ProjectVisibilityPicker
-          value={visibility}
-          onChange={(next) => {
-            setVisibility(next);
-            if (next === 'public') {
-              setInviteEmails([]);
-              setInviteGroupIds([]);
-            }
-          }}
-        />
+        {!isEdit && (
+          <ProjectVisibilityPicker
+            value={visibility}
+            onChange={(next) => {
+              setVisibility(next);
+              if (next === 'public') {
+                setInviteEmails([]);
+                setInviteGroupIds([]);
+              }
+            }}
+          />
+        )}
         {visibility === 'private' && !isEdit ? (
           <InvitePeopleFields
             emails={inviteEmails}
@@ -393,14 +412,25 @@ function AddProjectDialog({
             onMemberTypeChange={setInviteMemberType}
             access={inviteAccess}
             onAccessChange={setInviteAccess}
+            sendInviteEmail={sendInviteEmail}
+            onSendInviteEmailChange={setSendInviteEmail}
             suggestedUsers={suggestedUsers}
-            suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
+            suggestedGroups={suggestedGroups}
             description="Private projects are invite-only. Add people or groups who should have access."
+            onGuestSearch={async (query) => {
+              try {
+                const { apiClient } = await import('../../api/client');
+                const res = await apiClient.get<any>(`/workspaces/search-guests?q=${encodeURIComponent(query)}`);
+                return Array.isArray(res) ? res : [];
+              } catch {
+                return [];
+              }
+            }}
           />
         ) : null}
         <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary }}>
           {isEdit
-            ? 'Update project details and visibility.'
+            ? 'Update project name and workspace.'
             : 'New projects start as active. You will be assigned as project admin.'}
         </Typography>
       </DialogContent>
@@ -417,14 +447,14 @@ function AddProjectDialog({
 }
 
 export function PersonalSettingsSection() {
-  const { user, refreshUser } = useAuth();
-  
+  const { user, refreshUser, logout } = useAuth();
+
   const [profile, setProfile] = useState({
     fullName: user?.name || '',
-    timezone: user?.timezone || 'UTC',
+    timezone: resolveProfileTimezoneOption(user?.timezone),
     avatarUrl: user?.avatarUrl || ''
   });
-  
+
   const [isSaving, setIsSaving] = useState(false);
   const [saveProfileConfirmOpen, setSaveProfileConfirmOpen] = useState(false);
   const [logoutAllConfirmOpen, setLogoutAllConfirmOpen] = useState(false);
@@ -434,7 +464,7 @@ export function PersonalSettingsSection() {
     if (user) {
       setProfile({
         fullName: user.name || '',
-        timezone: user.timezone || 'UTC',
+        timezone: resolveProfileTimezoneOption(user.timezone),
         avatarUrl: user.avatarUrl || ''
       });
     }
@@ -460,8 +490,8 @@ export function PersonalSettingsSection() {
       await logoutAllSessions();
       toast.success('All sessions revoked. Logging out...');
       setTimeout(() => {
-        user?.logout?.(); // clear local token and redirect if logout is provided, else we rely on AuthContext unmounting
-        window.location.reload(); 
+        void logout();
+        window.location.assign('/');
       }, 1000);
     } catch (err: any) {
       toast.error(err.message || 'Failed to revoke sessions');
@@ -545,15 +575,18 @@ export function PersonalSettingsSection() {
             <Select
               labelId="profile-timezone-label"
               label="Timezone"
-              value={profile.timezone}
+              value={resolveProfileTimezoneOption(profile.timezone)}
               onChange={(event: SelectChangeEvent) =>
-                setProfile((current) => ({ ...current, timezone: event.target.value }))
+                setProfile((current) => ({
+                  ...current,
+                  timezone: resolveProfileTimezoneOption(event.target.value),
+                }))
               }
               sx={dialogSelectSx}
             >
               {PROFILE_TIMEZONE_OPTIONS.map((zone) => (
-                <MenuItem key={zone} value={zone} sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
-                  {zone}
+                <MenuItem key={zone.value} value={zone.value} sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
+                  {zone.label}
                 </MenuItem>
               ))}
             </Select>
@@ -597,7 +630,7 @@ export function PersonalSettingsSection() {
       <Dialog
         open={saveProfileConfirmOpen}
         onClose={() => setSaveProfileConfirmOpen(false)}
-        slotProps={noahDialogSlotProps}
+        slotProps={noahDialogSlotProps()}
       >
         <DialogTitle>Confirm Changes</DialogTitle>
         <DialogContent>
@@ -619,9 +652,9 @@ export function PersonalSettingsSection() {
       <Dialog
         open={logoutAllConfirmOpen}
         onClose={() => setLogoutAllConfirmOpen(false)}
-        slotProps={noahDialogSlotProps}
+        slotProps={noahDialogSlotProps()}
       >
-        <DialogTitle sx={{ color: cv.danger }}>Log Out of All Sessions</DialogTitle>
+        <DialogTitle sx={{ color: cv.destructive }}>Log Out of All Sessions</DialogTitle>
         <DialogContent>
           <Typography sx={{ color: cv.textSecondary, fontSize: '0.875rem' }}>
             Are you sure you want to log out of all active sessions? This will instantly revoke access for all devices, including the one you are currently using. You will need to log back in.
@@ -631,7 +664,15 @@ export function PersonalSettingsSection() {
           <Button onClick={() => setLogoutAllConfirmOpen(false)} sx={{ color: cv.textSecondary }}>
             Cancel
           </Button>
-          <Button onClick={handleLogoutAll} variant="contained" sx={{ bgcolor: cv.danger, color: '#fff', '&:hover': { bgcolor: cv.dangerHover } }}>
+          <Button
+            onClick={handleLogoutAll}
+            variant="contained"
+            sx={{
+              bgcolor: cv.destructive,
+              color: '#fff',
+              '&:hover': { bgcolor: cv.destructiveStrong },
+            }}
+          >
             Confirm Logout
           </Button>
         </DialogActions>
@@ -740,64 +781,64 @@ export function CompanySettingsSection() {
 
   return (
     <SettingsFormContainer>
-    <SettingsSectionCard title="Company Info" description="Organization details for your account.">
-      <Box sx={{ px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-          <Avatar
-            src={logoUrl}
-            sx={{ width: 64, height: 64, background: logoUrl ? 'transparent' : cv.brandGradient }}
-          >
-            {!logoUrl ? name.charAt(0).toUpperCase() : null}
-          </Avatar>
-          <Box>
-            <input
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-            />
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<UploadOutlinedIcon />}
-              sx={outlineButtonSx}
-              onClick={() => fileInputRef.current?.click()}
+      <SettingsSectionCard title="Company Info" description="Organization details for your account.">
+        <Box sx={{ px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+            <Avatar
+              src={logoUrl}
+              sx={{ width: 64, height: 64, background: logoUrl ? 'transparent' : cv.brandGradient }}
             >
-              Upload company logo
+              {!logoUrl ? name.charAt(0).toUpperCase() : null}
+            </Avatar>
+            <Box>
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<UploadOutlinedIcon />}
+                sx={outlineButtonSx}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Upload company logo
+              </Button>
+              <Typography sx={{ mt: 0.75, fontSize: '0.75rem', color: cv.textMuted }}>
+                PNG, JPG, or SVG. Used for branding on shared media links.
+              </Typography>
+            </Box>
+          </Box>
+
+          <TextField
+            label="Company name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            fullWidth size="small"
+          />
+          <TextField
+            label="Company website"
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            fullWidth size="small"
+          />
+          <TextField
+            label="Industry"
+            value={industry}
+            onChange={(e) => setIndustry(e.target.value)}
+            fullWidth size="small"
+          />
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+            <Button variant="contained" sx={containedButtonSx} onClick={handleSave} disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save company details'}
             </Button>
-            <Typography sx={{ mt: 0.75, fontSize: '0.75rem', color: cv.textMuted }}>
-              PNG, JPG, or SVG. Used for branding on shared media links.
-            </Typography>
           </Box>
         </Box>
-
-        <TextField 
-          label="Company name" 
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          fullWidth size="small" 
-        />
-        <TextField 
-          label="Company website" 
-          value={website}
-          onChange={(e) => setWebsite(e.target.value)}
-          fullWidth size="small" 
-        />
-        <TextField 
-          label="Industry" 
-          value={industry}
-          onChange={(e) => setIndustry(e.target.value)}
-          fullWidth size="small" 
-        />
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-          <Button variant="contained" sx={containedButtonSx} onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save company details'}
-          </Button>
-        </Box>
-      </Box>
-    </SettingsSectionCard>
+      </SettingsSectionCard>
     </SettingsFormContainer>
   );
 }
@@ -805,59 +846,131 @@ export function CompanySettingsSection() {
 export { default as UsageSettingsSection } from './UsageSettingsSection';
 
 export function PlanSettingsSection() {
-  const plan = MOCK_CURRENT_PLAN;
+  const { user, refreshUser } = useAuth();
+  const plan = useMemo(() => getDynamicPlanDetails(user), [user]);
+  const [choosePlanOpen, setChoosePlanOpen] = useState(false);
+
+  const handleUpgradePlan = async (planId: string, billingCycle: 'annual' | 'monthly') => {
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      const res = await apiClient.post<any>('/auth/upgrade-plan', { planId, billingCycle }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      await refreshUser();
+      toast.success((res as any)?.message || `Upgraded to ${planId.toUpperCase()} plan!`);
+      setChoosePlanOpen(false);
+    } catch (err: any) {
+      console.error('Failed to upgrade plan:', err);
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to upgrade plan';
+      toast.error(errMsg);
+    }
+  };
 
   return (
-    <SettingsFormContainer>
-      <SettingsSectionCard
-        title="Current Plan"
-        description="Active tier, trial milestone, and subscription line items."
-      >
-        <SettingsRow title="Plan name" description={plan.planName} />
-        <SettingsRow title="Free trial expiry" description={plan.freeTrialExpiry} />
-        <SettingsRow title="Subtotal" description={plan.subtotal} />
-        <SettingsRow
-          title="Sales tax"
-          description={`${plan.salesTaxPercent}% · ${plan.salesTaxAmount} (US state-level, based on billing address)`}
-        />
-        <SettingsRow title="Total" description={plan.total} showDivider={false} />
-      </SettingsSectionCard>
+    <>
+      <SettingsFormContainer>
+        <SettingsSectionCard
+          title="Current Plan"
+          description="Active tier, billing cycle term, and subscription line items."
+          action={
+            <Button
+              variant="contained"
+              onClick={() => setChoosePlanOpen(true)}
+              sx={{
+                background: cv.brandGradient,
+                color: cv.textOnCta,
+                textTransform: 'none',
+                borderRadius: '10px',
+                fontWeight: 600,
+                px: 2.5,
+                py: 0.75,
+                boxShadow: cv.brandShadowSoft,
+                '&:hover': {
+                  background: cv.brandGradientHover,
+                  boxShadow: cv.brandShadowStrong,
+                },
+              }}
+            >
+              Upgrade Plan
+            </Button>
+          }
+        >
+          <SettingsRow title="Plan name" description={plan.planName} />
+          <SettingsRow title="Billing cycle" description={plan.billingTermLabel} />
+          <SettingsRow title="Subscription expiry date" description={plan.expiryDateFormatted} />
+          <SettingsRow title="Subtotal" description={plan.subtotal} />
+          <SettingsRow
+            title="Sales tax"
+            description={`${plan.salesTaxPercent}% · ${plan.salesTaxAmount} (US state-level, based on billing address)`}
+          />
+          <SettingsRow title="Total" description={plan.total} showDivider={false} />
+        </SettingsSectionCard>
 
-      <SettingsSectionCard title="Line item details" description="Fetched dynamically from subscription terms.">
-        <Box sx={{ px: 2, py: 1.5 }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Description</TableCell>
-                <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Quantity</TableCell>
-                <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Unit price</TableCell>
-                <TableCell align="right" sx={{ color: cv.textMuted, borderColor: cv.border }}>
-                  Subtotal
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {plan.lineItems.map((item) => (
-                <TableRow key={item.description}>
-                  <TableCell sx={{ color: cv.textPrimary, borderColor: cv.border }}>
-                    {item.description}
-                  </TableCell>
-                  <TableCell sx={{ color: cv.textSecondary, borderColor: cv.border }}>
-                    {item.quantity}
-                  </TableCell>
-                  <TableCell sx={{ color: cv.textSecondary, borderColor: cv.border }}>
-                    {item.unitPrice}
-                  </TableCell>
-                  <TableCell align="right" sx={{ color: cv.textPrimary, borderColor: cv.border }}>
-                    {item.subtotal}
+        <SettingsSectionCard title="Line item details" description="Fetched dynamically from subscription terms.">
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Description</TableCell>
+                  <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Quantity</TableCell>
+                  <TableCell sx={{ color: cv.textMuted, borderColor: cv.border }}>Unit price</TableCell>
+                  <TableCell align="right" sx={{ color: cv.textMuted, borderColor: cv.border }}>
+                    Subtotal
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {plan.lineItems.map((item) => (
+                  <TableRow key={item.description}>
+                    <TableCell sx={{ color: cv.textPrimary, borderColor: cv.border }}>
+                      {item.description}
+                    </TableCell>
+                    <TableCell sx={{ color: cv.textSecondary, borderColor: cv.border }}>
+                      {item.quantity}
+                    </TableCell>
+                    <TableCell sx={{ color: cv.textSecondary, borderColor: cv.border }}>
+                      {item.unitPrice}
+                    </TableCell>
+                    <TableCell align="right" sx={{ color: cv.textPrimary, borderColor: cv.border }}>
+                      {item.subtotal}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        </SettingsSectionCard>
+      </SettingsFormContainer>
+
+      {/* Upgrade Plan Modal */}
+      <Dialog
+        fullScreen
+        open={choosePlanOpen}
+        onClose={() => setChoosePlanOpen(false)}
+        sx={{
+          '& .MuiDialog-paper': {
+            background: cv.bg,
+            color: cv.textPrimary,
+          },
+        }}
+      >
+        <Box sx={{ position: 'absolute', top: 20, right: 24, zIndex: 1200 }}>
+          <IconButton
+            onClick={() => setChoosePlanOpen(false)}
+            sx={{
+              color: cv.textSecondary,
+              backgroundColor: cv.surfaceHover,
+              border: `1px solid ${cv.border}`,
+              '&:hover': { backgroundColor: cv.surfaceActive, color: cv.textPrimary },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
         </Box>
-      </SettingsSectionCard>
-    </SettingsFormContainer>
+        <ChoosePlanScreen onSelectPlan={handleUpgradePlan} currentPlanId={plan.planId} />
+      </Dialog>
+    </>
   );
 }
 
@@ -1061,7 +1174,11 @@ function ProjectWorkspaceTable({
   showTeamMembersColumn = false,
   onAdd,
   onEdit,
+  onDelete,
+  onMarkActive,
+  onMarkInactive,
   onInviteTeamMembers,
+  onExport,
 }: {
   title: string;
   description: string;
@@ -1072,7 +1189,11 @@ function ProjectWorkspaceTable({
   showTeamMembersColumn?: boolean;
   onAdd?: () => void;
   onEdit?: (rowId: string) => void;
+  onDelete?: (ids: string[]) => void;
+  onMarkActive?: (ids: string[]) => void;
+  onMarkInactive?: (ids: string[]) => void;
   onInviteTeamMembers?: (workspaceId: string) => void;
+  onExport?: (filteredRows: SettingsProjectRow[]) => void;
 }) {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -1104,15 +1225,15 @@ function ProjectWorkspaceTable({
   const columns: SettingsTableColumn<SettingsProjectRow>[] = [
     ...(showProjectColumn
       ? [
-          {
-            id: 'project',
-            label: 'Project',
-            width: showTeamMembersColumn ? '14%' : '18%',
-            render: (row: SettingsProjectRow) => (
-              <ProjectNameCell name={row.project} />
-            ),
-          },
-        ]
+        {
+          id: 'project',
+          label: 'Project',
+          width: showTeamMembersColumn ? '14%' : '18%',
+          render: (row: SettingsProjectRow) => (
+            <ProjectNameCell name={row.project} />
+          ),
+        },
+      ]
       : []),
     {
       id: 'workspace',
@@ -1141,25 +1262,19 @@ function ProjectWorkspaceTable({
     {
       id: 'created',
       label: 'Creation date',
-      width: showTeamMembersColumn ? (showProjectColumn ? '12%' : '12%') : '14%',
+      width: showTeamMembersColumn ? (showProjectColumn ? '14%' : '14%') : '16%',
       render: (row) => row.creationDate,
-    },
-    {
-      id: 'storage',
-      label: 'Storage',
-      width: showTeamMembersColumn ? (showProjectColumn ? '8%' : '9%') : '10%',
-      render: (row) => row.storage,
     },
     {
       id: 'admin',
       label: showProjectColumn ? 'Project admin' : 'Workspace admin',
       width: showProjectColumn
         ? showTeamMembersColumn
-          ? '13%'
-          : '18%'
+          ? '15%'
+          : '20%'
         : showTeamMembersColumn
-          ? '14%'
-          : '22%',
+          ? '16%'
+          : '24%',
       render: (row) => tableText(row.projectAdmin),
     },
     ...(showTeamMembersColumn
@@ -1171,7 +1286,7 @@ function ProjectWorkspaceTable({
             render: (row: SettingsProjectRow) => (
               <WorkspaceTeamMembersCell
                 members={row.teamMembers ?? []}
-                canInvite={row.projectAdmin === CURRENT_USER.name}
+                canInvite={true}
                 visibility={showProjectColumn ? row.visibility : undefined}
                 shareLink={
                   showProjectColumn && row.visibility === 'public'
@@ -1188,65 +1303,85 @@ function ProjectWorkspaceTable({
 
   return (
     <SettingsTableContainer>
-    <SettingsSectionCard title={title} description={description}>
-      <SettingsAdminToolbar
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search…"
-        onFilter={() => setFilterOpen((open) => !open)}
-        filterOpen={filterOpen}
-        hasActiveFilters={hasActiveFilters}
-        onExport={() => undefined}
-        onAdd={onAdd}
-        addLabel={addLabel}
-      />
-      {showBulkActions && selectedIds.size > 0 ? (
-        <Box
-          sx={{
-            px: 2,
-            py: 1,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            flexWrap: 'wrap',
-            borderBottom: `1px solid ${cv.dividerSubtle}`,
-          }}
-        >
+      <SettingsSectionCard title={title} description={description}>
+        <SettingsAdminToolbar
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search…"
+          onFilter={() => setFilterOpen((open) => !open)}
+          filterOpen={filterOpen}
+          hasActiveFilters={hasActiveFilters}
+          onExport={onExport ? () => onExport(filtered) : undefined}
+          onAdd={onAdd}
+          addLabel={addLabel}
+        />
+        {showBulkActions && selectedIds.size > 0 ? (
+          <Box
+            sx={{
+              px: 2,
+              py: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              flexWrap: 'wrap',
+              borderBottom: `1px solid ${cv.dividerSubtle}`,
+            }}
+          >
+            <Button
+              size="small"
+              disabled={selectedIds.size !== 1}
+              onClick={() => {
+                const rowId = [...selectedIds][0];
+                if (rowId) onEdit?.(rowId);
+              }}
+              sx={{ textTransform: 'none', color: cv.textPrimary, fontWeight: 500 }}
+            >
+              Edit
+            </Button>
           <Button
             size="small"
-            disabled={selectedIds.size !== 1}
             onClick={() => {
-              const rowId = [...selectedIds][0];
-              if (rowId) onEdit?.(rowId);
+              if (onMarkActive) onMarkActive(Array.from(selectedIds));
+              setSelectedIds(new Set());
             }}
-            sx={{ textTransform: 'none', color: cv.textPrimary, fontWeight: 500 }}
+            sx={{ textTransform: 'none', color: cv.textSecondary }}
           >
-            Edit
-          </Button>
-          <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
             Mark active
           </Button>
-          <Button size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
+          <Button
+            size="small"
+            onClick={() => {
+              if (onMarkInactive) onMarkInactive(Array.from(selectedIds));
+              setSelectedIds(new Set());
+            }}
+            sx={{ textTransform: 'none', color: cv.textSecondary }}
+          >
             Mark inactive
           </Button>
-          <Button size="small" sx={{ textTransform: 'none', color: cv.destructive }}>
+          <Button 
+            size="small" 
+            sx={{ textTransform: 'none', color: cv.destructive }}
+            onClick={() => {
+              if (onDelete) onDelete(Array.from(selectedIds));
+            }}
+          >
             Mark delete
           </Button>
         </Box>
-      ) : null}
-      <Collapse in={filterOpen}>
-        <Box sx={{ px: 2, pb: 1.5 }}>
-          <SettingsTableFilterPanel
-            groups={[
-              {
-                id: 'status',
-                label: 'Status',
-                options: ['Active', 'Inactive'],
-                selected: statusFilter,
-                onToggle: (value) => setStatusFilter((current) => toggleFilterValue(current, value)),
-              },
-              ...(showProjectColumn
-                ? [
+        ) : null}
+        <Collapse in={filterOpen}>
+          <Box sx={{ px: 2, pb: 1.5 }}>
+            <SettingsTableFilterPanel
+              groups={[
+                {
+                  id: 'status',
+                  label: 'Status',
+                  options: ['Active', 'Inactive'],
+                  selected: statusFilter,
+                  onToggle: (value) => setStatusFilter((current) => toggleFilterValue(current, value)),
+                },
+                ...(showProjectColumn
+                  ? [
                     {
                       id: 'workspace',
                       label: 'Workspace',
@@ -1256,16 +1391,16 @@ function ProjectWorkspaceTable({
                         setWorkspaceFilter((current) => toggleFilterValue(current, value)),
                     },
                   ]
-                : []),
-            ]}
-            onClearAll={() => {
-              setStatusFilter(createDefaultFilterSelection());
-              setWorkspaceFilter(createDefaultFilterSelection());
-            }}
-          />
-        </Box>
-      </Collapse>
-      <SettingsDataTable
+                  : []),
+              ]}
+              onClearAll={() => {
+                setStatusFilter(createDefaultFilterSelection());
+                setWorkspaceFilter(createDefaultFilterSelection());
+              }}
+            />
+          </Box>
+        </Collapse>
+        <SettingsDataTable
           columns={columns}
           rows={filtered}
           getRowId={(row) => row.id}
@@ -1273,14 +1408,14 @@ function ProjectWorkspaceTable({
           selectedRowIds={selectedIds}
           onSelectionChange={setSelectedIds}
         />
-      {showBulkActions ? (
-        <Typography sx={{ px: 2, py: 1.25, fontSize: '0.75rem', color: cv.textMuted }}>
-          {selectedIds.size > 0
-            ? `${selectedIds.size} row${selectedIds.size === 1 ? '' : 's'} selected.`
-            : 'Use checkboxes to select one or more rows for bulk actions.'}
-        </Typography>
-      ) : null}
-    </SettingsSectionCard>
+        {showBulkActions ? (
+          <Typography sx={{ px: 2, py: 1.25, fontSize: '0.75rem', color: cv.textMuted }}>
+            {selectedIds.size > 0
+              ? `${selectedIds.size} row${selectedIds.size === 1 ? '' : 's'} selected.`
+              : 'Use checkboxes to select one or more rows for bulk actions.'}
+          </Typography>
+        ) : null}
+      </SettingsSectionCard>
     </SettingsTableContainer>
   );
 }
@@ -1291,7 +1426,9 @@ export function ProjectsAdminSettingsSection() {
   const [addOpen, setAddOpen] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
+  const [deleteDialogIds, setDeleteDialogIds] = useState<string[]>([]);
   const [orgUsersList, setOrgUsersList] = useState<import('../../data/mockSettingsData').SettingsUserRow[]>([]);
+  const [orgGroupsList, setOrgGroupsList] = useState<import('../../data/mockSettingsData').SettingsUserGroup[]>([]);
   const { formatDate } = useLocalizedDate();
 
   useEffect(() => {
@@ -1317,6 +1454,29 @@ export function ProjectsAdminSettingsSection() {
         setOrgUsersList(rows);
       })
       .catch((err) => console.error('Failed to fetch org users for share dialog:', err));
+
+    const fetchGroups = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await apiClient.get<any>('/user-groups', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = res.data || res;
+        if (Array.isArray(data)) {
+          const mappedGroups = data.map((g: any) => ({
+            id: g.id,
+            name: g.name || 'Unnamed Group',
+            description: g.description || '',
+            memberIds: Array.isArray(g.members) ? g.members.map((m: any) => m.userId || m.id) : [],
+          }));
+          setOrgGroupsList(mappedGroups);
+        }
+      } catch (err) {
+        console.error('Failed to fetch org groups:', err);
+      }
+    };
+    fetchGroups();
   }, []);
 
   useEffect(() => {
@@ -1335,33 +1495,72 @@ export function ProjectsAdminSettingsSection() {
               day: 'numeric',
               year: 'numeric',
             });
+            const vis: ProjectVisibility = p.visibility?.toLowerCase() === 'private' ? 'private' : 'public';
+
+            const userMembers: import('../../data/mockSettingsData').WorkspaceTeamMember[] = (p.users || []).map((pu: any) => {
+              const uName = pu.user?.name || pu.user?.email || 'User';
+              const initials = uName.split(/\s+/).filter(Boolean).slice(0, 2).map((part: string) => part[0]?.toUpperCase() ?? '').join('') || 'U';
+              return {
+                id: pu.userId || pu.id,
+                name: uName,
+                initials,
+                email: pu.user?.email,
+                avatarUrl: pu.user?.avatarUrl || undefined,
+                access: (pu.accessLevel as import('../../data/mockSettingsData').WorkspaceMemberAccess) || 'Can view',
+                memberType: (pu.memberType as import('../../data/mockSettingsData').WorkspaceMemberType) || 'Member',
+                isCurrentUser: pu.userId === CURRENT_USER.id || 
+                               pu.user?.email === CURRENT_USER.email || 
+                               pu.user?.name === CURRENT_USER.name ||
+                               pu.user?.name === 'Super Admin' ||
+                               pu.user?.email === 'anil.jangra@mtxeurope.com',
+              };
+            });
+
+            const groupMembers: import('../../data/mockSettingsData').WorkspaceTeamMember[] = (p.groups || []).map((pg: any) => {
+              const gName = pg.group?.name || 'Group';
+              const initials = gName.split(/\s+/).filter(Boolean).slice(0, 2).map((part: string) => part[0]?.toUpperCase() ?? '').join('') || 'G';
+              return {
+                id: pg.groupId || pg.id,
+                name: gName,
+                initials,
+                access: (pg.accessLevel as import('../../data/mockSettingsData').WorkspaceMemberAccess) || 'Can view',
+                memberType: 'Group' as const,
+                isCurrentUser: false,
+              };
+            });
+
+            const teamMembers = [...userMembers, ...groupMembers];
+            if (teamMembers.length === 0) {
+              teamMembers.push({
+                id: `pm-admin-${p.id}`,
+                name: CURRENT_USER.name,
+                initials: CURRENT_USER.initials,
+                access: 'Full Access',
+                memberType: 'Member',
+                isCurrentUser: true,
+              });
+            }
+
             return {
               id: p.id,
               project: p.name,
               workspace: p.workspace?.name || 'Unknown',
-              status: 'Active',
+              status: p.status?.toLowerCase() === 'inactive' ? 'Inactive' : 'Active',
               lastUpdated: today,
               creationDate: today,
-              storage: '0 MB', // mock for now
-              projectAdmin: CURRENT_USER.name,
-              visibility: 'public',
-              isRestricted: false,
-              teamMembers: [
-                {
-                  id: `pm-admin-${p.id}`,
-                  name: CURRENT_USER.name,
-                  initials: CURRENT_USER.initials,
-                  access: 'Full Access',
-                  memberType: 'Member',
-                  isCurrentUser: true,
-                }
-              ]
+              storage: '0 MB',
+              projectAdmin: p.createdBy?.name || p.createdBy?.email || CURRENT_USER.name,
+              visibility: vis,
+              isRestricted: vis === 'private',
+              teamMembers,
             } as SettingsProjectRow;
           });
           setProjects(formatted);
         }
-      } catch (err) {
-        console.error("Failed to load projects", err);
+      } catch (err: any) {
+        console.error("Failed to create project", err);
+        const errorMsg = err?.response?.data?.message || err?.message || 'Failed to create project';
+        toast.error(errorMsg);
       }
     };
     fetchProjects();
@@ -1379,6 +1578,9 @@ export function ProjectsAdminSettingsSection() {
     inviteGroupIds: string[],
     visibility: ProjectVisibility,
     folderId: string | null,
+    inviteAccess?: import('../../data/mockSettingsData').WorkspaceMemberAccess,
+    inviteMemberType?: import('../../data/mockSettingsData').WorkspaceMemberType,
+    sendInviteEmail?: boolean
   ) => {
     try {
       const workspaceObj = workspaces.find((w) => w.name === workspace);
@@ -1392,6 +1594,12 @@ export function ProjectsAdminSettingsSection() {
       await apiClient.post(`/workspaces/project/add/${workspaceObj.id}`, {
         name,
         folderId,
+        visibility,
+        inviteEmails,
+        inviteGroupIds,
+        inviteAccess,
+        inviteMemberType,
+        sendInviteEmail,
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -1417,22 +1625,38 @@ export function ProjectsAdminSettingsSection() {
           inviteGroupIds,
         ),
       ]);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to add project to backend:", err);
+      const errorMsg = err.response?.data?.message || err.message || "Failed to create project";
+      toast.error(errorMsg);
+      throw err;
     }
   };
 
-  const handleSaveProject = (name: string, workspace: string, visibility: ProjectVisibility) => {
+  const handleSaveProject = async (name: string, workspace: string, visibility: ProjectVisibility) => {
     if (!editProjectId) return;
     const today = formatDate(Date.now(), {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
     });
-    setProjects((current) =>
-      current.map((project) =>
-        project.id === editProjectId
-          ? {
+
+    try {
+      const workspaceObj = workspaces.find((w) => w.name === workspace);
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      const payload: any = { name };
+      if (workspaceObj?.id) {
+        payload.workspaceId = workspaceObj.id;
+      }
+      await apiClient.put(`/workspaces/project/update/${editProjectId}`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setProjects((current) =>
+        current.map((project) =>
+          project.id === editProjectId
+            ? {
               ...project,
               project: name,
               workspace,
@@ -1440,10 +1664,35 @@ export function ProjectsAdminSettingsSection() {
               isRestricted: visibility === 'private',
               lastUpdated: today,
             }
-          : project,
-      ),
-    );
+            : project,
+        ),
+      );
+    } catch (err: any) {
+      console.error("Failed to update project in backend:", err);
+      const { toast } = await import('react-hot-toast');
+      toast.error(err.response?.data?.message || "Failed to update project.");
+    }
     setEditProjectId(null);
+  };
+
+  const handleDeleteProjects = async () => {
+    if (deleteDialogIds.length === 0) return;
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+
+      // Delete projects sequentially
+      for (const id of deleteDialogIds) {
+        await apiClient.delete(`/workspaces/project/delete/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+
+      setProjects((current) => current.filter((p) => !deleteDialogIds.includes(p.id)));
+    } catch (err) {
+      console.error("Failed to delete projects in backend:", err);
+    }
+    setDeleteDialogIds([]);
   };
 
   const handleInviteMember = (payload: WorkspaceInvitePayload) => {
@@ -1452,6 +1701,26 @@ export function ProjectsAdminSettingsSection() {
     const target = projects.find((project) => project.id === inviteProjectId);
     const newMember = resolveWorkspaceInvite(payload, target?.teamMembers ?? []);
     if (!newMember) return false;
+
+    (async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        await apiClient.post(
+          `/workspaces/project/${inviteProjectId}/member`,
+          {
+            email: payload.email,
+            memberType: payload.memberType,
+            accessLevel: payload.access,
+            groupId: payload.groupId,
+            sendInviteEmail: payload.sendInviteEmail ?? false,
+          },
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      } catch (err) {
+        console.error('Failed to persist project member to backend:', err);
+      }
+    })();
 
     setProjects((current) =>
       current.map((project) =>
@@ -1463,34 +1732,56 @@ export function ProjectsAdminSettingsSection() {
     return true;
   };
 
-  const handleUpdateMemberAccess = (memberId: string, access: WorkspaceMemberAccess) => {
+  const handleUpdateMemberAccess = async (memberId: string, access: WorkspaceMemberAccess) => {
     if (!inviteProjectId) return;
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      await apiClient.put(
+        `/workspaces/project/${inviteProjectId}/member/${memberId}`,
+        { accessLevel: access },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+    } catch (err) {
+      console.error('Failed to update project member access level in backend:', err);
+    }
+
     setProjects((current) =>
       current.map((project) =>
         project.id === inviteProjectId
           ? {
-              ...project,
-              teamMembers: project.teamMembers?.map((member) =>
-                member.id === memberId ? { ...member, access } : member,
-              ),
-            }
+            ...project,
+            teamMembers: project.teamMembers?.map((member) =>
+              member.id === memberId ? { ...member, access } : member,
+            ),
+          }
           : project,
       ),
     );
   };
 
-  const handleRemoveMember = (memberId: string) => {
+  const handleRemoveMember = async (memberId: string) => {
     if (!inviteProjectId) return;
-    setProjects((current) =>
-      current.map((project) =>
-        project.id === inviteProjectId
-          ? {
-              ...project,
-              teamMembers: project.teamMembers?.filter((member) => member.id !== memberId),
-            }
-          : project,
-      ),
-    );
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      await apiClient.delete(`/workspaces/project/${inviteProjectId}/member/${memberId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setProjects((current) =>
+        current.map((project) =>
+          project.id === inviteProjectId
+            ? {
+                ...project,
+                teamMembers: project.teamMembers?.filter((member) => member.id !== memberId),
+              }
+            : project,
+        ),
+      );
+    } catch (err) {
+      console.error("Failed to remove project member in backend:", err);
+    }
   };
 
   const handleRestrictedChange = (restricted: boolean) => {
@@ -1502,14 +1793,82 @@ export function ProjectsAdminSettingsSection() {
     );
   };
 
-  const handleVisibilityChange = (visibility: ProjectVisibility) => {
+  const handleVisibilityChange = async (visibility: ProjectVisibility) => {
     if (!inviteProjectId) return;
-    setProjects((current) =>
-      current.map((project) =>
-        project.id === inviteProjectId
-          ? { ...project, visibility, isRestricted: visibility === 'private' }
-          : project,
-      ),
+    try {
+      const targetProj = projects.find((p) => p.id === inviteProjectId);
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      await apiClient.put(`/workspaces/project/update/${inviteProjectId}`, {
+        name: targetProj?.project,
+        visibility
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setProjects((current) =>
+        current.map((project) =>
+          project.id === inviteProjectId
+            ? { ...project, visibility, isRestricted: visibility === 'private' }
+            : project,
+        ),
+      );
+    } catch (err) {
+      console.error("Failed to update project visibility:", err);
+    }
+  };
+
+  const handleMarkActiveProjects = async (ids: string[]) => {
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      for (const id of ids) {
+        await apiClient.put(`/workspaces/project/update/${id}`, { status: 'active' }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      setProjects((current) =>
+        current.map((p) => (ids.includes(p.id) ? { ...p, status: 'Active' } : p)),
+      );
+      toast.success(`Marked ${ids.length} project${ids.length > 1 ? 's' : ''} as Active`);
+    } catch (err: any) {
+      console.error("Failed to mark projects active:", err);
+      toast.error("Failed to update project status in backend.");
+    }
+  };
+
+  const handleMarkInactiveProjects = async (ids: string[]) => {
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      for (const id of ids) {
+        await apiClient.put(`/workspaces/project/update/${id}`, { status: 'inactive' }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      setProjects((current) =>
+        current.map((p) => (ids.includes(p.id) ? { ...p, status: 'Inactive' } : p)),
+      );
+      toast.success(`Marked ${ids.length} project${ids.length > 1 ? 's' : ''} as Inactive`);
+    } catch (err: any) {
+      console.error("Failed to mark projects inactive:", err);
+      toast.error("Failed to update project status in backend.");
+    }
+  };
+
+  const handleExportProjects = (rowsToExport: SettingsProjectRow[]) => {
+    downloadCSV(
+      'Projects',
+      ['Project', 'Workspace', 'Status', 'Last updated', 'Creation date', 'Project admin', 'Team members'],
+      rowsToExport.map((row) => [
+        row.project,
+        row.workspace,
+        row.status,
+        row.lastUpdated,
+        row.creationDate,
+        row.projectAdmin,
+        (row.teamMembers || []).map((m) => m.name).join('; '),
+      ])
     );
   };
 
@@ -1522,9 +1881,22 @@ export function ProjectsAdminSettingsSection() {
         addLabel="Add new project"
         showBulkActions
         showTeamMembersColumn
-        onAdd={() => setAddOpen(true)}
+        onAdd={async () => {
+          try {
+            const summary = await getUsageSummary();
+            if (summary.projectsTotal != null && summary.projectsCount >= summary.projectsTotal) {
+              toast.error(`Project limit (${summary.projectsTotal}) reached for your current plan. Please upgrade to create more projects.`);
+              return;
+            }
+          } catch (e) {}
+          setAddOpen(true);
+        }}
         onEdit={setEditProjectId}
+        onDelete={(ids) => setDeleteDialogIds(ids)}
+        onMarkActive={handleMarkActiveProjects}
+        onMarkInactive={handleMarkInactiveProjects}
         onInviteTeamMembers={setInviteProjectId}
+        onExport={handleExportProjects}
       />
       <AddProjectDialog
         open={addOpen || Boolean(editProjectId)}
@@ -1538,21 +1910,42 @@ export function ProjectsAdminSettingsSection() {
         initialProject={
           editProject
             ? {
-                name: editProject.project,
-                workspace: editProject.workspace,
-                visibility: editProject.visibility ?? 'public',
-              }
+              name: editProject.project,
+              workspace: editProject.workspace,
+              visibility: editProject.visibility ?? 'public',
+            }
             : undefined
         }
         suggestedUsers={orgUsersList}
+        suggestedGroups={orgGroupsList}
       />
+      <Dialog
+        open={deleteDialogIds.length > 0}
+        onClose={() => setDeleteDialogIds([])}
+        PaperProps={{ sx: { bgcolor: cv.bgLayer, color: cv.textPrimary, backgroundImage: 'none', border: `1px solid ${cv.borderPrimary}` } }}
+      >
+        <DialogTitle sx={{ fontWeight: 600 }}>Delete Project{deleteDialogIds.length > 1 ? 's' : ''}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ color: cv.textSecondary }}>
+            Are you sure you want to delete {deleteDialogIds.length === 1 ? 'this project' : `these ${deleteDialogIds.length} projects`}? There can be folders or assets linked in it.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setDeleteDialogIds([])} sx={{ color: cv.textSecondary, textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteProjects} variant="contained" sx={{ bgcolor: cv.destructive, '&:hover': { bgcolor: '#b91c1c' }, textTransform: 'none' }}>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
       <WorkspaceMembersDialog
         open={Boolean(inviteProjectId)}
         workspaceName={inviteProject?.project ?? 'project'}
         resourceId={inviteProjectId ?? undefined}
         members={inviteProject?.teamMembers ?? []}
         suggestedUsers={orgUsersList}
-        suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
+        suggestedGroups={orgGroupsList}
         isRestricted={inviteProject?.isRestricted ?? false}
         resourceType="project"
         visibility={inviteProject?.visibility ?? 'private'}
@@ -1569,12 +1962,14 @@ export function ProjectsAdminSettingsSection() {
 
 export function WorkspacesAdminSettingsSection() {
   const { createWorkspace } = useDashboard();
-  const [workspaces, setWorkspaces] = useState<SettingsProjectRow[]>(MOCK_SETTINGS_WORKSPACES);
+  const [workspaces, setWorkspaces] = useState<SettingsProjectRow[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [editWorkspaceId, setEditWorkspaceId] = useState<string | null>(null);
   const [inviteWorkspaceId, setInviteWorkspaceId] = useState<string | null>(null);
   const [orgUsersList, setOrgUsersList] = useState<import('../../data/mockSettingsData').SettingsUserRow[]>([]);
   const { formatDate } = useLocalizedDate();
+
+  const [orgGroupsList, setOrgGroupsList] = useState<import('../../data/mockSettingsData').SettingsUserGroup[]>([]);
 
   useEffect(() => {
     fetchOrganizationUsers()
@@ -1599,6 +1994,74 @@ export function WorkspacesAdminSettingsSection() {
         setOrgUsersList(rows);
       })
       .catch((err) => console.error('Failed to fetch org users for share dialog:', err));
+
+    const fetchGroups = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await apiClient.get<any>('/user-groups', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = res.data || res;
+        if (Array.isArray(data)) {
+          const mappedGroups = data.map((g: any) => ({
+            id: g.id,
+            name: g.name || 'Unnamed Group',
+            description: g.description || '',
+            memberIds: Array.isArray(g.members) ? g.members.map((m: any) => m.userId || m.id) : [],
+          }));
+          setOrgGroupsList(mappedGroups);
+        }
+      } catch (err) {
+        console.error('Failed to fetch org groups:', err);
+      }
+    };
+    fetchGroups();
+  }, []);
+
+  useEffect(() => {
+    const fetchWorkspaces = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const response = await apiClient.get<any>('/workspaces/find-all', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = Array.isArray(response) ? response : response.data;
+        if (data && Array.isArray(data)) {
+          const formatted = data.map((w: any) => {
+            const today = formatDate(w.createdAt || Date.now(), {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            });
+            return {
+              id: w.id,
+              workspace: w.name,
+              status: 'Active',
+              lastUpdated: today,
+              creationDate: today,
+              storage: '0 MB',
+              projectAdmin: CURRENT_USER.name,
+              teamMembers: [
+                {
+                  id: `wm-admin-${w.id}`,
+                  name: CURRENT_USER.name,
+                  initials: CURRENT_USER.initials,
+                  access: 'Full Access',
+                  memberType: 'Member',
+                  isCurrentUser: true,
+                }
+              ]
+            } as SettingsProjectRow;
+          });
+          setWorkspaces(formatted);
+        }
+      } catch (err) {
+        console.error("Failed to load workspaces", err);
+      }
+    };
+    fetchWorkspaces();
   }, []);
 
   const inviteWorkspace = workspaces.find((workspace) => workspace.id === inviteWorkspaceId);
@@ -1668,11 +2131,11 @@ export function WorkspacesAdminSettingsSection() {
       current.map((workspace) =>
         workspace.id === inviteWorkspaceId
           ? {
-              ...workspace,
-              teamMembers: workspace.teamMembers?.map((member) =>
-                member.id === memberId ? { ...member, access } : member,
-              ),
-            }
+            ...workspace,
+            teamMembers: workspace.teamMembers?.map((member) =>
+              member.id === memberId ? { ...member, access } : member,
+            ),
+          }
           : workspace,
       ),
     );
@@ -1684,9 +2147,9 @@ export function WorkspacesAdminSettingsSection() {
       current.map((workspace) =>
         workspace.id === inviteWorkspaceId
           ? {
-              ...workspace,
-              teamMembers: workspace.teamMembers?.filter((member) => member.id !== memberId),
-            }
+            ...workspace,
+            teamMembers: workspace.teamMembers?.filter((member) => member.id !== memberId),
+          }
           : workspace,
       ),
     );
@@ -1711,7 +2174,16 @@ export function WorkspacesAdminSettingsSection() {
         showBulkActions
         showProjectColumn={false}
         showTeamMembersColumn
-        onAdd={() => setAddOpen(true)}
+        onAdd={async () => {
+          try {
+            const summary = await getUsageSummary();
+            if (summary.workspacesTotal != null && summary.workspacesCount >= summary.workspacesTotal) {
+              toast.error(`Workspace limit (${summary.workspacesTotal}) reached for your current plan. Please upgrade to create more workspaces.`);
+              return;
+            }
+          } catch (e) {}
+          setAddOpen(true);
+        }}
         onEdit={setEditWorkspaceId}
         onInviteTeamMembers={setInviteWorkspaceId}
       />
@@ -1733,7 +2205,7 @@ export function WorkspacesAdminSettingsSection() {
         resourceId={inviteWorkspaceId ?? undefined}
         members={inviteWorkspace?.teamMembers ?? []}
         suggestedUsers={orgUsersList}
-        suggestedGroups={MOCK_SETTINGS_USER_GROUPS}
+        suggestedGroups={orgGroupsList}
         isRestricted={inviteWorkspace?.isRestricted ?? false}
         onClose={() => setInviteWorkspaceId(null)}
         onInvite={handleInviteMember}
@@ -1762,22 +2234,22 @@ export function FieldsAdminSettingsSection() {
 
   return (
     <SettingsTableContainer>
-    <SettingsSectionCard title="Fields" description="Custom metadata fields for your library.">
-      <SettingsAdminToolbar
-        searchValue={search}
-        onSearchChange={setSearch}
-        onAdd={() => undefined}
-        addLabel="Add field"
-      />
-      <SettingsDataTable
-        columns={columns}
-        rows={rows}
-        getRowId={(row) => row.id}
-        selectable
-        selectedRowIds={selectedIds}
-        onSelectionChange={setSelectedIds}
-      />
-    </SettingsSectionCard>
+      <SettingsSectionCard title="Fields" description="Custom metadata fields for your library.">
+        <SettingsAdminToolbar
+          searchValue={search}
+          onSearchChange={setSearch}
+          onAdd={() => undefined}
+          addLabel="Add field"
+        />
+        <SettingsDataTable
+          columns={columns}
+          rows={rows}
+          getRowId={(row) => row.id}
+          selectable
+          selectedRowIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+        />
+      </SettingsSectionCard>
     </SettingsTableContainer>
   );
 }
@@ -1785,73 +2257,186 @@ export function FieldsAdminSettingsSection() {
 export function SecurityAdminSettingsSection() {
   return (
     <SettingsFormContainer>
-    <SettingsSectionCard title="Security" description="Authentication, sessions, and content security.">
-      <SettingsRow title="Single sign-on (SSO)" description="Not configured" action={<Button size="small" sx={outlineButtonSx} variant="outlined">Configure</Button>} />
-      <SettingsRow title="Session timeout" description="30 days of inactivity" action={<Button size="small" sx={outlineButtonSx} variant="outlined">Edit</Button>} />
-      <SettingsRow
-        title="Content Security Policy"
-        description="Restrict embedded media origins for share links."
-        action={<Button size="small" sx={outlineButtonSx} variant="outlined">Manage</Button>}
-        showDivider={false}
-      />
-    </SettingsSectionCard>
+      <SettingsSectionCard title="Security" description="Authentication, sessions, and content security.">
+        <SettingsRow title="Single sign-on (SSO)" description="Not configured" action={<Button size="small" sx={outlineButtonSx} variant="outlined">Configure</Button>} />
+        <SettingsRow title="Session timeout" description="30 days of inactivity" action={<Button size="small" sx={outlineButtonSx} variant="outlined">Edit</Button>} />
+        <SettingsRow
+          title="Content Security Policy"
+          description="Restrict embedded media origins for share links."
+          action={<Button size="small" sx={outlineButtonSx} variant="outlined">Manage</Button>}
+          showDivider={false}
+        />
+      </SettingsSectionCard>
     </SettingsFormContainer>
   );
 }
 
 export function ShareSettingsSection() {
   const [requirePassword, setRequirePassword] = useState(false);
-  const [allowDownloads, setAllowDownloads] = useState(true);
+  const [allowComments, setAllowComments] = useState(false);
+  const [allowDownloadOriginal, setAllowDownloadOriginal] = useState(true);
+  const [allowDownloadProxy, setAllowDownloadProxy] = useState(true);
+  const [showCompanyWatermark, setShowCompanyWatermark] = useState(true);
+  const [linkExpiry, setLinkExpiry] = useState('30');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const response = await apiClient.get<any>('/organizations/share-settings', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = response.data || response;
+        if (data) {
+          if (typeof data.requirePasswordDefault === 'boolean') {
+            setRequirePassword(data.requirePasswordDefault);
+          }
+          if (typeof data.allowCommentsDefault === 'boolean') {
+            setAllowComments(data.allowCommentsDefault);
+          }
+          if (typeof data.allowDownloadOriginalDefault === 'boolean') {
+            setAllowDownloadOriginal(data.allowDownloadOriginalDefault);
+          }
+          if (typeof data.allowDownloadProxyDefault === 'boolean') {
+            setAllowDownloadProxy(data.allowDownloadProxyDefault);
+          }
+          if (typeof data.showCompanyWatermarkDefault === 'boolean') {
+            setShowCompanyWatermark(data.showCompanyWatermarkDefault);
+          }
+          if (data.defaultExpiryDays) {
+            setLinkExpiry(String(data.defaultExpiryDays));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load share settings", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  const updateSetting = async (key: string, value: any) => {
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      await apiClient.patch('/organizations/share-settings', {
+        [key]: value
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Settings updated');
+    } catch (err) {
+      console.error(`Failed to update ${key}`, err);
+      toast.error('Failed to update settings');
+    }
+  };
+
+  if (loading) return null;
 
   return (
     <SettingsFormContainer>
-    <SettingsSectionCard
-      title="Share Settings"
-      description="Default share link options · Admin and Super Admin only"
-    >
-      <SettingsRow
-        title="Require password"
-        description="Protect new share links with a password by default."
-        action={
-          <Switch
-            checked={requirePassword}
-            onChange={(event) => setRequirePassword(event.target.checked)}
-            slotProps={{ input: { 'aria-label': 'Require password on share links' } }}
-          />
-        }
-      />
-      <SettingsRow
-        title="Allow downloads"
-        description="Let viewers download shared media from the link."
-        action={
-          <Switch
-            checked={allowDownloads}
-            onChange={(event) => setAllowDownloads(event.target.checked)}
-            slotProps={{ input: { 'aria-label': 'Allow downloads on share links' } }}
-          />
-        }
-      />
-      <SettingsRow
-        title="Link expiry"
-        description="Default expiration for new share links."
-        action={
-          <TextField
-            select
-            size="small"
-            defaultValue="30"
-            sx={{ minWidth: 120 }}
-            slotProps={textFieldSelectInDialogSlotProps}
-          >
-            {['7', '14', '30', '90'].map((days) => (
-              <MenuItem key={days} value={days} sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
-                {days} days
-              </MenuItem>
-            ))}
-          </TextField>
-        }
-        showDivider={false}
-      />
-    </SettingsSectionCard>
+      <SettingsSectionCard
+        title="Share Settings"
+        description="Default share link options · Admin and Super Admin only"
+      >
+        <SettingsRow
+          title="Require password"
+          description="Protect new share links with a password by default."
+          action={
+            <Switch
+              checked={requirePassword}
+              onChange={(event) => {
+                setRequirePassword(event.target.checked);
+                updateSetting('requirePasswordDefault', event.target.checked);
+              }}
+              slotProps={{ input: { 'aria-label': 'Require password on share links' } }}
+            />
+          }
+        />
+        <SettingsRow
+          title="Allow comments"
+          description="Let viewers add comments on shared media."
+          action={
+            <Switch
+              checked={allowComments}
+              onChange={(event) => {
+                setAllowComments(event.target.checked);
+                updateSetting('allowCommentsDefault', event.target.checked);
+              }}
+              slotProps={{ input: { 'aria-label': 'Allow comments on share links' } }}
+            />
+          }
+        />
+        <SettingsRow
+          title="Download original"
+          description="Let viewers download the original high-resolution media."
+          action={
+            <Switch
+              checked={allowDownloadOriginal}
+              onChange={(event) => {
+                setAllowDownloadOriginal(event.target.checked);
+                updateSetting('allowDownloadOriginalDefault', event.target.checked);
+              }}
+              slotProps={{ input: { 'aria-label': 'Allow original downloads on share links' } }}
+            />
+          }
+        />
+        <SettingsRow
+          title="Download proxy"
+          description="Let viewers download the proxy (compressed) media."
+          action={
+            <Switch
+              checked={allowDownloadProxy}
+              onChange={(event) => {
+                setAllowDownloadProxy(event.target.checked);
+                updateSetting('allowDownloadProxyDefault', event.target.checked);
+              }}
+              slotProps={{ input: { 'aria-label': 'Allow proxy downloads on share links' } }}
+            />
+          }
+        />
+        <SettingsRow
+          title="Show company watermark"
+          description="Display your company logo watermark on shared media."
+          action={
+            <Switch
+              checked={showCompanyWatermark}
+              onChange={(event) => {
+                setShowCompanyWatermark(event.target.checked);
+                updateSetting('showCompanyWatermarkDefault', event.target.checked);
+              }}
+              slotProps={{ input: { 'aria-label': 'Show company watermark on share links' } }}
+            />
+          }
+        />
+        <SettingsRow
+          title="Link expiry"
+          description="Default expiration for new share links."
+          action={
+            <TextField
+              select
+              size="small"
+              value={linkExpiry}
+              onChange={(event) => {
+                setLinkExpiry(event.target.value);
+                updateSetting('defaultExpiryDays', parseInt(event.target.value, 10));
+              }}
+              sx={{ minWidth: 120 }}
+              slotProps={textFieldSelectInDialogSlotProps}
+            >
+              {['7', '14', '30', '90'].map((days) => (
+                <MenuItem key={days} value={days} sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
+                  {days} days
+                </MenuItem>
+              ))}
+            </TextField>
+          }
+          showDivider={false}
+        />
+      </SettingsSectionCard>
     </SettingsFormContainer>
   );
 }
