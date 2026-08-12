@@ -6,6 +6,7 @@ import WaveBackground from '../WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../NoahLogo';
 import { cv } from '../../theme/cssVars';
 import { fetchPublicCatalogPlans } from '../../platform/api/platformApi';
+import { useAuth } from '../../auth/AuthContext';
 
 type BillingCycle = 'annual' | 'monthly';
 type PlanId = string;
@@ -119,6 +120,14 @@ interface ChoosePlanScreenProps {
 }
 
 export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: ChoosePlanScreenProps) {
+  let user = null;
+  try {
+    const auth = useAuth();
+    user = auth?.user;
+  } catch {
+    /* safely fallback if rendered outside AuthProvider */
+  }
+
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('annual');
   const [selectedPlan, setSelectedPlan] = useState<PlanId>(() => (currentPlanId || DEFAULT_PLAN).toLowerCase());
   const [plans, setPlans] = useState<PlanDefinition[]>(FALLBACK_PLANS);
@@ -336,17 +345,24 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
             let isFreeDisabled = false;
             let isButtonDisabled = false;
 
+            const isTrialUsedInOrg = user?.organization?.isFreeTrialUsed ?? (normCurrentPlan !== 'free');
+
             if (isSettingsFlow) {
               if (normCurrentPlan === planKey) {
                 isSelected = true;
                 isButtonDisabled = true;
               } else if (isFree) {
-                isFreeDisabled = normCurrentPlan !== 'free';
+                isFreeDisabled = Boolean(isTrialUsedInOrg);
                 isButtonDisabled = true;
               }
             } else {
               isSelected = selectedPlan.toLowerCase() === planKey;
-              isButtonDisabled = false;
+              if (isFree && isTrialUsedInOrg) {
+                isFreeDisabled = true;
+                isButtonDisabled = true;
+              } else {
+                isButtonDisabled = false;
+              }
             }
 
             const price = priceForCycle(plan, billingCycle);
@@ -634,8 +650,10 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
                             }),
                     }}
                   >
-                    {isSettingsFlow
-                      ? (isFreeDisabled ? 'Trial Used' : isSelected ? 'Active Plan' : (isFree ? 'Active Plan' : plan.cta))
+                    {isFreeDisabled
+                      ? 'Trial Used'
+                      : isSettingsFlow
+                      ? (isSelected ? 'Active Plan' : (isFree ? 'Active Plan' : plan.cta))
                       : plan.cta}
                   </Button>
                 </Box>
