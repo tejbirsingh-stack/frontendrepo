@@ -13,7 +13,9 @@ import {
   Avatar,
   Box,
   Button,
+  Checkbox,
   Chip,
+  CircularProgress,
   Collapse,
   Dialog,
   DialogActions,
@@ -22,6 +24,7 @@ import {
   FormControl,
   IconButton,
   InputLabel,
+  Menu,
   MenuItem,
   Select,
   Switch,
@@ -31,6 +34,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
@@ -38,6 +42,11 @@ import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import UploadOutlinedIcon from '@mui/icons-material/UploadOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import PauseCircleOutlinedIcon from '@mui/icons-material/PauseCircleOutlined';
+import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import SettingsAdminToolbar from './SettingsAdminToolbar';
 import SettingsTableFilterPanel from './SettingsTableFilterPanel';
 import WorkspaceTeamMembersCell from './WorkspaceTeamMembersCell';
@@ -58,6 +67,7 @@ import { SettingsRow, SettingsSectionCard } from './SettingsSectionCard';
 import TruncatedText from '../TruncatedText';
 import { getDynamicPlanDetails } from '../../utils/planHelper';
 import { CURRENT_USER } from '../../constants/currentUser';
+import { ROLE_IDS } from '../../constants/userRoles';
 import {
   createProject,
   createSettingsWorkspace,
@@ -1164,6 +1174,135 @@ export function BrandingSettingsSection() {
   );
 }
 
+interface ProjectRowActionsCellProps {
+  row: SettingsProjectRow;
+  showProjectColumn?: boolean;
+  onEdit?: (id: string) => void;
+  onDelete?: (ids: string[]) => void;
+  onMarkActive?: (ids: string[]) => void;
+  onMarkInactive?: (ids: string[]) => void;
+}
+
+function ProjectRowActionsCell({
+  row,
+  showProjectColumn = true,
+  onEdit,
+  onDelete,
+  onMarkActive,
+  onMarkInactive,
+}: ProjectRowActionsCellProps) {
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
+
+  const handleEditClick = (event: React.MouseEvent<HTMLElement>) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleOpenEditDialog = () => {
+    handleClose();
+    onEdit?.(row.id);
+  };
+
+  const handleMarkActive = () => {
+    handleClose();
+    onMarkActive?.([row.id]);
+  };
+
+  const handleMarkInactive = () => {
+    handleClose();
+    onMarkInactive?.([row.id]);
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete?.([row.id]);
+  };
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+      <Tooltip title="Edit & status options">
+        <IconButton
+          size="small"
+          onClick={handleEditClick}
+          sx={{
+            color: cv.textSecondary,
+            p: 0.75,
+            borderRadius: '8px',
+            transition: 'all 0.15s ease',
+            '&:hover': {
+              color: cv.brandOrchid,
+              backgroundColor: cv.purpleSurface || 'rgba(168, 85, 247, 0.12)',
+            },
+          }}
+        >
+          <EditOutlinedIcon sx={{ fontSize: '1.125rem' }} />
+        </IconButton>
+      </Tooltip>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        PaperProps={{
+          sx: {
+            bgcolor: cv.surfaceElevated || '#1b1726',
+            color: cv.textPrimary,
+            border: `1px solid ${cv.borderPrimary || cv.border}`,
+            borderRadius: '12px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+            minWidth: 160,
+            py: 0.5,
+          },
+        }}
+      >
+        <MenuItem
+          onClick={handleMarkActive}
+          disabled={row.status === 'Active'}
+          sx={{ fontSize: '0.8125rem', gap: 1.25, py: 1, px: 1.5 }}
+        >
+          <CheckCircleOutlinedIcon fontSize="small" sx={{ fontSize: '1.1rem', color: '#10b981' }} />
+          Mark active
+        </MenuItem>
+
+        <MenuItem
+          onClick={handleMarkInactive}
+          disabled={row.status === 'Inactive'}
+          sx={{ fontSize: '0.8125rem', gap: 1.25, py: 1, px: 1.5 }}
+        >
+          <PauseCircleOutlinedIcon fontSize="small" sx={{ fontSize: '1.1rem', color: '#f59e0b' }} />
+          Mark inactive
+        </MenuItem>
+      </Menu>
+
+      <Tooltip title={`Delete ${showProjectColumn ? 'project' : 'workspace'}`}>
+        <IconButton
+          size="small"
+          onClick={handleDelete}
+          sx={{
+            color: cv.textMuted || cv.textSecondary,
+            p: 0.75,
+            borderRadius: '8px',
+            transition: 'all 0.15s ease',
+            '&:hover': {
+              color: cv.destructive || '#ef4444',
+              backgroundColor: 'rgba(239, 68, 68, 0.12)',
+            },
+          }}
+        >
+          <DeleteOutlineOutlinedIcon sx={{ fontSize: '1.125rem' }} />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+}
+
 function ProjectWorkspaceTable({
   title,
   description,
@@ -1282,7 +1421,7 @@ function ProjectWorkspaceTable({
           {
             id: 'team',
             label: 'Team members',
-            width: showProjectColumn ? '22%' : '28%',
+            width: showProjectColumn ? '20%' : '24%',
             render: (row: SettingsProjectRow) => (
               <WorkspaceTeamMembersCell
                 members={row.teamMembers ?? []}
@@ -1299,6 +1438,22 @@ function ProjectWorkspaceTable({
           },
         ]
       : []),
+    {
+      id: 'actions',
+      label: 'Actions',
+      width: showProjectColumn ? '10%' : '12%',
+      align: 'right' as const,
+      render: (row: SettingsProjectRow) => (
+        <ProjectRowActionsCell
+          row={row}
+          showProjectColumn={showProjectColumn}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onMarkActive={onMarkActive}
+          onMarkInactive={onMarkInactive}
+        />
+      ),
+    },
   ];
 
   return (
@@ -1404,7 +1559,7 @@ function ProjectWorkspaceTable({
           columns={columns}
           rows={filtered}
           getRowId={(row) => row.id}
-          selectable
+          selectable={showBulkActions}
           selectedRowIds={selectedIds}
           onSelectionChange={setSelectedIds}
         />
@@ -1417,6 +1572,205 @@ function ProjectWorkspaceTable({
         ) : null}
       </SettingsSectionCard>
     </SettingsTableContainer>
+  );
+}
+
+interface DeleteProjectModalProps {
+  open: boolean;
+  projectId: string | null;
+  projectName?: string;
+  onClose: () => void;
+  onConfirmDelete: (projectId: string, deleteFileIds: string[]) => Promise<void>;
+}
+
+function DeleteProjectModal({
+  open,
+  projectId,
+  projectName = 'this project',
+  onClose,
+  onConfirmDelete,
+}: DeleteProjectModalProps) {
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [linkedFiles, setLinkedFiles] = useState<{ id: string; title: string; type?: string }[]>([]);
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open || !projectId) {
+      setLinkedFiles([]);
+      setSelectedFileIds(new Set());
+      return;
+    }
+
+    const fetchLinkedFiles = async () => {
+      setLoadingFiles(true);
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await apiClient.get<any>(`/workspaces/project/sources/${projectId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = res.data?.data || res.data || res;
+        let mediaList = Array.isArray(payload?.media) ? payload.media : Array.isArray(payload) ? payload : [];
+
+        if (mediaList.length === 0) {
+          const fallbackRes = await apiClient.get<any>(`/workspaces/project/find-all-data/${projectId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const fallbackPayload = fallbackRes.data?.data || fallbackRes.data || fallbackRes;
+          mediaList = Array.isArray(fallbackPayload?.media) ? fallbackPayload.media : Array.isArray(fallbackPayload) ? fallbackPayload : [];
+        }
+
+        const formatted = mediaList.map((m: any) => ({
+          id: m.id,
+          title: m.title || m.name || 'Untitled File',
+          type: m.type || 'file',
+        }));
+        setLinkedFiles(formatted);
+      } catch (err) {
+        console.error('Failed to fetch linked files for project:', err);
+      } finally {
+        setLoadingFiles(false);
+      }
+    };
+
+    fetchLinkedFiles();
+  }, [open, projectId]);
+
+  const allSelected = linkedFiles.length > 0 && selectedFileIds.size === linkedFiles.length;
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedFileIds(new Set());
+    } else {
+      setSelectedFileIds(new Set(linkedFiles.map((f) => f.id)));
+    }
+  };
+
+  const toggleFileSelect = (id: string) => {
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (!projectId) return;
+    setSubmitting(true);
+    try {
+      await onConfirmDelete(projectId, Array.from(selectedFileIds));
+      onClose();
+    } catch (err) {
+      console.error('Delete project failed:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          bgcolor: cv.surfaceElevated || '#1e1b2e',
+          color: cv.textPrimary,
+          backgroundImage: 'none',
+          border: `1px solid ${cv.borderPrimary || cv.border}`,
+          borderRadius: '16px',
+        },
+      }}
+    >
+      <DialogTitle sx={{ fontWeight: 600, fontSize: '1.125rem' }}>
+        Delete Project: "{projectName}"
+      </DialogTitle>
+      <DialogContent sx={{ pt: 1 }}>
+        <Typography variant="body2" sx={{ color: cv.textSecondary, mb: 2 }}>
+          Select any linked files you also want to mark for deletion. Unchecked files will remain active in your workspace with project tags unlinked.
+        </Typography>
+
+        {loadingFiles ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+            <CircularProgress size={28} />
+          </Box>
+        ) : linkedFiles.length === 0 ? (
+          <Box sx={{ p: 2, bgcolor: cv.insetHighlight || 'rgba(255,255,255,0.03)', borderRadius: '10px' }}>
+            <Typography variant="caption" sx={{ color: cv.textMuted }}>
+              No linked files found in this project.
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ border: `1px solid ${cv.border}`, borderRadius: '12px', overflow: 'hidden' }}>
+            <Box
+              onClick={toggleSelectAll}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                p: 1.25,
+                bgcolor: cv.surfaceRaised || 'rgba(255,255,255,0.04)',
+                borderBottom: `1px solid ${cv.border}`,
+                cursor: 'pointer',
+              }}
+            >
+              <Checkbox size="small" checked={allSelected} indeterminate={selectedFileIds.size > 0 && !allSelected} />
+              <Typography variant="caption" sx={{ fontWeight: 600, color: cv.textPrimary }}>
+                Select all linked files ({selectedFileIds.size} / {linkedFiles.length} selected)
+              </Typography>
+            </Box>
+
+            <Box sx={{ maxHeight: 220, overflowY: 'auto', p: 0.5 }}>
+              {linkedFiles.map((file) => {
+                const isChecked = selectedFileIds.has(file.id);
+                return (
+                  <Box
+                    key={file.id}
+                    onClick={() => toggleFileSelect(file.id)}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      p: 1,
+                      px: 1.5,
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      '&:hover': { bgcolor: cv.surfaceHover || 'rgba(255,255,255,0.05)' },
+                    }}
+                  >
+                    <Checkbox size="small" checked={isChecked} />
+                    <InsertDriveFileOutlinedIcon fontSize="small" sx={{ color: cv.textMuted }} />
+                    <Typography variant="body2" sx={{ color: cv.textPrimary, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {file.title}
+                    </Typography>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ p: 2, pt: 1, gap: 1 }}>
+        <Button onClick={onClose} disabled={submitting} sx={{ color: cv.textSecondary, textTransform: 'none' }}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSubmit}
+          disabled={submitting}
+          variant="contained"
+          sx={{
+            bgcolor: cv.destructive || '#ef4444',
+            '&:hover': { bgcolor: '#b91c1c' },
+            textTransform: 'none',
+            borderRadius: '10px',
+          }}
+        >
+          {submitting ? 'Deleting…' : selectedFileIds.size > 0 ? `Delete Project & ${selectedFileIds.size} Files` : 'Delete Project Only'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
@@ -1675,22 +2029,24 @@ export function ProjectsAdminSettingsSection() {
     setEditProjectId(null);
   };
 
-  const handleDeleteProjects = async () => {
-    if (deleteDialogIds.length === 0) return;
+  const handleDeleteProjectsConfirm = async (targetProjectId: string, selectedFileIds: string[]) => {
     try {
       const { apiClient } = await import('../../api/client');
       const token = localStorage.getItem('token');
 
-      // Delete projects sequentially
-      for (const id of deleteDialogIds) {
-        await apiClient.delete(`/workspaces/project/delete/${id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-      }
+      const res = await apiClient.post<any>(
+        `/workspaces/project/delete/${targetProjectId}`,
+        { deleteFileIds: selectedFileIds },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-      setProjects((current) => current.filter((p) => !deleteDialogIds.includes(p.id)));
-    } catch (err) {
-      console.error("Failed to delete projects in backend:", err);
+      setProjects((current) => current.filter((p) => p.id !== targetProjectId));
+
+      const msg = res?.message || 'Project action completed.';
+      toast.success(msg);
+    } catch (err: any) {
+      console.error('Failed to delete project in backend:', err);
+      toast.error(err?.message || err?.response?.data?.message || 'Failed to delete project.');
     }
     setDeleteDialogIds([]);
   };
@@ -1879,7 +2235,7 @@ export function ProjectsAdminSettingsSection() {
         description="Manage projects across workspaces."
         rows={projects}
         addLabel="Add new project"
-        showBulkActions
+        showBulkActions={false}
         showTeamMembersColumn
         onAdd={async () => {
           try {
@@ -1919,26 +2275,13 @@ export function ProjectsAdminSettingsSection() {
         suggestedUsers={orgUsersList}
         suggestedGroups={orgGroupsList}
       />
-      <Dialog
+      <DeleteProjectModal
         open={deleteDialogIds.length > 0}
+        projectId={deleteDialogIds[0] || null}
+        projectName={projects.find((p) => p.id === deleteDialogIds[0])?.project}
         onClose={() => setDeleteDialogIds([])}
-        PaperProps={{ sx: { bgcolor: cv.bgLayer, color: cv.textPrimary, backgroundImage: 'none', border: `1px solid ${cv.borderPrimary}` } }}
-      >
-        <DialogTitle sx={{ fontWeight: 600 }}>Delete Project{deleteDialogIds.length > 1 ? 's' : ''}</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" sx={{ color: cv.textSecondary }}>
-            Are you sure you want to delete {deleteDialogIds.length === 1 ? 'this project' : `these ${deleteDialogIds.length} projects`}? There can be folders or assets linked in it.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0 }}>
-          <Button onClick={() => setDeleteDialogIds([])} sx={{ color: cv.textSecondary, textTransform: 'none' }}>
-            Cancel
-          </Button>
-          <Button onClick={handleDeleteProjects} variant="contained" sx={{ bgcolor: cv.destructive, '&:hover': { bgcolor: '#b91c1c' }, textTransform: 'none' }}>
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onConfirmDelete={handleDeleteProjectsConfirm}
+      />
       <WorkspaceMembersDialog
         open={Boolean(inviteProjectId)}
         workspaceName={inviteProject?.project ?? 'project'}
