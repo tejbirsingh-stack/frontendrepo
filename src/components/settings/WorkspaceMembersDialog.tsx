@@ -78,7 +78,7 @@ type InviteTypeaheadOption =
   | { kind: 'user'; id: string; user: SettingsUserRow }
   | { kind: 'group'; id: string; group: SettingsUserGroup };
 
-const ACCESS_OPTIONS: WorkspaceMemberAccess[] = ['Full Access', 'Can edit', 'Can view'];
+// Dynamic options fetched from API
 
 const inlineAccessSelectSx = {
   fontSize: '0.8125rem',
@@ -253,6 +253,28 @@ export default function WorkspaceMembersDialog({
   
   // Organization Share Settings State for locking UI
   const [orgShareSettings, setOrgShareSettings] = useState<any>(null);
+
+  const [accessOptions, setAccessOptions] = useState<any[]>([]);
+  useEffect(() => {
+    const fetchAccessLevels = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await (apiClient as any).get('/workspaces/access-levels', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = Array.isArray(res) ? res : res?.data || res;
+        if (Array.isArray(data)) {
+          setAccessOptions(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch access levels:', err);
+      }
+    };
+    if (open) {
+      fetchAccessLevels();
+    }
+  }, [open]);
 
   useEffect(() => {
     if (secureShareOpen) {
@@ -892,9 +914,9 @@ export default function WorkspaceMembersDialog({
                     sx={inlineAccessSelectSx}
                     aria-label="Access level"
                   >
-                    {ACCESS_OPTIONS.map((option) => (
-                      <MenuItem key={option} value={option} sx={{ fontSize: '0.875rem' }}>
-                        {option}
+                    {accessOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id} sx={{ fontSize: '0.875rem' }}>
+                        {option.title || option.name}
                       </MenuItem>
                     ))}
                   </Select>
@@ -1225,9 +1247,9 @@ export default function WorkspaceMembersDialog({
                     MenuProps={selectInDialogMenuProps}
                     sx={{ ...dialogSelectSx, minWidth: 140 }}
                   >
-                    {ACCESS_OPTIONS.map((option) => (
-                      <MenuItem key={option} value={option} sx={{ fontSize: '0.875rem' }}>
-                        {option}
+                    {accessOptions.map((option) => (
+                      <MenuItem key={option.id} value={option.id} sx={{ fontSize: '0.875rem' }}>
+                        {option.title || option.name}
                       </MenuItem>
                     ))}
                     {onRemoveMember && !isCurrentMember ? (

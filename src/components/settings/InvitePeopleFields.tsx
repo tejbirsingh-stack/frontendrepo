@@ -28,7 +28,7 @@ import {
 } from '../../data/mockSettingsData';
 import { selectInDialogMenuProps } from '../../constants/dropdownMenu';
 
-const ACCESS_OPTIONS: WorkspaceMemberAccess[] = ['Full Access', 'Can edit', 'Can view'];
+// Dynamic options fetched from API
 
 const dialogSelectSx = {
   borderRadius: '10px',
@@ -84,6 +84,34 @@ export default function InvitePeopleFields({
   const [guestSuggestions, setGuestSuggestions] = useState<GuestUserSuggestion[]>([]);
   const [isGuestSearching, setIsGuestSearching] = useState(false);
   const guestSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [accessOptions, setAccessOptions] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchAccessLevels = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await (apiClient as any).get('/workspaces/access-levels', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = Array.isArray(res) ? res : res?.data || res;
+        if (Array.isArray(data)) {
+          setAccessOptions(data);
+          if (data.length > 0 && typeof onAccessChange === 'function') {
+             // Find 'FULL_ACCESS' ID if exists, otherwise first one
+             const fullAccess = data.find((d: any) => d.name === 'FULL_ACCESS');
+             onAccessChange(fullAccess ? fullAccess.id : data[0].id);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch access levels:', err);
+      }
+    };
+    if (showAccessControls) {
+      fetchAccessLevels();
+    }
+  }, [showAccessControls]);
 
   const isGroupMode = memberType === 'Group';
   const isGuestMode = memberType === 'Guest';
@@ -336,9 +364,9 @@ export default function InvitePeopleFields({
                 MenuProps={selectInDialogMenuProps}
                 sx={dialogSelectSx}
               >
-                {ACCESS_OPTIONS.map((option) => (
-                  <MenuItem key={option} value={option} sx={{ fontSize: '0.875rem' }}>
-                    {option}
+                {accessOptions.map((option) => (
+                  <MenuItem key={option.id} value={option.id} sx={{ fontSize: '0.875rem' }}>
+                    {option.title || option.name}
                   </MenuItem>
                 ))}
               </Select>

@@ -305,6 +305,7 @@ export default function DashboardPage({
     createProject,
     sidebarSelection,
     activeWorkspace,
+    hasWorkspacePermission,
   } = useDashboard();
 
   // Duplicates pagination and tabs state
@@ -596,24 +597,35 @@ export default function DashboardPage({
         );
         return [...projectMedia, ...extraFromLibrary];
       }
-      return mediaItems.filter(
+      const folderMediaLocal = mediaItems.filter(
         (item) =>
           item.parentFolderId === folderMedia.id &&
           !trashedIds.has(item.id),
       );
+      const seenIds = new Set(folderMediaLocal.map((i) => i.id));
+      const extraFromLibrary = libraryItems.filter(
+        (item) => !seenIds.has(item.id) && !trashedIds.has(item.id),
+      );
+      return [...folderMediaLocal, ...extraFromLibrary];
     }
 
-    const workspaceItems = mediaItems.filter(
+    const workspaceItemsLocal = mediaItems.filter(
       (item) =>
         item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
     );
+    
+    const seenLocalIds = new Set(workspaceItemsLocal.map(i => i.id));
+    const extraLibItems = libraryItems.filter(
+      (item) => !seenLocalIds.has(item.id) && !trashedIds.has(item.id)
+    );
+    const combinedWorkspaceItems = [...workspaceItemsLocal, ...extraLibItems];
 
     // All media: every project, folder, and file — hide organizational year/month folders.
     if (!sidebarSelection) {
-      return workspaceItems;
+      return combinedWorkspaceItems;
     }
 
-    return filterMediaBySidebarSelection(workspaceItems, sidebarSelection, mediaItems);
+    return filterMediaBySidebarSelection(combinedWorkspaceItems, sidebarSelection, mediaItems);
   }, [
     isFavoritesView,
     isDuplicatesView,
@@ -1333,66 +1345,66 @@ export default function DashboardPage({
             </MenuItem>
           )}
           <MenuItem
-            disabled={!hasPermission(user, PERMISSIONS.UPLOAD_MEDIA)}
+            disabled={!hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA)}
             onClick={() => {
-              if (!hasPermission(user, PERMISSIONS.UPLOAD_MEDIA)) return;
+              if (!hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA)) return;
               closeNewMenu();
               newUploadInputRef.current?.click();
             }}
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary,
-              opacity: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 0.6 : 1,
-              cursor: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 'transparent' : cv.surfaceHover },
+              color: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary,
+              opacity: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? 0.6 : 1,
+              cursor: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary }} />
+              <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Upload files
           </MenuItem>
           <MenuItem
-            disabled={!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)}
+            disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)}
             onClick={() => {
-              if (!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
+              if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
               closeNewMenu();
               setNewFolderModalOpen(true);
             }}
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
-              opacity: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
-              cursor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
+              color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
+              opacity: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+              cursor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
+              <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             New folder
           </MenuItem>
           {!folderMedia?.isProject && (
             <MenuItem
-              disabled={!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)}
+              disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)}
               onClick={() => {
-                if (!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
+                if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
                 closeNewMenu();
                 setNewProjectModalOpen(true);
               }}
               sx={{
                 py: 1,
                 fontSize: '0.875rem',
-                color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
-                opacity: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
-                cursor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
-                '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
+                color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
+                opacity: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+                cursor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+                '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
               }}
             >
               <ListItemIcon sx={{ minWidth: 32 }}>
-                <AddIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
+                <AddIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
               </ListItemIcon>
               New project
             </MenuItem>

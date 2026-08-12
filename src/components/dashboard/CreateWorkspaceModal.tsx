@@ -58,7 +58,7 @@ export default function CreateWorkspaceModal({
   const [inviteEmails, setInviteEmails] = useState<string[]>([]);
   const [inviteGroupIds, setInviteGroupIds] = useState<string[]>([]);
   const [inviteMemberType, setInviteMemberType] = useState<WorkspaceMemberType>('Member');
-  const [inviteAccess, setInviteAccess] = useState<WorkspaceMemberAccess>('Full Access');
+  const [inviteAccess, setInviteAccess] = useState<string>('Full Access');
   const [orgUsersList, setOrgUsersList] = useState<import('../../data/mockSettingsData').SettingsUserRow[]>([]);
   const [orgGroupsList, setOrgGroupsList] = useState<import('../../data/mockSettingsData').SettingsUserGroup[]>([]);
 
@@ -139,7 +139,7 @@ export default function CreateWorkspaceModal({
       inviteEmails,
       inviteGroupIds,
       memberType: inviteMemberType.toUpperCase(),
-      accessLevel: inviteAccess === 'Full Access' ? 'FULL_ACCESS' : inviteAccess === 'Can edit' ? 'CAN_EDIT' : 'CAN_VIEW',
+      accessLevel: inviteAccess,
     };
     if (isEdit) {
       onSave?.(payload);

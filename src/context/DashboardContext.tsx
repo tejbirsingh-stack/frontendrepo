@@ -158,6 +158,8 @@ interface DashboardContextValue {
   fetchWorkspaceData: (tagIds?: string[]) => Promise<void>;
   fetchFolderData: (folderId: string) => Promise<string[]>;
   fetchProjectData: (projectId: string) => Promise<void>;
+  effectivePermissions: string[];
+  hasWorkspacePermission: (slug: string) => boolean;
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -176,6 +178,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('activeWorkspaceId', id);
     setActiveWorkspaceIdState(id);
   }, []);
+
+  const [effectivePermissions, setEffectivePermissions] = useState<string[]>([]);
+  const hasWorkspacePermission = useCallback((slug: string) => {
+    return effectivePermissions.includes(slug);
+  }, [effectivePermissions]);
 
   const [systemTimezone, setSystemTimezone] = useState<string>('Europe/London');
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(initialMediaItems);
@@ -266,6 +273,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       const resBody = (response as any).data || response;
       const actualData = resBody.data || resBody;
+      
+      if (actualData && Array.isArray(actualData.effectivePermissions)) {
+        setEffectivePermissions(actualData.effectivePermissions);
+      } else {
+        setEffectivePermissions([]);
+      }
+
       if (actualData && (Array.isArray(actualData.folders) || Array.isArray(actualData.projects) || Array.isArray(actualData.media))) {
         const { folders, projects, allProjects, media } = actualData;
 
@@ -2424,6 +2438,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       fetchWorkspaceData,
       fetchFolderData,
       fetchProjectData,
+      effectivePermissions,
+      hasWorkspacePermission,
       libraryItems,
       nextPageToken,
       libraryLoading,

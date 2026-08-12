@@ -1704,7 +1704,7 @@ export function ProjectsAdminSettingsSection() {
 
 export function WorkspacesAdminSettingsSection() {
   const { createWorkspace } = useDashboard();
-  const [workspaces, setWorkspaces] = useState<SettingsProjectRow[]>(MOCK_SETTINGS_WORKSPACES);
+  const [workspaces, setWorkspaces] = useState<SettingsProjectRow[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [editWorkspaceId, setEditWorkspaceId] = useState<string | null>(null);
   const [inviteWorkspaceId, setInviteWorkspaceId] = useState<string | null>(null);
