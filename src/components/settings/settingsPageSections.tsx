@@ -1337,15 +1337,30 @@ function ProjectWorkspaceTable({
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<Set<string>>(createDefaultFilterSelection);
-  const [workspaceFilter, setWorkspaceFilter] = useState<Set<string>>(createDefaultFilterSelection);
+  const [pendingStatusFilter, setPendingStatusFilter] = useState<Set<string>>(createDefaultFilterSelection);
+  const [pendingWorkspaceFilter, setPendingWorkspaceFilter] = useState<Set<string>>(createDefaultFilterSelection);
+  const [appliedStatusFilter, setAppliedStatusFilter] = useState<Set<string>>(createDefaultFilterSelection);
+  const [appliedWorkspaceFilter, setAppliedWorkspaceFilter] = useState<Set<string>>(createDefaultFilterSelection);
 
   const workspaceOptions = useMemo(
     () => uniqueSorted(rows.map((row) => row.workspace)),
     [rows],
   );
 
-  const hasActiveFilters = hasActiveFilterSelections(statusFilter, workspaceFilter);
+  const hasActiveFilters = hasActiveFilterSelections(appliedStatusFilter, appliedWorkspaceFilter);
+
+  const handleApplyFilters = () => {
+    setAppliedStatusFilter(new Set(pendingStatusFilter));
+    setAppliedWorkspaceFilter(new Set(pendingWorkspaceFilter));
+  };
+
+  const handleClearAllFilters = () => {
+    const defaultSel = createDefaultFilterSelection();
+    setPendingStatusFilter(defaultSel);
+    setPendingWorkspaceFilter(defaultSel);
+    setAppliedStatusFilter(defaultSel);
+    setAppliedWorkspaceFilter(defaultSel);
+  };
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -1355,11 +1370,11 @@ function ProjectWorkspaceTable({
         (showProjectColumn && row.project.toLowerCase().includes(query)) ||
         row.workspace.toLowerCase().includes(query) ||
         row.projectAdmin.toLowerCase().includes(query);
-      const matchesStatus = matchesSetFilter(row.status, statusFilter);
-      const matchesWorkspace = matchesSetFilter(row.workspace, workspaceFilter);
+      const matchesStatus = matchesSetFilter(row.status, appliedStatusFilter);
+      const matchesWorkspace = matchesSetFilter(row.workspace, appliedWorkspaceFilter);
       return matchesSearch && matchesStatus && matchesWorkspace;
     });
-  }, [rows, search, showProjectColumn, statusFilter, workspaceFilter]);
+  }, [rows, search, showProjectColumn, appliedStatusFilter, appliedWorkspaceFilter]);
 
   const columns: SettingsTableColumn<SettingsProjectRow>[] = [
     ...(showProjectColumn
@@ -1532,8 +1547,8 @@ function ProjectWorkspaceTable({
                   id: 'status',
                   label: 'Status',
                   options: ['Active', 'Inactive'],
-                  selected: statusFilter,
-                  onToggle: (value) => setStatusFilter((current) => toggleFilterValue(current, value)),
+                  selected: pendingStatusFilter,
+                  onToggle: (value) => setPendingStatusFilter((current) => toggleFilterValue(current, value)),
                 },
                 ...(showProjectColumn
                   ? [
@@ -1541,17 +1556,15 @@ function ProjectWorkspaceTable({
                       id: 'workspace',
                       label: 'Workspace',
                       options: workspaceOptions,
-                      selected: workspaceFilter,
+                      selected: pendingWorkspaceFilter,
                       onToggle: (value: string) =>
-                        setWorkspaceFilter((current) => toggleFilterValue(current, value)),
+                        setPendingWorkspaceFilter((current) => toggleFilterValue(current, value)),
                     },
                   ]
                   : []),
               ]}
-              onClearAll={() => {
-                setStatusFilter(createDefaultFilterSelection());
-                setWorkspaceFilter(createDefaultFilterSelection());
-              }}
+              onClearAll={handleClearAllFilters}
+              onApply={handleApplyFilters}
             />
           </Box>
         </Collapse>

@@ -1,4 +1,4 @@
-import { Box, Chip, Typography } from '@mui/material';
+import { Box, Button, Chip, Typography } from '@mui/material';
 import { cv } from '../../theme/cssVars';
 import {
   FILTER_ALL_OPTION,
@@ -17,6 +17,7 @@ export interface SettingsFilterGroup {
 interface SettingsTableFilterPanelProps {
   groups: SettingsFilterGroup[];
   onClearAll: () => void;
+  onApply?: () => void;
 }
 
 function FilterChip({
@@ -40,6 +41,7 @@ function FilterChip({
 export default function SettingsTableFilterPanel({
   groups,
   onClearAll,
+  onApply,
 }: SettingsTableFilterPanelProps) {
   return (
     <Box
@@ -114,6 +116,33 @@ export default function SettingsTableFilterPanel({
           </Box>
         ))}
       </Box>
+
+      {onApply && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2.5 }}>
+          <Button
+            variant="contained"
+            onClick={onApply}
+            sx={{
+              px: 3,
+              py: 0.875,
+              borderRadius: '10px',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              textTransform: 'none',
+              background: 'linear-gradient(135deg, var(--noah-brand-purple), var(--noah-brand-purple-light, #a78bfa))',
+              boxShadow: '0 2px 12px rgba(139,92,246,0.35)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, var(--noah-brand-purple-hover, #7c3aed), var(--noah-brand-purple))',
+                boxShadow: '0 4px 16px rgba(139,92,246,0.5)',
+              },
+              transition: 'all 0.2s ease',
+            }}
+          >
+            Apply Filters
+          </Button>
+        </Box>
+      )}
     </Box>
   );
 }
+

@@ -511,11 +511,26 @@ function PeopleTab({
   const [addOpen, setAddOpen] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [roleFilter, setRoleFilter] = useState<Set<string>>(createDefaultFilterSelection);
-  const [statusFilter, setStatusFilter] = useState<Set<string>>(createDefaultFilterSelection);
+  const [pendingRoleFilter, setPendingRoleFilter] = useState<Set<string>>(createDefaultFilterSelection);
+  const [pendingStatusFilter, setPendingStatusFilter] = useState<Set<string>>(createDefaultFilterSelection);
+  const [appliedRoleFilter, setAppliedRoleFilter] = useState<Set<string>>(createDefaultFilterSelection);
+  const [appliedStatusFilter, setAppliedStatusFilter] = useState<Set<string>>(createDefaultFilterSelection);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const hasActiveFilters = hasActiveFilterSelections(roleFilter, statusFilter);
+  const hasActiveFilters = hasActiveFilterSelections(appliedRoleFilter, appliedStatusFilter);
+
+  const handleApplyFilters = () => {
+    setAppliedRoleFilter(new Set(pendingRoleFilter));
+    setAppliedStatusFilter(new Set(pendingStatusFilter));
+  };
+
+  const handleClearAllFilters = () => {
+    const defaultSel = createDefaultFilterSelection();
+    setPendingRoleFilter(defaultSel);
+    setPendingStatusFilter(defaultSel);
+    setAppliedRoleFilter(defaultSel);
+    setAppliedStatusFilter(defaultSel);
+  };
 
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -525,11 +540,11 @@ function PeopleTab({
         user.name.toLowerCase().includes(query) ||
         user.email.toLowerCase().includes(query) ||
         user.role.toLowerCase().includes(query);
-      const matchesRole = matchesSetFilter(user.role, roleFilter);
-      const matchesStatus = matchesSetFilter(user.status, statusFilter);
+      const matchesRole = matchesSetFilter(user.role, appliedRoleFilter);
+      const matchesStatus = matchesSetFilter(user.status, appliedStatusFilter);
       return matchesSearch && matchesRole && matchesStatus;
     });
-  }, [users, search, roleFilter, statusFilter]);
+  }, [users, search, appliedRoleFilter, appliedStatusFilter]);
 
   const handleInvite = (email: string, role: UserRole) => {
     setUsers((current) => [...current, createInvitedUser(email, role)]);
@@ -645,21 +660,19 @@ function PeopleTab({
                   id: 'role',
                   label: 'Account role',
                   options: [...USER_ROLES],
-                  selected: roleFilter,
-                  onToggle: (value) => setRoleFilter((current) => toggleFilterValue(current, value)),
+                  selected: pendingRoleFilter,
+                  onToggle: (value) => setPendingRoleFilter((current) => toggleFilterValue(current, value)),
                 },
                 {
                   id: 'status',
                   label: 'Status',
                   options: ['Active', 'Pending'],
-                  selected: statusFilter,
-                  onToggle: (value) => setStatusFilter((current) => toggleFilterValue(current, value)),
+                  selected: pendingStatusFilter,
+                  onToggle: (value) => setPendingStatusFilter((current) => toggleFilterValue(current, value)),
                 },
               ]}
-              onClearAll={() => {
-                setRoleFilter(createDefaultFilterSelection());
-                setStatusFilter(createDefaultFilterSelection());
-              }}
+              onClearAll={handleClearAllFilters}
+              onApply={handleApplyFilters}
             />
           </Box>
         </Collapse>
