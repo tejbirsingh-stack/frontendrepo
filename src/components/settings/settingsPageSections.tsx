@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
+import ProjectDeleteFlowModal from '../modals/ProjectDeleteFlowModal';
 import { getUsageSummary } from '../../api/usage.service';
 import { downloadCSV } from '../../utils/csvExport';
 import { getCompanyInfoRequest, updateCompanyInfoRequest, uploadCompanyLogoRequest, updateProfileRequest, uploadProfilePhotoRequest } from '../../api';
@@ -2042,20 +2043,30 @@ export function ProjectsAdminSettingsSection() {
     setEditProjectId(null);
   };
 
-  const handleDeleteProjectsConfirm = async (targetProjectId: string, selectedFileIds: string[]) => {
+  const handleDeleteProjectsConfirm = async (
+    targetProjectId: string,
+    isWholeProject: boolean,
+    selectedFileIds: string[],
+    selectedFolderIds: string[]
+  ) => {
     try {
       const { apiClient } = await import('../../api/client');
       const token = localStorage.getItem('token');
 
       const res = await apiClient.post<any>(
         `/workspaces/project/delete/${targetProjectId}`,
-        { deleteFileIds: selectedFileIds },
+        {
+          isWholeProject,
+          deleteFileIds: selectedFileIds,
+          deleteFolderIds: selectedFolderIds,
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
+      // Instantly remove project from Projects list view when deletion request is submitted
       setProjects((current) => current.filter((p) => p.id !== targetProjectId));
 
-      const msg = res?.message || 'Project action completed.';
+      const msg = res?.message || 'Project deletion request submitted for Super Admin review.';
       toast.success(msg);
     } catch (err: any) {
       console.error('Failed to delete project in backend:', err);
@@ -2288,7 +2299,7 @@ export function ProjectsAdminSettingsSection() {
         suggestedUsers={orgUsersList}
         suggestedGroups={orgGroupsList}
       />
-      <DeleteProjectModal
+      <ProjectDeleteFlowModal
         open={deleteDialogIds.length > 0}
         projectId={deleteDialogIds[0] || null}
         projectName={projects.find((p) => p.id === deleteDialogIds[0])?.project}
