@@ -43,16 +43,18 @@ export default function SettingsNav({ onNavigate }: { onNavigate?: () => void })
             const active = location.pathname === href;
             const hasManageSubscription = user?.permissions?.includes('manage_subscription_billing');
             
+            const isSuperAdmin = user?.role === 'Super Admin' || user?.roleId === '996cc58f-8823-4b6f-bcb9-76b2c1f2dd15' || (typeof user?.role === 'string' && user.role.toLowerCase().includes('super admin'));
             const isBillingDisabled = item.id === 'billing' && !hasManageSubscription;
             const isPlanDisabled = item.id === 'plan' && !hasManageSubscription;
             const isCompanyDisabled = item.id === 'company' && !hasManageSubscription; // Admin is blocked from overarching infrastructure
             const isSecurityDisabled = item.id === 'security' && !hasManageSubscription;
             const isUserDisabled = item.id === 'user' && !user?.permissions?.includes('manage_users_permissions');
             const isUsageDisabled = item.id === 'usage' && !user?.permissions?.includes('view_audit_analytics');
-            const isProjectsWorkspacesDisabled = ['projects', 'workspaces', 'fields', 'settings'].includes(item.id) && !user?.permissions?.includes('manage_root_folders');
+            const isProjectsWorkspacesDisabled = ['projects', 'fields', 'settings'].includes(item.id) && !user?.permissions?.includes('manage_root_folders');
+            const isWorkspacesDisabled = item.id === 'workspaces' && !isSuperAdmin;
             const isBrandingDisabled = item.id === 'branding' && !user?.permissions?.includes('manage_users_permissions');
 
-            const isDisabled = isBillingDisabled || isPlanDisabled || isCompanyDisabled || isSecurityDisabled || isUserDisabled || isUsageDisabled || isProjectsWorkspacesDisabled || isBrandingDisabled;
+            const isDisabled = isBillingDisabled || isPlanDisabled || isCompanyDisabled || isSecurityDisabled || isUserDisabled || isUsageDisabled || isProjectsWorkspacesDisabled || isWorkspacesDisabled || isBrandingDisabled;
 
             const buttonContent = (
               <ListItemButton

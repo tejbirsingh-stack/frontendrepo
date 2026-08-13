@@ -48,6 +48,7 @@ import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import PauseCircleOutlinedIcon from '@mui/icons-material/PauseCircleOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import SettingsAdminToolbar from './SettingsAdminToolbar';
 import SettingsTableFilterPanel from './SettingsTableFilterPanel';
 import WorkspaceTeamMembersCell from './WorkspaceTeamMembersCell';
@@ -1282,24 +1283,26 @@ function ProjectRowActionsCell({
         </MenuItem>
       </Menu>
 
-      <Tooltip title={`Delete ${showProjectColumn ? 'project' : 'workspace'}`}>
-        <IconButton
-          size="small"
-          onClick={handleDelete}
-          sx={{
-            color: cv.textMuted || cv.textSecondary,
-            p: 0.75,
-            borderRadius: '8px',
-            transition: 'all 0.15s ease',
-            '&:hover': {
-              color: cv.destructive || '#ef4444',
-              backgroundColor: 'rgba(239, 68, 68, 0.12)',
-            },
-          }}
-        >
-          <DeleteOutlineOutlinedIcon sx={{ fontSize: '1.125rem' }} />
-        </IconButton>
-      </Tooltip>
+      {!row.isDefault && onDelete && (
+        <Tooltip title={`Delete ${showProjectColumn ? 'project' : 'workspace'}`}>
+          <IconButton
+            size="small"
+            onClick={handleDelete}
+            sx={{
+              color: cv.textMuted || cv.textSecondary,
+              p: 0.75,
+              borderRadius: '8px',
+              transition: 'all 0.15s ease',
+              '&:hover': {
+                color: cv.destructive || '#ef4444',
+                backgroundColor: 'rgba(239, 68, 68, 0.12)',
+              },
+            }}
+          >
+            <DeleteOutlineOutlinedIcon sx={{ fontSize: '1.125rem' }} />
+          </IconButton>
+        </Tooltip>
+      )}
     </Box>
   );
 }
@@ -2396,12 +2399,13 @@ export function WorkspacesAdminSettingsSection() {
         });
         const data = Array.isArray(response) ? response : response.data;
         if (data && Array.isArray(data)) {
-          const formatted = data.map((w: any) => {
+          const formatted = data.map((w: any, index: number) => {
             const today = formatDate(w.createdAt || Date.now(), {
               month: 'short',
               day: 'numeric',
               year: 'numeric',
             });
+            const isDefaultWorkspace = Boolean(w.isDefault || w.is_default || index === data.length - 1);
             return {
               id: w.id,
               workspace: w.name,
@@ -2410,6 +2414,7 @@ export function WorkspacesAdminSettingsSection() {
               creationDate: today,
               storage: '0 MB',
               projectAdmin: CURRENT_USER.name,
+              isDefault: isDefaultWorkspace,
               teamMembers: [
                 {
                   id: `wm-admin-${w.id}`,
@@ -2531,6 +2536,47 @@ export function WorkspacesAdminSettingsSection() {
     );
   };
 
+  const [deleteConfirmStep, setDeleteConfirmStep] = useState<0 | 1 | 2>(0);
+  const [targetDeleteWorkspaceIds, setTargetDeleteWorkspaceIds] = useState<string[]>([]);
+  const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
+
+  const targetWorkspaces = useMemo(() => {
+    return workspaces.filter((w) => targetDeleteWorkspaceIds.includes(w.id));
+  }, [workspaces, targetDeleteWorkspaceIds]);
+
+  const handleDeleteWorkspace = (ids: string[]) => {
+    const hasDefault = workspaces.some((w) => ids.includes(w.id) && w.isDefault);
+    if (hasDefault) {
+      toast.error('Default workspace created during organization registration cannot be deleted.');
+      return;
+    }
+    setTargetDeleteWorkspaceIds(ids);
+    setDeleteConfirmStep(1);
+  };
+
+  const handlePerformPermanentDelete = async () => {
+    if (targetDeleteWorkspaceIds.length === 0) return;
+    setIsDeletingWorkspace(true);
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      for (const id of targetDeleteWorkspaceIds) {
+        await apiClient.delete(`/workspaces/delete/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      setWorkspaces((prev) => prev.filter((w) => !targetDeleteWorkspaceIds.includes(w.id)));
+      toast.success('Workspace and all associated projects, folders, and files permanently deleted.');
+      setDeleteConfirmStep(0);
+      setTargetDeleteWorkspaceIds([]);
+    } catch (err: any) {
+      console.error('Failed to delete workspace:', err);
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to delete workspace.');
+    } finally {
+      setIsDeletingWorkspace(false);
+    }
+  };
+
   return (
     <>
       <ProjectWorkspaceTable
@@ -2552,6 +2598,7 @@ export function WorkspacesAdminSettingsSection() {
           setAddOpen(true);
         }}
         onEdit={setEditWorkspaceId}
+        onDelete={handleDeleteWorkspace}
         onInviteTeamMembers={setInviteWorkspaceId}
       />
       <CreateWorkspaceModal
@@ -2580,6 +2627,89 @@ export function WorkspacesAdminSettingsSection() {
         onRemoveMember={handleRemoveMember}
         onRestrictedChange={handleRestrictedChange}
       />
+
+      {/* Step 1 Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmStep === 1}
+        onClose={() => setDeleteConfirmStep(0)}
+        slotProps={noahDialogSlotProps()}
+      >
+        <DialogTitle sx={{ color: cv.textPrimary, fontWeight: 600 }}>Delete Workspace</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: cv.textPrimary, fontSize: '0.9375rem', fontWeight: 500, mb: 1 }}>
+            Are you sure you want to delete this workspace?
+          </Typography>
+          {targetWorkspaces.length > 0 && (
+            <Typography sx={{ color: cv.textSecondary, fontSize: '0.875rem' }}>
+              Workspace: <strong>{targetWorkspaces.map(w => w.workspace).join(', ')}</strong>
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setDeleteConfirmStep(0)} sx={{ color: cv.textSecondary }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => setDeleteConfirmStep(2)}
+            variant="contained"
+            sx={containedButtonSx}
+          >
+            Yes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Step 2 Warning Permanent Deletion Dialog */}
+      <Dialog
+        open={deleteConfirmStep === 2}
+        onClose={() => !isDeletingWorkspace && setDeleteConfirmStep(0)}
+        slotProps={noahDialogSlotProps()}
+      >
+        <DialogTitle sx={{ color: cv.destructive || '#ef4444', display: 'flex', alignItems: 'center', gap: 1, fontWeight: 600 }}>
+          <WarningAmberOutlinedIcon sx={{ fontSize: '1.5rem', color: cv.destructive || '#ef4444' }} />
+          Warning: Permanent Deletion
+        </DialogTitle>
+        <DialogContent>
+          <Box
+            sx={{
+              p: 2,
+              borderRadius: '10px',
+              bgcolor: 'rgba(239, 68, 68, 0.08)',
+              border: `1px solid rgba(239, 68, 68, 0.25)`,
+              my: 0.5,
+            }}
+          >
+            <Typography sx={{ color: cv.textPrimary, fontSize: '0.875rem', fontWeight: 600, mb: 0.75 }}>
+              Once you delete this workspace:
+            </Typography>
+            <Typography sx={{ color: cv.textSecondary, fontSize: '0.8125rem', lineHeight: 1.6 }}>
+              All projects, files, and folders inside it cannot be restored again. It will be permanently deleted from the database and cloud storage.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button
+            disabled={isDeletingWorkspace}
+            onClick={() => setDeleteConfirmStep(0)}
+            sx={{ color: cv.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={isDeletingWorkspace}
+            onClick={handlePerformPermanentDelete}
+            variant="contained"
+            sx={{
+              bgcolor: cv.destructive || '#ef4444',
+              color: '#fff',
+              fontWeight: 600,
+              '&:hover': { bgcolor: cv.destructiveStrong || '#dc2626' },
+            }}
+          >
+            {isDeletingWorkspace ? 'Deleting...' : 'Delete Permanently'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }
