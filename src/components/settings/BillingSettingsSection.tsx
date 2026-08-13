@@ -32,6 +32,8 @@ import {
   type BillingInvoiceRow,
 } from '../../data/mockSettingsData';
 import { SETTINGS_BASE_PATH } from '../../constants/settingsNav';
+import { billingService } from '../../api/billing.service';
+import toast from 'react-hot-toast';
 
 const outlineButtonSx = {
   borderColor: cv.border,
@@ -171,6 +173,39 @@ function BillingOverviewTab() {
       ? billing.billingContact.taxId ?? paymentConfig.taxId
       : paymentConfig.taxId;
 
+  const [loadingCheckout, setLoadingCheckout] = useState(false);
+  const [loadingPortal, setLoadingPortal] = useState(false);
+
+  const handleManagePlan = async () => {
+    try {
+      setLoadingCheckout(true);
+      // Replace with actual priceId from selected plan if needed
+      const priceId = plan?.monthlyPriceId || 'price_12345';
+      const res = await billingService.createCheckoutSession(priceId);
+      if (res?.url) {
+        window.location.href = res.url;
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to start checkout');
+    } finally {
+      setLoadingCheckout(false);
+    }
+  };
+
+  const handlePortal = async () => {
+    try {
+      setLoadingPortal(true);
+      const res = await billingService.createPortalSession();
+      if (res?.url) {
+        window.location.href = res.url;
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to open billing portal');
+    } finally {
+      setLoadingPortal(false);
+    }
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       <Box
@@ -219,13 +254,13 @@ function BillingOverviewTab() {
             {billing.isFreePlanActive ? 'Cancel free trial' : 'Cancel plan'}
           </Button>
           <Button
-            component={RouterLink}
-            to={`${SETTINGS_BASE_PATH}/accounts/plan`}
             variant="contained"
             size="small"
             sx={containedButtonSx}
+            disabled={loadingCheckout}
+            onClick={handleManagePlan}
           >
-            Manage plan
+            {loadingCheckout ? 'Loading...' : 'Manage plan'}
           </Button>
         </Box>
       </Box>
@@ -258,8 +293,14 @@ function BillingOverviewTab() {
                   {billing.paymentMethod.expYear}
                 </Typography>
               </Box>
-              <Button variant="outlined" size="small" sx={outlineButtonSx}>
-                {paymentConfig.hasCardOnFile ? 'Edit card' : 'Add card'}
+              <Button 
+                variant="outlined" 
+                size="small" 
+                sx={outlineButtonSx}
+                disabled={loadingPortal}
+                onClick={handlePortal}
+              >
+                {loadingPortal ? 'Loading...' : paymentConfig.hasCardOnFile ? 'Edit card' : 'Add card'}
               </Button>
             </Box>
 
