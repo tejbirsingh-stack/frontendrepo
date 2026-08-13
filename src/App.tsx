@@ -12,6 +12,7 @@ import {
   DashboardPage, 
   FolderPage,
   ProjectPage,
+  MarketingLandingPage,
   LoginPage,
   NotFoundPage,
   SignUpPage,
@@ -38,8 +39,9 @@ function App() {
         <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
           <Route path="/s/:token" element={<ShareGuestPage />} />
+          <Route path="/" element={<MarketingLandingPage />} />
           <Route
-            path="/"
+            path="/login"
             element={
               <GuestRoute>
                 <LoginPage />

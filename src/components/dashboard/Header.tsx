@@ -144,7 +144,7 @@ export default function Header({
   const handleLogoutConfirm = () => {
     setLogoutModalOpen(false);
     clearSession();
-    navigate('/', { replace: true });
+    navigate('/login', { replace: true });
   };
 
 

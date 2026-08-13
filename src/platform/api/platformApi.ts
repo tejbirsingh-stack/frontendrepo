@@ -213,6 +213,29 @@ export async function fetchLanding(slug = 'main') {
   );
 }
 
+export async function fetchPublicLanding(slug = 'main') {
+  return platformRequest<{ success: boolean; page: Record<string, unknown> }>(
+    `/platform/public/landing?slug=${encodeURIComponent(slug)}`,
+    { skipAuth: true },
+  );
+}
+
+export type DemoRequestPayload = {
+  name: string;
+  email: string;
+  company?: string;
+  teamSize?: string;
+  message?: string;
+};
+
+export async function submitDemoRequest(body: DemoRequestPayload) {
+  return platformRequest<{ success: boolean }>('/platform/public/demo-request', {
+    method: 'POST',
+    skipAuth: true,
+    body: JSON.stringify(body),
+  });
+}
+
 export async function updateLanding(slug: string, body: Record<string, unknown>) {
   return platformRequest<{ success: boolean; page: Record<string, unknown> }>(
     `/platform/landing/${slug}`,

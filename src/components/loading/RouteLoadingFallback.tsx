@@ -1,10 +1,16 @@
+import { Box } from '@mui/material';
 import { useLocation } from 'react-router-dom';
+import { cv } from '../../theme/cssVars';
 import AuthPageSkeleton from './AuthPageSkeleton';
 import DashboardShellSkeleton from './DashboardShellSkeleton';
 import MediaViewerSkeleton from './MediaViewerSkeleton';
 
 function getSkeletonForPath(pathname: string) {
-  if (pathname === '/' || pathname === '/signup') {
+  if (pathname === '/') {
+    return <Box sx={{ minHeight: '100vh', backgroundColor: cv.bg }} />;
+  }
+
+  if (pathname === '/login' || pathname === '/signup') {
     return <AuthPageSkeleton />;
   }
 

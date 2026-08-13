@@ -124,7 +124,7 @@ export default function VerifyEmailPage() {
                 <Button
                   variant="contained"
                   fullWidth
-                  onClick={() => navigate('/', { replace: true })}
+                  onClick={() => navigate('/login', { replace: true })}
                   sx={{
                     py: 1.5,
                     background: cv.brandGradient,
@@ -150,7 +150,7 @@ export default function VerifyEmailPage() {
                 <Button
                   variant="contained"
                   fullWidth
-                  onClick={() => navigate('/', { replace: true })}
+                  onClick={() => navigate('/login', { replace: true })}
                   sx={{
                     py: 1.5,
                     background: cv.brandGradient,

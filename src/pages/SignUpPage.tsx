@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -230,6 +230,7 @@ function SignupStepFooter({
 
 export default function SignUpPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { instance } = useMsal();
   const { loginGoogle, loginMicrosoft, setSession } = useAuth();
   const [phase, setPhase] = useState<SignupPhase>('email');
@@ -255,6 +256,20 @@ export default function SignUpPage() {
   const [isSsoLoading, setIsSsoLoading] = useState(false);
   const { enqueueFiles } = useUploadManager();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const state = location.state as
+      | { email?: string; firstName?: string; lastName?: string; companyWebsite?: string; fromTrial?: boolean }
+      | null;
+    if (!state) return;
+    if (state.email) setEmail(state.email);
+    if (state.firstName) setFirstName(state.firstName);
+    if (state.lastName) setLastName(state.lastName);
+    if (state.companyWebsite) setCompanyWebsite(state.companyWebsite);
+    if (state.fromTrial && state.email) {
+      setShowPasswordFields(true);
+    }
+  }, [location.state]);
 
   const workspaceSlug = useMemo(() => slugifyWorkspaceName(workspaceName), [workspaceName]);
 
@@ -1104,7 +1119,7 @@ export default function SignUpPage() {
                 Already have an account?{' '}
                 <Link
                   component={RouterLink}
-                  to="/"
+                  to="/login"
                   underline="hover"
                   sx={{ color: cv.textPrimary, fontWeight: 500 }}
                 >

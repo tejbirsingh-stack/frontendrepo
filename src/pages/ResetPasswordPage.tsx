@@ -73,7 +73,7 @@ export default function ResetPasswordPage() {
 
       setSuccessMessage('Your account setup is complete! You can now sign in with your new credentials.');
       setTimeout(() => {
-        navigate('/', { replace: true });
+        navigate('/login', { replace: true });
       }, 3000);
     } catch (err: any) {
       console.error('Account setup error:', err);
@@ -134,7 +134,7 @@ export default function ResetPasswordPage() {
               <Button
                 variant="contained"
                 fullWidth
-                onClick={() => navigate('/', { replace: true })}
+                onClick={() => navigate('/login', { replace: true })}
                 sx={{
                   py: 1.5,
                   background: cv.brandGradient,
@@ -286,7 +286,7 @@ export default function ResetPasswordPage() {
                 Already set up?{' '}
                 <Link
                   component={RouterLink}
-                  to="/"
+                  to="/login"
                   underline="hover"
                   sx={{
                     color: cv.textPrimary,

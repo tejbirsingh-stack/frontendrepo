@@ -13,6 +13,7 @@ import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
 import { useAuth } from '../auth/AuthContext';
+import { getPostAuthRedirect } from '../auth/paths';
 
 export default function MfaAuthPage() {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export default function MfaAuthPage() {
   // Protect the route
   useEffect(() => {
     if (!state || !state.requiresMfa || !state.email || !state.password) {
-      navigate('/', { replace: true });
+      navigate('/login', { replace: true });
     }
   }, [state, navigate]);
 
@@ -36,7 +37,7 @@ export default function MfaAuthPage() {
 
     setError('');
 
-    const redirectPath = state?.from || '/home';
+    const redirectPath = getPostAuthRedirect(state?.from);
 
     try {
       await login({ 
@@ -168,7 +169,7 @@ export default function MfaAuthPage() {
             >
               <Link
                 component={RouterLink}
-                to="/"
+                to="/login"
                 underline="hover"
                 sx={{
                   color: cv.textPrimary,
