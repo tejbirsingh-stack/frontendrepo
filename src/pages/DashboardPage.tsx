@@ -305,12 +305,16 @@ export default function DashboardPage({
     createProject,
     sidebarSelection,
     activeWorkspace,
+    hasWorkspacePermission,
   } = useDashboard();
 
   // Duplicates pagination and tabs state
   const [duplicateTab, setDuplicateTab] = useState<MediaType>('video');
   const [duplicatePage, setDuplicatePage] = useState(1);
   const DUPLICATES_PER_PAGE = 48;
+
+  // Shared view tabs state
+  const [sharedTab, setSharedTab] = useState<'with_me' | 'by_me'>('with_me');
 
   const { sentinelRef } = useLibraryInfiniteScroll({
     loading: libraryLoadingMore,
@@ -321,6 +325,10 @@ export default function DashboardPage({
   const handleDuplicateTabChange = (event: React.SyntheticEvent, newValue: MediaType) => {
     setDuplicateTab(newValue);
     setDuplicatePage(1); // Reset page on tab change
+  };
+
+  const handleSharedTabChange = (event: React.SyntheticEvent, newValue: 'with_me' | 'by_me') => {
+    setSharedTab(newValue);
   };
 
   const handleDuplicatePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
@@ -578,32 +586,46 @@ export default function DashboardPage({
 
     if (folderMedia) {
       if (folderMedia.isProject) {
-        return mediaItems.filter(
+        const projectMedia = mediaItems.filter(
           (item) =>
-            item.workspaceId === activeWorkspaceId &&
             (item.linkedProjectIds || []).includes(folderMedia.id) &&
             !trashedIds.has(item.id),
         );
+        const seenIds = new Set(projectMedia.map((i) => i.id));
+        const extraFromLibrary = libraryItems.filter(
+          (item) => !seenIds.has(item.id) && !trashedIds.has(item.id),
+        );
+        return [...projectMedia, ...extraFromLibrary];
       }
-      return mediaItems.filter(
+      const folderMediaLocal = mediaItems.filter(
         (item) =>
-          item.workspaceId === activeWorkspaceId &&
           item.parentFolderId === folderMedia.id &&
           !trashedIds.has(item.id),
       );
+      const seenIds = new Set(folderMediaLocal.map((i) => i.id));
+      const extraFromLibrary = libraryItems.filter(
+        (item) => !seenIds.has(item.id) && !trashedIds.has(item.id),
+      );
+      return [...folderMediaLocal, ...extraFromLibrary];
     }
 
-    const workspaceItems = mediaItems.filter(
+    const workspaceItemsLocal = mediaItems.filter(
       (item) =>
         item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
     );
+    
+    const seenLocalIds = new Set(workspaceItemsLocal.map(i => i.id));
+    const extraLibItems = libraryItems.filter(
+      (item) => !seenLocalIds.has(item.id) && !trashedIds.has(item.id)
+    );
+    const combinedWorkspaceItems = [...workspaceItemsLocal, ...extraLibItems];
 
     // All media: every project, folder, and file — hide organizational year/month folders.
     if (!sidebarSelection) {
-      return workspaceItems;
+      return combinedWorkspaceItems;
     }
 
-    return filterMediaBySidebarSelection(workspaceItems, sidebarSelection, mediaItems);
+    return filterMediaBySidebarSelection(combinedWorkspaceItems, sidebarSelection, mediaItems);
   }, [
     isFavoritesView,
     isDuplicatesView,
@@ -617,13 +639,17 @@ export default function DashboardPage({
     trashedIds,
     sidebarSelection,
     isProjectsView,
+    libraryItems,
   ]);
 
   const displayedItems = useMemo(() => {
     if (isFavoritesView) {
       return libraryItems.filter(item => favorites.has(item.id));
     }
-    return libraryItems;
+    if (isDuplicatesView || isSharedView || (!folderMedia && !sidebarSelection && !isProjectsView)) {
+      return libraryItems;
+    }
+    return librarySourceItems;
   }, [
     libraryView,
     libraryItems,
@@ -1319,66 +1345,66 @@ export default function DashboardPage({
             </MenuItem>
           )}
           <MenuItem
-            disabled={!hasPermission(user, PERMISSIONS.UPLOAD_MEDIA)}
+            disabled={!hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA)}
             onClick={() => {
-              if (!hasPermission(user, PERMISSIONS.UPLOAD_MEDIA)) return;
+              if (!hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA)) return;
               closeNewMenu();
               newUploadInputRef.current?.click();
             }}
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary,
-              opacity: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 0.6 : 1,
-              cursor: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? 'transparent' : cv.surfaceHover },
+              color: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary,
+              opacity: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? 0.6 : 1,
+              cursor: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary }} />
+              <CloudUploadOutlinedIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Upload files
           </MenuItem>
           <MenuItem
-            disabled={!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)}
+            disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)}
             onClick={() => {
-              if (!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
+              if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
               closeNewMenu();
               setNewFolderModalOpen(true);
             }}
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
-              opacity: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
-              cursor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
+              color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
+              opacity: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+              cursor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
+              <CreateNewFolderOutlinedIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             New folder
           </MenuItem>
           {!folderMedia?.isProject && (
             <MenuItem
-              disabled={!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)}
+              disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)}
               onClick={() => {
-                if (!hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
+                if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
                 closeNewMenu();
                 setNewProjectModalOpen(true);
               }}
               sx={{
                 py: 1,
                 fontSize: '0.875rem',
-                color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
-                opacity: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
-                cursor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
-                '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
+                color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
+                opacity: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+                cursor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+                '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
               }}
             >
               <ListItemIcon sx={{ minWidth: 32 }}>
-                <AddIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
+                <AddIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
               </ListItemIcon>
               New project
             </MenuItem>
@@ -1688,6 +1714,94 @@ export default function DashboardPage({
               );
             })()
           )}
+        </Box>
+      ) : isSharedView ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {(() => {
+            const sharedWithMe = displayedItems.filter(i => !i.isSharedByMe);
+            const sharedByMe = displayedItems.filter(i => i.isSharedByMe && !i.isProject);
+
+            const tabSx = {
+              minHeight: 40,
+              mb: 1,
+              borderBottom: `1px solid ${cv.border}`,
+              '& .MuiTab-root': {
+                minHeight: 40,
+                py: 1,
+                px: 0,
+                mr: 4,
+                fontSize: '0.9375rem',
+                fontWeight: 600,
+                color: cv.textSecondary,
+                textTransform: 'none',
+                minWidth: 'auto',
+              },
+              '& .Mui-selected': {
+                color: `${cv.textPrimary} !important`,
+              },
+              '& .MuiTabs-indicator': {
+                backgroundColor: cv.brandBlue,
+                height: 3,
+                borderRadius: '3px 3px 0 0',
+              },
+            };
+
+            const renderGrid = (items: typeof displayedItems) => (
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: '1fr',
+                    sm: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  },
+                  gap: { xs: 2, sm: 2.5 },
+                }}
+              >
+                {items.map((item) => renderMediaItem(item))}
+              </Box>
+            );
+
+            const renderList = (items: typeof displayedItems) => (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {items.map((item) => renderMediaItem(item))}
+              </Box>
+            );
+
+            const activeItems = sharedTab === 'with_me' ? sharedWithMe : sharedByMe;
+
+            return (
+              <>
+                <Tabs value={sharedTab} onChange={handleSharedTabChange} sx={tabSx}>
+                  <Tab value="with_me" label={`Shared With Me (${sharedWithMe.length})`} />
+                  <Tab value="by_me" label={`Shared By Me (${sharedByMe.length})`} />
+                </Tabs>
+                <Box>
+                  {activeItems.length === 0 ? (
+                    <Box
+                      sx={{
+                        borderRadius: '12px',
+                        border: `1px dashed ${cv.border}`,
+                        backgroundColor: cv.surface,
+                        px: 2,
+                        py: 5,
+                        textAlign: 'center',
+                      }}
+                    >
+                      <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted }}>
+                        {sharedTab === 'with_me' 
+                          ? 'No items shared with you.' 
+                          : "You haven't shared any items."}
+                      </Typography>
+                    </Box>
+                  ) : viewMode === 'list' ? (
+                    renderList(activeItems)
+                  ) : (
+                    renderGrid(activeItems)
+                  )}
+                </Box>
+              </>
+            );
+          })()}
         </Box>
       ) : viewMode === 'folder' ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>

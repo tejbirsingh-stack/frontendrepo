@@ -298,25 +298,37 @@ export default function DeletionRequestsPage() {
     }
   };
 
-  const handleRestore = (id: string) =>
+  const handleRestore = (id: string, isProject?: boolean) =>
     runAction(id, async () => {
-      try {
-        await apiClient.post(`/media/${id}/restore`);
-      } catch {
-        await apiClient.post(`/media/${id}/reject`);
+      if (isProject) {
+        await apiClient.post(`/workspaces/project/restore/${id}`);
+      } else {
+        try {
+          await apiClient.post(`/media/${id}/restore`);
+        } catch {
+          await apiClient.post(`/media/${id}/reject`);
+        }
+        restoreFromTrashBulk([id]);
       }
-      restoreFromTrashBulk([id]);
     });
 
-  const handleEscalateDelete = (id: string) =>
-    runAction(id, () => apiClient.post(`/media/${id}/admin-approve`));
-
-  const handlePermanentDelete = (id: string) =>
+  const handleEscalateDelete = (id: string, isProject?: boolean) =>
     runAction(id, async () => {
-      try {
-        await apiClient.post(`/media/${id}/permanent-delete`);
-      } catch {
-        await apiClient.delete(`/media/${id}`);
+      if (!isProject) {
+        await apiClient.post(`/media/${id}/admin-approve`);
+      }
+    });
+
+  const handlePermanentDelete = (id: string, isProject?: boolean) =>
+    runAction(id, async () => {
+      if (isProject) {
+        await apiClient.post(`/workspaces/project/delete/${id}`);
+      } else {
+        try {
+          await apiClient.post(`/media/${id}/permanent-delete`);
+        } catch {
+          await apiClient.delete(`/media/${id}`);
+        }
       }
     });
 
@@ -333,7 +345,7 @@ export default function DeletionRequestsPage() {
     return (
       <Box
         key={item.id}
-        onClick={() => navigate(`/media/${item.id}`)}
+        onClick={() => !item.isProject && navigate(`/media/${item.id}`)}
         sx={{
           display: 'flex',
           alignItems: { xs: 'flex-start', md: 'center' },
@@ -343,7 +355,7 @@ export default function DeletionRequestsPage() {
           borderRadius: '12px',
           backgroundColor: cv.surface,
           border: `1px solid ${cv.border}`,
-          cursor: 'pointer',
+          cursor: item.isProject ? 'default' : 'pointer',
           transition: 'background-color 0.15s ease',
           '&:hover': { backgroundColor: cv.surfaceHover },
         }}
@@ -394,7 +406,7 @@ export default function DeletionRequestsPage() {
               variant="outlined"
               startIcon={<RestoreOutlinedIcon />}
               disabled={isBusy}
-              onClick={() => void handleRestore(item.id)}
+              onClick={() => void handleRestore(item.id, item.isProject)}
               sx={{
                 textTransform: 'none',
                 borderRadius: '10px',
@@ -415,7 +427,7 @@ export default function DeletionRequestsPage() {
                 variant="contained"
                 startIcon={<DeleteOutlineOutlinedIcon />}
                 disabled={isBusy}
-                onClick={() => void handleEscalateDelete(item.id)}
+                onClick={() => void handleEscalateDelete(item.id, item.isProject)}
                 sx={{
                   textTransform: 'none',
                   borderRadius: '10px',
@@ -437,7 +449,7 @@ export default function DeletionRequestsPage() {
                 variant="contained"
                 startIcon={<DeleteOutlineOutlinedIcon />}
                 disabled={isBusy || !isHardDeleteAllowed}
-                onClick={() => void handlePermanentDelete(item.id)}
+                onClick={() => void handlePermanentDelete(item.id, item.isProject)}
                 sx={{
                   textTransform: 'none',
                   borderRadius: '10px',

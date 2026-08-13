@@ -178,17 +178,40 @@ import { getMediaAssetByIdRequest, updateAssetTagsRequest, updateAssetReviewStat
 import { fetchUserGroups } from '../api/userGroups.service';
 import type { MediaItem, MediaType } from '../data/mockMedia';
 
+function parseAccessLevelToRole(val?: string): 'Admin' | 'Editor' | 'Viewer' {
+  if (!val) return 'Viewer';
+  const str = val.trim();
+  if (
+    str === '10f1fe4a-f28f-4d76-a7c2-6175dfe04c9b' ||
+    str === 'FULL_ACCESS' ||
+    str.toLowerCase() === 'full access' ||
+    str.toLowerCase() === 'full_access' ||
+    str === 'Admin'
+  ) {
+    return 'Admin';
+  }
+  if (
+    str === 'd321a6c5-c28a-4dc4-900e-4dc57fe276bf' ||
+    str === 'CAN_EDIT' ||
+    str.toLowerCase() === 'can edit' ||
+    str.toLowerCase() === 'can_edit' ||
+    str === 'Editor'
+  ) {
+    return 'Editor';
+  }
+  return 'Viewer';
+}
+
+function parseAccessLevelToTitle(val?: string): WorkspaceMemberAccess {
+  const role = parseAccessLevelToRole(val);
+  if (role === 'Admin') return 'Full Access';
+  if (role === 'Editor') return 'Can edit';
+  return 'Can view';
+}
+
 function collaboratorsToTeamMembers(collaborators: MediaCollaborator[]): WorkspaceTeamMember[] {
   return collaborators.map((collaborator) => {
-    // Map the backend role to the frontend dropdown options
-    let access: WorkspaceMemberAccess = 'Full Access';
-    if (collaborator.role) {
-      const normalizedRole = collaborator.role.toLowerCase();
-      if (normalizedRole.includes('viewer')) access = 'Can view';
-      else if (normalizedRole.includes('collaborator')) access = 'Can edit';
-      else if (normalizedRole.includes('editor')) access = 'Can edit';
-    }
-
+    const access = parseAccessLevelToTitle(collaborator.role);
     return {
       id: collaborator.id,
       name: collaborator.name,
@@ -559,29 +582,51 @@ export default function VideoPlayerPage({
   );
   const [collaborators, setCollaborators] = useState<MediaCollaborator[]>([]);
   const [orgUsersList, setOrgUsersList] = useState<SettingsUserRow[]>([]);
+  const currentUserCollab = useMemo(() => {
+    return collaborators.find((c) => c.isCurrentUser || (c.email && user?.email && c.email.toLowerCase() === user.email.toLowerCase()));
+  }, [collaborators, user?.email]);
+
   const isAssetAdmin = useMemo(() => {
     if (isGuestMode) return false;
-    const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
     if (currentUserCollab?.role === 'Admin') return true;
     if (item?.uploadedByUserId === user?.id || item?.uploadedBy?.id === user?.id) return true;
-    if (isSharedWithUser) return false;
-    return user?.role === 'Super Admin' || user?.role === 'Admin';
-  }, [isGuestMode, collaborators, isSharedWithUser, user, item?.uploadedByUserId, item?.uploadedBy?.id]);
+    if (user?.role === 'Super Admin' || user?.role === 'Admin') return true;
+    return false;
+  }, [isGuestMode, currentUserCollab, user, item?.uploadedByUserId, item?.uploadedBy?.id]);
+
+  const isAssetEditor = useMemo(() => {
+    if (isGuestMode) return false;
+    if (isAssetAdmin) return true;
+    return currentUserCollab?.role === 'Editor';
+  }, [isGuestMode, isAssetAdmin, currentUserCollab]);
 
   const isViewer = useMemo(() => {
-    if (isAssetAdmin) return false;
     if (isGuestMode) {
       return !guestPermissions?.comment;
     }
-    const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
-    const isAssetViewer = currentUserCollab?.role === 'Viewer';
-    return isAssetViewer || !user?.permissions?.includes('timeline_annotations');
-  }, [isGuestMode, guestPermissions?.comment, collaborators, user?.permissions, isAssetAdmin]);
+    if (isAssetAdmin || isAssetEditor) return false;
+    if (currentUserCollab?.role === 'Viewer') return true;
+    const rawRole = (user?.role || user?.roleRelation?.name || '').trim().toLowerCase();
+    if (rawRole === 'admin' || rawRole === 'super admin' || rawRole === 'editor') return false;
+    return true;
+  }, [isGuestMode, guestPermissions?.comment, currentUserCollab, isAssetAdmin, isAssetEditor, user]);
 
-  const canDownloadOriginal = isAssetAdmin;
-  const canShare = isAssetAdmin;
+  const canDownloadOriginal = isGuestMode
+    ? Boolean(guestPermissions?.download)
+    : (isAssetAdmin || isAssetEditor || !isViewer);
+
+  const canShare = isGuestMode ? false : (isAssetAdmin || isAssetEditor);
 
   const triggerMediaDownload = useCallback((variant: 'original' | 'proxy') => {
+    if (isGuestMode && shareToken) {
+      const a = document.createElement('a');
+      a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${shareToken}/stream?download=true`;
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
     if (!item?.id) return;
     const a = document.createElement('a');
     a.href =
@@ -592,7 +637,7 @@ export default function VideoPlayerPage({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  }, [item?.id]);
+  }, [isGuestMode, shareToken, item?.id]);
 
   const originalDownloadSizeLabel = useMemo(() => {
     const bytes = Number((item as any)?.file_size ?? item?.sizeBytes ?? (item as any)?.size ?? 0);
@@ -608,26 +653,35 @@ export default function VideoPlayerPage({
     return bytes > 0 ? formatFileSize(bytes) : '—';
   }, [item]);
 
-  const canDownloadProxy = Boolean(
-    item?.type === 'video' || item?.type === 'audio'
-      ? item?.hasProxy ||
-        Number(item?.proxySizeBytes || (item?.customMetadata as any)?.proxySize || 0) > 0 ||
-        (item?.compressionStatus === 'completed' || item?.compressionStatus === 'active')
-      : false,
-  );
+  const canDownloadProxy = isGuestMode
+    ? Boolean(guestPermissions?.downloadProxy || guestPermissions?.download)
+    : Boolean(
+        item?.type === 'video' || item?.type === 'audio'
+          ? item?.hasProxy ||
+            Number(item?.proxySizeBytes || (item?.customMetadata as any)?.proxySize || 0) > 0 ||
+            (item?.compressionStatus === 'completed' || item?.compressionStatus === 'active')
+          : false,
+      );
 
-  const canEditReviewStatus = !isGuestMode && (isAssetAdmin || !isViewer);
+  const canEditReviewStatus = !isGuestMode && (isAssetAdmin || isAssetEditor || !isViewer);
 
   const headerPermissions = useMemo(() => {
-    const rawRole = (user?.role || user?.roleRelation?.name || '').trim().toLowerCase();
-    const isViewerRole = isViewer || rawRole === 'viewer' || rawRole === 'guest';
+    if (isGuestMode) {
+      return {
+        canShare: false,
+        canFavorite: false,
+        canDownload: Boolean(guestPermissions?.download || guestPermissions?.downloadProxy),
+        canViewTechnicalDetails: true,
+      };
+    }
+    const hasEditOrAdminAccess = isAssetAdmin || isAssetEditor || !isViewer;
     return {
-      canShare: (canShare || isAssetAdmin) && (!isViewerRole || isAssetAdmin) && !isGuestMode,
-      canFavorite: (!isViewerRole || isAssetAdmin) && !isGuestMode,
-      canDownload: (canDownloadOriginal || isAssetAdmin) && (!isViewerRole || isAssetAdmin) && !isGuestMode,
-      canViewTechnicalDetails: !isViewerRole || isAssetAdmin,
+      canShare: hasEditOrAdminAccess,
+      canFavorite: true,
+      canDownload: hasEditOrAdminAccess,
+      canViewTechnicalDetails: true,
     };
-  }, [isViewer, user, isGuestMode, canDownloadOriginal, canShare, isAssetAdmin]);
+  }, [isGuestMode, guestPermissions, isAssetAdmin, isAssetEditor, isViewer]);
   const [comments, setComments] = useState<VideoComment[]>([]);
   const [drawings, setDrawings] = useState<VideoDrawingStroke[]>([]);
   const [shapes, setShapes] = useState<VideoShape[]>([]);
@@ -1695,7 +1749,6 @@ export default function VideoPlayerPage({
       setShareLinks(links || []);
     });
   }, [mediaId]);
-
   useEffect(() => {
     if (!mediaId) {
       setCollaborators([]);
@@ -1703,100 +1756,120 @@ export default function VideoPlayerPage({
     }
     const fetchOrgUsers = async () => {
       try {
-        const [users, overridesData] = await Promise.all([
-          fetchOrganizationUsers(),
+        const [usersResult, overridesData] = await Promise.all([
+          fetchOrganizationUsers().catch(() => []),
           getAssetAccessOverrides(mediaId).catch(() => ({ overrides: [], groupOverrides: [] }))
         ]);
 
-        const { overrides = [], groupOverrides = [] } = overridesData as { overrides: any[], groupOverrides: any[] };
+        const users = Array.isArray(usersResult) ? usersResult : [];
+        const { overrides = [], groupOverrides = [] } = (overridesData || {}) as { overrides: any[], groupOverrides: any[] };
 
-        if (users && users.length > 0) {
-          const activeUsers = users.filter((u) => u.status?.toLowerCase() === 'active');
-          const mapped: MediaCollaborator[] = activeUsers.map((u) => {
-            const displayName = u.name || u.email.split('@')[0] || 'User';
-            const initials = displayName
-              .split(/\s+/)
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((part) => part[0]?.toUpperCase() ?? '')
-              .join('') || u.email[0]?.toUpperCase() || 'U';
+        // Ensure current user is in baseUsers list even if fetchOrganizationUsers didn't return them
+        let baseUsers = [...users];
+        if (user && !baseUsers.some((u) => u.id === user.id || (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase()))) {
+          baseUsers.push({
+            id: user.id,
+            name: user.name || user.email?.split('@')[0] || 'User',
+            email: user.email,
+            role: user.role,
+            roleRelation: user.roleRelation,
+            status: 'active',
+          } as any);
+        }
 
-            // Check if there is an explicit role override for this asset
-            const override = overrides.find((o) => o.userId === u.id);
-            let finalRole = u.role || u.roleRelation?.name;
-            let hasAnyOverride = false;
+        // Also add any user IDs from overrides if missing
+        overrides.forEach((ov: any) => {
+          if (ov.userId && !baseUsers.some((u) => u.id === ov.userId)) {
+            baseUsers.push({
+              id: ov.userId,
+              name: 'User',
+              email: '',
+              role: 'Viewer',
+              status: 'active',
+            } as any);
+          }
+        });
 
-            if (override && override.accessLevel) {
-              hasAnyOverride = true;
-              if (override.accessLevel === 'Can edit') {
-                finalRole = 'Editor';
-              } else if (override.accessLevel === 'Can view') {
-                finalRole = 'Viewer';
-              } else if (override.accessLevel === 'Full Access') {
+        const mapped: MediaCollaborator[] = baseUsers.map((u) => {
+          const displayName = u.name || u.email?.split('@')[0] || 'User';
+          const initials = displayName
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part[0]?.toUpperCase() ?? '')
+            .join('') || u.email?.[0]?.toUpperCase() || 'U';
+
+          // Check if there is an explicit role override for this asset
+          const override = overrides.find((o: any) => o.userId === u.id);
+          let finalRole = u.role || u.roleRelation?.name;
+          let hasAnyOverride = false;
+
+          if (override && override.accessLevel) {
+            hasAnyOverride = true;
+            finalRole = parseAccessLevelToRole(override.accessLevel);
+          } else {
+            // Check if user is in any shared groups and find the most permissive access level
+            const userGroups = groupOverrides.filter((go: any) =>
+              go.group?.members?.some((m: any) => m.userId === u.id)
+            );
+
+            if (userGroups.length > 0) {
+              const roles = userGroups.map((go: any) => parseAccessLevelToRole(go.accessLevel));
+              if (roles.includes('Admin')) {
                 finalRole = 'Admin';
-              }
-            } else {
-              // Check if user is in any shared groups and find the most permissive access level
-              const userGroups = groupOverrides.filter((go) =>
-                go.group?.members?.some((m: any) => m.userId === u.id)
-              );
-
-              if (userGroups.length > 0) {
-                const accessLevels = userGroups.map(go => go.accessLevel);
-                if (accessLevels.includes('Full Access')) {
-                  finalRole = 'Admin';
-                } else if (accessLevels.includes('Can edit')) {
-                  finalRole = 'Editor';
-                } else if (accessLevels.includes('Can view')) {
-                  finalRole = 'Viewer';
-                }
+                hasAnyOverride = true;
+              } else if (roles.includes('Editor')) {
+                finalRole = 'Editor';
+                hasAnyOverride = true;
+              } else if (roles.includes('Viewer')) {
+                finalRole = 'Viewer';
+                hasAnyOverride = true;
               }
             }
+          }
 
-            return {
-              id: u.id,
-              name: displayName,
-              email: u.email,
-              initials,
-              isCurrentUser: u.email === user?.email,
-              hasOverride: hasAnyOverride,
-              role: finalRole,
-            };
-          });
-          // Also map group overrides
-          const groupCollaborators: MediaCollaborator[] = groupOverrides.map(go => {
-            const groupName = go.group?.name || 'Group';
-            let finalRole = 'Viewer';
-            if (go.accessLevel === 'Can edit') finalRole = 'Editor';
-            else if (go.accessLevel === 'Full Access') finalRole = 'Admin';
+          const isCurrUser = Boolean(
+            (user?.email && u.email && u.email.toLowerCase() === user.email.toLowerCase()) ||
+            (user?.id && u.id && u.id === user.id)
+          );
 
-            return {
-              id: go.group?.id || go.groupId,
-              name: groupName,
-              initials: groupName.substring(0, 2).toUpperCase(),
-              isCurrentUser: false,
-              hasOverride: true,
-              role: finalRole,
-              groupId: go.group?.id || go.groupId
-            };
-          });
+          return {
+            id: u.id,
+            name: displayName,
+            email: u.email || '',
+            initials,
+            isCurrentUser: isCurrUser,
+            hasOverride: hasAnyOverride,
+            role: finalRole,
+          };
+        });
 
-          setCollaborators([...mapped, ...groupCollaborators]);
+        // Map group overrides
+        const groupCollaborators: MediaCollaborator[] = groupOverrides.map((go: any) => {
+          const groupName = go.group?.name || 'Group';
+          const finalRole = parseAccessLevelToRole(go.accessLevel);
 
-          // Map real org users to SettingsUserRow[] for the share invite dropdown
+          return {
+            id: go.group?.id || go.groupId,
+            name: groupName,
+            initials: groupName.substring(0, 2).toUpperCase(),
+            isCurrentUser: false,
+            hasOverride: true,
+            role: finalRole,
+            groupId: go.group?.id || go.groupId,
+          };
+        });
+
+        setCollaborators([...mapped, ...groupCollaborators]);
+
+        // Map real org users to SettingsUserRow[] for the share invite dropdown
+        if (users.length > 0) {
           const userRows: SettingsUserRow[] = users.map((u) => {
-            const displayName = u.name || u.email.split('@')[0] || 'User';
-            const initials = displayName
-              .split(/\s+/)
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((part: string) => part[0]?.toUpperCase() ?? '')
-              .join('') || u.email[0]?.toUpperCase() || 'U';
+            const displayName = u.name || u.email?.split('@')[0] || 'User';
             const roleName = (u.roleRelation?.name || u.role || 'Collaborator') as SettingsUserRow['role'];
             return {
               id: u.id,
               name: displayName,
-              initials,
               email: u.email,
               lastActive: u.lastActiveAt || u.lastLoginAt || 'Never',
               joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—',
@@ -1804,21 +1877,18 @@ export default function VideoPlayerPage({
               roleId: u.roleId,
               roleRelation: u.roleRelation,
               status: (u.status?.toLowerCase() === 'active' ? 'Active' : 'Pending') as 'Active' | 'Pending',
-              isCurrentUser: u.email === user?.email,
+              isCurrentUser: Boolean(user?.email && u.email && u.email.toLowerCase() === user.email.toLowerCase()) || u.id === user?.id,
               isOrganizationMember: true,
             };
           });
           setOrgUsersList(userRows);
-        } else {
-          setCollaborators(loadMediaCollaborators(mediaId));
         }
       } catch (err) {
         console.error('Failed to fetch organization users for collaborators:', err);
-        setCollaborators(loadMediaCollaborators(mediaId));
       }
     };
     fetchOrgUsers();
-  }, [mediaId, user?.email]);
+  }, [mediaId, user?.email, user?.id]);
 
   useEffect(() => {
     if (!mediaId) return;
@@ -3006,12 +3076,15 @@ export default function VideoPlayerPage({
 
   const handleShareUpdateMemberAccess = useCallback(
     async (memberId: string, access: WorkspaceMemberAccess) => {
-      const member = shareTeamMembers.find(m => m.id === memberId);
+      const member = shareTeamMembers.find((m) => m.id === memberId);
+      const newRole = parseAccessLevelToRole(access);
+      const titleAccess = parseAccessLevelToTitle(access);
+
       setShareTeamMembers((current) =>
-        current.map((m) => (m.id === memberId ? { ...m, access } : m)),
+        current.map((m) => (m.id === memberId ? { ...m, access: titleAccess, hasOverride: true } : m)),
       );
       setCollaborators((current) =>
-        current.map((c) => (c.id === memberId ? { ...c, role: access === 'Can edit' ? 'Editor' : 'Viewer' } : c))
+        current.map((c) => (c.id === memberId ? { ...c, role: newRole, hasOverride: true } : c)),
       );
 
       if (!mediaId) return;
@@ -3830,284 +3903,251 @@ export default function VideoPlayerPage({
             </>
           ) : null}
 
-          {isGuestMode ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {(guestPermissions.download || guestPermissions.downloadProxy) && shareToken ? (
-                <Button
-                  variant="contained"
-                  size="small"
-                  startIcon={<FileDownloadOutlinedIcon />}
-                  component="a"
-                  href={`/api/share/${shareToken}/stream?download=true`}
-                  download
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    borderRadius: '10px',
-                    background: cv.brandGradient,
-                    color: '#fff',
-                    minHeight: 36,
-                    px: 2,
-                  }}
-                >
-                  Download
-                </Button>
-              ) : null}
-            </Box>
-          ) : (
+          {headerPermissions.canDownload && (
             <>
-              {item?.id && headerPermissions.canDownload && (
-                <>
-                  <Tooltip
-                    title={
-                      canDownloadOriginal
-                        ? 'Download'
-                        : 'Viewer role does not have permission to download'
-                    }
-                    arrow
-                    placement="bottom"
-                  >
-                    <Box sx={{ display: 'inline-flex' }}>
-                      <IconButton
-                        type="button"
-                        disabled={!canDownloadOriginal}
-                        size="small"
-                        aria-label="Download"
-                        aria-haspopup="menu"
-                        aria-expanded={downloadMenuOpen}
-                        aria-controls={downloadMenuOpen ? 'header-download-menu' : undefined}
-                        onClick={(e) => {
-                          if (!canDownloadOriginal) return;
-                          setDownloadMenuAnchor(e.currentTarget);
-                        }}
-                        sx={{
-                          width: 'auto',
-                          minWidth: 36,
-                          height: 36,
-                          px: 0.75,
-                          gap: 0.15,
-                          borderRadius: '10px',
-                          color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
-                          border: `1px solid ${cv.border}`,
-                          backgroundColor: cv.surface,
-                          '&:hover': canDownloadOriginal
-                            ? {
-                              backgroundColor: cv.surfaceHover,
-                              borderColor: cv.borderStrong,
-                            }
-                            : {},
-                          '&.Mui-disabled': {
-                            opacity: 0.5,
-                            color: cv.textMuted,
-                          },
-                        }}
-                      >
-                        <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
-                        <KeyboardArrowDownIcon sx={{ fontSize: 16, ml: -0.25 }} />
-                      </IconButton>
-                    </Box>
-                  </Tooltip>
-
-                  <Menu
-                    id="header-download-menu"
-                    anchorEl={downloadMenuAnchor}
-                    open={downloadMenuOpen}
-                    onClose={() => setDownloadMenuAnchor(null)}
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                    transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-                    slotProps={{
-                      paper: {
-                        sx: {
-                          mt: 1,
-                          minWidth: 260,
-                          borderRadius: '12px',
-                          border: `1px solid ${cv.border}`,
-                          background: cv.drawerSurface,
-                          boxShadow: cv.dropdownShadow || cv.popoverShadow,
-                          color: cv.textPrimary,
-                          py: 0.5,
-                        },
-                      },
-                    }}
-                  >
-                    <MenuItem
-                      disabled={!canDownloadOriginal}
-                      onClick={() => {
-                        setDownloadMenuAnchor(null);
-                        triggerMediaDownload('original');
-                      }}
-                      sx={{
-                        fontSize: '0.875rem',
-                        py: 1.1,
-                        px: 1.75,
-                        gap: 1.25,
-                        minHeight: 44,
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
-                        <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="Download Original"
-                        primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
-                      />
-                      <Typography
-                        component="span"
-                        sx={{
-                          ml: 2,
-                          fontSize: '0.75rem',
-                          color: cv.textMuted,
-                          fontVariantNumeric: 'tabular-nums',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {originalDownloadSizeLabel}
-                      </Typography>
-                    </MenuItem>
-                    <MenuItem
-                      disabled={!canDownloadOriginal || !canDownloadProxy}
-                      onClick={() => {
-                        setDownloadMenuAnchor(null);
-                        triggerMediaDownload('proxy');
-                      }}
-                      sx={{
-                        fontSize: '0.875rem',
-                        py: 1.1,
-                        px: 1.75,
-                        gap: 1.25,
-                        minHeight: 44,
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
-                        <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="Download Proxy"
-                        primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
-                      />
-                      <Typography
-                        component="span"
-                        sx={{
-                          ml: 2,
-                          fontSize: '0.75rem',
-                          color: cv.textMuted,
-                          fontVariantNumeric: 'tabular-nums',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {canDownloadProxy ? proxyDownloadSizeLabel : '—'}
-                      </Typography>
-                    </MenuItem>
-                  </Menu>
-                </>
-              )}
-
-              {item?.id && !isGuestMode && (
-                <Tooltip title="Copy asset link" arrow placement="bottom">
+              <Tooltip
+                title="Download"
+                arrow
+                placement="bottom"
+              >
+                <Box sx={{ display: 'inline-flex' }}>
                   <IconButton
                     type="button"
                     size="small"
-                    aria-label="Copy asset link"
-                    onClick={handleCopyAssetLink}
+                    aria-label="Download"
+                    aria-haspopup="menu"
+                    aria-expanded={downloadMenuOpen}
+                    aria-controls={downloadMenuOpen ? 'header-download-menu' : undefined}
+                    onClick={(e) => {
+                      if (!canDownloadOriginal) return;
+                      setDownloadMenuAnchor(e.currentTarget);
+                    }}
                     sx={{
+                      width: 'auto',
+                      minWidth: 36,
+                      height: 36,
+                      px: 0.75,
+                      gap: 0.15,
+                      borderRadius: '10px',
+                      color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
+                      border: `1px solid ${cv.border}`,
+                      backgroundColor: cv.surface,
+                      '&:hover': canDownloadOriginal
+                        ? {
+                            backgroundColor: cv.surfaceHover,
+                            borderColor: cv.borderStrong,
+                          }
+                        : {},
+                      '&.Mui-disabled': {
+                        opacity: 0.5,
+                        color: cv.textMuted,
+                      },
+                    }}
+                  >
+                    <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
+                    <KeyboardArrowDownIcon sx={{ fontSize: 16, ml: -0.25 }} />
+                  </IconButton>
+                </Box>
+              </Tooltip>
+
+              <Menu
+                id="header-download-menu"
+                anchorEl={downloadMenuAnchor}
+                open={downloadMenuOpen}
+                onClose={() => setDownloadMenuAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                slotProps={{
+                  paper: {
+                    sx: {
+                      mt: 1,
+                      minWidth: 260,
+                      borderRadius: '12px',
+                      border: `1px solid ${cv.border}`,
+                      background: cv.drawerSurface,
+                      boxShadow: cv.dropdownShadow || cv.popoverShadow,
+                      color: cv.textPrimary,
+                      py: 0.5,
+                    },
+                  },
+                }}
+              >
+                <MenuItem
+                  disabled={!canDownloadOriginal}
+                  onClick={() => {
+                    setDownloadMenuAnchor(null);
+                    triggerMediaDownload('original');
+                  }}
+                  sx={{
+                    fontSize: '0.875rem',
+                    py: 1.1,
+                    px: 1.75,
+                    gap: 1.25,
+                    minHeight: 44,
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                    <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Download Original"
+                    primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                  />
+                  <Typography
+                    component="span"
+                    sx={{
+                      ml: 2,
+                      fontSize: '0.75rem',
+                      color: cv.textMuted,
+                      fontVariantNumeric: 'tabular-nums',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {originalDownloadSizeLabel}
+                  </Typography>
+                </MenuItem>
+                <MenuItem
+                  disabled={!canDownloadOriginal || !canDownloadProxy}
+                  onClick={() => {
+                    setDownloadMenuAnchor(null);
+                    triggerMediaDownload('proxy');
+                  }}
+                  sx={{
+                    fontSize: '0.875rem',
+                    py: 1.1,
+                    px: 1.75,
+                    gap: 1.25,
+                    minHeight: 44,
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                    <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Download Proxy"
+                    primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                  />
+                  <Typography
+                    component="span"
+                    sx={{
+                      ml: 2,
+                      fontSize: '0.75rem',
+                      color: cv.textMuted,
+                      fontVariantNumeric: 'tabular-nums',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {canDownloadProxy ? proxyDownloadSizeLabel : '—'}
+                  </Typography>
+                </MenuItem>
+              </Menu>
+            </>
+          )}
+
+          {item?.id && !isGuestMode && (
+            <Tooltip title="Copy asset link" arrow placement="bottom">
+              <IconButton
+                type="button"
+                size="small"
+                aria-label="Copy asset link"
+                onClick={handleCopyAssetLink}
+                sx={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: '10px',
+                  color: cv.textPrimary,
+                  border: `1px solid ${cv.border}`,
+                  backgroundColor: cv.surface,
+                  '&:hover': {
+                    backgroundColor: cv.surfaceHover,
+                    borderColor: cv.borderStrong,
+                  },
+                }}
+              >
+                <ContentCopyOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+
+          {canShare && (
+            <PeopleCollaboratorsPopover
+              collaborators={collaborators}
+              onCollaboratorsChange={setCollaborators}
+              onInvited={(name) =>
+                setStatusToast({
+                  open: true,
+                  message: `Invite sent to ${name}`,
+                  variant: 'resolved',
+                })
+              }
+            />
+          )}
+
+          {headerPermissions.canShare && (() => {
+            const assetMediaType = item?.type || 'video';
+            const shareControlLabel = assetMediaType === 'image' ? 'Share image' : assetMediaType === 'audio' ? 'Share audio' : 'Share video';
+            return (
+              <Tooltip title={shareControlLabel} arrow placement="bottom">
+                <Box sx={{ display: 'inline-flex' }}>
+                  <IconButton
+                    type="button"
+                    size="small"
+                    aria-haspopup="dialog"
+                    aria-expanded={shareDialogOpen}
+                    aria-label={shareControlLabel}
+                    onClick={handleOpenShareDialog}
+                    sx={{
+                      display: { xs: 'inline-flex', lg: 'none' },
                       width: 36,
                       height: 36,
                       borderRadius: '10px',
                       color: cv.textPrimary,
-                      border: `1px solid ${cv.border}`,
-                      backgroundColor: cv.surface,
+                      background: cv.brandGradient,
+                      boxShadow: cv.brandShadowSoft,
                       '&:hover': {
-                        backgroundColor: cv.surfaceHover,
-                        borderColor: cv.borderStrong,
+                        background: cv.brandGradient,
+                        filter: 'brightness(1.08)',
                       },
                     }}
                   >
-                    <ContentCopyOutlinedIcon sx={{ fontSize: 18 }} />
+                    <ShareOutlinedIcon sx={{ fontSize: 18 }} />
                   </IconButton>
-                </Tooltip>
-              )}
+                  <Button
+                    type="button"
+                    size="small"
+                    variant="contained"
+                    aria-haspopup="dialog"
+                    aria-expanded={shareDialogOpen}
+                    startIcon={<ShareOutlinedIcon sx={{ fontSize: 16 }} />}
+                    onClick={handleOpenShareDialog}
+                    sx={{
+                      display: { xs: 'none', lg: 'inline-flex' },
+                      minHeight: 36,
+                      height: 36,
+                      py: 0,
+                      px: 1.5,
+                      borderRadius: '10px',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.8125rem',
+                      letterSpacing: '0.01em',
+                      color: cv.textPrimary,
+                      background: cv.brandGradient,
+                      boxShadow: cv.brandShadowSoft,
+                      '&:hover': {
+                        background: cv.brandGradient,
+                        filter: 'brightness(1.08)',
+                      },
+                    }}
+                  >
+                    Share
+                  </Button>
+                </Box>
+              </Tooltip>
+            );
+          })()}
 
-              {canShare && (
-                <PeopleCollaboratorsPopover
-                  collaborators={collaborators}
-                  onCollaboratorsChange={setCollaborators}
-                  onInvited={(name) =>
-                    setStatusToast({
-                      open: true,
-                      message: `Invite sent to ${name}`,
-                      variant: 'resolved',
-                    })
-                  }
-                />
-              )}
-
-              {headerPermissions.canShare && (() => {
-                const assetMediaType = item?.type || 'video';
-                const shareControlLabel = assetMediaType === 'image' ? 'Share image' : assetMediaType === 'audio' ? 'Share audio' : 'Share video';
-                return (
-                  <Tooltip title={shareControlLabel} arrow placement="bottom">
-                    <Box sx={{ display: 'inline-flex' }}>
-                      <IconButton
-                        type="button"
-                        size="small"
-                        aria-haspopup="dialog"
-                        aria-expanded={shareDialogOpen}
-                        aria-label={shareControlLabel}
-                        onClick={handleOpenShareDialog}
-                        sx={{
-                          display: { xs: 'inline-flex', lg: 'none' },
-                          width: 36,
-                          height: 36,
-                          borderRadius: '10px',
-                          color: cv.textPrimary,
-                          background: cv.brandGradient,
-                          boxShadow: cv.brandShadowSoft,
-                          '&:hover': {
-                            background: cv.brandGradient,
-                            filter: 'brightness(1.08)',
-                          },
-                        }}
-                      >
-                        <ShareOutlinedIcon sx={{ fontSize: 18 }} />
-                      </IconButton>
-                      <Button
-                        type="button"
-                        size="small"
-                        variant="contained"
-                        aria-haspopup="dialog"
-                        aria-expanded={shareDialogOpen}
-                        startIcon={<ShareOutlinedIcon sx={{ fontSize: 16 }} />}
-                        onClick={handleOpenShareDialog}
-                        sx={{
-                          display: { xs: 'none', lg: 'inline-flex' },
-                          minHeight: 36,
-                          height: 36,
-                          py: 0,
-                          px: 1.5,
-                          borderRadius: '10px',
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          fontSize: '0.8125rem',
-                          letterSpacing: '0.01em',
-                          color: cv.textPrimary,
-                          background: cv.brandGradient,
-                          boxShadow: cv.brandShadowSoft,
-                          '&:hover': {
-                            background: cv.brandGradient,
-                            filter: 'brightness(1.08)',
-                          },
-                        }}
-                      >
-                        Share
-                      </Button>
-                    </Box>
-                  </Tooltip>
-                );
-              })()}
-            </>
-          )}
-
-          {!historyOpen ? (
+          {(!isGuestMode || guestPermissions?.comment) && !historyOpen ? (
             <Tooltip title="Show annotation history" arrow placement="bottom">
               <IconButton
                 type="button"
@@ -4530,7 +4570,9 @@ export default function VideoPlayerPage({
                   </Box>
                 ) : null}
 
-                <VideoAnnotationSurface
+                {(!isGuestMode || guestPermissions?.comment) && (
+                  <>
+                    <VideoAnnotationSurface
                   activeTool={isViewer ? 'select' : activeTool}
                   enabled={surfaceEnabled && !isViewer}
                   annotationsVisible={annotationsVisible}
@@ -4600,6 +4642,8 @@ export default function VideoPlayerPage({
                   onMoveComment={handleMoveComment}
                   onPanActionStart={handleAnnotationActionStart}
                 />
+                  </>
+                )}
               </Box>
             </Box>
 
@@ -4607,10 +4651,10 @@ export default function VideoPlayerPage({
               <VideoPlayerControls
                 videoRef={videoRef}
                 fullscreenTargetRef={videoStageRef}
-                annotationCount={history.length}
+                annotationCount={!isGuestMode || guestPermissions?.comment ? history.length : undefined}
                 annotationsVisible={annotationsVisible}
                 onToggleAnnotationsVisible={() => setAnnotationsVisible((visible) => !visible)}
-                timelineItems={timelineItems}
+                timelineItems={!isGuestMode || guestPermissions?.comment ? timelineItems : []}
                 timelineFallbackDuration={timelineFallbackDuration}
                 onAnnotationRangeChange={handleAnnotationRangeChange}
                 onAnnotationClick={handleAnnotationClick}
@@ -4815,8 +4859,9 @@ export default function VideoPlayerPage({
           </Box>
         </GlassCard>
 
-        <AnnotationHistoryDrawer
-          open={historyOpen}
+        {(!isGuestMode || guestPermissions?.comment) && (
+          <AnnotationHistoryDrawer
+            open={historyOpen}
           activeHistoryEntryId={activeHistoryEntryId}
           entries={history}
           comments={comments}
@@ -4852,6 +4897,7 @@ export default function VideoPlayerPage({
           onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
           onAddCollaborator={handleAddCollaboratorForGroup}
         />
+        )}
       </Box>
 
       <PlayerToolsDrawer

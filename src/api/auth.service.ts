@@ -1,4 +1,5 @@
 import { CURRENT_USER } from '../constants/currentUser';
+import { PERMISSIONS } from '../constants/permissions';
 import {
   findMockAuthAccount,
   mockAuthEmailExists,
@@ -98,7 +99,7 @@ export const verifyEmailRequest = async (token: string) => {
 
 export const loginWithGoogle = async (idToken: string, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => {
   const response = await axios.post(
-    `${API_BASE_URL}/auth/loging-google`,
+    `${API_BASE_URL}/auth/login-google`,
     { idToken, ...(options || {}) }
   );
 
@@ -352,6 +353,14 @@ export function mapAuthUserDtoToSessionUser(input: any) {
   const rawPlanType =
     user.organization?.planType || user.planType || user.workspace?.planType || 'free';
 
+  let permissions = user.permissions || [];
+  if (
+    (formattedRole === 'Super Admin' || formattedRole === 'SuperAdmin' || formattedRole === 'System Admin') &&
+    permissions.length === 0
+  ) {
+    permissions = Object.values(PERMISSIONS);
+  }
+
   return {
     id: user.id || 'user-id',
     name: name,
@@ -364,7 +373,7 @@ export function mapAuthUserDtoToSessionUser(input: any) {
     planType: rawPlanType,
     orgId: user.orgId || user.organization?.id,
     allowedProjectIds: user.allowedProjectIds || [],
-    permissions: user.permissions || [],
+    permissions: permissions,
     initials: user.initials || getNameInitials(name),
     avatarUrl: user.avatarUrl,
     accountName: user.accountName || (user.organization && user.organization.name) || `${name}'s Account`,

@@ -15,6 +15,15 @@ export interface AuthSessionUser {
     name?: string;
     slug?: string;
     planType?: string;
+    planExpiresAt?: string | Date;
+    maxUsers?: number;
+    maxWorkspaces?: number;
+    maxProjects?: number;
+    storageQuotaBytes?: string | number;
+    storageUsedBytes?: string | number;
+    features?: any;
+    isFreeTrialUsed?: boolean;
+    metadata?: Record<string, any>;
   };
   planType?: string;
   timezone?: string;

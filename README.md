@@ -9,11 +9,11 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173).
+Open [http://localhost:5173](http://localhost:5173)
 
 ## Demo Credentials (Local / Mock Aut)
 
-When `VITE_API_BASE_URL` is not set, the app uses mock authentication. Use these credentials to sign in:
+When `VITE_API_BASE_URL` is not set, the app uses mock authentication. Use these credentials to sign in
 
 | Field | Value |
 |:------|:------|
@@ -32,7 +32,7 @@ You can also create a new account at `/signup`. In mock mode, new users are stor
 
 Copy `.env.example` to `.env.local` and configure as needed:
 
-```env
+
 VITE_API_BASE_URL=
 VITE_APP_ORIGIN=http://localhost:5173
 VITE_API_TIMEOUT_MS=30000

@@ -47,11 +47,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
-    if (!rememberMe) {
-      setError('Please check "Remember me" to continue.');
-      return;
-    }
-
     const redirectPath =
       typeof location.state === 'object' &&
         location.state !== null &&

@@ -176,9 +176,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
       >
         {isFolder ? (
           <MenuItem
-            disabled={!user?.permissions?.includes('upload_delete_media')}
+            disabled={!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS)}
             onClick={(event) => {
-              if (!user?.permissions?.includes('upload_delete_media')) return;
+              if (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS)) return;
               consumeMenuPointerEvent(event);
               openColorPicker();
             }}
@@ -186,23 +186,23 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary,
-              opacity: !user?.permissions?.includes('upload_delete_media') ? 0.6 : 1,
-              cursor: !user?.permissions?.includes('upload_delete_media') ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: !user?.permissions?.includes('upload_delete_media') ? 'transparent' : cv.surfaceHover },
+              color: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? cv.textMuted : cv.textSecondary,
+              opacity: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? 0.6 : 1,
+              cursor: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <PaletteOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
+              <PaletteOutlinedIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Change color
           </MenuItem>
         ) : null}
         {!item.isProject ? (
           <MenuItem
-            disabled={!user?.permissions?.includes('upload_delete_media')}
+            disabled={!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS)}
             onClick={(event) => {
-              if (!user?.permissions?.includes('upload_delete_media')) return;
+              if (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS)) return;
               consumeMenuPointerEvent(event);
               openMove();
             }}
@@ -210,14 +210,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary,
-              opacity: !user?.permissions?.includes('upload_delete_media') ? 0.6 : 1,
-              cursor: !user?.permissions?.includes('upload_delete_media') ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: !user?.permissions?.includes('upload_delete_media') ? 'transparent' : cv.surfaceHover },
+              color: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? cv.textMuted : cv.textSecondary,
+              opacity: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? 0.6 : 1,
+              cursor: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <DriveFileMoveOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
+              <DriveFileMoveOutlinedIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Move
           </MenuItem>
@@ -271,9 +271,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           View in location
         </MenuItem>
         <MenuItem
-          disabled={!user?.permissions?.includes('upload_delete_media')}
+          disabled={!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS)}
           onClick={(event) => {
-            if (!user?.permissions?.includes('upload_delete_media')) return;
+            if (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS)) return;
             consumeMenuPointerEvent(event);
             openRename();
           }}
@@ -281,14 +281,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary,
-            opacity: !user?.permissions?.includes('upload_delete_media') ? 0.6 : 1,
-            cursor: !user?.permissions?.includes('upload_delete_media') ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: !user?.permissions?.includes('upload_delete_media') ? 'transparent' : cv.surfaceHover },
+            color: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? cv.textMuted : cv.textSecondary,
+            opacity: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? 0.6 : 1,
+            cursor: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
+            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: !hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Rename
         </MenuItem>

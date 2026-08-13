@@ -1,17 +1,25 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { cv } from '../../theme/cssVars';
 import {
+  Avatar,
   Box,
   Button,
+  Checkbox,
   Chip,
+  CircularProgress,
   FormControl,
+  FormControlLabel,
+  IconButton,
   MenuItem,
+  Paper,
   Select,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import CloseIcon from '@mui/icons-material/Close';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import MemberTypeToggle from './MemberTypeToggle';
 import {
@@ -24,8 +32,7 @@ import {
 } from '../../data/mockSettingsData';
 import { selectInDialogMenuProps } from '../../constants/dropdownMenu';
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ACCESS_OPTIONS: WorkspaceMemberAccess[] = ['Full Access', 'Can edit', 'Can view'];
+// Dynamic options fetched from API
 
 const dialogSelectSx = {
   borderRadius: '10px',
@@ -35,6 +42,14 @@ const dialogSelectSx = {
   '& .MuiOutlinedInput-notchedOutline': { borderColor: cv.border },
   '& .MuiSelect-select': { py: 0.75 },
 };
+
+export interface GuestUserSuggestion {
+  id: string;
+  name: string;
+  email: string;
+  orgName?: string | null;
+  avatarUrl?: string | null;
+}
 
 interface InvitePeopleFieldsProps {
   emails: string[];
@@ -49,6 +64,9 @@ interface InvitePeopleFieldsProps {
   onAccessChange?: (access: WorkspaceMemberAccess) => void;
   suggestedUsers?: SettingsUserRow[];
   suggestedGroups?: SettingsUserGroup[];
+  onGuestSearch?: (query: string) => Promise<GuestUserSuggestion[]>;
+  sendInviteEmail?: boolean;
+  onSendInviteEmailChange?: (send: boolean) => void;
 }
 
 export default function InvitePeopleFields({
@@ -64,50 +82,114 @@ export default function InvitePeopleFields({
   onAccessChange,
   suggestedUsers = [],
   suggestedGroups = MOCK_SETTINGS_USER_GROUPS,
+  onGuestSearch,
+  sendInviteEmail = false,
+  onSendInviteEmailChange,
 }: InvitePeopleFieldsProps) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
+  const [guestSuggestions, setGuestSuggestions] = useState<GuestUserSuggestion[]>([]);
+  const [isGuestSearching, setIsGuestSearching] = useState(false);
+  const guestSearchTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const [accessOptions, setAccessOptions] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchAccessLevels = async () => {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await (apiClient as any).get('/workspaces/access-levels', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = Array.isArray(res) ? res : res?.data || res;
+        if (Array.isArray(data)) {
+          setAccessOptions(data);
+          if (data.length > 0 && typeof onAccessChange === 'function') {
+             // Find 'FULL_ACCESS' ID if exists, otherwise first one
+             const fullAccess = data.find((d: any) => d.name === 'FULL_ACCESS');
+             onAccessChange(fullAccess ? fullAccess.id : data[0].id);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch access levels:', err);
+      }
+    };
+    if (showAccessControls) {
+      fetchAccessLevels();
+    }
+  }, [showAccessControls]);
 
   const isGroupMode = memberType === 'Group';
+  const isGuestMode = memberType === 'Guest';
+  const isMemberMode = memberType === 'Member';
 
+  // Debounced guest search when in Guest mode
+  useEffect(() => {
+    if (!isGuestMode || !onGuestSearch) { setGuestSuggestions([]); return; }
+    const q = input.trim();
+    if (q.length < 2) { setGuestSuggestions([]); return; }
+    if (guestSearchTimer.current) clearTimeout(guestSearchTimer.current);
+    guestSearchTimer.current = setTimeout(async () => {
+      setIsGuestSearching(true);
+      try {
+        const results = await onGuestSearch(q);
+        const selectedEmails = new Set(emails.map(e => e.toLowerCase()));
+        setGuestSuggestions(results.filter(u => !selectedEmails.has(u.email.toLowerCase())));
+      } catch {
+        setGuestSuggestions([]);
+      } finally {
+        setIsGuestSearching(false);
+      }
+    }, 300);
+    return () => { if (guestSearchTimer.current) clearTimeout(guestSearchTimer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input, isGuestMode]);
+
+  // User suggestions shown only in Member mode
   const userSuggestions = useMemo(() => {
+    if (!isMemberMode) return [];
     const normalized = input.trim().toLowerCase();
+    if (!normalized) return [];
     const selectedEmails = new Set(emails.map((email) => email.toLowerCase()));
     return suggestedUsers
-      .filter((user) => !selectedEmails.has(user.email.toLowerCase()))
-      .filter((user) => {
-        if (!normalized) return true;
-        return (
-          user.name.toLowerCase().includes(normalized) ||
-          user.email.toLowerCase().includes(normalized)
-        );
-      })
-      .slice(0, 4);
-  }, [emails, input, suggestedUsers]);
+      .filter((user) => !selectedEmails.has(String(user.email || '').toLowerCase()))
+      .filter((user) =>
+        String(user.name || '').toLowerCase().includes(normalized) ||
+        String(user.email || '').toLowerCase().includes(normalized)
+      )
+      .slice(0, 5);
+  }, [emails, input, suggestedUsers, isMemberMode]);
 
+  // Group suggestions shown only in Group mode
   const groupSuggestions = useMemo(() => {
+    if (!isGroupMode) return [];
     const normalized = input.trim().toLowerCase();
     const selectedIds = new Set(groupIds);
     return suggestedGroups
       .filter((group) => !selectedIds.has(group.id))
       .filter((group) => {
         if (!normalized) return true;
-        return group.name.toLowerCase().includes(normalized);
+        return String(group.name || '').toLowerCase().includes(normalized);
       })
-      .slice(0, 4);
-  }, [groupIds, input, suggestedGroups]);
+      .slice(0, 5);
+  }, [groupIds, input, suggestedGroups, isGroupMode]);
 
-  const handleAdd = () => {
+  const handleAdd = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed) {
-      setError(isGroupMode ? 'Enter a group name' : 'Enter a name or email address');
+      if (isGroupMode) setError('Enter a group name');
+      else if (isMemberMode) setError('Select a member from suggestions');
+      else setError('Enter an email address');
       return;
     }
 
+    // GROUP mode: must match an existing group
     if (isGroupMode) {
       const group = findUserGroupByName(trimmed, suggestedGroups);
       if (!group) {
-        setError('Select an existing group or pick a suggestion below.');
+        setError('Select an existing group from the suggestions.');
         return;
       }
       if (groupIds.includes(group.id)) {
@@ -120,27 +202,62 @@ export default function InvitePeopleFields({
       return;
     }
 
-    const emailMatch = trimmed.match(EMAIL_PATTERN);
-    const suggested = suggestedUsers.find(
-      (user) =>
-        user.email.toLowerCase() === trimmed.toLowerCase() ||
-        user.name.toLowerCase() === trimmed.toLowerCase(),
-    );
-    const email = emailMatch ? trimmed.toLowerCase() : suggested?.email;
-
-    if (!email || !EMAIL_PATTERN.test(email)) {
-      setError('Enter a valid email or select a suggested person.');
+    // Guest mode: validate via backend API
+    if (isGuestMode) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmed)) {
+        setError('Enter a valid email address to invite a Guest.');
+        return;
+      }
+      if (emails.some((entry) => entry.toLowerCase() === trimmed.toLowerCase())) {
+        setError('This email has already been added');
+        return;
+      }
+      setIsValidating(true);
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await (apiClient as any).get(
+          `/workspaces/validate-guest?email=${encodeURIComponent(trimmed)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = (res as any).data ?? res;
+        if (!data.valid) {
+          setError(data.reason || 'This email cannot be invited as a Guest.');
+          return;
+        }
+        onChange([...emails, trimmed]);
+        setInput('');
+        setError('');
+      } catch {
+        setError('Could not validate this email. Please try again.');
+      } finally {
+        setIsValidating(false);
+      }
       return;
     }
+
+    // Member mode: must already exist in org suggestions
+    const suggested = suggestedUsers.find(
+      (user) =>
+        String(user.email || '').toLowerCase() === trimmed.toLowerCase() ||
+        String(user.name || '').toLowerCase() === trimmed.toLowerCase(),
+    );
+
+    if (!suggested) {
+      setError('User not found in your organization. You can only invite organization members.');
+      return;
+    }
+
+    const email = suggested.email;
     if (emails.some((entry) => entry.toLowerCase() === email.toLowerCase())) {
       setError('This email has already been added');
       return;
     }
-
     onChange([...emails, email]);
     setInput('');
     setError('');
-  };
+  }, [input, isGroupMode, isMemberMode, isGuestMode, suggestedGroups, groupIds, onGroupIdsChange, emails, onChange, suggestedUsers]);
 
   const handleRemoveEmail = (emailToRemove: string) => {
     onChange(emails.filter((email) => email !== emailToRemove));
@@ -153,15 +270,15 @@ export default function InvitePeopleFields({
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      handleAdd();
+      void handleAdd();
     }
   };
 
-  const inputLabel = isGroupMode ? 'Group name' : 'Name or email';
-  const inputPlaceholder = isGroupMode ? 'e.g. Creative Team' : 'name@company.com';
+  const inputLabel = isGroupMode ? 'Group name' : isMemberMode ? 'Member name or email' : 'Guest email';
+  const inputPlaceholder = isGroupMode ? 'e.g. Creative Team' : isMemberMode ? 'Search members...' : 'user@othercompany.com';
 
   return (
-    <Box>
+    <Box sx={{ position: 'relative' }}>
       <Typography
         variant="caption"
         sx={{
@@ -204,8 +321,13 @@ export default function InvitePeopleFields({
           <Button
             type="button"
             variant="outlined"
-            onClick={handleAdd}
-            startIcon={<AddIcon sx={{ fontSize: 18 }} />}
+            onClick={() => void handleAdd()}
+            disabled={isValidating || isGuestSearching}
+            startIcon={
+              isValidating || isGuestSearching
+                ? <CircularProgress size={16} color="inherit" />
+                : <AddIcon sx={{ fontSize: 18 }} />
+            }
             sx={{
               mt: 0.25,
               flexShrink: 0,
@@ -218,7 +340,7 @@ export default function InvitePeopleFields({
               '&:hover': { borderColor: cv.borderFocus, backgroundColor: cv.surfaceHover },
             }}
           >
-            Add
+            {isValidating || isGuestSearching ? 'Validating...' : 'Add'}
           </Button>
         </Box>
 
@@ -250,168 +372,304 @@ export default function InvitePeopleFields({
                 MenuProps={selectInDialogMenuProps}
                 sx={dialogSelectSx}
               >
-                {ACCESS_OPTIONS.map((option) => (
-                  <MenuItem key={option} value={option} sx={{ fontSize: '0.875rem' }}>
-                    {option}
+                {accessOptions.map((option) => (
+                  <MenuItem key={option.id} value={option.id} sx={{ fontSize: '0.875rem' }}>
+                    {option.title || option.name}
                   </MenuItem>
                 ))}
               </Select>
             </FormControl>
           </Box>
         ) : null}
-      </Box>
 
-      {!isGroupMode && userSuggestions.length > 0 && input.trim() ? (
-        <Box sx={{ mt: 1.25 }}>
-          <Typography
-            sx={{
-              fontSize: '0.6875rem',
-              fontWeight: 600,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              color: cv.textMuted,
-              mb: 0.75,
-            }}
-          >
-            Suggested
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            {userSuggestions.map((user) => (
-              <Box
-                key={user.id}
-                component="button"
-                type="button"
-                onClick={() => {
-                  setInput(user.email);
-                  setError('');
-                }}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  width: '100%',
-                  border: 'none',
-                  borderRadius: '10px',
-                  px: 1,
-                  py: 0.75,
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  backgroundColor: 'transparent',
-                  '&:hover': { backgroundColor: cv.surfaceHover },
-                }}
-              >
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary }}>
-                  {user.name}
-                </Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>{user.email}</Typography>
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      ) : null}
-
-      {isGroupMode && groupSuggestions.length > 0 && input.trim() ? (
-        <Box sx={{ mt: 1.25 }}>
-          <Typography
-            sx={{
-              fontSize: '0.6875rem',
-              fontWeight: 600,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              color: cv.textMuted,
-              mb: 0.75,
-            }}
-          >
-            Suggested groups
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            {groupSuggestions.map((group) => (
-              <Box
-                key={group.id}
-                component="button"
-                type="button"
-                onClick={() => {
-                  setInput(group.name);
-                  setError('');
-                }}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  width: '100%',
-                  border: 'none',
-                  borderRadius: '10px',
-                  px: 1,
-                  py: 0.75,
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  backgroundColor: 'transparent',
-                  '&:hover': { backgroundColor: cv.surfaceHover },
-                }}
-              >
-                <GroupsOutlinedIcon sx={{ fontSize: 18, color: cv.textSecondary }} />
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary }}>
-                    {group.name}
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
-                    {group.memberIds.length} member{group.memberIds.length === 1 ? '' : 's'}
-                  </Typography>
-                </Box>
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      ) : null}
-
-      {emails.length > 0 || groupIds.length > 0 ? (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 1.5 }}>
-          {emails.map((email) => (
-            <Chip
-              key={email}
-              label={email}
-              size="small"
-              onDelete={() => handleRemoveEmail(email)}
-              sx={{
-                height: 28,
-                fontSize: '0.8125rem',
-                color: cv.textPrimary,
-                backgroundColor: cv.insetHighlight,
-                border: `1px solid ${cv.border}`,
-                '& .MuiChip-deleteIcon': {
-                  color: cv.textMuted,
-                  '&:hover': { color: cv.textPrimary },
-                },
-              }}
-            />
-          ))}
-          {groupIds.map((groupId) => {
-            const group = suggestedGroups.find((entry) => entry.id === groupId);
-            return (
-              <Chip
-                key={groupId}
-                icon={<GroupsOutlinedIcon sx={{ fontSize: '16px !important' }} />}
-                label={group?.name ?? groupId}
+        <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={sendInviteEmail}
+                onChange={(e) => onSendInviteEmailChange?.(e.target.checked)}
                 size="small"
-                onDelete={() => handleRemoveGroup(groupId)}
                 sx={{
-                  height: 28,
-                  fontSize: '0.8125rem',
-                  color: cv.textPrimary,
-                  backgroundColor: cv.indigoSurface,
-                  border: `1px solid ${cv.border}`,
-                  '& .MuiChip-deleteIcon': {
-                    color: cv.textMuted,
-                    '&:hover': { color: cv.textPrimary },
+                  color: cv.textMuted,
+                  p: 0.5,
+                  mr: 0.5,
+                  '&.Mui-checked': {
+                    color: cv.brandMain,
                   },
                 }}
               />
-            );
-          })}
+            }
+            label={
+              <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary }}>
+                Send invitation email
+              </Typography>
+            }
+            sx={{ ml: 0, mr: 0, userSelect: 'none' }}
+          />
+        </Box>
+      </Box>
+
+      {/* Floating Suggestions Dropdown */}
+      {input.trim() && (
+        (isMemberMode && userSuggestions.length > 0) ||
+        (isGroupMode && groupSuggestions.length > 0)
+      ) ? (
+        <Paper
+          elevation={8}
+          sx={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            mt: 0.5,
+            zIndex: 1400,
+            maxHeight: 220,
+            overflowY: 'auto',
+            bgcolor: cv.elevatedSurface,
+            borderRadius: '10px',
+            border: `1px solid ${cv.border}`,
+            boxShadow: cv.popoverShadow,
+            p: 0.75,
+          }}
+        >
+          {isMemberMode && userSuggestions.length > 0 ? (
+            <Box>
+              <Typography
+                sx={{
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: cv.textMuted,
+                  mb: 0.75,
+                  px: 1,
+                }}
+              >
+                Suggested
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {userSuggestions.map((user) => (
+                  <Box
+                    key={user.id}
+                    component="button"
+                    type="button"
+                    onClick={() => {
+                      const email = user.email.toLowerCase();
+                      if (!emails.some((e) => e.toLowerCase() === email)) {
+                        onChange([...emails, email]);
+                      }
+                      setInput('');
+                      setError('');
+                    }}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      width: '100%',
+                      border: 'none',
+                      borderRadius: '8px',
+                      px: 1,
+                      py: 1,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      backgroundColor: 'transparent',
+                      '&:hover': { backgroundColor: cv.surfaceHover },
+                    }}
+                  >
+                    <Avatar sx={{ width: 32, height: 32, fontSize: '0.875rem', bgcolor: cv.brandMain, color: '#fff' }}>
+                      {user.name ? user.name[0]?.toUpperCase() : user.email[0]?.toUpperCase()}
+                    </Avatar>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {user.name}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {user.email}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          ) : null}
+
+          {isGroupMode && groupSuggestions.length > 0 ? (
+            <Box>
+              <Typography
+                sx={{
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: cv.textMuted,
+                  mb: 0.75,
+                  px: 1,
+                }}
+              >
+                Suggested groups
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {groupSuggestions.map((group) => (
+                  <Box
+                    key={group.id}
+                    component="button"
+                    type="button"
+                    onClick={() => {
+                      if (!groupIds.includes(group.id)) {
+                        onGroupIdsChange?.([...groupIds, group.id]);
+                      }
+                      setInput('');
+                      setError('');
+                    }}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      width: '100%',
+                      border: 'none',
+                      borderRadius: '8px',
+                      px: 1,
+                      py: 1,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      backgroundColor: 'transparent',
+                      '&:hover': { backgroundColor: cv.surfaceHover },
+                    }}
+                  >
+                    <Avatar sx={{ width: 32, height: 32, bgcolor: cv.surfaceHighlight, color: cv.textSecondary }}>
+                      <GroupsOutlinedIcon sx={{ fontSize: 20 }} />
+                    </Avatar>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {group.name}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25, lineHeight: 1.2 }}>
+                        {group.memberIds.length} member{group.memberIds.length === 1 ? '' : 's'}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          ) : null}
+        </Paper>
+      ) : null}
+
+      {/* Direct Access list (added emails + groups) */}
+      {(emails.length > 0 || groupIds.length > 0) ? (
+        <Box sx={{ mt: 1.75 }}>
+          <Typography
+            sx={{
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: cv.textMuted,
+              mb: 0.75,
+            }}
+          >
+            Direct Access
+          </Typography>
+          <Box
+            sx={{
+              borderRadius: '10px',
+              border: `1px solid ${cv.border}`,
+              overflow: 'hidden',
+              maxHeight: 116,
+              overflowY: 'auto',
+            }}
+          >
+            {emails.map((email, idx) => {
+              const user = suggestedUsers.find(
+                (u) => u.email.toLowerCase() === email.toLowerCase()
+              );
+              const displayName = user?.name || email.split('@')[0];
+              const initials = displayName[0]?.toUpperCase() || 'U';
+              return (
+                <Box
+                  key={email}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    px: 1.5,
+                    py: 1,
+                    borderBottom: idx < emails.length - 1 || groupIds.length > 0 ? `1px solid ${cv.border}` : 'none',
+                    '&:hover': { backgroundColor: cv.surfaceHover },
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  <Avatar sx={{ width: 30, height: 30, fontSize: '0.8rem', bgcolor: cv.brandMain, color: '#fff', flexShrink: 0 }}>
+                    {initials}
+                  </Avatar>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {displayName}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {email}
+                    </Typography>
+                  </Box>
+                  <Tooltip title="Remove">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleRemoveEmail(email)}
+                      sx={{ color: cv.textMuted, '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceActive } }}
+                    >
+                      <CloseIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              );
+            })}
+            {groupIds.map((groupId, idx) => {
+              const group = suggestedGroups.find((entry) => entry.id === groupId);
+              return (
+                <Box
+                  key={groupId}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    px: 1.5,
+                    py: 1,
+                    borderBottom: idx < groupIds.length - 1 ? `1px solid ${cv.border}` : 'none',
+                    '&:hover': { backgroundColor: cv.surfaceHover },
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  <Avatar sx={{ width: 30, height: 30, bgcolor: cv.indigoSurface, color: cv.textSecondary, flexShrink: 0 }}>
+                    <GroupsOutlinedIcon sx={{ fontSize: 18 }} />
+                  </Avatar>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {group?.name ?? groupId}
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, lineHeight: 1.2 }}>
+                      {group ? `${group.memberIds.length} member${group.memberIds.length === 1 ? '' : 's'}` : 'Group'}
+                    </Typography>
+                  </Box>
+                  <Tooltip title="Remove">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleRemoveGroup(groupId)}
+                      sx={{ color: cv.textMuted, '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceActive } }}
+                    >
+                      <CloseIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              );
+            })}
+          </Box>
         </Box>
       ) : null}
 
-      {description ? (
+      {memberType === 'Guest' ? (
+        <Typography sx={{ mt: 1.25, fontSize: '0.8125rem', color: cv.textSecondary }}>
+          Enter the email of an active user from <strong>another organization</strong>. They must already have an account in the system.
+        </Typography>
+      ) : description ? (
         <Typography sx={{ mt: 1.25, fontSize: '0.8125rem', color: cv.textSecondary }}>
           {description}
         </Typography>

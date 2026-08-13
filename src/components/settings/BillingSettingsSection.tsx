@@ -20,6 +20,8 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import SettingsAdminToolbar from './SettingsAdminToolbar';
 import SettingsDataTable, { type SettingsTableColumn } from './SettingsDataTable';
 import TruncatedText from '../TruncatedText';
+import { useAuth } from '../../auth/AuthContext';
+import { getDynamicPlanDetails } from '../../utils/planHelper';
 import {
   MOCK_BILLING_DETAILS,
   MOCK_BILLING_INVOICES,
@@ -157,7 +159,8 @@ function DetailField({ label, value }: { label: string; value: string }) {
 }
 
 function BillingOverviewTab() {
-  const plan = MOCK_CURRENT_PLAN;
+  const { user } = useAuth();
+  const plan = useMemo(() => getDynamicPlanDetails(user), [user]);
   const billing = MOCK_BILLING_DETAILS;
   const paymentConfig = MOCK_PAYMENT_INVOICE_CONFIG;
   const cardSummary = formatPaymentMethod(billing.paymentMethod);
@@ -188,25 +191,25 @@ function BillingOverviewTab() {
             CURRENT SUBSCRIPTION
           </Typography>
           <Typography sx={{ mt: 0.75, fontSize: '1.375rem', fontWeight: 600, color: cv.textPrimary }}>
-            {billing.plan}
+            {plan.planName}
           </Typography>
           <Box sx={{ mt: 1.25, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
             <Box>
               <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>Next charge</Typography>
               <Typography sx={{ mt: 0.25, fontSize: '0.9375rem', fontWeight: 600, color: cv.textPrimary }}>
-                {billing.nextBillingDate} · {billing.amount}
+                {plan.expiryDateFormatted} · {plan.total}
               </Typography>
             </Box>
             <Box>
               <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>Billing cycle</Typography>
               <Typography sx={{ mt: 0.25, fontSize: '0.9375rem', fontWeight: 600, color: cv.textPrimary }}>
-                {billing.billingCycle}
+                {plan.billingTermLabel}
               </Typography>
             </Box>
             <Box>
-              <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>Trial ends</Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>Subscription expiry</Typography>
               <Typography sx={{ mt: 0.25, fontSize: '0.9375rem', fontWeight: 600, color: cv.textPrimary }}>
-                {plan.freeTrialExpiry}
+                {plan.expiryDateFormatted}
               </Typography>
             </Box>
           </Box>

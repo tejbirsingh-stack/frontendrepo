@@ -61,6 +61,7 @@ export interface WorkspaceInvitePayload {
   memberType: WorkspaceMemberType;
   access: WorkspaceMemberAccess;
   message?: string;
+  sendInviteEmail?: boolean;
 }
 
 export interface BillingPaymentMethod {
@@ -796,7 +797,7 @@ export function findUserGroupByName(
   groups: SettingsUserGroup[] = MOCK_SETTINGS_USER_GROUPS,
 ): SettingsUserGroup | undefined {
   const normalized = name.trim().toLowerCase();
-  return groups.find((group) => group.name.toLowerCase() === normalized);
+  return groups.find((group) => String(group.name || '').toLowerCase() === normalized);
 }
 
 export function resolveWorkspaceInvite(

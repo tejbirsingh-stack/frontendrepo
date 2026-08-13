@@ -56,6 +56,8 @@ import AddSidebarItemModal, { type SidebarItemMode } from './AddSidebarItemModal
 import CreateWorkspaceModal, { type CreateWorkspaceFormData } from './CreateWorkspaceModal';
 import RenameMediaModal from './RenameMediaModal';
 import TrashConfirmModal from './TrashConfirmModal';
+import toast from 'react-hot-toast';
+import { getUsageSummary } from '../../api/usage.service';
 import UploadPanel from './UploadPanel';
 import GlobalSearchField from './GlobalSearchField';
 import type { MediaItem, MediaType, SidebarFolder } from '../../data/mockMedia';
@@ -1192,6 +1194,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     clearSidebarSelection,
     fetchFolderData,
     fetchProjectData,
+    hasWorkspacePermission,
   } = useDashboard();
 
   const [fileSearch, setFileSearch] = useState('');
@@ -1395,8 +1398,15 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     setColorPickerWorkspaceId(null);
   };
 
-  const openCreateModal = () => {
+  const openCreateModal = async () => {
     closeWorkspaceMenu();
+    try {
+      const summary = await getUsageSummary();
+      if (summary.workspacesTotal != null && summary.workspacesCount >= summary.workspacesTotal) {
+        toast.error(`Workspace limit (${summary.workspacesTotal}) reached for your current plan. Please upgrade to create more workspaces.`);
+        return;
+      }
+    } catch (e) {}
     setCreateModalOpen(true);
   };
 
@@ -1783,23 +1793,23 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
           })}
           <Divider sx={{ my: 0.5, borderColor: cv.border }} />
           <MenuItem
-            disabled={!user?.permissions?.includes('manage_root_folders')}
+            disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)}
             onClick={() => {
-              if (!user?.permissions?.includes('manage_root_folders')) return;
+              if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
               openCreateModal();
             }}
             sx={{
               py: 1,
               px: 1.5,
               fontSize: '0.875rem',
-              color: !user?.permissions?.includes('manage_root_folders') ? cv.textMuted : cv.textSecondary,
-              opacity: !user?.permissions?.includes('manage_root_folders') ? 0.6 : 1,
-              cursor: !user?.permissions?.includes('manage_root_folders') ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: !user?.permissions?.includes('manage_root_folders') ? 'transparent' : cv.surfaceHover },
+              color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
+              opacity: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+              cursor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 28 }}>
-              <WorkspacesOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('manage_root_folders') ? cv.textMuted : cv.textSecondary }} />
+              <WorkspacesOutlinedIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Create new workspace
           </MenuItem>
@@ -1882,9 +1892,16 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
             }}
           />
           <Box
-            onDragOver={(event) => {
+            onDragOver={async (event) => {
               if (!event.dataTransfer.types.includes('Files')) return;
               event.preventDefault();
+              try {
+                const summary = await getUsageSummary();
+                if (summary.storageWarningLevel === 'exceeded' || summary.storageUsedBytes >= summary.storageQuotaBytes) {
+                  toast.error('Storage limit reached — Uploads are blocked until you free space or upgrade your plan.');
+                  return;
+                }
+              } catch (e) {}
               setUploadPanelOpen(true);
             }}
           >
@@ -1892,7 +1909,17 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
               icon={<UploadOutlinedIcon />}
               label="Upload"
               active={uploadPanelOpen}
-              onClick={() => setUploadPanelOpen((open) => !open)}
+              onClick={async () => {
+                try {
+                  const summary = await getUsageSummary();
+                  if (summary.storageWarningLevel === 'exceeded' || summary.storageUsedBytes >= summary.storageQuotaBytes) {
+                    toast.error('Storage limit reached — Uploads are blocked until you free space or upgrade your plan.');
+                    setUploadPanelOpen(false);
+                    return;
+                  }
+                } catch (e) {}
+                setUploadPanelOpen((open) => !open);
+              }}
             />
           </Box>
         </List>
@@ -2060,42 +2087,42 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         }}
       >
         <MenuItem
-          disabled={!user?.permissions?.includes('manage_root_folders')}
+          disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)}
           onClick={() => {
-            if (!user?.permissions?.includes('manage_root_folders')) return;
+            if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
             openAddItemModal('folder');
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: !user?.permissions?.includes('manage_root_folders') ? cv.textMuted : cv.textSecondary,
-            opacity: !user?.permissions?.includes('manage_root_folders') ? 0.6 : 1,
-            cursor: !user?.permissions?.includes('manage_root_folders') ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: !user?.permissions?.includes('manage_root_folders') ? 'transparent' : cv.surfaceHover },
+            color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
+            opacity: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+            cursor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <FolderOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('manage_root_folders') ? cv.textMuted : cv.textSecondary }} />
+            <FolderOutlinedIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           New folder
         </MenuItem>
         <MenuItem
-          disabled={!user?.permissions?.includes('upload_delete_media')}
+          disabled={!hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA)}
           onClick={() => {
-            if (!user?.permissions?.includes('upload_delete_media')) return;
+            if (!hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA)) return;
             openAddItemModal('file');
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary,
-            opacity: !user?.permissions?.includes('upload_delete_media') ? 0.6 : 1,
-            cursor: !user?.permissions?.includes('upload_delete_media') ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: !user?.permissions?.includes('upload_delete_media') ? 'transparent' : cv.surfaceHover },
+            color: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary,
+            opacity: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? 0.6 : 1,
+            cursor: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <InsertDriveFileOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
+            <InsertDriveFileOutlinedIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.UPLOAD_MEDIA) ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           New file
         </MenuItem>
@@ -2172,42 +2199,42 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
           {folderActionsTarget && favorites.has(folderActionsTarget.folderId) ? 'Remove from favorites' : 'Add to favorites'}
         </MenuItem>
         <MenuItem
-          disabled={!user?.permissions?.includes('upload_delete_media')}
+          disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)}
           onClick={() => {
-            if (!user?.permissions?.includes('upload_delete_media')) return;
+            if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
             openRenameFolder();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary,
-            opacity: !user?.permissions?.includes('upload_delete_media') ? 0.6 : 1,
-            cursor: !user?.permissions?.includes('upload_delete_media') ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: !user?.permissions?.includes('upload_delete_media') ? 'transparent' : cv.surfaceHover },
+            color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
+            opacity: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+            cursor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('upload_delete_media') ? cv.textMuted : cv.textSecondary }} />
+            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Rename
         </MenuItem>
         <MenuItem
-          disabled={!user?.permissions?.includes('manage_root_folders')}
+          disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)}
           onClick={() => {
-            if (!user?.permissions?.includes('manage_root_folders')) return;
+            if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
             openDeleteFolder();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: !user?.permissions?.includes('manage_root_folders') ? cv.textMuted : cv.destructive,
-            opacity: !user?.permissions?.includes('manage_root_folders') ? 0.6 : 1,
-            cursor: !user?.permissions?.includes('manage_root_folders') ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: !user?.permissions?.includes('manage_root_folders') ? 'transparent' : cv.destructiveHover },
+            color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.destructive,
+            opacity: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
+            cursor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.destructiveHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DeleteOutlinedIcon sx={{ fontSize: 18, color: !user?.permissions?.includes('manage_root_folders') ? cv.textMuted : cv.destructive }} />
+            <DeleteOutlinedIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.destructive }} />
           </ListItemIcon>
           Delete
         </MenuItem>

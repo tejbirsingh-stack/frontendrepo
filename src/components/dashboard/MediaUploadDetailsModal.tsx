@@ -579,29 +579,21 @@ export default function MediaUploadDetailsModal({
   const handleSubmit = async () => {
     if (!canUpload || isUploading) return;
     setIsUploading(true);
-    setUploadProgress(0);
     try {
       const trimmedSummary = summary.trim();
-      await onUpload(
-        {
-          title: title.trim(),
-          ...(trimmedSummary ? { summary: trimmedSummary } : {}),
-          ...(thumbnail ? { thumbnail } : {}),
-          tagIds: selectedTags.map((tag) => tag.id),
-          folderId: folderId || null,
-          visibility,
-          ...(duration ? { duration } : {}),
-        },
-        (progress) => {
-          if (progress.total > 0) {
-            const percent = Math.min(100, Math.round((progress.loaded / progress.total) * 100));
-            setUploadProgress(percent);
-          }
-        },
-      );
+      await onUpload({
+        title: title.trim(),
+        ...(trimmedSummary ? { summary: trimmedSummary } : {}),
+        ...(thumbnail ? { thumbnail } : {}),
+        tagIds: selectedTags.map((tag) => tag.id),
+        folderId: folderId || null,
+        visibility,
+        ...(duration ? { duration } : {}),
+      });
+    } catch (err) {
+      console.error('Failed to submit media upload details:', err);
     } finally {
       setIsUploading(false);
-      setUploadProgress(null);
     }
   };
 

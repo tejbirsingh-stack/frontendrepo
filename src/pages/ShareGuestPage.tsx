@@ -411,7 +411,58 @@ export default function ShareGuestPage() {
                   {assetMeta?.title || 'Shared Media Asset'}
                 </Typography>
 
-                {/* Download button removed to prevent downloading of watermarked videos */}
+                {(permissions.download || permissions.downloadProxy) && (
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    {permissions.download && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<DownloadOutlinedIcon />}
+                        onClick={() => {
+                          const a = document.createElement('a');
+                          a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${token}/stream?download=true`;
+                          a.download = '';
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        }}
+                        sx={{
+                          textTransform: 'none',
+                          borderRadius: '8px',
+                          color: '#f8fafc',
+                          borderColor: 'rgba(255,255,255,0.2)',
+                          '&:hover': { borderColor: 'rgba(255,255,255,0.4)', backgroundColor: 'rgba(255,255,255,0.05)' },
+                        }}
+                      >
+                        Download Original
+                      </Button>
+                    )}
+                    {permissions.downloadProxy && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<DownloadOutlinedIcon />}
+                        onClick={() => {
+                          const a = document.createElement('a');
+                          a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${token}/stream?download=true`;
+                          a.download = '';
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        }}
+                        sx={{
+                          textTransform: 'none',
+                          borderRadius: '8px',
+                          color: '#f8fafc',
+                          borderColor: 'rgba(255,255,255,0.2)',
+                          '&:hover': { borderColor: 'rgba(255,255,255,0.4)', backgroundColor: 'rgba(255,255,255,0.05)' },
+                        }}
+                      >
+                        Download Proxy
+                      </Button>
+                    )}
+                  </Box>
+                )}
               </Box>
             </Box>
 
