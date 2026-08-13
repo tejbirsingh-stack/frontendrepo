@@ -49,6 +49,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import PauseCircleOutlinedIcon from '@mui/icons-material/PauseCircleOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import SettingsAdminToolbar from './SettingsAdminToolbar';
 import SettingsTableFilterPanel from './SettingsTableFilterPanel';
 import WorkspaceTeamMembersCell from './WorkspaceTeamMembersCell';
@@ -2632,83 +2633,299 @@ export function WorkspacesAdminSettingsSection() {
       <Dialog
         open={deleteConfirmStep === 1}
         onClose={() => setDeleteConfirmStep(0)}
-        slotProps={noahDialogSlotProps()}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: cv.surfaceElevated || '#1e192b',
+            color: cv.textPrimary,
+            backgroundImage: 'none',
+            border: `1px solid ${cv.border || 'rgba(255, 255, 255, 0.12)'}`,
+            borderRadius: '20px',
+            boxShadow: '0 24px 64px rgba(0, 0, 0, 0.6)',
+            p: 1,
+          },
+        }}
       >
-        <DialogTitle sx={{ color: cv.textPrimary, fontWeight: 600 }}>Delete Workspace</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ color: cv.textPrimary, fontSize: '0.9375rem', fontWeight: 500, mb: 1 }}>
+        <Box sx={{ p: 2, position: 'relative' }}>
+          <IconButton
+            onClick={() => setDeleteConfirmStep(0)}
+            sx={{
+              position: 'absolute',
+              right: 12,
+              top: 12,
+              color: cv.textMuted || 'rgba(255, 255, 255, 0.4)',
+              '&:hover': { color: cv.textPrimary || '#ffffff', bgcolor: 'rgba(255, 255, 255, 0.08)' },
+            }}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+
+          {/* Top Red Circular Icon Badge */}
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1, mb: 2 }}>
+            <Box
+              sx={{
+                width: 60,
+                height: 60,
+                borderRadius: '50%',
+                bgcolor: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.28)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 0 20px rgba(239, 68, 68, 0.18)',
+              }}
+            >
+              <DeleteOutlineOutlinedIcon sx={{ fontSize: 30, color: cv.destructive || '#ef4444' }} />
+            </Box>
+          </Box>
+
+          <Typography
+            variant="h6"
+            align="center"
+            sx={{ fontWeight: 700, fontSize: '1.2rem', color: cv.textPrimary, mb: 1, px: 2 }}
+          >
             Are you sure you want to delete this workspace?
           </Typography>
+
           {targetWorkspaces.length > 0 && (
-            <Typography sx={{ color: cv.textSecondary, fontSize: '0.875rem' }}>
-              Workspace: <strong>{targetWorkspaces.map(w => w.workspace).join(', ')}</strong>
+            <Typography
+              variant="body2"
+              align="center"
+              sx={{ color: cv.textSecondary, fontSize: '0.9rem', mb: 2.5 }}
+            >
+              Workspace: <strong style={{ color: cv.textPrimary }}>{targetWorkspaces.map(w => w.workspace).join(', ')}</strong>
             </Typography>
           )}
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0 }}>
-          <Button onClick={() => setDeleteConfirmStep(0)} sx={{ color: cv.textSecondary }}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => setDeleteConfirmStep(2)}
-            variant="contained"
-            sx={containedButtonSx}
+
+          {/* Option Card Box */}
+          <Box
+            sx={{
+              p: 2.5,
+              borderRadius: '14px',
+              bgcolor: 'rgba(168, 85, 247, 0.05)',
+              border: `1px solid ${cv.border || 'rgba(168, 85, 247, 0.3)'}`,
+              display: 'flex',
+              gap: 1.5,
+              mb: 3,
+            }}
           >
-            Yes
-          </Button>
-        </DialogActions>
+            <Box
+              sx={{
+                width: 30,
+                height: 30,
+                borderRadius: '50%',
+                border: '1px solid rgba(168, 85, 247, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                mt: 0.25,
+                color: cv.brandOrchid || '#a855f7',
+              }}
+            >
+              <InfoOutlinedIcon sx={{ fontSize: 18 }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: cv.textPrimary, mb: 0.5 }}>
+                Important notice:
+              </Typography>
+              <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.6 }}>
+                Deleting this workspace will delete all projects, files, and folders contained inside it.
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Action Buttons Row */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5 }}>
+            <Button
+              variant="contained"
+              onClick={() => setDeleteConfirmStep(0)}
+              sx={{
+                borderRadius: '10px',
+                bgcolor: 'rgba(255, 255, 255, 0.08)',
+                color: cv.textPrimary || '#ffffff',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                py: 1,
+                boxShadow: 'none',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.15)', boxShadow: 'none' },
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<DeleteOutlineOutlinedIcon fontSize="small" />}
+              onClick={() => setDeleteConfirmStep(2)}
+              sx={{
+                borderRadius: '10px',
+                bgcolor: cv.destructive || '#ef4444',
+                color: cv.textOnCta || '#ffffff',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                py: 1,
+                boxShadow: 'none',
+                '&:hover': { bgcolor: cv.destructiveHover || '#dc2626', boxShadow: 'none' },
+              }}
+            >
+              Yes, Proceed
+            </Button>
+          </Box>
+        </Box>
       </Dialog>
 
       {/* Step 2 Warning Permanent Deletion Dialog */}
       <Dialog
         open={deleteConfirmStep === 2}
         onClose={() => !isDeletingWorkspace && setDeleteConfirmStep(0)}
-        slotProps={noahDialogSlotProps()}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: cv.surfaceElevated || '#1e192b',
+            color: cv.textPrimary,
+            backgroundImage: 'none',
+            border: `1px solid ${cv.border || 'rgba(255, 255, 255, 0.12)'}`,
+            borderRadius: '20px',
+            boxShadow: '0 24px 64px rgba(0, 0, 0, 0.6)',
+            p: 1,
+          },
+        }}
       >
-        <DialogTitle sx={{ color: cv.destructive || '#ef4444', display: 'flex', alignItems: 'center', gap: 1, fontWeight: 600 }}>
-          <WarningAmberOutlinedIcon sx={{ fontSize: '1.5rem', color: cv.destructive || '#ef4444' }} />
-          Warning: Permanent Deletion
-        </DialogTitle>
-        <DialogContent>
-          <Box
-            sx={{
-              p: 2,
-              borderRadius: '10px',
-              bgcolor: 'rgba(239, 68, 68, 0.08)',
-              border: `1px solid rgba(239, 68, 68, 0.25)`,
-              my: 0.5,
-            }}
-          >
-            <Typography sx={{ color: cv.textPrimary, fontSize: '0.875rem', fontWeight: 600, mb: 0.75 }}>
-              Once you delete this workspace:
-            </Typography>
-            <Typography sx={{ color: cv.textSecondary, fontSize: '0.8125rem', lineHeight: 1.6 }}>
-              All projects, files, and folders inside it cannot be restored again. It will be permanently deleted from the database and cloud storage.
-            </Typography>
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0 }}>
-          <Button
+        <Box sx={{ p: 2, position: 'relative' }}>
+          <IconButton
             disabled={isDeletingWorkspace}
             onClick={() => setDeleteConfirmStep(0)}
-            sx={{ color: cv.textSecondary }}
-          >
-            Cancel
-          </Button>
-          <Button
-            disabled={isDeletingWorkspace}
-            onClick={handlePerformPermanentDelete}
-            variant="contained"
             sx={{
-              bgcolor: cv.destructive || '#ef4444',
-              color: '#fff',
-              fontWeight: 600,
-              '&:hover': { bgcolor: cv.destructiveStrong || '#dc2626' },
+              position: 'absolute',
+              right: 12,
+              top: 12,
+              color: cv.textMuted || 'rgba(255, 255, 255, 0.4)',
+              '&:hover': { color: cv.textPrimary || '#ffffff', bgcolor: 'rgba(255, 255, 255, 0.08)' },
             }}
           >
-            {isDeletingWorkspace ? 'Deleting...' : 'Delete Permanently'}
-          </Button>
-        </DialogActions>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+
+          {/* Top Red Circular Warning Badge */}
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1, mb: 2 }}>
+            <Box
+              sx={{
+                width: 60,
+                height: 60,
+                borderRadius: '50%',
+                bgcolor: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 0 24px rgba(239, 68, 68, 0.25)',
+              }}
+            >
+              <WarningAmberOutlinedIcon sx={{ fontSize: 32, color: cv.destructive || '#ef4444' }} />
+            </Box>
+          </Box>
+
+          <Typography
+            variant="h6"
+            align="center"
+            sx={{ fontWeight: 700, fontSize: '1.2rem', color: cv.destructive || '#ef4444', mb: 1, px: 2 }}
+          >
+            Warning: Permanent Deletion
+          </Typography>
+
+          {targetWorkspaces.length > 0 && (
+            <Typography
+              variant="body2"
+              align="center"
+              sx={{ color: cv.textSecondary, fontSize: '0.9rem', mb: 2.5 }}
+            >
+              Workspace: <strong style={{ color: cv.textPrimary }}>{targetWorkspaces.map(w => w.workspace).join(', ')}</strong>
+            </Typography>
+          )}
+
+          {/* Warning Details Card */}
+          <Box
+            sx={{
+              p: 2.5,
+              borderRadius: '14px',
+              bgcolor: 'rgba(239, 68, 68, 0.08)',
+              border: `1px solid rgba(239, 68, 68, 0.28)`,
+              display: 'flex',
+              gap: 1.5,
+              mb: 3,
+            }}
+          >
+            <Box
+              sx={{
+                width: 30,
+                height: 30,
+                borderRadius: '50%',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                mt: 0.25,
+                color: cv.destructive || '#ef4444',
+              }}
+            >
+              <WarningAmberOutlinedIcon sx={{ fontSize: 18 }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary, mb: 0.5 }}>
+                Once you delete this workspace:
+              </Typography>
+              <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.6 }}>
+                All projects, files, and folders inside it cannot be restored again. It will be permanently deleted from the database and Backblaze B2 cloud storage.
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Action Buttons Row */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5 }}>
+            <Button
+              disabled={isDeletingWorkspace}
+              variant="contained"
+              onClick={() => setDeleteConfirmStep(0)}
+              sx={{
+                borderRadius: '10px',
+                bgcolor: 'rgba(255, 255, 255, 0.08)',
+                color: cv.textPrimary || '#ffffff',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                py: 1,
+                boxShadow: 'none',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.15)', boxShadow: 'none' },
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={isDeletingWorkspace}
+              variant="contained"
+              startIcon={<DeleteOutlineOutlinedIcon fontSize="small" />}
+              onClick={handlePerformPermanentDelete}
+              sx={{
+                borderRadius: '10px',
+                bgcolor: cv.destructive || '#ef4444',
+                color: cv.textOnCta || '#ffffff',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                py: 1,
+                boxShadow: 'none',
+                '&:hover': { bgcolor: cv.destructiveHover || '#dc2626', boxShadow: 'none' },
+              }}
+            >
+              {isDeletingWorkspace ? 'Deleting...' : 'Delete Permanently'}
+            </Button>
+          </Box>
+        </Box>
       </Dialog>
     </>
   );

@@ -22,6 +22,9 @@ import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import CloseIcon from '@mui/icons-material/Close';
+import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { cv } from '../../theme/cssVars';
 import { PROJECT_ACCENT_COLOR } from '../../utils/folderColorStyle';
 import { apiClient } from '../../api/client';
@@ -451,48 +454,155 @@ export default function ProjectDeleteFlowModal({
     >
       {/* STEP 1: Initial Confirmation Popup */}
       {step === 'confirm1' && (
-        <>
-          <DialogTitle sx={{ fontWeight: 600, fontSize: '1.125rem', pt: 2, pb: 1, color: cv.textPrimary }}>
-            Are you sure you want to delete all files and folders in this project?
-          </DialogTitle>
-          <DialogContent sx={{ py: 1 }}>
-            <Typography variant="body2" sx={{ color: cv.textSecondary }}>
-              Project: <strong style={{ color: cv.textPrimary }}>{projectName}</strong>
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2, pt: 1, gap: 1 }}>
+        <Box sx={{ p: 2, position: 'relative' }}>
+          <IconButton
+            onClick={onClose}
+            sx={{
+              position: 'absolute',
+              right: 12,
+              top: 12,
+              color: cv.textMuted || 'rgba(255, 255, 255, 0.4)',
+              '&:hover': { color: cv.textPrimary || '#ffffff', bgcolor: 'rgba(255, 255, 255, 0.08)' },
+            }}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+
+          {/* Top Red Circular Icon Badge */}
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1, mb: 2 }}>
+            <Box
+              sx={{
+                width: 60,
+                height: 60,
+                borderRadius: '50%',
+                bgcolor: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.28)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 0 20px rgba(239, 68, 68, 0.18)',
+              }}
+            >
+              <DeleteOutlineOutlinedIcon sx={{ fontSize: 30, color: cv.destructive || '#ef4444' }} />
+            </Box>
+          </Box>
+
+          <Typography
+            variant="h6"
+            align="center"
+            sx={{ fontWeight: 700, fontSize: '1.2rem', color: cv.textPrimary, mb: 1, px: 2 }}
+          >
+            Would you like to delete the entire project or select specific files and folders?
+          </Typography>
+
+          <Typography
+            variant="body2"
+            align="center"
+            sx={{ color: cv.textSecondary, fontSize: '0.9rem', mb: 2.5 }}
+          >
+            Project: <strong style={{ color: cv.textPrimary }}>{projectName}</strong>
+          </Typography>
+
+          {/* Option Card Box */}
+          <Box
+            sx={{
+              p: 2.5,
+              borderRadius: '14px',
+              bgcolor: 'rgba(168, 85, 247, 0.05)',
+              border: `1px solid ${cv.border || 'rgba(168, 85, 247, 0.3)'}`,
+              display: 'flex',
+              gap: 1.5,
+              mb: 3,
+            }}
+          >
+            <Box
+              sx={{
+                width: 30,
+                height: 30,
+                borderRadius: '50%',
+                border: '1px solid rgba(168, 85, 247, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                mt: 0.25,
+                color: cv.brandOrchid || '#a855f7',
+              }}
+            >
+              <InfoOutlinedIcon sx={{ fontSize: 18 }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: cv.textPrimary, mb: 0.5 }}>
+                You have two options:
+              </Typography>
+              <Box component="ul" sx={{ m: 0, pl: 2, fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.6 }}>
+                <li>
+                  <strong style={{ color: cv.textPrimary }}>Delete whole project</strong> – This will permanently delete the entire project along with all its files and folders.
+                </li>
+                <li>
+                  <strong style={{ color: cv.textPrimary }}>Select files and folder</strong> – This will allow you to choose specific files and folders to delete.
+                </li>
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Action Buttons Row */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, flexWrap: 'wrap' }}>
             <Button
               variant="contained"
-              onClick={() => setStep('confirm_whole')}
+              onClick={onClose}
               sx={{
-                borderRadius: '8px',
-                bgcolor: cv.destructive || '#ff6b6b',
-                color: cv.textOnCta || '#ffffff',
+                borderRadius: '10px',
+                bgcolor: 'rgba(255, 255, 255, 0.08)',
+                color: cv.textPrimary || '#ffffff',
                 textTransform: 'none',
                 fontWeight: 600,
                 px: 3,
-                '&:hover': { bgcolor: cv.destructiveHover || '#fa5252' },
+                py: 1,
+                boxShadow: 'none',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.15)', boxShadow: 'none' },
               }}
             >
-              Yes
+              Cancel
             </Button>
             <Button
-              variant="outlined"
-              onClick={() => setStep('select_tree')}
+              variant="contained"
+              startIcon={<DeleteOutlineOutlinedIcon fontSize="small" />}
+              onClick={() => setStep('confirm_whole')}
               sx={{
-                borderRadius: '8px',
-                borderColor: cv.borderStrong || 'rgba(255,255,255,0.15)',
-                bgcolor: cv.surfaceMuted || 'rgba(255,255,255,0.06)',
-                color: cv.textPrimary,
+                borderRadius: '10px',
+                bgcolor: cv.destructive || '#ef4444',
+                color: cv.textOnCta || '#ffffff',
                 textTransform: 'none',
-                px: 3,
-                '&:hover': { borderColor: cv.textSecondary, bgcolor: cv.surfaceHover },
+                fontWeight: 600,
+                px: 2.5,
+                py: 1,
+                boxShadow: 'none',
+                '&:hover': { bgcolor: cv.destructiveHover || '#dc2626', boxShadow: 'none' },
               }}
             >
-              No
+              Delete whole project
             </Button>
-          </DialogActions>
-        </>
+            <Button
+              variant="contained"
+              startIcon={<FolderOutlinedIcon fontSize="small" />}
+              onClick={() => setStep('select_tree')}
+              sx={{
+                borderRadius: '10px',
+                bgcolor: cv.brandOrchid || '#a855f7',
+                color: cv.textOnCta || '#ffffff',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 2.5,
+                py: 1,
+                boxShadow: 'none',
+                '&:hover': { bgcolor: cv.brandOrchidHover || '#9333ea', boxShadow: 'none' },
+              }}
+            >
+              Select files and folder
+            </Button>
+          </Box>
+        </Box>
       )}
 
       {/* STEP 2A (If Admin clicked "Yes"): Delete Whole Project Confirmation */}
