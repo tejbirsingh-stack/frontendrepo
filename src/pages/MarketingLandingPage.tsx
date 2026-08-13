@@ -16,26 +16,17 @@ import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
-import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import VerifiedUserOutlinedIcon from '@mui/icons-material/VerifiedUserOutlined';
-import GppGoodOutlinedIcon from '@mui/icons-material/GppGoodOutlined';
 import NoahLogo from '../components/NoahLogo';
+import WaveBackground from '../components/WaveBackground';
 import LandingCtaDialogs from '../components/landing/LandingCtaDialogs';
 import {
   CAPABILITIES,
-  CREAM,
-  CREAM_HOVER,
   DISPLAY_FONT,
-  FEATURES,
   FALLBACK_HERO,
   FALLBACK_PLANS,
   FRICTION,
-  INK,
   NAV_LINKS,
   PILLARS,
-  SECURITY_POINTS,
-  WORKFLOW,
 } from '../components/landing/landingContent';
 import { useAuth } from '../auth/AuthContext';
 import { useForcedDarkTheme } from '../context/ThemePreferenceContext';
@@ -68,21 +59,21 @@ function asString(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
 
-function creamButtonSx(extra?: object) {
+function primaryButtonSx(extra?: object) {
   return {
     height: 48,
     minHeight: 44,
     px: 2.75,
     borderRadius: '999px',
-    backgroundColor: CREAM,
-    color: INK,
+    background: cv.brandGradient,
+    color: cv.textOnCta,
     fontWeight: 600,
     textTransform: 'none',
     boxShadow: 'none',
-    transition: `background-color 0.28s ${EASE}, transform 0.28s ${EASE}, box-shadow 0.28s ${EASE}`,
+    transition: `background 0.28s ${EASE}, transform 0.28s ${EASE}, box-shadow 0.28s ${EASE}`,
     '&:hover': {
-      backgroundColor: CREAM_HOVER,
-      boxShadow: '0 10px 28px rgba(243, 230, 200, 0.18)',
+      background: cv.brandGradientHover,
+      boxShadow: cv.brandShadow,
       transform: 'translateY(-1px)',
     },
     ...extra,
@@ -102,8 +93,8 @@ function ghostButtonSx(extra?: object) {
     backgroundColor: 'transparent',
     transition: `background-color 0.28s ${EASE}, border-color 0.28s ${EASE}, transform 0.28s ${EASE}`,
     '&:hover': {
-      borderColor: CREAM,
-      backgroundColor: 'rgba(243, 230, 200, 0.08)',
+      borderColor: cv.brandOrchid,
+      backgroundColor: cv.purpleSurfaceHover,
       transform: 'translateY(-1px)',
     },
     ...extra,
@@ -122,16 +113,16 @@ const footerLinkButtonSx = {
   cursor: 'pointer',
   font: 'inherit',
   minHeight: 44,
-  '&:hover': { color: CREAM },
+  '&:hover': { color: cv.brandOrchid },
   transition: `color 0.22s ${EASE}`,
-  '&:focus-visible': { outline: `2px solid ${CREAM}`, outlineOffset: 2 },
+  '&:focus-visible': { outline: `2px solid ${cv.brandOrchid}`, outlineOffset: 2 },
 } as const;
 
 const cardHoverSx = {
   transition: `transform 0.4s ${EASE}, border-color 0.4s ${EASE}, box-shadow 0.4s ${EASE}`,
   '&:hover': {
     transform: 'translateY(-6px)',
-    borderColor: 'rgba(243,230,200,0.35)',
+    borderColor: cv.purpleChipBorder,
     boxShadow: '0 18px 40px rgba(0,0,0,0.28)',
   },
 } as const;
@@ -149,7 +140,7 @@ function ProductPreview() {
     { title: 'Hero_cut_v12.mov', meta: '4K · 02:14', tone: cv.brandPurple },
     { title: 'VO_final.wav', meta: 'Audio · 00:46', tone: cv.brandTeal },
     { title: 'Still_08.jpg', meta: 'RAW · 48 MP', tone: cv.brandOrchid },
-    { title: 'Brand_kit.pdf', meta: 'Document', tone: CREAM },
+    { title: 'Brand_kit.pdf', meta: 'Document', tone: cv.brandPurple },
   ];
 
   return (
@@ -228,7 +219,7 @@ function ProductPreview() {
                   border: `1px solid ${cv.border}`,
                   background: cv.surface,
                   transition: `transform 0.35s ${EASE}, border-color 0.35s ${EASE}`,
-                  '&:hover': { transform: 'translateY(-4px)', borderColor: 'rgba(243,230,200,0.3)' },
+                  '&:hover': { transform: 'translateY(-4px)', borderColor: cv.purpleChipBorder },
                 }}
               >
                 <Box
@@ -240,9 +231,9 @@ function ProductPreview() {
                   }}
                 >
                   {card.title.endsWith('.mov') ? (
-                    <PlayArrowRoundedIcon sx={{ color: CREAM }} />
+                    <PlayArrowRoundedIcon sx={{ color: cv.brandOrchid }} />
                   ) : (
-                    <FolderOutlinedIcon sx={{ color: CREAM, opacity: 0.85 }} />
+                    <FolderOutlinedIcon sx={{ color: cv.brandOrchid, opacity: 0.85 }} />
                   )}
                 </Box>
                 <Box sx={{ p: 1.1 }}>
@@ -409,8 +400,8 @@ export default function MarketingLandingPage() {
           px: 2,
           py: 1.25,
           borderRadius: '10px',
-          backgroundColor: CREAM,
-          color: INK,
+          background: cv.brandGradient,
+          color: cv.textOnCta,
           fontWeight: 700,
           '&:focus': { top: 16, outline: `3px solid ${cv.brandOrchid}` },
         }}
@@ -436,7 +427,7 @@ export default function MarketingLandingPage() {
             maxWidth: MAX,
             mx: 'auto',
             px: { xs: 2, sm: 3 },
-            height: 72,
+            height: { xs: 72, sm: 80, md: 88 },
             display: 'flex',
             alignItems: 'center',
             gap: 2,
@@ -444,15 +435,24 @@ export default function MarketingLandingPage() {
         >
           <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
             <NoahLogo
-              width={132}
-              height={36}
-              boxWidth={132}
-              objectFit="contain"
+              width={{ xs: 200, sm: 248, md: 292 }}
+              height={{ xs: 56, sm: 64, md: 72 }}
+              boxWidth={{ xs: 200, sm: 248, md: 292 }}
+              objectFit="cover"
               animated={false}
               showGlow={false}
               align="left"
               ariaLabel="NOAH Cloud home"
-              sx={{ mb: 0 }}
+              sx={{
+                mb: 0,
+                overflow: 'hidden',
+                '& img': {
+                  mixBlendMode: 'lighten',
+                  objectPosition: 'center',
+                  transform: 'scale(1)',
+                },
+                'html[data-theme="light"] & img': { mixBlendMode: 'normal' },
+              }}
             />
           </Box>
           <Box
@@ -490,7 +490,7 @@ export default function MarketingLandingPage() {
             <Button onClick={openDemo} sx={ghostButtonSx({ display: { xs: 'none', lg: 'inline-flex' }, height: 40, px: 2 })}>
               Book a demo
             </Button>
-            <Button onClick={openTrial} sx={creamButtonSx({ height: 40, px: 2 })}>
+            <Button onClick={openTrial} sx={primaryButtonSx({ height: 40, px: 2 })}>
               Start free trial
             </Button>
             <IconButton
@@ -535,7 +535,7 @@ export default function MarketingLandingPage() {
           <Button onClick={() => { closeMenu(); openDemo(); }} sx={{ ...ghostButtonSx(), mt: 1 }}>
             Book a demo
           </Button>
-          <Button onClick={() => { closeMenu(); openTrial(); }} sx={creamButtonSx()}>
+          <Button onClick={() => { closeMenu(); openTrial(); }} sx={primaryButtonSx()}>
             Start free trial
           </Button>
         </Box>
@@ -562,9 +562,9 @@ export default function MarketingLandingPage() {
                 height: 32,
                 px: 1.5,
                 borderRadius: '999px',
-                color: CREAM,
-                border: '1px solid rgba(243,230,200,0.28)',
-                background: 'rgba(243,230,200,0.06)',
+                color: cv.brandOrchid,
+                border: `1px solid ${cv.purpleChipBorder}`,
+                background: cv.purpleSurface,
                 fontWeight: 600,
                 letterSpacing: '0.04em',
                 textTransform: 'uppercase',
@@ -604,7 +604,7 @@ export default function MarketingLandingPage() {
               {heroSubtitle}
             </Typography>
             <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center', gap: 1.5, flexWrap: 'wrap', ...heroAnim(320) }}>
-              <Button onClick={openTrial} sx={creamButtonSx({ px: 3.5 })}>
+              <Button onClick={openTrial} sx={primaryButtonSx({ px: 3.5 })}>
                 Start free trial
               </Button>
               <Button onClick={openDemo} sx={ghostButtonSx({ px: 3.5 })}>
@@ -643,9 +643,9 @@ export default function MarketingLandingPage() {
           </Box>
         </Box>
 
-        <Box component="section" id="features" aria-labelledby="pillars-title" data-reveal sx={{ ...sectionPad, scrollMarginTop: '88px' }}>
+        <Box component="section" id="features" aria-labelledby="pillars-title" data-reveal sx={{ ...sectionPad, scrollMarginTop: '104px' }}>
           <Box sx={{ maxWidth: MAX, mx: 'auto' }}>
-            <Typography sx={{ color: CREAM, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '0.75rem', mb: 1.5 }}>
+            <Typography sx={{ color: cv.brandOrchid, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '0.75rem', mb: 1.5 }}>
               Built as one platform
             </Typography>
             <Typography
@@ -664,24 +664,16 @@ export default function MarketingLandingPage() {
                     borderRadius: '20px',
                     border: `1px solid ${cv.border}`,
                     background: cv.surface,
-                    minHeight: 320,
                     ...cardHoverSx,
                   }}
                 >
-                  <Typography sx={{ color: CREAM, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  <Typography sx={{ color: cv.brandOrchid, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                     {pillar.kicker}
                   </Typography>
                   <Typography component="h3" sx={{ mt: 1.25, fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
                     {pillar.title}
                   </Typography>
                   <Typography sx={{ mt: 1.25, color: cv.textSecondary, fontSize: '0.9375rem', lineHeight: 1.6 }}>{pillar.body}</Typography>
-                  <Box component="ul" sx={{ mt: 2, pl: 2.2, m: 0 }}>
-                    {pillar.points.map((point) => (
-                      <Box component="li" key={point} sx={{ color: cv.textSecondary, fontSize: '0.875rem', mb: 0.75, lineHeight: 1.45 }}>
-                        {point}
-                      </Box>
-                    ))}
-                  </Box>
                 </Box>
               ))}
             </Box>
@@ -715,15 +707,15 @@ export default function MarketingLandingPage() {
                 sx={{
                   p: { xs: 2.5, md: 3.5 },
                   borderRadius: '20px',
-                  border: `1px solid rgba(243,230,200,0.28)`,
-                  background: 'linear-gradient(180deg, rgba(243,230,200,0.08), rgba(18,18,18,0.4))',
+                  border: `1px solid ${cv.purpleChipBorder}`,
+                  background: `linear-gradient(180deg, ${cv.purpleSurfaceHover}, rgba(18,18,18,0.4))`,
                 }}
               >
-                <Typography sx={{ fontWeight: 700, mb: 2, color: CREAM }}>With NOAH Cloud</Typography>
+                <Typography sx={{ fontWeight: 700, mb: 2, color: cv.brandOrchid }}>With NOAH Cloud</Typography>
                 <Box component="ul" sx={{ m: 0, pl: 0, listStyle: 'none' }}>
                   {FRICTION.with.map((item) => (
                     <Box key={item} sx={{ display: 'flex', gap: 1.25, mb: 1.25, alignItems: 'flex-start' }}>
-                      <CheckRoundedIcon sx={{ color: CREAM, fontSize: 20, mt: '2px' }} aria-hidden />
+                      <CheckRoundedIcon sx={{ color: cv.brandOrchid, fontSize: 20, mt: '2px' }} aria-hidden />
                       <Typography sx={{ color: cv.textPrimary, lineHeight: 1.5 }}>{item}</Typography>
                     </Box>
                   ))}
@@ -733,59 +725,8 @@ export default function MarketingLandingPage() {
           </Box>
         </Box>
 
-        <Box component="section" id="workflow" aria-labelledby="workflow-title" data-reveal sx={{ ...sectionPad, background: cv.surface, scrollMarginTop: '88px' }}>
-          <Box sx={{ maxWidth: MAX, mx: 'auto' }}>
-            <Typography sx={{ color: CREAM, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '0.75rem', mb: 1.5 }}>
-              See immediate impact
-            </Typography>
-            <Typography
-              id="workflow-title"
-              component="h2"
-              sx={{ fontFamily: DISPLAY_FONT, fontSize: { xs: '2rem', md: '3rem' }, fontWeight: 600, letterSpacing: '-0.03em', mb: 6, maxWidth: 640 }}
-            >
-              From ingest to delivery without leaving the library
-            </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(4, 1fr)' }, gap: 2.5 }}>
-              {WORKFLOW.map((item) => (
-                <Box key={item.step}>
-                  <Typography sx={{ fontFamily: DISPLAY_FONT, color: CREAM, fontSize: '1.75rem', fontWeight: 600 }}>{item.step}</Typography>
-                  <Typography component="h3" sx={{ mt: 1, fontWeight: 700, fontSize: '1.125rem' }}>
-                    {item.title}
-                  </Typography>
-                  <Typography sx={{ mt: 1, color: cv.textSecondary, fontSize: '0.9375rem', lineHeight: 1.6 }}>{item.body}</Typography>
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        </Box>
-
-        <Box component="section" aria-labelledby="all-features-title" data-reveal sx={sectionPad}>
-          <Box sx={{ maxWidth: MAX, mx: 'auto' }}>
-            <Typography
-              id="all-features-title"
-              component="h2"
-              sx={{ fontFamily: DISPLAY_FONT, fontSize: { xs: '2rem', md: '3rem' }, fontWeight: 600, letterSpacing: '-0.03em', mb: 1 }}
-            >
-              Everything the operation actually uses
-            </Typography>
-            <Typography sx={{ color: cv.textSecondary, mb: 5, maxWidth: 620 }}>
-              The same capabilities that power the NOAH workspace — library, review, sharing, identity, and billing — on one landing page.
-            </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
-              {FEATURES.map((feature) => (
-                <Box key={feature.title} sx={{ p: 2.5, borderRadius: '16px', border: `1px solid ${cv.border}`, background: cv.surface, ...cardHoverSx }}>
-                  <Typography component="h3" sx={{ fontWeight: 700, mb: 0.75 }}>
-                    {feature.title}
-                  </Typography>
-                  <Typography sx={{ color: cv.textSecondary, fontSize: '0.9rem', lineHeight: 1.55 }}>{feature.body}</Typography>
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        </Box>
-
         {plansEnabled && plans.length > 0 ? (
-          <Box component="section" id="plans" aria-labelledby="plans-title" data-reveal sx={{ ...sectionPad, background: cv.surface, scrollMarginTop: '88px' }}>
+          <Box component="section" id="plans" aria-labelledby="plans-title" data-reveal sx={{ ...sectionPad, background: cv.surface, scrollMarginTop: '104px' }}>
             <Box sx={{ maxWidth: MAX, mx: 'auto' }}>
               <Typography
                 id="plans-title"
@@ -818,11 +759,11 @@ export default function MarketingLandingPage() {
                       minHeight: 40,
                       px: 2,
                       borderRadius: '999px',
-                      color: billingCycle === cycle ? INK : cv.textSecondary,
-                      backgroundColor: billingCycle === cycle ? CREAM : 'transparent',
+                      color: billingCycle === cycle ? cv.textOnCta : cv.textSecondary,
+                      background: billingCycle === cycle ? cv.brandGradient : 'transparent',
                       fontWeight: 600,
-                      transition: `background-color 0.28s ${EASE}, color 0.28s ${EASE}`,
-                      '&:hover': { backgroundColor: billingCycle === cycle ? CREAM_HOVER : cv.surfaceHover },
+                      transition: `background 0.28s ${EASE}, color 0.28s ${EASE}`,
+                      '&:hover': { background: billingCycle === cycle ? cv.brandGradientHover : cv.surfaceHover },
                     }}
                   >
                     {cycle === 'annual' ? 'Annual' : 'Monthly'}
@@ -838,8 +779,8 @@ export default function MarketingLandingPage() {
                       sx={{
                         p: 2.5,
                         borderRadius: '20px',
-                        border: `1px solid ${featured ? 'rgba(243,230,200,0.45)' : cv.border}`,
-                        background: featured ? 'linear-gradient(180deg, rgba(243,230,200,0.1), rgba(18,18,18,0.5))' : cv.bg,
+                        border: `1px solid ${featured ? cv.purpleChipBorder : cv.border}`,
+                        background: featured ? `linear-gradient(180deg, ${cv.purpleSurfaceHover}, rgba(18,18,18,0.5))` : cv.bg,
                         display: 'flex',
                         flexDirection: 'column',
                         ...cardHoverSx,
@@ -860,14 +801,14 @@ export default function MarketingLandingPage() {
                       <Box component="ul" sx={{ m: 0, mt: 2, pl: 0, listStyle: 'none', flex: 1 }}>
                         {(Array.isArray(plan.features) ? plan.features : []).slice(0, 6).map((feature) => (
                           <Box key={feature} sx={{ display: 'flex', gap: 1, mb: 0.85, alignItems: 'flex-start' }}>
-                            <CheckRoundedIcon sx={{ fontSize: 16, color: CREAM, mt: '2px' }} aria-hidden />
+                            <CheckRoundedIcon sx={{ fontSize: 16, color: cv.brandOrchid, mt: '2px' }} aria-hidden />
                             <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.4 }}>{feature}</Typography>
                           </Box>
                         ))}
                       </Box>
                       <Button
                         onClick={() => handlePlanCta(plan)}
-                        sx={featured ? creamButtonSx({ mt: 2, width: '100%' }) : ghostButtonSx({ mt: 2, width: '100%' })}
+                        sx={featured ? primaryButtonSx({ mt: 2, width: '100%' }) : ghostButtonSx({ mt: 2, width: '100%' })}
                       >
                         {plan.ctaLabel || (featured ? 'Start free trial' : 'Choose plan')}
                       </Button>
@@ -879,37 +820,6 @@ export default function MarketingLandingPage() {
           </Box>
         ) : null}
 
-        <Box component="section" id="security" aria-labelledby="security-title" data-reveal sx={{ ...sectionPad, scrollMarginTop: '88px' }}>
-          <Box sx={{ maxWidth: MAX, mx: 'auto' }}>
-            <Typography sx={{ color: CREAM, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '0.75rem', mb: 1.5 }}>
-              Built for security from the ground up
-            </Typography>
-            <Typography
-              id="security-title"
-              component="h2"
-              sx={{ fontFamily: DISPLAY_FONT, fontSize: { xs: '2rem', md: '3rem' }, fontWeight: 600, letterSpacing: '-0.03em', maxWidth: 720, mb: 5 }}
-            >
-              Enterprise controls for the media you cannot afford to lose
-            </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
-              {SECURITY_POINTS.map((item, index) => {
-                const Icon = [ShieldOutlinedIcon, LockOutlinedIcon, VerifiedUserOutlinedIcon, GppGoodOutlinedIcon][index];
-                return (
-                  <Box key={item.title} sx={{ display: 'flex', gap: 2, p: 2.5, borderRadius: '16px', border: `1px solid ${cv.border}`, ...cardHoverSx }}>
-                    <Icon sx={{ color: CREAM, mt: 0.3 }} aria-hidden />
-                    <Box>
-                      <Typography component="h3" sx={{ fontWeight: 700, mb: 0.5 }}>
-                        {item.title}
-                      </Typography>
-                      <Typography sx={{ color: cv.textSecondary, fontSize: '0.9375rem', lineHeight: 1.55 }}>{item.body}</Typography>
-                    </Box>
-                  </Box>
-                );
-              })}
-            </Box>
-          </Box>
-        </Box>
-
         <Box component="section" aria-labelledby="final-cta-title" data-reveal sx={{ ...sectionPad, pt: { xs: 4, md: 6 } }}>
           <Box
             sx={{
@@ -918,7 +828,7 @@ export default function MarketingLandingPage() {
               borderRadius: { xs: '24px', md: '32px' },
               p: { xs: 3.5, md: 8 },
               textAlign: 'center',
-              border: `1px solid rgba(243,230,200,0.2)`,
+              border: `1px solid ${cv.purpleChipBorder}`,
               background:
                 'radial-gradient(ellipse at top, rgba(142,68,173,0.28), transparent 55%), linear-gradient(180deg, rgba(28,28,28,0.9), rgba(18,18,18,0.95))',
               transition: `transform 0.5s ${EASE}, box-shadow 0.5s ${EASE}`,
@@ -936,7 +846,7 @@ export default function MarketingLandingPage() {
               Ready to give the team a library that keeps up with the work?
             </Typography>
             <Box sx={{ mt: 3.5, display: 'flex', justifyContent: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-              <Button onClick={openTrial} endIcon={<ArrowForwardRoundedIcon />} sx={creamButtonSx({ px: 3.5 })}>
+              <Button onClick={openTrial} endIcon={<ArrowForwardRoundedIcon />} sx={primaryButtonSx({ px: 3.5 })}>
                 Start free trial
               </Button>
               <Button onClick={openDemo} sx={ghostButtonSx({ px: 3.5 })}>
@@ -947,9 +857,22 @@ export default function MarketingLandingPage() {
         </Box>
       </Box>
 
-      <Box component="footer" role="contentinfo" sx={{ borderTop: `1px solid ${cv.border}`, px: { xs: 2.5, sm: 4 }, py: 5 }}>
+      <Box
+        component="footer"
+        role="contentinfo"
+        sx={{
+          position: 'relative',
+          overflow: 'hidden',
+          borderTop: `1px solid ${cv.border}`,
+          px: { xs: 2.5, sm: 4 },
+          pt: 5,
+          pb: { xs: 8, md: 20 },
+        }}
+      >
         <Box
           sx={{
+            position: 'relative',
+            zIndex: 1,
             maxWidth: MAX,
             mx: 'auto',
             display: 'grid',
@@ -958,7 +881,25 @@ export default function MarketingLandingPage() {
           }}
         >
           <Box>
-            <NoahLogo width={120} height={32} boxWidth={120} objectFit="contain" animated={false} showGlow={false} align="left" sx={{ mb: 1.5 }} />
+            <NoahLogo
+              width={{ xs: 200, sm: 248, md: 292 }}
+              height={{ xs: 56, sm: 64, md: 72 }}
+              boxWidth={{ xs: 200, sm: 248, md: 292 }}
+              objectFit="cover"
+              animated={false}
+              showGlow={false}
+              align="left"
+              sx={{
+                mb: 1.5,
+                overflow: 'hidden',
+                '& img': {
+                  mixBlendMode: 'lighten',
+                  objectPosition: 'center',
+                  transform: 'scale(1)',
+                },
+                'html[data-theme="light"] & img': { mixBlendMode: 'normal' },
+              }}
+            />
             <Typography sx={{ color: cv.textMuted, fontSize: '0.875rem', maxWidth: 280, lineHeight: 1.55 }}>
               NOAH Cloud — enterprise media asset management for teams that review, share, and ship from a single library.
             </Typography>
@@ -966,7 +907,7 @@ export default function MarketingLandingPage() {
           <Box>
             <Typography sx={{ fontWeight: 700, mb: 1.25 }}>Product</Typography>
             {NAV_LINKS.map((item) => (
-              <Link key={item.href} href={item.href} underline="none" sx={{ display: 'block', color: cv.textSecondary, py: 0.6, transition: `color 0.22s ${EASE}`, '&:hover': { color: CREAM } }}>
+              <Link key={item.href} href={item.href} underline="none" sx={{ display: 'block', color: cv.textSecondary, py: 0.6, transition: `color 0.22s ${EASE}`, '&:hover': { color: cv.brandOrchid } }}>
                 {item.label}
               </Link>
             ))}
@@ -979,7 +920,7 @@ export default function MarketingLandingPage() {
             <Box component="button" onClick={openDemo} sx={footerLinkButtonSx}>
               Book a demo
             </Box>
-            <Link component={RouterLink} to="/login" underline="none" sx={{ display: 'block', color: cv.textSecondary, py: 0.6, transition: `color 0.22s ${EASE}`, '&:hover': { color: CREAM } }}>
+            <Link component={RouterLink} to="/login" underline="none" sx={{ display: 'block', color: cv.textSecondary, py: 0.6, transition: `color 0.22s ${EASE}`, '&:hover': { color: cv.brandOrchid } }}>
               Sign in
             </Link>
           </Box>
@@ -990,9 +931,10 @@ export default function MarketingLandingPage() {
             </Typography>
           </Box>
         </Box>
-        <Typography sx={{ maxWidth: MAX, mx: 'auto', mt: 5, color: cv.textMuted, fontSize: '0.75rem' }}>
+        <Typography sx={{ position: 'relative', zIndex: 1, maxWidth: MAX, mx: 'auto', mt: 5, color: cv.textMuted, fontSize: '0.75rem' }}>
           © {new Date().getFullYear()} NOAH Cloud. All rights reserved.
         </Typography>
+        <WaveBackground sx={{ position: 'absolute' }} />
       </Box>
 
       <LandingCtaDialogs open={modal} onClose={() => setModal(null)} />

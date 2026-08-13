@@ -20,7 +20,7 @@ import { submitDemoRequest } from '../../platform/api/platformApi';
 import { noahDialogBackdropSx, noahDialogPaperSx, noahDialogSlotProps } from '../../constants/dialogStyles';
 import { cv } from '../../theme/cssVars';
 import { validateBusinessEmail } from '../../utils/authValidation';
-import { CREAM, CREAM_HOVER, DISPLAY_FONT, INK, TEAM_SIZE_OPTIONS } from './landingContent';
+import { DISPLAY_FONT, TEAM_SIZE_OPTIONS } from './landingContent';
 
 function restorePageScroll() {
   const html = document.documentElement;
@@ -35,6 +35,16 @@ function restorePageScroll() {
 const DIALOG_DURATION = { enter: 420, exit: 280 };
 
 type ModalKind = 'demo' | 'trial' | null;
+
+const primaryCtaSx = {
+  height: 48,
+  minHeight: 48,
+  background: cv.brandGradient,
+  color: cv.textOnCta,
+  fontWeight: 600,
+  boxShadow: 'none',
+  '&:hover': { background: cv.brandGradientHover, boxShadow: cv.brandShadow },
+} as const;
 
 const fieldSx = {
   '& .MuiOutlinedInput-root': {
@@ -252,7 +262,7 @@ function TrialForm({ onClose }: { onClose: () => void }) {
         <Typography id={errorId} role="alert" sx={{ color: cv.destructive, mt: 1.5, fontSize: '0.875rem' }}>
           {error}{' '}
           {error.includes('already registered') ? (
-            <Link component={RouterLink} to="/login" sx={{ color: CREAM, fontWeight: 600 }}>
+            <Link component={RouterLink} to="/login" sx={{ color: cv.brandOrchid, fontWeight: 600 }}>
               Sign in
             </Link>
           ) : null}
@@ -266,16 +276,10 @@ function TrialForm({ onClose }: { onClose: () => void }) {
         aria-busy={busy}
         sx={{
           mt: 2.5,
-          height: 48,
-          minHeight: 48,
-          backgroundColor: CREAM,
-          color: INK,
-          fontWeight: 600,
-          boxShadow: 'none',
-          '&:hover': { backgroundColor: CREAM_HOVER, boxShadow: 'none' },
+          ...primaryCtaSx,
         }}
       >
-        {busy ? <CircularProgress size={22} sx={{ color: INK }} /> : 'Create my workspace'}
+        {busy ? <CircularProgress size={22} sx={{ color: cv.textOnCta }} /> : 'Create my workspace'}
       </Button>
       <Typography sx={{ mt: 1.5, textAlign: 'center', color: cv.textMuted, fontSize: '0.8125rem' }}>
         Already have an account?{' '}
@@ -345,15 +349,7 @@ function DemoForm({ onClose }: { onClose: () => void }) {
         <Button
           onClick={onClose}
           variant="contained"
-          sx={{
-            height: 48,
-            px: 3,
-            backgroundColor: CREAM,
-            color: INK,
-            fontWeight: 600,
-            boxShadow: 'none',
-            '&:hover': { backgroundColor: CREAM_HOVER, boxShadow: 'none' },
-          }}
+          sx={primaryCtaSx}
         >
           Back to NOAH
         </Button>
@@ -435,16 +431,10 @@ function DemoForm({ onClose }: { onClose: () => void }) {
         aria-busy={busy}
         sx={{
           mt: 2.5,
-          height: 48,
-          minHeight: 48,
-          backgroundColor: CREAM,
-          color: INK,
-          fontWeight: 600,
-          boxShadow: 'none',
-          '&:hover': { backgroundColor: CREAM_HOVER, boxShadow: 'none' },
+          ...primaryCtaSx,
         }}
       >
-        {busy ? <CircularProgress size={22} sx={{ color: INK }} /> : 'Request a demo'}
+        {busy ? <CircularProgress size={22} sx={{ color: cv.textOnCta }} /> : 'Request a demo'}
       </Button>
     </Box>
   );
