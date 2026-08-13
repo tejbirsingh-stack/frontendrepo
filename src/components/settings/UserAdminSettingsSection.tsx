@@ -522,6 +522,7 @@ function PeopleTab({
   const handleApplyFilters = () => {
     setAppliedRoleFilter(new Set(pendingRoleFilter));
     setAppliedStatusFilter(new Set(pendingStatusFilter));
+    setFilterOpen(false);
   };
 
   const handleClearAllFilters = () => {

@@ -1357,6 +1357,7 @@ function ProjectWorkspaceTable({
   const handleApplyFilters = () => {
     setAppliedStatusFilter(new Set(pendingStatusFilter));
     setAppliedWorkspaceFilter(new Set(pendingWorkspaceFilter));
+    setFilterOpen(false);
   };
 
   const handleClearAllFilters = () => {
@@ -2601,6 +2602,16 @@ export function WorkspacesAdminSettingsSection() {
         onEdit={setEditWorkspaceId}
         onDelete={handleDeleteWorkspace}
         onInviteTeamMembers={setInviteWorkspaceId}
+        onMarkActive={(ids) => {
+          setWorkspaces((prev) =>
+            prev.map((w) => (ids.includes(w.id) ? { ...w, status: 'Active' } : w))
+          );
+        }}
+        onMarkInactive={(ids) => {
+          setWorkspaces((prev) =>
+            prev.map((w) => (ids.includes(w.id) ? { ...w, status: 'Inactive' } : w))
+          );
+        }}
       />
       <CreateWorkspaceModal
         open={addOpen || Boolean(editWorkspaceId)}
