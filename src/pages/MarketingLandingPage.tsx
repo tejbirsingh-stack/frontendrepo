@@ -16,6 +16,9 @@ import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import VideoLibraryRoundedIcon from '@mui/icons-material/VideoLibraryRounded';
+import RateReviewRoundedIcon from '@mui/icons-material/RateReviewRounded';
+import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded';
 import NoahLogo from '../components/NoahLogo';
 import WaveBackground from '../components/WaveBackground';
 import LandingCtaDialogs from '../components/landing/LandingCtaDialogs';
@@ -125,6 +128,12 @@ const cardHoverSx = {
     borderColor: cv.purpleChipBorder,
     boxShadow: '0 18px 40px rgba(0,0,0,0.28)',
   },
+} as const;
+
+const PILLAR_ICONS = {
+  library: VideoLibraryRoundedIcon,
+  review: RateReviewRoundedIcon,
+  share: IosShareRoundedIcon,
 } as const;
 
 function heroAnim(delayMs: number) {
@@ -656,26 +665,45 @@ export default function MarketingLandingPage() {
               Media intelligence across library, review, and delivery
             </Typography>
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2.5 }}>
-              {PILLARS.map((pillar) => (
-                <Box
-                  key={pillar.id}
-                  sx={{
-                    p: { xs: 2.5, md: 3 },
-                    borderRadius: '20px',
-                    border: `1px solid ${cv.border}`,
-                    background: cv.surface,
-                    ...cardHoverSx,
-                  }}
-                >
-                  <Typography sx={{ color: cv.brandOrchid, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                    {pillar.kicker}
-                  </Typography>
-                  <Typography component="h3" sx={{ mt: 1.25, fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
-                    {pillar.title}
-                  </Typography>
-                  <Typography sx={{ mt: 1.25, color: cv.textSecondary, fontSize: '0.9375rem', lineHeight: 1.6 }}>{pillar.body}</Typography>
-                </Box>
-              ))}
+              {PILLARS.map((pillar) => {
+                const PillarIcon = PILLAR_ICONS[pillar.id];
+                return (
+                  <Box
+                    key={pillar.id}
+                    sx={{
+                      p: { xs: 2.5, md: 3 },
+                      borderRadius: '20px',
+                      border: `1px solid ${cv.border}`,
+                      background: cv.surface,
+                      ...cardHoverSx,
+                    }}
+                  >
+                    <Box
+                      aria-hidden
+                      sx={{
+                        width: 48,
+                        height: 48,
+                        mb: 2,
+                        display: 'grid',
+                        placeItems: 'center',
+                        borderRadius: '14px',
+                        color: cv.brandOrchid,
+                        border: `1px solid ${cv.purpleChipBorder}`,
+                        background: cv.purpleSurface,
+                      }}
+                    >
+                      <PillarIcon sx={{ fontSize: 24 }} />
+                    </Box>
+                    <Typography sx={{ color: cv.brandOrchid, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                      {pillar.kicker}
+                    </Typography>
+                    <Typography component="h3" sx={{ mt: 1.25, fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
+                      {pillar.title}
+                    </Typography>
+                    <Typography sx={{ mt: 1.25, color: cv.textSecondary, fontSize: '0.9375rem', lineHeight: 1.6 }}>{pillar.body}</Typography>
+                  </Box>
+                );
+              })}
             </Box>
           </Box>
         </Box>
