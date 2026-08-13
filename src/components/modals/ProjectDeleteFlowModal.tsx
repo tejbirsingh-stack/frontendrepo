@@ -162,9 +162,8 @@ export default function ProjectDeleteFlowModal({
         setSelectedFolderIds(allFolderSet);
         setIsProjectRootChecked(true);
 
-        // Expand root level folders by default
-        const rootFolderIds = formattedFolders.map((f) => f.id);
-        setExpandedFolderIds(new Set(rootFolderIds));
+        // Keep folders collapsed by default
+        setExpandedFolderIds(new Set());
       } catch (err) {
         console.error('Failed to load project files & folders:', err);
       } finally {
