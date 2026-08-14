@@ -164,9 +164,8 @@ export default function SuperAdminDeleteFlowModal({
         setSelectedFileIds(allFileSet);
         setSelectedFolderIds(allFolderSet);
 
-        // Expand root level folders by default
-        const rootFolderIds = formattedFolders.map((f) => f.id);
-        setExpandedFolderIds(new Set(rootFolderIds));
+        // Keep folders collapsed by default
+        setExpandedFolderIds(new Set());
       } catch (err) {
         console.error('Failed to load project tree for Super Admin delete:', err);
       } finally {

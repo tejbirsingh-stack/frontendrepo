@@ -15,6 +15,8 @@ import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import RestoreOutlinedIcon from '@mui/icons-material/RestoreOutlined';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { PERMISSIONS, hasPermission } from '../constants/permissions';
@@ -398,8 +400,6 @@ export default function DeletionRequestsPage() {
     };
 
     const deletedFilesList = (item.deletedFiles || []).filter((f: any) => !isWorkspaceDateContainer(f.title));
-    const visibleFiles = isExpanded ? deletedFilesList : deletedFilesList.slice(0, 5);
-    const remainingCount = deletedFilesList.length - 5;
 
     return (
       <Box
@@ -453,56 +453,118 @@ export default function DeletionRequestsPage() {
               </Typography>
             )}
 
-            {/* Project Expansion List (First 5 items + More button) */}
-            {item.isProject && deletedFilesList.length > 0 && (
-              <Box
-                sx={{
-                  mt: 1.25,
-                  mb: 1.25,
-                  p: 1.25,
-                  borderRadius: '10px',
-                  bgcolor: cv.surfaceRaised || 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${cv.border}`,
-                }}
-              >
-                <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: cv.textPrimary, mb: 0.75 }}>
-                  Selected Files & Folders ({deletedFilesList.length}):
-                </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
-                  {visibleFiles.map((file) => (
-                    <MetaPill key={file.id || file.title} label={file.title || 'Untitled file'} tone="purple" />
-                  ))}
-
-                  {deletedFilesList.length > 5 && (
-                    <Button
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleExpandItem(item.id);
-                      }}
-                      sx={{
-                        fontSize: '0.6875rem',
-                        fontWeight: 600,
-                        textTransform: 'none',
-                        color: cv.brandBlue,
-                        p: 0,
-                        minWidth: 'auto',
-                        ml: 0.5,
-                        '&:hover': { textDecoration: 'underline', bgcolor: 'transparent' },
-                      }}
-                    >
-                      {isExpanded ? 'Show less' : `+ ${remainingCount} More`}
-                    </Button>
-                  )}
-                </Box>
-              </Box>
-            )}
-
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center', mb: item.isProject && deletedFilesList.length > 0 ? 1 : 0 }}>
               <MetaPill label={mediaKindLabel(kind)} />
               <MetaPill label={getWorkspaceName(item)} />
               {adminName ? <MetaPill label={`Admin: ${adminName}`} tone="purple" /> : null}
             </Box>
+
+            {/* Project Expansion List (Toggle button & vertical list of files and folders) */}
+            {item.isProject && deletedFilesList.length > 0 && (
+              <Box
+                sx={{
+                  mt: 1,
+                  borderRadius: '10px',
+                  bgcolor: cv.surfaceRaised || 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${cv.border}`,
+                  overflow: 'hidden',
+                }}
+              >
+                <Box
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleExpandItem(item.id);
+                  }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    p: '8px 12px',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    transition: 'background-color 0.15s ease',
+                    '&:hover': {
+                      bgcolor: 'rgba(255,255,255,0.06)',
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: cv.textPrimary }}>
+                      Selected Files & Folders ({deletedFilesList.length}):
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.6875rem', color: cv.brandBlue, fontWeight: 500 }}>
+                      {isExpanded ? 'Click to close' : 'Click to view list of this project files and folders'}
+                    </Typography>
+                  </Box>
+                  {isExpanded ? (
+                    <KeyboardArrowUpIcon sx={{ fontSize: 18, color: cv.textSecondary, flexShrink: 0 }} />
+                  ) : (
+                    <KeyboardArrowDownIcon sx={{ fontSize: 18, color: cv.textSecondary, flexShrink: 0 }} />
+                  )}
+                </Box>
+
+                {isExpanded && (
+                  <Box
+                    sx={{
+                      p: 1.25,
+                      borderTop: `1px solid ${cv.border}`,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 0.75,
+                      maxHeight: 250,
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {deletedFilesList.map((file) => {
+                      const fileTitle = file.title || 'Untitled item';
+                      const isFolder =
+                        file.type === 'folder' ||
+                        (file as any).isFolder ||
+                        fileTitle.toLowerCase().includes('folder');
+                      const ItemIcon = isFolder ? FolderOutlinedIcon : InsertDriveFileOutlinedIcon;
+
+                      return (
+                        <Box
+                          key={file.id || file.title}
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            px: 1.25,
+                            py: 0.75,
+                            borderRadius: '6px',
+                            bgcolor: cv.surfaceHover || 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${cv.border}`,
+                            transition: 'background-color 0.15s ease',
+                            '&:hover': {
+                              bgcolor: 'rgba(255,255,255,0.08)',
+                            },
+                          }}
+                        >
+                          <ItemIcon
+                            sx={{
+                              fontSize: 16,
+                              color: isFolder ? cv.warning : cv.brandPurple,
+                              flexShrink: 0,
+                            }}
+                          />
+                          <Typography
+                            noWrap
+                            sx={{
+                              fontSize: '0.75rem',
+                              fontWeight: 500,
+                              color: cv.textPrimary,
+                            }}
+                          >
+                            {fileTitle}
+                          </Typography>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                )}
+              </Box>
+            )}
           </Box>
         </Box>
 
