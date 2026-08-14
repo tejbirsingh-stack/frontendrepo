@@ -21,9 +21,6 @@ import {
 import { toast } from 'react-hot-toast';
 import { billingService } from '../../api/billing.service';
 
-// Default stripe promise loaded directly from environment variable
-const defaultStripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
-
 const cardElementOptions = {
   style: {
     base: {
@@ -184,7 +181,7 @@ interface AddCardModalProps {
 
 export const AddCardModal: React.FC<AddCardModalProps> = ({ open, onClose, onSuccess }) => {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [stripePromise, setStripePromise] = useState<any>(() => defaultStripePromise);
+  const [stripePromise, setStripePromise] = useState<any>(null);
   const [loadingSecret, setLoadingSecret] = useState(false);
 
   useEffect(() => {
@@ -210,6 +207,7 @@ export const AddCardModal: React.FC<AddCardModalProps> = ({ open, onClose, onSuc
       fetchSecret();
     } else {
       setClientSecret(null);
+      setStripePromise(null);
     }
   }, [open]);
 
