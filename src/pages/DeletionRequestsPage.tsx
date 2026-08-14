@@ -15,6 +15,8 @@ import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import RestoreOutlinedIcon from '@mui/icons-material/RestoreOutlined';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { PERMISSIONS, hasPermission } from '../constants/permissions';
@@ -23,6 +25,7 @@ import { useDashboard } from '../context/DashboardContext';
 import { ROLE_IDS } from '../constants/userRoles';
 import { cv } from '../theme/cssVars';
 import { PROJECT_ACCENT_COLOR } from '../utils/folderColorStyle';
+import SuperAdminDeleteFlowModal from '../components/modals/SuperAdminDeleteFlowModal';
 
 type MediaKind = 'folder' | 'project' | 'video' | 'image' | 'audio' | 'document' | 'file';
 
@@ -30,13 +33,16 @@ interface PendingDeletion {
   id: string;
   title: string;
   status?: string;
+  rawStatus?: string;
   deletedAt?: string;
   deletionReason?: string;
+  deletionType?: string;
   type?: string;
   thumbnail?: string;
   workspaceName?: string;
   workspace?: string;
   isProject?: boolean;
+  deletedFiles?: Array<{ id: string; title: string; type?: string }>;
   deletedBy?: {
     name?: string;
     role?: string;
@@ -184,13 +190,11 @@ function MetaPill({
 }
 
 function isSuperAdminPending(item: PendingDeletion): boolean {
-  const status = (item.status || '').toLowerCase().replace(/[\s_-]+/g, '');
-  if (
-    status.includes('superadmin') ||
-    status.includes('adminapproved') ||
-    status.includes('approvedfordeletion') ||
-    status.includes('pendingpermanent')
-  ) {
+  if (item.status === 'pending_super_admin' || item.rawStatus === 'pending_super_admin') {
+    return true;
+  }
+  const deletedRole = (item.deletedBy?.roleRelation?.name || item.deletedBy?.role || '').toLowerCase();
+  if (deletedRole.includes('admin')) {
     return true;
   }
   return Boolean(item.approvedBy?.name || item.adminApprovedBy?.name || item.reviewedBy?.name);
@@ -319,18 +323,53 @@ export default function DeletionRequestsPage() {
       }
     });
 
-  const handlePermanentDelete = (id: string, isProject?: boolean) =>
-    runAction(id, async () => {
-      if (isProject) {
-        await apiClient.post(`/workspaces/project/delete/${id}`);
-      } else {
+  const [superAdminModalOpen, setSuperAdminModalOpen] = useState(false);
+  const [selectedProjectForSuperAdminDelete, setSelectedProjectForSuperAdminDelete] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+
+  const handlePermanentDelete = (item: PendingDeletion) => {
+    if (item.isProject) {
+      setSelectedProjectForSuperAdminDelete({ id: item.id, name: item.title });
+      setSuperAdminModalOpen(true);
+    } else {
+      runAction(item.id, async () => {
         try {
-          await apiClient.post(`/media/${id}/permanent-delete`);
+          await apiClient.post(`/media/${item.id}/permanent-delete`);
         } catch {
-          await apiClient.delete(`/media/${id}`);
+          await apiClient.delete(`/media/${item.id}`);
         }
-      }
+      });
+    }
+  };
+
+  const handleConfirmSuperAdminPermanentDelete = async (
+    projectId: string,
+    isWholeProject: boolean,
+    selectedFileIds: string[],
+    selectedFolderIds: string[]
+  ) => {
+    await runAction(projectId, async () => {
+      await apiClient.post(`/workspaces/project/delete/${projectId}`, {
+        isWholeProject,
+        deleteFileIds: selectedFileIds,
+        deleteFolderIds: selectedFolderIds,
+        isPermanent: true,
+      });
     });
+  };
+
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+
+  const toggleExpandItem = (id: string) => {
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const renderItemRow = (
     item: PendingDeletion,
@@ -341,6 +380,26 @@ export default function DeletionRequestsPage() {
     const canAct =
       stage === 'admin' ? isAdmin : isSuperAdmin;
     const isBusy = busyId === item.id;
+    const isExpanded = expandedItems.has(item.id);
+
+    const isWorkspaceDateContainer = (name?: string): boolean => {
+      if (!name) return false;
+      const trimmed = name.trim();
+      if (/^\d{4}$/.test(trimmed)) return true;
+      const lower = trimmed.toLowerCase();
+      const months = [
+        'january', 'february', 'march', 'april', 'may', 'june',
+        'july', 'august', 'september', 'october', 'november', 'december',
+        'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+      ];
+      return months.some((m) => {
+        if (lower === m) return true;
+        if (lower.includes(m) && (/\d/.test(lower) || lower.includes('/') || lower.includes('-'))) return true;
+        return false;
+      });
+    };
+
+    const deletedFilesList = (item.deletedFiles || []).filter((f: any) => !isWorkspaceDateContainer(f.title));
 
     return (
       <Box
@@ -351,7 +410,7 @@ export default function DeletionRequestsPage() {
           alignItems: { xs: 'flex-start', md: 'center' },
           flexDirection: { xs: 'column', md: 'row' },
           gap: 2,
-          p: 1.75,
+          p: 2,
           borderRadius: '12px',
           backgroundColor: cv.surface,
           border: `1px solid ${cv.border}`,
@@ -363,29 +422,149 @@ export default function DeletionRequestsPage() {
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, flex: 1, minWidth: 0 }}>
           <MediaThumb item={item} />
           <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography
-              sx={{
-                fontSize: '0.9375rem',
-                fontWeight: 600,
-                color: cv.textPrimary,
-                mb: 0.35,
-              }}
-            >
-              {item.title || 'Untitled'}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
+              <Typography
+                sx={{
+                  fontSize: '0.9375rem',
+                  fontWeight: 600,
+                  color: cv.textPrimary,
+                }}
+              >
+                {item.title || 'Untitled'}
+              </Typography>
+
+              {item.isProject && (
+                <MetaPill
+                  label={item.deletionType || 'Whole Project'}
+                  tone={item.deletionType === 'Selected Files/Folders' ? 'purple' : 'neutral'}
+                />
+              )}
+
+              <MetaPill label={item.status || 'Pending Review'} tone="purple" />
+            </Box>
+
             <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mb: 1 }}>
               {getDeletedByLabel(item)}
             </Typography>
+
             {item.deletionReason && (
               <Typography sx={{ fontSize: '0.75rem', color: cv.textSecondary, mb: 1, fontStyle: 'italic' }}>
                 Reason: {item.deletionReason}
               </Typography>
             )}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
+
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center', mb: item.isProject && deletedFilesList.length > 0 ? 1 : 0 }}>
               <MetaPill label={mediaKindLabel(kind)} />
               <MetaPill label={getWorkspaceName(item)} />
               {adminName ? <MetaPill label={`Admin: ${adminName}`} tone="purple" /> : null}
             </Box>
+
+            {/* Project Expansion List (Toggle button & vertical list of files and folders) */}
+            {item.isProject && deletedFilesList.length > 0 && (
+              <Box
+                sx={{
+                  mt: 1,
+                  borderRadius: '10px',
+                  bgcolor: cv.surfaceRaised || 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${cv.border}`,
+                  overflow: 'hidden',
+                }}
+              >
+                <Box
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleExpandItem(item.id);
+                  }}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    p: '8px 12px',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    transition: 'background-color 0.15s ease',
+                    '&:hover': {
+                      bgcolor: 'rgba(255,255,255,0.06)',
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: cv.textPrimary }}>
+                      Selected Files & Folders ({deletedFilesList.length}):
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.6875rem', color: cv.brandBlue, fontWeight: 500 }}>
+                      {isExpanded ? 'Click to close' : 'Click to view list of this project files and folders'}
+                    </Typography>
+                  </Box>
+                  {isExpanded ? (
+                    <KeyboardArrowUpIcon sx={{ fontSize: 18, color: cv.textSecondary, flexShrink: 0 }} />
+                  ) : (
+                    <KeyboardArrowDownIcon sx={{ fontSize: 18, color: cv.textSecondary, flexShrink: 0 }} />
+                  )}
+                </Box>
+
+                {isExpanded && (
+                  <Box
+                    sx={{
+                      p: 1.25,
+                      borderTop: `1px solid ${cv.border}`,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 0.75,
+                      maxHeight: 250,
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {deletedFilesList.map((file) => {
+                      const fileTitle = file.title || 'Untitled item';
+                      const isFolder =
+                        file.type === 'folder' ||
+                        (file as any).isFolder ||
+                        fileTitle.toLowerCase().includes('folder');
+                      const ItemIcon = isFolder ? FolderOutlinedIcon : InsertDriveFileOutlinedIcon;
+
+                      return (
+                        <Box
+                          key={file.id || file.title}
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            px: 1.25,
+                            py: 0.75,
+                            borderRadius: '6px',
+                            bgcolor: cv.surfaceHover || 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${cv.border}`,
+                            transition: 'background-color 0.15s ease',
+                            '&:hover': {
+                              bgcolor: 'rgba(255,255,255,0.08)',
+                            },
+                          }}
+                        >
+                          <ItemIcon
+                            sx={{
+                              fontSize: 16,
+                              color: isFolder ? cv.warning : cv.brandPurple,
+                              flexShrink: 0,
+                            }}
+                          />
+                          <Typography
+                            noWrap
+                            sx={{
+                              fontSize: '0.75rem',
+                              fontWeight: 500,
+                              color: cv.textPrimary,
+                            }}
+                          >
+                            {fileTitle}
+                          </Typography>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                )}
+              </Box>
+            )}
           </Box>
         </Box>
 
@@ -419,7 +598,7 @@ export default function DeletionRequestsPage() {
                 },
               }}
             >
-              Restore
+              Cancel/Reject
             </Button>
             {stage === 'admin' ? (
               <Button
@@ -449,7 +628,7 @@ export default function DeletionRequestsPage() {
                 variant="contained"
                 startIcon={<DeleteOutlineOutlinedIcon />}
                 disabled={isBusy || !isHardDeleteAllowed}
-                onClick={() => void handlePermanentDelete(item.id, item.isProject)}
+                onClick={() => void handlePermanentDelete(item)}
                 sx={{
                   textTransform: 'none',
                   borderRadius: '10px',
@@ -463,7 +642,7 @@ export default function DeletionRequestsPage() {
                   },
                 }}
               >
-                Delete forever
+                Permanently Delete
               </Button>
             )}
           </Box>
@@ -585,6 +764,17 @@ export default function DeletionRequestsPage() {
           showTitle: true,
         })
       )}
+
+      <SuperAdminDeleteFlowModal
+        open={superAdminModalOpen}
+        projectId={selectedProjectForSuperAdminDelete?.id || null}
+        projectName={selectedProjectForSuperAdminDelete?.name || 'Project'}
+        onClose={() => {
+          setSuperAdminModalOpen(false);
+          setSelectedProjectForSuperAdminDelete(null);
+        }}
+        onConfirmPermanentDelete={handleConfirmSuperAdminPermanentDelete}
+      />
     </Box>
   );
 }

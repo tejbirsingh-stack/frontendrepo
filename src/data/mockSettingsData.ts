@@ -35,6 +35,7 @@ export interface SettingsProjectRow {
   visibility?: ProjectVisibility;
   teamMembers?: WorkspaceTeamMember[];
   isRestricted?: boolean;
+  isDefault?: boolean;
 }
 
 export interface WorkspaceTeamMember {

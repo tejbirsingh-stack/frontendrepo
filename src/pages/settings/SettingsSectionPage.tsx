@@ -35,6 +35,8 @@ export default function SettingsSectionPage() {
   const hasViewAudit = user?.permissions?.includes('view_audit_analytics');
   const hasManageRootFolders = user?.permissions?.includes('manage_root_folders');
 
+  const isSuperAdmin = user?.role === 'Super Admin' || user?.roleId === '996cc58f-8823-4b6f-bcb9-76b2c1f2dd15' || (typeof user?.role === 'string' && user.role.toLowerCase().includes('super admin'));
+
   if (['accounts/billing', 'accounts/plan', 'profile/company', 'admin/security'].includes(sectionKey) && !hasManageSubscription) {
     return <Navigate to="/home" replace />;
   }
@@ -47,7 +49,11 @@ export default function SettingsSectionPage() {
     return <Navigate to="/home" replace />;
   }
 
-  if (['admin/projects', 'admin/workspaces', 'admin/fields', 'share/settings'].includes(sectionKey) && !hasManageRootFolders) {
+  if (['admin/projects', 'admin/fields', 'share/settings'].includes(sectionKey) && !hasManageRootFolders) {
+    return <Navigate to="/home" replace />;
+  }
+
+  if (sectionKey === 'admin/workspaces' && !isSuperAdmin) {
     return <Navigate to="/home" replace />;
   }
 

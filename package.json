@@ -16,6 +16,8 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.1.0",
     "@mui/material": "^9.1.0",
+    "@stripe/react-stripe-js": "^6.8.1",
+    "@stripe/stripe-js": "^9.13.0",
     "axios": "^1.18.1",
     "emoji-picker-element": "^1.29.1",
     "exceljs": "^4.4.0",
@@ -25,7 +27,8 @@
     "react-dom": "^19.2.6",
     "react-hot-toast": "^2.6.0",
     "react-loading-skeleton": "^3.5.0",
-    "react-router-dom": "^7.18.1"
+    "react-router-dom": "^7.18.1",
+    "recharts": "^2.15.4"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

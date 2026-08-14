@@ -33,7 +33,7 @@ export default function SettingsSidebar({
     setLogoutModalOpen(false);
     onClose?.();
     clearSession();
-    navigate('/', { replace: true });
+    navigate('/login', { replace: true });
   };
 
   return (

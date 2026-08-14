@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import ProjectDeleteFlowModal from '../modals/ProjectDeleteFlowModal';
 import { getUsageSummary } from '../../api/usage.service';
 import { downloadCSV } from '../../utils/csvExport';
 import { getCompanyInfoRequest, updateCompanyInfoRequest, uploadCompanyLogoRequest, updateProfileRequest, uploadProfilePhotoRequest } from '../../api';
@@ -8,7 +10,9 @@ import { fetchUserGroups } from '../../api/userGroups.service';
 import { useAuth } from '../../auth/AuthContext';
 import { useLocalizedDate } from '../../hooks/useLocalizedDate';
 import { cv } from '../../theme/cssVars';
+import { billingService } from '../../api/billing.service';
 import ChoosePlanScreen from '../onboarding/ChoosePlanScreen';
+import PaymentSuccessModal from './PaymentSuccessModal';
 import {
   Avatar,
   Box,
@@ -47,6 +51,8 @@ import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import PauseCircleOutlinedIcon from '@mui/icons-material/PauseCircleOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import SettingsAdminToolbar from './SettingsAdminToolbar';
 import SettingsTableFilterPanel from './SettingsTableFilterPanel';
 import WorkspaceTeamMembersCell from './WorkspaceTeamMembersCell';
@@ -856,12 +862,77 @@ export function CompanySettingsSection() {
 export { default as UsageSettingsSection } from './UsageSettingsSection';
 
 export function PlanSettingsSection() {
+  const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
   const plan = useMemo(() => getDynamicPlanDetails(user), [user]);
   const [choosePlanOpen, setChoosePlanOpen] = useState(false);
+  const [successModalDetails, setSuccessModalDetails] = useState<any>(null);
 
-  const handleUpgradePlan = async (planId: string, billingCycle: 'annual' | 'monthly') => {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    const success = params.get('success');
+    if (success === 'true' && sessionId) {
+      toast.loading('Confirming your payment...', { id: 'stripe-sync' });
+      billingService
+        .syncSession(sessionId)
+        .then(async (res) => {
+          await refreshUser();
+          toast.success(res?.message || 'Subscription successfully updated!', { id: 'stripe-sync' });
+          if (res?.checkoutDetails) {
+            setSuccessModalDetails(res.checkoutDetails);
+          }
+        })
+        .catch((err) => {
+          console.error('[Stripe Sync Error]', err);
+          toast.error(err?.message || 'Failed to sync subscription status', { id: 'stripe-sync' });
+        })
+        .finally(() => {
+          const cleanUrl = window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        });
+    }
+  }, [refreshUser]);
+
+  const handleUpgradePlan = async (
+    planId: string,
+    billingCycle: 'annual' | 'monthly',
+    priceId?: string,
+    useSavedCard: boolean = true,
+  ) => {
     try {
+      let activePriceId = priceId;
+      const normalizedId = planId.toLowerCase().trim();
+
+      if (!activePriceId && normalizedId !== 'free') {
+        const { fetchPublicCatalogPlans } = await import('../../platform/api/platformApi');
+        const catalog = await fetchPublicCatalogPlans().catch(() => null);
+        const match = catalog?.plans?.find(
+          (p: any) => p.name?.toLowerCase() === normalizedId || p.id?.toLowerCase() === normalizedId
+        );
+        if (match) {
+          activePriceId = billingCycle === 'annual' ? (match.yearlyPriceId || match.monthlyPriceId) : match.monthlyPriceId;
+        }
+        if (!activePriceId) {
+          activePriceId = normalizedId;
+        }
+      }
+
+      if (activePriceId) {
+        toast.loading(useSavedCard ? 'Processing subscription upgrade...' : 'Opening payment page...', { id: 'stripe-checkout' });
+        const res: any = await billingService.createCheckoutSession(activePriceId, useSavedCard);
+        if (res?.directUpgrade) {
+          await refreshUser();
+          toast.success(res.message || 'Subscription successfully upgraded!', { id: 'stripe-checkout' });
+          navigate('/home/settings/accounts/billing');
+          return;
+        }
+        if (res?.url) {
+          window.location.href = res.url;
+          return;
+        }
+      }
+
       const { apiClient } = await import('../../api/client');
       const token = localStorage.getItem('token');
       const res = await apiClient.post<any>('/auth/upgrade-plan', { planId, billingCycle }, {
@@ -873,13 +944,38 @@ export function PlanSettingsSection() {
     } catch (err: any) {
       console.error('Failed to upgrade plan:', err);
       const errMsg = err?.response?.data?.message || err?.message || 'Failed to upgrade plan';
-      toast.error(errMsg);
+      toast.error(errMsg, { id: 'stripe-checkout' });
     }
   };
 
   return (
     <>
       <SettingsFormContainer>
+        {user?.organization?.subscriptionStatus === 'active' && (
+          <Box
+            sx={{
+              p: 2,
+              mb: 2.5,
+              borderRadius: '14px',
+              background: 'rgba(34, 197, 94, 0.08)',
+              border: '1px solid rgba(34, 197, 94, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.75,
+            }}
+          >
+            <CheckCircleOutlinedIcon sx={{ color: '#22c55e', fontSize: 26, flexShrink: 0 }} />
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#ffffff' }}>
+                You are currently on the active {plan.planName} Plan
+              </Typography>
+              <Typography variant="body2" sx={{ color: cv.textMuted, fontSize: '0.8125rem', mt: 0.25 }}>
+                Your subscription is active and set to renew on {plan.expiryDateFormatted}. You can switch tiers or manage billing details anytime.
+              </Typography>
+            </Box>
+          </Box>
+        )}
+
         <SettingsSectionCard
           title="Current Plan"
           description="Active tier, billing cycle term, and subscription line items."
@@ -980,6 +1076,25 @@ export function PlanSettingsSection() {
         </Box>
         <ChoosePlanScreen onSelectPlan={handleUpgradePlan} currentPlanId={plan.planId} />
       </Dialog>
+
+      {/* Payment Success Confirmation & Invoice Download Modal */}
+      <PaymentSuccessModal
+        open={Boolean(successModalDetails)}
+        onClose={() => setSuccessModalDetails(null)}
+        details={successModalDetails}
+        onManageBilling={async () => {
+          try {
+            toast.loading('Opening Stripe Portal...', { id: 'portal-launch' });
+            const res = await billingService.createPortalSession();
+            toast.dismiss('portal-launch');
+            if (res?.url) {
+              window.open(res.url, '_blank', 'noopener,noreferrer');
+            }
+          } catch (err: any) {
+            toast.error(err?.message || 'Failed to open billing portal', { id: 'portal-launch' });
+          }
+        }}
+      />
     </>
   );
 }
@@ -1281,24 +1396,26 @@ function ProjectRowActionsCell({
         </MenuItem>
       </Menu>
 
-      <Tooltip title={`Delete ${showProjectColumn ? 'project' : 'workspace'}`}>
-        <IconButton
-          size="small"
-          onClick={handleDelete}
-          sx={{
-            color: cv.textMuted || cv.textSecondary,
-            p: 0.75,
-            borderRadius: '8px',
-            transition: 'all 0.15s ease',
-            '&:hover': {
-              color: cv.destructive || '#ef4444',
-              backgroundColor: 'rgba(239, 68, 68, 0.12)',
-            },
-          }}
-        >
-          <DeleteOutlineOutlinedIcon sx={{ fontSize: '1.125rem' }} />
-        </IconButton>
-      </Tooltip>
+      {!row.isDefault && onDelete && (
+        <Tooltip title={`Delete ${showProjectColumn ? 'project' : 'workspace'}`}>
+          <IconButton
+            size="small"
+            onClick={handleDelete}
+            sx={{
+              color: cv.textMuted || cv.textSecondary,
+              p: 0.75,
+              borderRadius: '8px',
+              transition: 'all 0.15s ease',
+              '&:hover': {
+                color: cv.destructive || '#ef4444',
+                backgroundColor: 'rgba(239, 68, 68, 0.12)',
+              },
+            }}
+          >
+            <DeleteOutlineOutlinedIcon sx={{ fontSize: '1.125rem' }} />
+          </IconButton>
+        </Tooltip>
+      )}
     </Box>
   );
 }
@@ -1352,6 +1469,7 @@ function ProjectWorkspaceTable({
   const handleApplyFilters = () => {
     setAppliedStatusFilter(new Set(pendingStatusFilter));
     setAppliedWorkspaceFilter(new Set(pendingWorkspaceFilter));
+    setFilterOpen(false);
   };
 
   const handleClearAllFilters = () => {
@@ -2042,20 +2160,30 @@ export function ProjectsAdminSettingsSection() {
     setEditProjectId(null);
   };
 
-  const handleDeleteProjectsConfirm = async (targetProjectId: string, selectedFileIds: string[]) => {
+  const handleDeleteProjectsConfirm = async (
+    targetProjectId: string,
+    isWholeProject: boolean,
+    selectedFileIds: string[],
+    selectedFolderIds: string[]
+  ) => {
     try {
       const { apiClient } = await import('../../api/client');
       const token = localStorage.getItem('token');
 
       const res = await apiClient.post<any>(
         `/workspaces/project/delete/${targetProjectId}`,
-        { deleteFileIds: selectedFileIds },
+        {
+          isWholeProject,
+          deleteFileIds: selectedFileIds,
+          deleteFolderIds: selectedFolderIds,
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
+      // Instantly remove project from Projects list view when deletion request is submitted
       setProjects((current) => current.filter((p) => p.id !== targetProjectId));
 
-      const msg = res?.message || 'Project action completed.';
+      const msg = res?.message || 'Project deletion request submitted for Super Admin review.';
       toast.success(msg);
     } catch (err: any) {
       console.error('Failed to delete project in backend:', err);
@@ -2288,7 +2416,7 @@ export function ProjectsAdminSettingsSection() {
         suggestedUsers={orgUsersList}
         suggestedGroups={orgGroupsList}
       />
-      <DeleteProjectModal
+      <ProjectDeleteFlowModal
         open={deleteDialogIds.length > 0}
         projectId={deleteDialogIds[0] || null}
         projectName={projects.find((p) => p.id === deleteDialogIds[0])?.project}
@@ -2385,12 +2513,13 @@ export function WorkspacesAdminSettingsSection() {
         });
         const data = Array.isArray(response) ? response : response.data;
         if (data && Array.isArray(data)) {
-          const formatted = data.map((w: any) => {
+          const formatted = data.map((w: any, index: number) => {
             const today = formatDate(w.createdAt || Date.now(), {
               month: 'short',
               day: 'numeric',
               year: 'numeric',
             });
+            const isDefaultWorkspace = Boolean(w.isDefault || w.is_default || index === data.length - 1);
             return {
               id: w.id,
               workspace: w.name,
@@ -2399,6 +2528,7 @@ export function WorkspacesAdminSettingsSection() {
               creationDate: today,
               storage: '0 MB',
               projectAdmin: CURRENT_USER.name,
+              isDefault: isDefaultWorkspace,
               teamMembers: [
                 {
                   id: `wm-admin-${w.id}`,
@@ -2520,6 +2650,47 @@ export function WorkspacesAdminSettingsSection() {
     );
   };
 
+  const [deleteConfirmStep, setDeleteConfirmStep] = useState<0 | 1 | 2>(0);
+  const [targetDeleteWorkspaceIds, setTargetDeleteWorkspaceIds] = useState<string[]>([]);
+  const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
+
+  const targetWorkspaces = useMemo(() => {
+    return workspaces.filter((w) => targetDeleteWorkspaceIds.includes(w.id));
+  }, [workspaces, targetDeleteWorkspaceIds]);
+
+  const handleDeleteWorkspace = (ids: string[]) => {
+    const hasDefault = workspaces.some((w) => ids.includes(w.id) && w.isDefault);
+    if (hasDefault) {
+      toast.error('Default workspace created during organization registration cannot be deleted.');
+      return;
+    }
+    setTargetDeleteWorkspaceIds(ids);
+    setDeleteConfirmStep(1);
+  };
+
+  const handlePerformPermanentDelete = async () => {
+    if (targetDeleteWorkspaceIds.length === 0) return;
+    setIsDeletingWorkspace(true);
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      for (const id of targetDeleteWorkspaceIds) {
+        await apiClient.delete(`/workspaces/delete/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      setWorkspaces((prev) => prev.filter((w) => !targetDeleteWorkspaceIds.includes(w.id)));
+      toast.success('Workspace and all associated projects, folders, and files permanently deleted.');
+      setDeleteConfirmStep(0);
+      setTargetDeleteWorkspaceIds([]);
+    } catch (err: any) {
+      console.error('Failed to delete workspace:', err);
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to delete workspace.');
+    } finally {
+      setIsDeletingWorkspace(false);
+    }
+  };
+
   return (
     <>
       <ProjectWorkspaceTable
@@ -2541,7 +2712,18 @@ export function WorkspacesAdminSettingsSection() {
           setAddOpen(true);
         }}
         onEdit={setEditWorkspaceId}
+        onDelete={handleDeleteWorkspace}
         onInviteTeamMembers={setInviteWorkspaceId}
+        onMarkActive={(ids) => {
+          setWorkspaces((prev) =>
+            prev.map((w) => (ids.includes(w.id) ? { ...w, status: 'Active' } : w))
+          );
+        }}
+        onMarkInactive={(ids) => {
+          setWorkspaces((prev) =>
+            prev.map((w) => (ids.includes(w.id) ? { ...w, status: 'Inactive' } : w))
+          );
+        }}
       />
       <CreateWorkspaceModal
         open={addOpen || Boolean(editWorkspaceId)}
@@ -2569,6 +2751,305 @@ export function WorkspacesAdminSettingsSection() {
         onRemoveMember={handleRemoveMember}
         onRestrictedChange={handleRestrictedChange}
       />
+
+      {/* Step 1 Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmStep === 1}
+        onClose={() => setDeleteConfirmStep(0)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: cv.surfaceElevated || '#1e192b',
+            color: cv.textPrimary,
+            backgroundImage: 'none',
+            border: `1px solid ${cv.border || 'rgba(255, 255, 255, 0.12)'}`,
+            borderRadius: '20px',
+            boxShadow: '0 24px 64px rgba(0, 0, 0, 0.6)',
+            p: 1,
+          },
+        }}
+      >
+        <Box sx={{ p: 2, position: 'relative' }}>
+          <IconButton
+            onClick={() => setDeleteConfirmStep(0)}
+            sx={{
+              position: 'absolute',
+              right: 12,
+              top: 12,
+              color: cv.textMuted || 'rgba(255, 255, 255, 0.4)',
+              '&:hover': { color: cv.textPrimary || '#ffffff', bgcolor: 'rgba(255, 255, 255, 0.08)' },
+            }}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+
+          {/* Top Red Circular Icon Badge */}
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1, mb: 2 }}>
+            <Box
+              sx={{
+                width: 60,
+                height: 60,
+                borderRadius: '50%',
+                bgcolor: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.28)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 0 20px rgba(239, 68, 68, 0.18)',
+              }}
+            >
+              <DeleteOutlineOutlinedIcon sx={{ fontSize: 30, color: cv.destructive || '#ef4444' }} />
+            </Box>
+          </Box>
+
+          <Typography
+            variant="h6"
+            align="center"
+            sx={{ fontWeight: 700, fontSize: '1.2rem', color: cv.textPrimary, mb: 1, px: 2 }}
+          >
+            Are you sure you want to delete this workspace?
+          </Typography>
+
+          {targetWorkspaces.length > 0 && (
+            <Typography
+              variant="body2"
+              align="center"
+              sx={{ color: cv.textSecondary, fontSize: '0.9rem', mb: 2.5 }}
+            >
+              Workspace: <strong style={{ color: cv.textPrimary }}>{targetWorkspaces.map(w => w.workspace).join(', ')}</strong>
+            </Typography>
+          )}
+
+          {/* Option Card Box */}
+          <Box
+            sx={{
+              p: 2.5,
+              borderRadius: '14px',
+              bgcolor: 'rgba(168, 85, 247, 0.05)',
+              border: `1px solid ${cv.border || 'rgba(168, 85, 247, 0.3)'}`,
+              display: 'flex',
+              gap: 1.5,
+              mb: 3,
+            }}
+          >
+            <Box
+              sx={{
+                width: 30,
+                height: 30,
+                borderRadius: '50%',
+                border: '1px solid rgba(168, 85, 247, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                mt: 0.25,
+                color: cv.brandOrchid || '#a855f7',
+              }}
+            >
+              <InfoOutlinedIcon sx={{ fontSize: 18 }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: cv.textPrimary, mb: 0.5 }}>
+                Important notice:
+              </Typography>
+              <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.6 }}>
+                Deleting this workspace will delete all projects, files, and folders contained inside it.
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Action Buttons Row */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5 }}>
+            <Button
+              variant="contained"
+              onClick={() => setDeleteConfirmStep(0)}
+              sx={{
+                borderRadius: '10px',
+                bgcolor: 'rgba(255, 255, 255, 0.08)',
+                color: cv.textPrimary || '#ffffff',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                py: 1,
+                boxShadow: 'none',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.15)', boxShadow: 'none' },
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<DeleteOutlineOutlinedIcon fontSize="small" />}
+              onClick={() => setDeleteConfirmStep(2)}
+              sx={{
+                borderRadius: '10px',
+                bgcolor: cv.destructive || '#ef4444',
+                color: cv.textOnCta || '#ffffff',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                py: 1,
+                boxShadow: 'none',
+                '&:hover': { bgcolor: cv.destructiveHover || '#dc2626', boxShadow: 'none' },
+              }}
+            >
+              Yes, Proceed
+            </Button>
+          </Box>
+        </Box>
+      </Dialog>
+
+      {/* Step 2 Warning Permanent Deletion Dialog */}
+      <Dialog
+        open={deleteConfirmStep === 2}
+        onClose={() => !isDeletingWorkspace && setDeleteConfirmStep(0)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: cv.surfaceElevated || '#1e192b',
+            color: cv.textPrimary,
+            backgroundImage: 'none',
+            border: `1px solid ${cv.border || 'rgba(255, 255, 255, 0.12)'}`,
+            borderRadius: '20px',
+            boxShadow: '0 24px 64px rgba(0, 0, 0, 0.6)',
+            p: 1,
+          },
+        }}
+      >
+        <Box sx={{ p: 2, position: 'relative' }}>
+          <IconButton
+            disabled={isDeletingWorkspace}
+            onClick={() => setDeleteConfirmStep(0)}
+            sx={{
+              position: 'absolute',
+              right: 12,
+              top: 12,
+              color: cv.textMuted || 'rgba(255, 255, 255, 0.4)',
+              '&:hover': { color: cv.textPrimary || '#ffffff', bgcolor: 'rgba(255, 255, 255, 0.08)' },
+            }}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+
+          {/* Top Red Circular Warning Badge */}
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1, mb: 2 }}>
+            <Box
+              sx={{
+                width: 60,
+                height: 60,
+                borderRadius: '50%',
+                bgcolor: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 0 24px rgba(239, 68, 68, 0.25)',
+              }}
+            >
+              <WarningAmberOutlinedIcon sx={{ fontSize: 32, color: cv.destructive || '#ef4444' }} />
+            </Box>
+          </Box>
+
+          <Typography
+            variant="h6"
+            align="center"
+            sx={{ fontWeight: 700, fontSize: '1.2rem', color: cv.destructive || '#ef4444', mb: 1, px: 2 }}
+          >
+            Warning: Permanent Deletion
+          </Typography>
+
+          {targetWorkspaces.length > 0 && (
+            <Typography
+              variant="body2"
+              align="center"
+              sx={{ color: cv.textSecondary, fontSize: '0.9rem', mb: 2.5 }}
+            >
+              Workspace: <strong style={{ color: cv.textPrimary }}>{targetWorkspaces.map(w => w.workspace).join(', ')}</strong>
+            </Typography>
+          )}
+
+          {/* Warning Details Card */}
+          <Box
+            sx={{
+              p: 2.5,
+              borderRadius: '14px',
+              bgcolor: 'rgba(239, 68, 68, 0.08)',
+              border: `1px solid rgba(239, 68, 68, 0.28)`,
+              display: 'flex',
+              gap: 1.5,
+              mb: 3,
+            }}
+          >
+            <Box
+              sx={{
+                width: 30,
+                height: 30,
+                borderRadius: '50%',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                mt: 0.25,
+                color: cv.destructive || '#ef4444',
+              }}
+            >
+              <WarningAmberOutlinedIcon sx={{ fontSize: 18 }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary, mb: 0.5 }}>
+                Once you delete this workspace:
+              </Typography>
+              <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.6 }}>
+                All projects, files, and folders inside it cannot be restored again. It will be permanently deleted from the database and Backblaze B2 cloud storage.
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Action Buttons Row */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5 }}>
+            <Button
+              disabled={isDeletingWorkspace}
+              variant="contained"
+              onClick={() => setDeleteConfirmStep(0)}
+              sx={{
+                borderRadius: '10px',
+                bgcolor: 'rgba(255, 255, 255, 0.08)',
+                color: cv.textPrimary || '#ffffff',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                py: 1,
+                boxShadow: 'none',
+                '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.15)', boxShadow: 'none' },
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={isDeletingWorkspace}
+              variant="contained"
+              startIcon={<DeleteOutlineOutlinedIcon fontSize="small" />}
+              onClick={handlePerformPermanentDelete}
+              sx={{
+                borderRadius: '10px',
+                bgcolor: cv.destructive || '#ef4444',
+                color: cv.textOnCta || '#ffffff',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                py: 1,
+                boxShadow: 'none',
+                '&:hover': { bgcolor: cv.destructiveHover || '#dc2626', boxShadow: 'none' },
+              }}
+            >
+              {isDeletingWorkspace ? 'Deleting...' : 'Delete Permanently'}
+            </Button>
+          </Box>
+        </Box>
+      </Dialog>
     </>
   );
 }

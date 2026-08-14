@@ -35,7 +35,13 @@ export function hasActiveFilterSelections(...selections: Set<string>[]): boolean
 
 export function matchesSetFilter(value: string, selected: Set<string>): boolean {
   if (isFilterAllSelected(selected)) return true;
-  return selected.has(value);
+  if (!value) return false;
+  const valLower = value.toLowerCase().trim();
+  for (const s of selected) {
+    if (s === FILTER_ALL_OPTION || s.toLowerCase().trim() === 'all') return true;
+    if (s.toLowerCase().trim() === valLower) return true;
+  }
+  return false;
 }
 
 export function uniqueSorted(values: string[]): string[] {

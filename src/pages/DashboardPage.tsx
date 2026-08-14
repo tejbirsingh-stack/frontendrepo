@@ -586,14 +586,26 @@ export default function DashboardPage({
 
     if (folderMedia) {
       if (folderMedia.isProject) {
+        const projectFolders = mediaItems.filter(
+          (item) =>
+            (item.linkedProjectIds || []).includes(folderMedia.id) &&
+            item.type === 'folder' &&
+            !trashedIds.has(item.id),
+        );
+        const projectFolderIds = new Set(projectFolders.map((f) => f.id));
+
         const projectMedia = mediaItems.filter(
           (item) =>
             (item.linkedProjectIds || []).includes(folderMedia.id) &&
-            !trashedIds.has(item.id),
+            !trashedIds.has(item.id) &&
+            (!item.parentFolderId || !projectFolderIds.has(item.parentFolderId)),
         );
         const seenIds = new Set(projectMedia.map((i) => i.id));
         const extraFromLibrary = libraryItems.filter(
-          (item) => !seenIds.has(item.id) && !trashedIds.has(item.id),
+          (item) =>
+            !seenIds.has(item.id) &&
+            !trashedIds.has(item.id) &&
+            (!item.parentFolderId || !projectFolderIds.has(item.parentFolderId)),
         );
         return [...projectMedia, ...extraFromLibrary];
       }

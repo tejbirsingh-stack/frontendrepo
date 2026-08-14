@@ -56,6 +56,17 @@ export async function fetchOrganizations(params: Record<string, string> = {}) {
   }>(`/platform/organizations${qs ? `?${qs}` : ''}`);
 }
 
+export async function createOrganization(body: Record<string, unknown>) {
+  return platformRequest<{
+    success: boolean;
+    organization: Record<string, unknown>;
+    adminUser?: Record<string, unknown> | null;
+  }>('/platform/organizations', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function fetchOrganization(orgId: string) {
   return platformRequest<{ success: boolean; organization: Record<string, unknown> }>(
     `/platform/organizations/${orgId}`,
@@ -65,6 +76,60 @@ export async function fetchOrganization(orgId: string) {
 export async function patchOrganization(orgId: string, body: Record<string, unknown>) {
   return platformRequest<{ success: boolean; organization: Record<string, unknown> }>(
     `/platform/organizations/${orgId}`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+}
+
+export async function fetchPlatformUsers(params: Record<string, string> = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return platformRequest<{
+    success: boolean;
+    total: number;
+    users: Array<Record<string, unknown>>;
+  }>(`/platform/users${qs ? `?${qs}` : ''}`);
+}
+
+export async function invitePlatformUser(body: Record<string, unknown>) {
+  return platformRequest<{
+    success: boolean;
+    message?: string;
+    user: Record<string, unknown>;
+  }>('/platform/users', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function fetchPlatformRoles() {
+  return platformRequest<{
+    success: boolean;
+    roles: Array<{ id: string; name: string; show?: number | null }>;
+  }>('/platform/roles');
+}
+
+export async function patchPlatformUser(userId: string, body: Record<string, unknown>) {
+  return platformRequest<{ success: boolean; user: Record<string, unknown> }>(
+    `/platform/users/${userId}`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+}
+
+export async function fetchPlatformWorkspaces(params: Record<string, string> = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return platformRequest<{
+    success: boolean;
+    total: number;
+    workspaces: Array<Record<string, unknown>>;
+  }>(`/platform/workspaces${qs ? `?${qs}` : ''}`);
+}
+
+export async function patchPlatformWorkspace(
+  orgId: string,
+  workspaceId: string,
+  body: Record<string, unknown>,
+) {
+  return platformRequest<{ success: boolean; workspace: Record<string, unknown> }>(
+    `/platform/organizations/${orgId}/workspaces/${workspaceId}`,
     { method: 'PATCH', body: JSON.stringify(body) },
   );
 }
@@ -97,15 +162,17 @@ export async function deletePlan(planId: string) {
   return platformRequest<{ success: boolean }>(`/platform/plans/${planId}`, { method: 'DELETE' });
 }
 
-export async function fetchBillingOverview() {
+export async function fetchBillingOverview(params: Record<string, string> = {}) {
+  const qs = new URLSearchParams(params).toString();
   return platformRequest<{ success: boolean; billing: Record<string, unknown> }>(
-    '/platform/billing/overview',
+    `/platform/billing/overview${qs ? `?${qs}` : ''}`,
   );
 }
 
-export async function fetchUsageOverview() {
+export async function fetchUsageOverview(params: Record<string, string> = {}) {
+  const qs = new URLSearchParams(params).toString();
   return platformRequest<{ success: boolean; usage: Array<Record<string, unknown>> }>(
-    '/platform/usage/overview',
+    `/platform/usage/overview${qs ? `?${qs}` : ''}`,
   );
 }
 
@@ -116,37 +183,28 @@ export async function fetchActivity(params: Record<string, string> = {}) {
   );
 }
 
-export async function fetchReportingSummary() {
-  return platformRequest<{ success: boolean; report: Record<string, unknown> }>(
-    '/platform/reporting/summary',
-  );
-}
-
-export async function fetchModerationFlags(status?: string) {
-  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-  return platformRequest<{ success: boolean; flags: Array<Record<string, unknown>> }>(
-    `/platform/moderation/flags${qs}`,
-  );
-}
-
-export async function updateModerationFlag(flagId: string, body: Record<string, unknown>) {
-  return platformRequest<{ success: boolean; flag: Record<string, unknown> }>(
-    `/platform/moderation/flags/${flagId}`,
-    { method: 'PATCH', body: JSON.stringify(body) },
-  );
-}
-
-export async function searchMedia(params: Record<string, string> = {}) {
+export async function fetchReportingSummary(params: Record<string, string> = {}) {
   const qs = new URLSearchParams(params).toString();
-  return platformRequest<{ success: boolean; assets: Array<Record<string, unknown>> }>(
-    `/platform/media/search${qs ? `?${qs}` : ''}`,
+  return platformRequest<{ success: boolean; report: Record<string, unknown> }>(
+    `/platform/reporting/summary${qs ? `?${qs}` : ''}`,
   );
 }
 
-export async function forceDeleteMedia(assetId: string) {
-  return platformRequest<{ success: boolean }>(`/platform/media/${assetId}/force-delete`, {
-    method: 'POST',
-  });
+export type PlatformReportType =
+  | 'growth'
+  | 'organizations'
+  | 'users'
+  | 'usage'
+  | 'activity';
+
+export async function exportPlatformReports(params: Record<string, string> = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return platformRequest<{
+    success: boolean;
+    filters: Record<string, unknown>;
+    selectedReports: PlatformReportType[];
+    reports: Record<string, unknown>;
+  }>(`/platform/reporting/export${qs ? `?${qs}` : ''}`);
 }
 
 export async function fetchLanding(slug = 'main') {
@@ -155,9 +213,76 @@ export async function fetchLanding(slug = 'main') {
   );
 }
 
+export async function fetchPublicLanding(slug = 'main') {
+  return platformRequest<{ success: boolean; page: Record<string, unknown> }>(
+    `/platform/public/landing?slug=${encodeURIComponent(slug)}`,
+    { skipAuth: true },
+  );
+}
+
+export type DemoRequestPayload = {
+  name: string;
+  email: string;
+  company?: string;
+  teamSize?: string;
+  message?: string;
+};
+
+export async function submitDemoRequest(body: DemoRequestPayload) {
+  return platformRequest<{ success: boolean }>('/platform/public/demo-request', {
+    method: 'POST',
+    skipAuth: true,
+    body: JSON.stringify(body),
+  });
+}
+
 export async function updateLanding(slug: string, body: Record<string, unknown>) {
   return platformRequest<{ success: boolean; page: Record<string, unknown> }>(
     `/platform/landing/${slug}`,
     { method: 'PUT', body: JSON.stringify(body) },
   );
+}
+
+export type PlatformDefaultContentItem = {
+  id: string;
+  title: string;
+  fileName: string;
+  filePath: string;
+  mimeType: string;
+  sizeBytes: string;
+  assetType: string;
+  sortOrder: number;
+  isEnabled: boolean;
+  uploadedById?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  previewUrl?: string | null;
+};
+
+export async function fetchDefaultContent() {
+  return platformRequest<{
+    success: boolean;
+    total: number;
+    items: PlatformDefaultContentItem[];
+  }>('/platform/default-content');
+}
+
+export async function uploadDefaultContent(formData: FormData) {
+  return platformRequest<{ success: boolean; item: PlatformDefaultContentItem }>(
+    '/platform/default-content',
+    { method: 'POST', body: formData },
+  );
+}
+
+export async function updateDefaultContent(id: string, body: Record<string, unknown>) {
+  return platformRequest<{ success: boolean; item: PlatformDefaultContentItem }>(
+    `/platform/default-content/${id}`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+}
+
+export async function deleteDefaultContent(id: string) {
+  return platformRequest<{ success: boolean }>(`/platform/default-content/${id}`, {
+    method: 'DELETE',
+  });
 }

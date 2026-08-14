@@ -615,7 +615,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             title: a.title || 'Untitled',
             type,
             workspaceId: activeWorkspaceId!,
-            parentFolderId: a.folderId || null,
+            parentFolderId: a.folderId || (a.ownerType === 'FOLDER' ? a.ownerId : null),
             linkedProjectIds: [projectId],
             createdAt: a.createdAt || a.uploadDate || new Date().toISOString(),
             sizeBytes: Number(a.files?.[0]?.sizeBytes || a.size || 0),
