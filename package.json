@@ -16,6 +16,8 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.1.0",
     "@mui/material": "^9.1.0",
+    "@stripe/react-stripe-js": "^6.8.1",
+    "@stripe/stripe-js": "^9.13.0",
     "axios": "^1.18.1",
     "emoji-picker-element": "^1.29.1",
     "exceljs": "^4.4.0",
