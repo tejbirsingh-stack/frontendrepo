@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react';
-import { Box, Button, Typography, keyframes } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { Box, Button, Typography, keyframes, Dialog, DialogTitle, DialogContent, DialogActions, Stack, Radio, RadioGroup } from '@mui/material';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
+import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
 import LiquidBackground from '../LiquidBackground';
 import WaveBackground from '../WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../NoahLogo';
 import { cv } from '../../theme/cssVars';
 import { fetchPublicCatalogPlans } from '../../platform/api/platformApi';
 import { useAuth } from '../../auth/AuthContext';
+import { billingService } from '../../api/billing.service';
 
 type BillingCycle = 'annual' | 'monthly';
 type PlanId = string;
@@ -17,6 +21,8 @@ interface PlanDefinition {
   description: string;
   monthlyPrice: number;
   yearlyPrice?: number;
+  monthlyPriceId?: string;
+  yearlyPriceId?: string;
   cta: string;
   featured?: boolean;
   features: string[];
@@ -115,7 +121,7 @@ function priceForCycle(plan: PlanDefinition, cycle: BillingCycle): number {
 
 interface ChoosePlanScreenProps {
   /** Called when a plan CTA is clicked. No navigation — parent decides next step. */
-  onSelectPlan?: (planId: PlanId, billingCycle: BillingCycle) => void;
+  onSelectPlan?: (planId: PlanId, billingCycle: BillingCycle, priceId?: string, useSavedCard?: boolean) => void;
   currentPlanId?: string;
 }
 
@@ -131,7 +137,26 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('annual');
   const [selectedPlan, setSelectedPlan] = useState<PlanId>(() => (currentPlanId || DEFAULT_PLAN).toLowerCase());
   const [plans, setPlans] = useState<PlanDefinition[]>(FALLBACK_PLANS);
+  const [savedCards, setSavedCards] = useState<any[]>([]);
+  const [paymentOption, setPaymentOption] = useState<'saved' | 'new'>('saved');
   const isSettingsFlow = Boolean(currentPlanId && currentPlanId.trim() !== '');
+
+  useEffect(() => {
+    billingService.getPaymentMethods()
+      .then((res) => {
+        if (res?.cards?.length) {
+          setSavedCards(res.cards);
+          setPaymentOption('saved');
+        } else {
+          setSavedCards([]);
+          setPaymentOption('new');
+        }
+      })
+      .catch(() => {
+        setSavedCards([]);
+        setPaymentOption('new');
+      });
+  }, []);
 
   useEffect(() => {
     if (currentPlanId) {
@@ -150,6 +175,8 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
             description: p.description || '',
             monthlyPrice: (p.monthlyPriceCents || 0) / 100,
             yearlyPrice: ((p.yearlyPriceCents ?? p.annualPriceCents) || 0) / 100,
+            monthlyPriceId: p.monthlyPriceId,
+            yearlyPriceId: p.yearlyPriceId,
             cta: p.ctaLabel || `Start with ${p.name}`,
             featured: Boolean(p.isFeatured),
             features: Array.isArray(p.features) ? p.features : [],
@@ -164,13 +191,43 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
       });
   }, [currentPlanId]);
 
+  const [confirmPlanModal, setConfirmPlanModal] = useState<{
+    planId: string;
+    planName: string;
+    priceId?: string;
+    isSamePlan: boolean;
+  } | null>(null);
+
   const handleSelect = (planId: PlanId) => {
     const pId = String(planId).toLowerCase().trim();
-    if (isSettingsFlow && (pId === 'free' || pId === 'f2fe83c1-d36a-4cd3-b173-7f394a77c6bd')) {
+    const normCurrentPlan = (currentPlanId || '').toLowerCase().trim();
+    const targetPlan = plans.find((p) => (p.name || p.id).toLowerCase() === pId || p.id === planId);
+    const selectedPriceId = billingCycle === 'annual' 
+      ? (targetPlan?.yearlyPriceId || targetPlan?.monthlyPriceId) 
+      : targetPlan?.monthlyPriceId;
+
+    if (isSettingsFlow) {
+      const isSame = normCurrentPlan === pId || normCurrentPlan === (targetPlan?.name || '').toLowerCase();
+      setConfirmPlanModal({
+        planId,
+        planName: targetPlan?.name || planId,
+        priceId: selectedPriceId,
+        isSamePlan: isSame,
+      });
       return;
     }
+
     setSelectedPlan(planId);
-    onSelectPlan?.(planId, billingCycle);
+    onSelectPlan?.(planId, billingCycle, selectedPriceId, paymentOption === 'saved' && savedCards.length > 0);
+  };
+
+  const handleConfirmSwitch = () => {
+    if (!confirmPlanModal) return;
+    const { planId, priceId } = confirmPlanModal;
+    const useSaved = paymentOption === 'saved' && savedCards.length > 0;
+    setConfirmPlanModal(null);
+    setSelectedPlan(planId);
+    onSelectPlan?.(planId, billingCycle, priceId, useSaved);
   };
 
   return (
@@ -345,10 +402,16 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
             let isFreeDisabled = false;
             let isButtonDisabled = false;
 
-            const isTrialUsedInOrg = user?.organization?.isFreeTrialUsed ?? (normCurrentPlan !== 'free');
+            const isTrialUsedInOrg = isSettingsFlow
+              ? (user?.organization?.isFreeTrialUsed ?? (normCurrentPlan !== 'free'))
+              : Boolean(user?.organization?.isFreeTrialUsed);
 
             if (isSettingsFlow) {
-              if (normCurrentPlan === planKey) {
+              if (
+                normCurrentPlan === planKey || 
+                normCurrentPlan === plan.id.toLowerCase() || 
+                normCurrentPlan === (plan.name || '').toLowerCase()
+              ) {
                 isSelected = true;
                 isButtonDisabled = true;
               } else if (isFree) {
@@ -380,14 +443,18 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
                   background: cv.glassBackground,
                   backdropFilter: 'blur(40px) saturate(180%)',
                   WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-                  border: isSelected || isFeatured
-                    ? `1.5px solid ${cv.brandOrchid}`
-                    : `1px solid ${cv.border}`,
-                  boxShadow: isSelected
-                    ? `0 0 40px ${cv.purpleGlow24}, ${cv.cardShadow}`
-                    : isFeatured
-                      ? `0 0 32px ${cv.purpleGlow24}, ${cv.cardShadow}`
-                      : cv.cardShadow,
+                  border: isSelected && isSettingsFlow
+                    ? '1.5px solid #22c55e'
+                    : isSelected || isFeatured
+                      ? `1.5px solid ${cv.brandOrchid}`
+                      : `1px solid ${cv.border}`,
+                  boxShadow: isSelected && isSettingsFlow
+                    ? '0 0 32px rgba(34, 197, 94, 0.25)'
+                    : isSelected
+                      ? `0 0 40px ${cv.purpleGlow24}, ${cv.cardShadow}`
+                      : isFeatured
+                        ? `0 0 32px ${cv.purpleGlow24}, ${cv.cardShadow}`
+                        : cv.cardShadow,
                   overflow: 'hidden',
                   opacity: isFreeDisabled ? 0.6 : 1,
                   mt: { lg: isFeatured || isSelected ? 0 : 1.5 },
@@ -395,7 +462,27 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
                   transition: 'border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease',
                 }}
               >
-                {isFeatured ? (
+                {isSelected && isSettingsFlow ? (
+                  <Box
+                    sx={{
+                      py: 0.85,
+                      px: 2,
+                      textAlign: 'center',
+                      backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                      color: '#22c55e',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.01em',
+                      borderBottom: '1px solid rgba(34, 197, 94, 0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 0.5,
+                    }}
+                  >
+                    <CheckCircleOutlinedIcon sx={{ fontSize: 16 }} /> Active Plan
+                  </Box>
+                ) : isFeatured ? (
                   <Box
                     sx={{
                       py: 0.85,
@@ -409,22 +496,6 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
                     }}
                   >
                     Recommended for you
-                  </Box>
-                ) : isSelected && isSettingsFlow ? (
-                  <Box
-                    sx={{
-                      py: 0.85,
-                      px: 2,
-                      textAlign: 'center',
-                      backgroundColor: cv.purpleSurface,
-                      color: cv.brandOrchid,
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      letterSpacing: '0.01em',
-                      borderBottom: `1px solid ${cv.purpleChipBorder}`,
-                    }}
-                  >
-                    Current selection
                   </Box>
                 ) : isFreeDisabled ? (
                   <Box
@@ -662,6 +733,231 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
           })}
         </Box>
       </Box>
+
+      {/* Confirmation Dialog before switching plans */}
+      <Dialog
+        open={Boolean(confirmPlanModal)}
+        onClose={() => setConfirmPlanModal(null)}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          backdrop: {
+            sx: {
+              backgroundColor: 'rgba(0, 0, 0, 0.65)',
+              backdropFilter: 'blur(8px)',
+            },
+          },
+        }}
+        PaperProps={{
+          style: { backgroundColor: '#13111e', backgroundImage: 'none' },
+          sx: {
+            backgroundColor: '#13111e !important',
+            backgroundImage: 'none !important',
+            border: '1px solid rgba(168, 85, 247, 0.4)',
+            borderRadius: '24px',
+            boxShadow: '0 24px 64px rgba(0, 0, 0, 0.9), 0 0 40px rgba(168, 85, 247, 0.3)',
+            p: 1,
+            color: '#ffffff',
+          },
+        }}
+      >
+        <DialogContent sx={{ textAlign: 'center', py: 3.5, px: 3 }}>
+          {/* Glowing Purple Header Icon */}
+          <Box
+            sx={{
+              width: 64,
+              height: 64,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(99, 102, 241, 0.35))',
+              border: '1.5px solid rgba(168, 85, 247, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              mx: 'auto',
+              mb: 2.5,
+              boxShadow: '0 0 24px rgba(168, 85, 247, 0.35)',
+            }}
+          >
+            {confirmPlanModal?.isSamePlan ? (
+              <CheckCircleOutlinedIcon sx={{ fontSize: 36, color: '#22c55e' }} />
+            ) : (
+              <SwapHorizRoundedIcon sx={{ fontSize: 36, color: cv.brandOrchid }} />
+            )}
+          </Box>
+
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#ffffff', fontSize: '1.25rem' }}>
+            {confirmPlanModal?.isSamePlan ? 'Active Plan Selected' : 'Switch Subscription Plan?'}
+          </Typography>
+
+          <Typography variant="body2" sx={{ color: cv.textMuted, mb: 2.5, lineHeight: 1.6, fontSize: '0.875rem' }}>
+            {confirmPlanModal?.isSamePlan
+              ? `You are currently subscribed to the ${confirmPlanModal?.planName} plan.`
+              : `Are you sure you want to switch your organization's subscription to the ${confirmPlanModal?.planName} plan?`}
+          </Typography>
+
+          {!confirmPlanModal?.isSamePlan && (
+            <>
+              <Box
+                sx={{
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  borderRadius: '14px',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  p: 2,
+                  mb: 2.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <Typography variant="body2" sx={{ color: cv.textMuted }}>
+                  Target Plan
+                </Typography>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: cv.brandOrchid }}>
+                  {confirmPlanModal?.planName} ({billingCycle})
+                </Typography>
+              </Box>
+
+              <Box sx={{ textAlign: 'left', mb: 3 }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: cv.textMuted,
+                    fontWeight: 600,
+                    display: 'block',
+                    mb: 1.25,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  Payment Method
+                </Typography>
+
+                <RadioGroup
+                  value={paymentOption}
+                  onChange={(e) => setPaymentOption(e.target.value as 'saved' | 'new')}
+                  sx={{ gap: 1.25 }}
+                >
+                  {savedCards.length > 0 && (
+                    <Box
+                      onClick={() => setPaymentOption('saved')}
+                      sx={{
+                        p: 1.5,
+                        borderRadius: '12px',
+                        border: `1px solid ${paymentOption === 'saved' ? 'rgba(168, 85, 247, 0.6)' : 'rgba(255, 255, 255, 0.1)'}`,
+                        backgroundColor: paymentOption === 'saved' ? 'rgba(168, 85, 247, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        transition: 'all 0.2s',
+                        '&:hover': { borderColor: 'rgba(168, 85, 247, 0.4)' },
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                        <Radio
+                          value="saved"
+                          checked={paymentOption === 'saved'}
+                          sx={{ color: cv.textMuted, '&.Mui-checked': { color: cv.brandOrchid }, p: 0.25 }}
+                        />
+                        <CreditCardOutlinedIcon sx={{ color: cv.brandOrchid, fontSize: 20 }} />
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: '#ffffff', fontSize: '0.84rem' }}>
+                            {savedCards[0].brand?.toUpperCase() || 'Card'} ending in {savedCards[0].last4}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: cv.textMuted, fontSize: '0.72rem' }}>
+                            Use existing saved card
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Box>
+                  )}
+
+                  <Box
+                    onClick={() => setPaymentOption('new')}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: '12px',
+                      border: `1px solid ${paymentOption === 'new' ? 'rgba(168, 85, 247, 0.6)' : 'rgba(255, 255, 255, 0.1)'}`,
+                      backgroundColor: paymentOption === 'new' ? 'rgba(168, 85, 247, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      transition: 'all 0.2s',
+                      '&:hover': { borderColor: 'rgba(168, 85, 247, 0.4)' },
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                      <Radio
+                        value="new"
+                        checked={paymentOption === 'new'}
+                        sx={{ color: cv.textMuted, '&.Mui-checked': { color: cv.brandOrchid }, p: 0.25 }}
+                      />
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: '#ffffff', fontSize: '0.84rem' }}>
+                          Use a new payment card
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: cv.textMuted, fontSize: '0.72rem' }}>
+                          Opens secure Stripe Checkout page
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                </RadioGroup>
+              </Box>
+            </>
+          )}
+
+          <Stack spacing={1.5}>
+            {!confirmPlanModal?.isSamePlan && (
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={handleConfirmSwitch}
+                sx={{
+                  background: cv.brandGradient,
+                  color: cv.textOnCta,
+                  fontWeight: 600,
+                  py: 1.1,
+                  borderRadius: '12px',
+                  textTransform: 'none',
+                  fontSize: '0.9375rem',
+                  boxShadow: cv.brandShadowSoft,
+                  '&:hover': {
+                    background: cv.brandGradientHover,
+                    boxShadow: cv.brandShadowStrong,
+                  },
+                }}
+              >
+                {paymentOption === 'saved' && savedCards.length > 0
+                  ? 'Confirm & Pay with Saved Card'
+                  : 'Proceed to Stripe Payment'}
+              </Button>
+            )}
+
+            <Button
+              variant="outlined"
+              fullWidth
+              onClick={() => setConfirmPlanModal(null)}
+              sx={{
+                borderColor: 'rgba(255, 255, 255, 0.15)',
+                color: cv.textPrimary,
+                fontWeight: 500,
+                py: 1,
+                borderRadius: '12px',
+                textTransform: 'none',
+                '&:hover': {
+                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                },
+              }}
+            >
+              Cancel
+            </Button>
+          </Stack>
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }

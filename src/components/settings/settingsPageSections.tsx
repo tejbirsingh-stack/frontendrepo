@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import ProjectDeleteFlowModal from '../modals/ProjectDeleteFlowModal';
 import { getUsageSummary } from '../../api/usage.service';
@@ -9,7 +10,9 @@ import { fetchUserGroups } from '../../api/userGroups.service';
 import { useAuth } from '../../auth/AuthContext';
 import { useLocalizedDate } from '../../hooks/useLocalizedDate';
 import { cv } from '../../theme/cssVars';
+import { billingService } from '../../api/billing.service';
 import ChoosePlanScreen from '../onboarding/ChoosePlanScreen';
+import PaymentSuccessModal from './PaymentSuccessModal';
 import {
   Avatar,
   Box,
@@ -859,12 +862,77 @@ export function CompanySettingsSection() {
 export { default as UsageSettingsSection } from './UsageSettingsSection';
 
 export function PlanSettingsSection() {
+  const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
   const plan = useMemo(() => getDynamicPlanDetails(user), [user]);
   const [choosePlanOpen, setChoosePlanOpen] = useState(false);
+  const [successModalDetails, setSuccessModalDetails] = useState<any>(null);
 
-  const handleUpgradePlan = async (planId: string, billingCycle: 'annual' | 'monthly') => {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    const success = params.get('success');
+    if (success === 'true' && sessionId) {
+      toast.loading('Confirming your payment...', { id: 'stripe-sync' });
+      billingService
+        .syncSession(sessionId)
+        .then(async (res) => {
+          await refreshUser();
+          toast.success(res?.message || 'Subscription successfully updated!', { id: 'stripe-sync' });
+          if (res?.checkoutDetails) {
+            setSuccessModalDetails(res.checkoutDetails);
+          }
+        })
+        .catch((err) => {
+          console.error('[Stripe Sync Error]', err);
+          toast.error(err?.message || 'Failed to sync subscription status', { id: 'stripe-sync' });
+        })
+        .finally(() => {
+          const cleanUrl = window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        });
+    }
+  }, [refreshUser]);
+
+  const handleUpgradePlan = async (
+    planId: string,
+    billingCycle: 'annual' | 'monthly',
+    priceId?: string,
+    useSavedCard: boolean = true,
+  ) => {
     try {
+      let activePriceId = priceId;
+      const normalizedId = planId.toLowerCase().trim();
+
+      if (!activePriceId && normalizedId !== 'free') {
+        const { fetchPublicCatalogPlans } = await import('../../platform/api/platformApi');
+        const catalog = await fetchPublicCatalogPlans().catch(() => null);
+        const match = catalog?.plans?.find(
+          (p: any) => p.name?.toLowerCase() === normalizedId || p.id?.toLowerCase() === normalizedId
+        );
+        if (match) {
+          activePriceId = billingCycle === 'annual' ? (match.yearlyPriceId || match.monthlyPriceId) : match.monthlyPriceId;
+        }
+        if (!activePriceId) {
+          activePriceId = normalizedId;
+        }
+      }
+
+      if (activePriceId) {
+        toast.loading(useSavedCard ? 'Processing subscription upgrade...' : 'Opening payment page...', { id: 'stripe-checkout' });
+        const res: any = await billingService.createCheckoutSession(activePriceId, useSavedCard);
+        if (res?.directUpgrade) {
+          await refreshUser();
+          toast.success(res.message || 'Subscription successfully upgraded!', { id: 'stripe-checkout' });
+          navigate('/home/settings/accounts/billing');
+          return;
+        }
+        if (res?.url) {
+          window.location.href = res.url;
+          return;
+        }
+      }
+
       const { apiClient } = await import('../../api/client');
       const token = localStorage.getItem('token');
       const res = await apiClient.post<any>('/auth/upgrade-plan', { planId, billingCycle }, {
@@ -876,13 +944,38 @@ export function PlanSettingsSection() {
     } catch (err: any) {
       console.error('Failed to upgrade plan:', err);
       const errMsg = err?.response?.data?.message || err?.message || 'Failed to upgrade plan';
-      toast.error(errMsg);
+      toast.error(errMsg, { id: 'stripe-checkout' });
     }
   };
 
   return (
     <>
       <SettingsFormContainer>
+        {user?.organization?.subscriptionStatus === 'active' && (
+          <Box
+            sx={{
+              p: 2,
+              mb: 2.5,
+              borderRadius: '14px',
+              background: 'rgba(34, 197, 94, 0.08)',
+              border: '1px solid rgba(34, 197, 94, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.75,
+            }}
+          >
+            <CheckCircleOutlinedIcon sx={{ color: '#22c55e', fontSize: 26, flexShrink: 0 }} />
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#ffffff' }}>
+                You are currently on the active {plan.planName} Plan
+              </Typography>
+              <Typography variant="body2" sx={{ color: cv.textMuted, fontSize: '0.8125rem', mt: 0.25 }}>
+                Your subscription is active and set to renew on {plan.expiryDateFormatted}. You can switch tiers or manage billing details anytime.
+              </Typography>
+            </Box>
+          </Box>
+        )}
+
         <SettingsSectionCard
           title="Current Plan"
           description="Active tier, billing cycle term, and subscription line items."
@@ -983,6 +1076,25 @@ export function PlanSettingsSection() {
         </Box>
         <ChoosePlanScreen onSelectPlan={handleUpgradePlan} currentPlanId={plan.planId} />
       </Dialog>
+
+      {/* Payment Success Confirmation & Invoice Download Modal */}
+      <PaymentSuccessModal
+        open={Boolean(successModalDetails)}
+        onClose={() => setSuccessModalDetails(null)}
+        details={successModalDetails}
+        onManageBilling={async () => {
+          try {
+            toast.loading('Opening Stripe Portal...', { id: 'portal-launch' });
+            const res = await billingService.createPortalSession();
+            toast.dismiss('portal-launch');
+            if (res?.url) {
+              window.open(res.url, '_blank', 'noopener,noreferrer');
+            }
+          } catch (err: any) {
+            toast.error(err?.message || 'Failed to open billing portal', { id: 'portal-launch' });
+          }
+        }}
+      />
     </>
   );
 }
