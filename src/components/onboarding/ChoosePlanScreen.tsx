@@ -740,6 +740,9 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
         onClose={() => setConfirmPlanModal(null)}
         maxWidth="xs"
         fullWidth
+        sx={{
+          zIndex: 20000,
+        }}
         slotProps={{
           backdrop: {
             sx: {
@@ -747,17 +750,17 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
               backdropFilter: 'blur(8px)',
             },
           },
-        }}
-        PaperProps={{
-          style: { backgroundColor: '#13111e', backgroundImage: 'none' },
-          sx: {
-            backgroundColor: '#13111e !important',
-            backgroundImage: 'none !important',
-            border: '1px solid rgba(168, 85, 247, 0.4)',
-            borderRadius: '24px',
-            boxShadow: '0 24px 64px rgba(0, 0, 0, 0.9), 0 0 40px rgba(168, 85, 247, 0.3)',
-            p: 1,
-            color: '#ffffff',
+          paper: {
+            style: { backgroundColor: '#13111e', backgroundImage: 'none' },
+            sx: {
+              backgroundColor: '#13111e !important',
+              backgroundImage: 'none !important',
+              border: '1px solid rgba(168, 85, 247, 0.4)',
+              borderRadius: '24px',
+              boxShadow: '0 24px 64px rgba(0, 0, 0, 0.9), 0 0 40px rgba(168, 85, 247, 0.3)',
+              p: 1,
+              color: '#ffffff',
+            },
           },
         }}
       >

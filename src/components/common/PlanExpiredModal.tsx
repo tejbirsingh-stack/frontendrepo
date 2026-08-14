@@ -10,6 +10,8 @@ import ChoosePlanScreen from '../onboarding/ChoosePlanScreen';
 import { getDynamicPlanDetails } from '../../utils/planHelper';
 import { apiClient } from '../../api/client';
 
+import { billingService } from '../../api/billing.service';
+
 export default function PlanExpiredModal() {
   const { user, refreshUser, clearSession } = useAuth();
   const [choosePlanOpen, setChoosePlanOpen] = useState(false);
@@ -36,9 +38,46 @@ export default function PlanExpiredModal() {
     rawRole.includes('system admin') ||
     rawRole.includes('admin');
 
-  const handleUpgradePlan = async (planId: string, billingCycle: 'annual' | 'monthly') => {
+  const handleUpgradePlan = async (
+    planId: string,
+    billingCycle: 'annual' | 'monthly',
+    priceId?: string,
+    useSavedCard: boolean = true,
+  ) => {
     setIsUpgrading(true);
     try {
+      let activePriceId = priceId;
+      const normalizedId = planId.toLowerCase().trim();
+
+      if (!activePriceId && normalizedId !== 'free') {
+        const { fetchPublicCatalogPlans } = await import('../../platform/api/platformApi');
+        const catalog = await fetchPublicCatalogPlans().catch(() => null);
+        const match = catalog?.plans?.find(
+          (p: any) => p.name?.toLowerCase() === normalizedId || p.id?.toLowerCase() === normalizedId
+        );
+        if (match) {
+          activePriceId = billingCycle === 'annual' ? (match.yearlyPriceId || match.monthlyPriceId) : match.monthlyPriceId;
+        }
+        if (!activePriceId) {
+          activePriceId = normalizedId;
+        }
+      }
+
+      if (activePriceId) {
+        toast.loading(useSavedCard ? 'Processing subscription upgrade...' : 'Opening payment page...', { id: 'stripe-checkout' });
+        const res: any = await billingService.createCheckoutSession(activePriceId, useSavedCard);
+        if (res?.directUpgrade) {
+          await refreshUser();
+          toast.success(res.message || 'Subscription successfully upgraded!', { id: 'stripe-checkout' });
+          setChoosePlanOpen(false);
+          return;
+        }
+        if (res?.url) {
+          window.location.href = res.url;
+          return;
+        }
+      }
+
       const token = localStorage.getItem('token');
       const res = await apiClient.post<any>(
         '/auth/upgrade-plan',
@@ -53,7 +92,7 @@ export default function PlanExpiredModal() {
     } catch (err: any) {
       console.error('Failed to upgrade plan:', err);
       const errMsg = err?.response?.data?.message || err?.message || 'Failed to upgrade plan';
-      toast.error(errMsg);
+      toast.error(errMsg, { id: 'stripe-checkout' });
     } finally {
       setIsUpgrading(false);
     }
@@ -63,7 +102,6 @@ export default function PlanExpiredModal() {
     <>
       <Dialog
         open={true}
-        disableEscapeKeyDown
         keepMounted
         sx={{
           zIndex: 9999,
