@@ -247,8 +247,62 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     [mediaItems],
   );
 
-  // Empty stub kept for interface compatibility (no localStorage tracking)
-  const trashedAtById: Record<string, string> = {};
+  const trashedAtById = useMemo(() => {
+    const map: Record<string, string> = {};
+    mediaItems.forEach((item) => {
+      if (item.status === 'trash' && item.deletedAt) {
+        map[item.id] = item.deletedAt;
+      }
+    });
+    return map;
+  }, [mediaItems]);
+
+  const fetchTrashItems = useCallback(async () => {
+    try {
+      const { apiClient } = await import('../api/client');
+      const response = await apiClient.get<any>('/media/trash');
+      const resBody = (response as any).data || response;
+      const assets = resBody.assets || resBody.data || (Array.isArray(resBody) ? resBody : []);
+
+      if (Array.isArray(assets)) {
+        const trashMediaItems: MediaItem[] = assets.map((a: any) => {
+          const imageExtRegex = /\.(jpg|jpeg|png|webp|gif|svg|exr|openexr|dpx|cin|tiff|tif|psd|psb|ai|eps|pcx|jpf|bmp|mpo)$/i;
+          const isVideo = a.type === 'video' || /\.(mp4|mov|webm|avi|mkv|flv|wmv|m4v)$/i.test(a.name || a.title || '');
+          const isAudio = a.type === 'audio' || /\.(mp3|wav|ogg|aac|m4a|flac|alac)$/i.test(a.name || a.title || '');
+          const isImage = a.type === 'image' || imageExtRegex.test(a.name || a.title || '');
+          const type: MediaType = isVideo ? 'video' : isAudio ? 'audio' : isImage ? 'image' : (a.type || 'video');
+
+          return {
+            id: a.id,
+            title: a.name || a.title || 'Untitled',
+            type,
+            workspaceId: a.workspaceId || activeWorkspaceId || '',
+            createdAt: a.uploadDate || a.createdAt || new Date().toISOString(),
+            deletedAt: a.deletedAt || new Date().toISOString(),
+            sizeBytes: Number(a.size || 0),
+            storageProvider: 'b2',
+            uploadedBy: CURRENT_USER.name,
+            thumbnail: a.thumbnail || `/api/media/${encodeURIComponent(a.id)}/thumbnail`,
+            videoSrc: a.url || `/api/media/${encodeURIComponent(a.id)}/stream`,
+            status: 'trash',
+          };
+        });
+
+        setMediaItems((prev) => {
+          const nonTrash = prev.filter((m) => m.status !== 'trash');
+          const trashMap = new Map(trashMediaItems.map((item) => [item.id, item]));
+          prev.filter((m) => m.status === 'trash').forEach((item) => {
+            if (!trashMap.has(item.id)) {
+              trashMap.set(item.id, item);
+            }
+          });
+          return [...nonTrash, ...Array.from(trashMap.values())];
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch trash items:', err);
+    }
+  }, [activeWorkspaceId]);
   const prefetchFolderTreesRef = useRef<(folderIds: string[]) => Promise<void>>(async () => {});
 
   useEffect(() => {
@@ -427,7 +481,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchWorkspaceData();
-  }, [activeWorkspaceId, fetchWorkspaceData]);
+    fetchTrashItems();
+  }, [activeWorkspaceId, fetchWorkspaceData, fetchTrashItems]);
 
   // Listen for upload completion events (from background upload queue or modal)
   useEffect(() => {
@@ -1346,7 +1401,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       // Send DELETE to backend (with reason)
       uniqueIds.forEach((id) => {
-        apiClient.delete(`/media/${id}`, { body: { reason } }).catch(err => console.error('Failed to sync delete with backend', err));
+        apiClient.delete(`/media/${id}`, { body: { reason } })
+          .then(() => { void fetchTrashItems(); })
+          .catch(err => console.error('Failed to sync delete with backend', err));
       });
 
       setFavorites((prev) => {
@@ -1414,7 +1471,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
 
     uniqueIds.forEach((id) => {
-      apiClient.post(`/media/${id}/restore`).catch(err => console.error('Failed to sync restore with backend', err));
+      apiClient.post(`/media/${id}/restore`)
+        .then(() => { void fetchTrashItems(); })
+        .catch(err => console.error('Failed to sync restore with backend', err));
     });
 
     // Restore to active in local state

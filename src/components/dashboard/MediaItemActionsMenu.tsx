@@ -375,8 +375,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             e.stopPropagation();
             if (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
             if (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) return;
-            handleMenuClose(e);
-            onTrash();
+            openDelete();
           }}
           sx={{
             py: 1,
