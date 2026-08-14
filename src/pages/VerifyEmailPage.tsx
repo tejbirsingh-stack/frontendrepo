@@ -8,9 +8,11 @@ import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
 import { cv } from '../theme/cssVars';
+import { useForcedDarkTheme } from '../context/ThemePreferenceContext';
 import { verifyEmailRequest } from '../api/auth.service';
 
 export default function VerifyEmailPage() {
+  useForcedDarkTheme();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') || '';
@@ -87,7 +89,7 @@ export default function VerifyEmailPage() {
         }}
       >
         <Box sx={AUTH_LOGO_PARENT_SX}>
-          <NoahLogo sx={AUTH_LOGO_SX} />
+          <NoahLogo sx={AUTH_LOGO_SX} showGlow={false} animated={false} />
         </Box>
 
         <GlassCard glow sx={{ width: '100%', maxWidth: 460 }}>
@@ -122,7 +124,7 @@ export default function VerifyEmailPage() {
                 <Button
                   variant="contained"
                   fullWidth
-                  onClick={() => navigate('/', { replace: true })}
+                  onClick={() => navigate('/login', { replace: true })}
                   sx={{
                     py: 1.5,
                     background: cv.brandGradient,
@@ -148,7 +150,7 @@ export default function VerifyEmailPage() {
                 <Button
                   variant="contained"
                   fullWidth
-                  onClick={() => navigate('/', { replace: true })}
+                  onClick={() => navigate('/login', { replace: true })}
                   sx={{
                     py: 1.5,
                     background: cv.brandGradient,

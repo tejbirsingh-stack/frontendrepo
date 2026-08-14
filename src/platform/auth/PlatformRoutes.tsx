@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
+import { useForcedDarkTheme } from '../../context/ThemePreferenceContext';
 import { usePlatformAuth } from './PlatformAuthContext';
 
 export function PlatformProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -22,6 +23,7 @@ export function PlatformProtectedRoute({ children }: { children: React.ReactNode
 }
 
 export function PlatformGuestRoute({ children }: { children: React.ReactNode }) {
+  useForcedDarkTheme();
   const { isAuthenticated, isInitializing } = usePlatformAuth();
 
   if (isInitializing) {

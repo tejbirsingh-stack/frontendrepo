@@ -25,7 +25,11 @@ export async function platformRequest<T>(
   const { skipAuth, headers, ...rest } = options;
   const requestHeaders = new Headers(headers);
   requestHeaders.set('Accept', 'application/json');
-  if (rest.body && !requestHeaders.has('Content-Type')) {
+  if (
+    rest.body &&
+    !(typeof FormData !== 'undefined' && rest.body instanceof FormData) &&
+    !requestHeaders.has('Content-Type')
+  ) {
     requestHeaders.set('Content-Type', 'application/json');
   }
 

@@ -4,12 +4,12 @@ import { useThemePreference } from '../../context/ThemePreferenceContext';
 import { getSkeletonThemeColors } from '../../theme/skeletonColors';
 
 export default function AppSkeletonTheme({ children }: { children: ReactNode }) {
-  const { mode } = useThemePreference();
-  const colors = getSkeletonThemeColors(mode);
+  const { effectiveMode } = useThemePreference();
+  const colors = getSkeletonThemeColors(effectiveMode);
 
   return (
     <SkeletonTheme
-      key={mode}
+      key={effectiveMode}
       baseColor={colors.baseColor}
       highlightColor={colors.highlightColor}
       borderRadius="0.5rem"

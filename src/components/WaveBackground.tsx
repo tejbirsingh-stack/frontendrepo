@@ -1,6 +1,10 @@
-import { Box } from '@mui/material';
+import { Box, type SxProps, type Theme } from '@mui/material';
 
-export default function WaveBackground() {
+type WaveBackgroundProps = Readonly<{
+  sx?: SxProps<Theme>;
+}>;
+
+export default function WaveBackground({ sx }: WaveBackgroundProps) {
   return (
     <Box
       className="wave-background"
@@ -12,6 +16,7 @@ export default function WaveBackground() {
         width: '100%',
         zIndex: 0,
         pointerEvents: 'none',
+        ...sx,
       }}
     >
       <svg

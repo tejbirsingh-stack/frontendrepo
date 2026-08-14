@@ -24,6 +24,14 @@ import WaveBackground from '../components/WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
 import LoginDemoAccountsBubble from '../components/demo/LoginDemoAccountsBubble';
 import { useAuth } from '../auth/AuthContext';
+import { getPostAuthRedirect } from '../auth/paths';
+
+function redirectFromState(state: unknown): string {
+  if (typeof state === 'object' && state !== null && 'from' in state) {
+    return getPostAuthRedirect((state as { from?: unknown }).from);
+  }
+  return getPostAuthRedirect();
+}
 
 export default function LoginPage() {
   const { instance } = useMsal();
@@ -47,13 +55,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
-    const redirectPath =
-      typeof location.state === 'object' &&
-        location.state !== null &&
-        'from' in location.state &&
-        typeof (location.state as { from?: unknown }).from === 'string'
-        ? (location.state as { from: string }).from
-        : '/home';
+    const redirectPath = redirectFromState(location.state);
 
     try {
       await login({
@@ -79,13 +81,7 @@ export default function LoginPage() {
     setError('');
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "967923512322-0oullb620hh9se1ff0prs8stvbspi829.apps.googleusercontent.com";
 
-    const redirectPath =
-      typeof location.state === 'object' &&
-        location.state !== null &&
-        'from' in location.state &&
-        typeof (location.state as { from?: unknown }).from === 'string'
-        ? (location.state as { from: string }).from
-        : '/home';
+    const redirectPath = redirectFromState(location.state);
 
     // Helper function to dynamically load Google Identity Services SDK
     const loadGoogleScript = (): Promise<any> => {
@@ -144,10 +140,7 @@ export default function LoginPage() {
           const isSignUp = authMode === 'signup';
 
           if (response && response.idToken) {
-            const redirectPath =
-              typeof location.state === 'object' && location.state !== null && 'from' in location.state
-                ? (location.state as any).from
-                : '/home';
+            const redirectPath = redirectFromState(location.state);
 
             return loginMicrosoft(response.idToken, false, {
               mode: isSignUp ? 'signup' : 'login',
@@ -166,13 +159,7 @@ export default function LoginPage() {
 
   const handleMicrosoftLogin = async () => {
     setError('');
-    const redirectPath =
-      typeof location.state === 'object' &&
-        location.state !== null &&
-        'from' in location.state &&
-        typeof (location.state as { from?: unknown }).from === 'string'
-        ? (location.state as { from: string }).from
-        : '/home';
+    const redirectPath = redirectFromState(location.state);
 
     try {
       let response: any = null;
@@ -227,7 +214,7 @@ export default function LoginPage() {
         }}
       >
         <Box sx={AUTH_LOGO_PARENT_SX}>
-          <NoahLogo sx={AUTH_LOGO_SX} />
+          <NoahLogo to="/" ariaLabel="Back to NOAH Cloud home" sx={AUTH_LOGO_SX} showGlow={false} animated={false} />
         </Box>
 
         <GlassCard
@@ -439,6 +426,19 @@ export default function LoginPage() {
                 }}
               >
                 Sign up
+              </Link>
+              {' · '}
+              <Link
+                component={RouterLink}
+                to="/"
+                underline="hover"
+                sx={{
+                  color: cv.textPrimary,
+                  fontWeight: 500,
+                  '&:hover': { color: cv.brandBlue },
+                }}
+              >
+                Back to home
               </Link>
             </Typography>
           </Box>
