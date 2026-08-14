@@ -924,7 +924,12 @@ export function PlanSettingsSection() {
         if (res?.directUpgrade) {
           await refreshUser();
           toast.success(res.message || 'Subscription successfully upgraded!', { id: 'stripe-checkout' });
-          navigate('/home/settings/accounts/billing');
+          if (res?.checkoutDetails) {
+            setSuccessModalDetails(res.checkoutDetails);
+            setChoosePlanOpen(false);
+          } else {
+            navigate('/home/settings/accounts/billing');
+          }
           return;
         }
         if (res?.url) {

@@ -23,10 +23,26 @@ export const billingService = {
     return apiClient.post<any>('/stripe/sync-session', { sessionId });
   },
   /**
-   * Fetches all active Stripe subscriptions for the current organization.
+   * Fetches all active Stripe subscriptions and scheduled downgrades.
    */
-  getSubscriptions: async (): Promise<{ success: boolean; subscriptions: any[] }> => {
-    return apiClient.get<{ success: boolean; subscriptions: any[] }>('/stripe/subscriptions');
+  getSubscriptions: async (): Promise<{
+    success: boolean;
+    subscriptions: any[];
+    scheduledDowngrade?: {
+      planId: string;
+      planName: string;
+      billingCycle: string;
+      effectiveDate: string;
+    } | null;
+  }> => {
+    return apiClient.get<{ success: boolean; subscriptions: any[]; scheduledDowngrade?: any }>('/stripe/subscriptions');
+  },
+
+  /**
+   * Cancels a scheduled plan downgrade, restoring active current plan status.
+   */
+  cancelScheduledDowngrade: async (): Promise<{ success: boolean; message: string }> => {
+    return apiClient.post<{ success: boolean; message: string }>('/stripe/cancel-scheduled-downgrade');
   },
 
   /**
@@ -69,5 +85,65 @@ export const billingService = {
    */
   deleteCard: async (paymentMethodId: string): Promise<{ success: boolean; message: string }> => {
     return apiClient.post<{ success: boolean; message: string }>('/stripe/delete-card', { paymentMethodId });
+  },
+
+  /**
+   * Fetches billing address and invoice config for the organization.
+   */
+  getBillingDetails: async (): Promise<{ success: boolean; billingAddress: any; invoiceConfig: any }> => {
+    return apiClient.get<{ success: boolean; billingAddress: any; invoiceConfig: any }>('/stripe/billing-details');
+  },
+
+  /**
+   * Updates organization billing address.
+   */
+  updateBillingAddress: async (data: {
+    companyName?: string;
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  }): Promise<{ success: boolean; message: string; billingAddress: any }> => {
+    return apiClient.post<{ success: boolean; message: string; billingAddress: any }>('/stripe/billing-address', data);
+  },
+
+  /**
+   * Updates organization invoice configuration.
+   */
+  updateInvoiceConfig: async (data: {
+    companyName?: string;
+    taxId?: string;
+    invoiceEmail?: string;
+    billingContact?: string;
+  }): Promise<{ success: boolean; message: string; invoiceConfig: any }> => {
+    return apiClient.post<{ success: boolean; message: string; invoiceConfig: any }>('/stripe/invoice-config', data);
+  },
+
+  /**
+   * Fetches historical invoices for the organization.
+   */
+  getInvoices: async (): Promise<{
+    success: boolean;
+    invoices: Array<{
+      id: string;
+      invoiceNumber: string;
+      date: string;
+      createdTimestamp: number;
+      description: string;
+      status: string;
+      amount: string;
+      amountCents: number;
+      invoicePdf: string | null;
+      invoiceUrl: string | null;
+    }>;
+    stats: {
+      totalInvoices: number;
+      lastPaymentDate: string;
+      lifetimeSpend: string;
+    };
+  }> => {
+    return apiClient.get<{ success: boolean; invoices: any[]; stats: any }>('/stripe/invoices');
   },
 };
