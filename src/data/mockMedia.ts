@@ -47,6 +47,7 @@ export interface MediaItem {
   proxySizeBytes?: number;
   hasProxy?: boolean;
   status?: 'active' | 'duplicate' | 'archived' | 'trash';
+  deletedAt?: string;
   isProject?: boolean;
   isSharedByMe?: boolean;
 }
