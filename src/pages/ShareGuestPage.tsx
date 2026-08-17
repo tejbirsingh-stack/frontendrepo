@@ -158,6 +158,19 @@ export default function ShareGuestPage() {
     }
   };
 
+  if (status === 'unlocked' && token) {
+    return (
+      <VideoPlayerPage
+        isGuestMode={true}
+        shareToken={token}
+        guestBranding={branding}
+        guestPermissions={permissions}
+        guestAssetMeta={assetMeta}
+        guestExpiresAt={expiresAt}
+      />
+    );
+  }
+
   return (
     <Box
       sx={{

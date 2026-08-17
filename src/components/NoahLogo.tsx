@@ -107,7 +107,6 @@ export default function NoahLogo({
   onClick,
   ariaLabel = 'Go to dashboard',
 }: NoahLogoProps) {
-  const { orgBranding } = useAuth();
   const isInteractive = Boolean(to || onClick);
   const logoHeight = height ?? resolveLogoHeight(width);
   const useCropBox = Boolean(boxWidth && height);
@@ -151,11 +150,10 @@ export default function NoahLogo({
         position: 'relative',
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 1.5,
-        width: fitContainer || useCropBox ? '100%' : undefined,
-        height: useCropBox ? '100%' : undefined,
+        gap: 1.25,
+        maxWidth: '100%',
+        maxHeight: 44,
         zIndex: 1,
-        overflow: useCropBox ? 'hidden' : undefined,
       }}
     >
       {showGlow && (
@@ -163,65 +161,99 @@ export default function NoahLogo({
           aria-hidden
           sx={{
             position: 'absolute',
-            width: typeof logoHeight === 'number' ? logoHeight * 5 : { xs: 140, sm: 180 },
-            height: typeof logoHeight === 'number' ? logoHeight * 1.4 : { xs: 36, sm: 48 },
+            width: typeof logoHeight === 'number' ? logoHeight * 4 : 140,
+            height: typeof logoHeight === 'number' ? logoHeight * 1.2 : 36,
             top: '50%',
             left: align === 'left' ? '35%' : '50%',
             transform: 'translate(-50%, -50%)',
             background: activeBranding?.accentColor || cv.brandGradient,
-            filter: 'blur(40px)',
-            opacity: 0.3,
+            filter: 'blur(32px)',
+            opacity: 0.25,
             animation: animated ? `${pulse} 6s ease-in-out infinite` : 'none',
             pointerEvents: 'none',
           }}
         />
       )}
-      <Box
-        component="img"
-        src={hasCustomLogo ? customLogoUrl : LOGO_SRC}
-        alt={customAccountName || "NOAH CLOUD"}
-        sx={{
-          display: 'block',
-          flexShrink: 0,
-          position: 'relative',
-          borderRadius: hasCustomLogo ? '6px' : 0,
-          animation: animated ? `${drift} 8s ease-in-out infinite` : 'none',
-          ...(useCropBox
-            ? {
-                width: '100%',
-                height: '100%',
-                objectFit: hasCustomLogo ? 'contain' : (resolvedObjectFit ?? 'cover'),
-                objectPosition: align === 'left' ? 'left center' : 'center',
-              }
-            : fitContainer
+
+      {hasCustomLogo ? (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 38,
+            width: 38,
+            minWidth: 38,
+            borderRadius: '10px',
+            overflow: 'hidden',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.25)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            p: '2px',
+            flexShrink: 0,
+          }}
+        >
+          <Box
+            component="img"
+            src={customLogoUrl}
+            alt={customAccountName || "Brand Logo"}
+            sx={{
+              maxHeight: '100%',
+              maxWidth: '100%',
+              objectFit: 'contain',
+              display: 'block',
+            }}
+          />
+        </Box>
+      ) : (
+        <Box
+          component="img"
+          src={LOGO_SRC}
+          alt="NOAH CLOUD"
+          sx={{
+            display: 'block',
+            flexShrink: 0,
+            position: 'relative',
+            animation: animated ? `${drift} 8s ease-in-out infinite` : 'none',
+            ...(useCropBox
               ? {
                   width: '100%',
-                  maxWidth: '100%',
-                  height: 'auto',
-                  maxHeight: logoHeight,
-                  objectFit: hasCustomLogo ? 'contain' : (resolvedObjectFit ?? 'contain'),
+                  height: '100%',
+                  objectFit: resolvedObjectFit ?? 'cover',
                   objectPosition: align === 'left' ? 'left center' : 'center',
                 }
-              : {
-                  height: logoHeight,
-                  maxHeight: 44,
-                  maxWidth: 160,
-                  width: 'auto',
-                  verticalAlign: 'middle',
-                  objectFit: 'contain',
-                }),
-        }}
-      />
-      {customAccountName && hasCustomLogo && (
+              : fitContainer
+                ? {
+                    width: 'auto',
+                    maxWidth: '100%',
+                    height: 'auto',
+                    maxHeight: Math.min(typeof logoHeight === 'number' ? logoHeight : 40, 40),
+                    objectFit: 'contain',
+                    objectPosition: align === 'left' ? 'left center' : 'center',
+                  }
+                : {
+                    height: Math.min(typeof logoHeight === 'number' ? logoHeight : 40, 40),
+                    maxHeight: 40,
+                    maxWidth: 160,
+                    width: 'auto',
+                    verticalAlign: 'middle',
+                    objectFit: 'contain',
+                  }),
+          }}
+        />
+      )}
+
+      {hasCustomLogo && customAccountName && (
         <Typography
           sx={{
             fontWeight: 700,
-            fontSize: '1rem',
-            letterSpacing: '-0.01em',
+            fontSize: '0.975rem',
+            letterSpacing: '-0.015em',
             color: '#f8fafc',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
+            maxWidth: 130,
           }}
         >
           {customAccountName}

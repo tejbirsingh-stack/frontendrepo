@@ -88,12 +88,17 @@ const SIDEBAR_WIDTH = SIDE_PANEL_WIDTH;
 const sidebarLogoSx = {
   mb: 0,
   px: 0,
-  height: '100%',
+  height: 'auto',
+  maxHeight: '44px',
+  display: 'flex',
+  alignItems: 'center',
   '& img': {
-    maxHeight: 'none',
-    height: '100%',
+    maxHeight: '40px',
+    maxWidth: '140px',
+    height: 'auto',
     width: 'auto',
-    maxWidth: '100%',
+    objectFit: 'contain',
+    borderRadius: '8px',
   },
 } as const;
 
