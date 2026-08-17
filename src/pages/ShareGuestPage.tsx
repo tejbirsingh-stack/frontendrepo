@@ -86,7 +86,10 @@ export default function ShareGuestPage() {
         }
       })
       .catch((err: any) => {
-        if (err?.status === 404 || err?.data?.expired) {
+        if (err?.status === 403 || err?.response?.status === 403 || err?.data?.error === 'Forbidden' || err?.message?.includes('Content Security Policy')) {
+          setStatus('error');
+          setErrorMessage(err?.response?.data?.message || err?.data?.message || err?.message || 'Media embedding is restricted to allowed domain origins configured by Global Admin.');
+        } else if (err?.status === 404 || err?.data?.expired) {
           setStatus('expired');
         } else {
           setStatus('error');

@@ -25,6 +25,7 @@ import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahL
 import LoginDemoAccountsBubble from '../components/demo/LoginDemoAccountsBubble';
 import { useAuth } from '../auth/AuthContext';
 import { getPostAuthRedirect } from '../auth/paths';
+import { fetchGlobalSecuritySettings } from '../platform/api/platformApi';
 
 function redirectFromState(state: unknown): string {
   if (typeof state === 'object' && state !== null && 'from' in state) {
@@ -43,6 +44,20 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+
+  const [ssoConfigured, setSsoConfigured] = useState<boolean>(true);
+  const [ssoProvider, setSsoProvider] = useState<string>('google, microsoft');
+
+  useEffect(() => {
+    fetchGlobalSecuritySettings()
+      .then((res) => {
+        if (res?.settings) {
+          setSsoConfigured(Boolean(res.settings.ssoConfigured));
+          setSsoProvider(res.settings.ssoProvider || 'google, microsoft');
+        }
+      })
+      .catch((err) => console.error('Failed to fetch security settings for login:', err));
+  }, []);
 
   useEffect(() => {
     const state = location.state as { email?: string } | null;
@@ -355,56 +370,64 @@ export default function LoginPage() {
               Sign in
             </Button>
 
-            <Divider
-              sx={{
-                my: 2,
-                '&::before, &::after': { borderColor: cv.border },
-                color: cv.textMuted,
-                fontSize: '0.8125rem',
-              }}
-            >
-              or
-            </Divider>
+            {ssoConfigured ? (
+              <>
+                <Divider
+                  sx={{
+                    my: 2,
+                    '&::before, &::after': { borderColor: cv.border },
+                    color: cv.textMuted,
+                    fontSize: '0.8125rem',
+                  }}
+                >
+                  or
+                </Divider>
 
-            <Box sx={{ display: 'flex', gap: 2, width: '100%' }}>
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={handleGoogleLogin}
-                startIcon={<GoogleIcon />}
-                sx={{
-                  py: 1.5,
-                  borderColor: cv.border,
-                  color: cv.textPrimary,
-                  backgroundColor: 'var(--noah-footer-tint)',
-                  '&:hover': {
-                    borderColor: cv.borderStrong,
-                    backgroundColor: cv.surfaceHover,
-                  },
-                }}
-              >
-                Google
-              </Button>
+                <Box sx={{ display: 'flex', gap: 2, width: '100%' }}>
+                  {ssoProvider.toLowerCase().includes('google') && (
+                    <Button
+                      fullWidth
+                      variant="outlined"
+                      onClick={handleGoogleLogin}
+                      startIcon={<GoogleIcon />}
+                      sx={{
+                        py: 1.5,
+                        borderColor: cv.border,
+                        color: cv.textPrimary,
+                        backgroundColor: 'var(--noah-footer-tint)',
+                        '&:hover': {
+                          borderColor: cv.borderStrong,
+                          backgroundColor: cv.surfaceHover,
+                        },
+                      }}
+                    >
+                      Google
+                    </Button>
+                  )}
 
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={handleMicrosoftLogin}
-                startIcon={<MicrosoftIcon />}
-                sx={{
-                  py: 1.5,
-                  borderColor: cv.border,
-                  color: cv.textPrimary,
-                  backgroundColor: 'var(--noah-footer-tint)',
-                  '&:hover': {
-                    borderColor: cv.borderStrong,
-                    backgroundColor: cv.surfaceHover,
-                  },
-                }}
-              >
-                Microsoft
-              </Button>
-            </Box>
+                  {ssoProvider.toLowerCase().includes('microsoft') && (
+                    <Button
+                      fullWidth
+                      variant="outlined"
+                      onClick={handleMicrosoftLogin}
+                      startIcon={<MicrosoftIcon />}
+                      sx={{
+                        py: 1.5,
+                        borderColor: cv.border,
+                        color: cv.textPrimary,
+                        backgroundColor: 'var(--noah-footer-tint)',
+                        '&:hover': {
+                          borderColor: cv.borderStrong,
+                          backgroundColor: cv.surfaceHover,
+                        },
+                      }}
+                    >
+                      Microsoft
+                    </Button>
+                  )}
+                </Box>
+              </>
+            ) : null}
 
             <Typography
               variant="body2"

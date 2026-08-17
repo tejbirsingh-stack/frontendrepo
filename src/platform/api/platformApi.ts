@@ -286,3 +286,28 @@ export async function deleteDefaultContent(id: string) {
     method: 'DELETE',
   });
 }
+
+export type GlobalSecuritySettings = {
+  ssoConfigured: boolean;
+  ssoProvider: string;
+  ssoDomain: string;
+  sessionTimeoutDays: number;
+  contentSecurityPolicy: string;
+  updatedAt?: string;
+};
+
+export async function fetchGlobalSecuritySettings() {
+  return platformRequest<{ success: boolean; settings: GlobalSecuritySettings }>('/platform/security', {
+    skipAuth: true,
+  });
+}
+
+export async function updateGlobalSecuritySettings(body: Partial<GlobalSecuritySettings>) {
+  return platformRequest<{ success: boolean; message: string; settings: GlobalSecuritySettings }>(
+    '/platform/security',
+    {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    },
+  );
+}

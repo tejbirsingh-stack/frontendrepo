@@ -16,6 +16,7 @@ import PlatformActivityPage from './pages/PlatformActivityPage';
 import PlatformReportingPage from './pages/PlatformReportingPage';
 import PlatformLandingPage from './pages/PlatformLandingPage';
 import PlatformDefaultContentPage from './pages/PlatformDefaultContentPage';
+import PlatformSecurityPage from './pages/PlatformSecurityPage';
 
 /** Applied globally while PlatformApp is mounted so portaled Dialogs get the same size. */
 const PLATFORM_BUTTON_STYLES = {
@@ -60,6 +61,7 @@ export default function PlatformApp() {
             <Route path="usage" element={<PlatformUsagePage />} />
             <Route path="activity" element={<PlatformActivityPage />} />
             <Route path="reporting" element={<PlatformReportingPage />} />
+            <Route path="security" element={<PlatformSecurityPage />} />
             <Route path="landing" element={<PlatformLandingPage />} />
             <Route path="default-content" element={<PlatformDefaultContentPage />} />
           </Route>

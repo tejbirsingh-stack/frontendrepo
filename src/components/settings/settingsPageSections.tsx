@@ -3092,15 +3092,147 @@ export function FieldsAdminSettingsSection() {
 }
 
 export function SecurityAdminSettingsSection() {
+  const [settings, setSettings] = useState<{
+    ssoConfigured: boolean;
+    ssoProvider: string;
+    sessionTimeoutDays: number;
+    contentSecurityPolicy: string;
+  }>({
+    ssoConfigured: false,
+    ssoProvider: 'google',
+    sessionTimeoutDays: 30,
+    contentSecurityPolicy: '*.noahcloud.ai, localhost',
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadGlobalSettings() {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const res = await apiClient.get<any>('/platform/security');
+        if (isMounted && res?.settings) {
+          setSettings({
+            ssoConfigured: Boolean(res.settings.ssoConfigured),
+            ssoProvider: res.settings.ssoProvider || 'google',
+            sessionTimeoutDays: Number(res.settings.sessionTimeoutDays) || 30,
+            contentSecurityPolicy: res.settings.contentSecurityPolicy || '*.noahcloud.ai, localhost',
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching global security settings for super admin:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    loadGlobalSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <SettingsFormContainer>
-      <SettingsSectionCard title="Security" description="Authentication, sessions, and content security.">
-        <SettingsRow title="Single sign-on (SSO)" description="Not configured" action={<Button size="small" sx={outlineButtonSx} variant="outlined">Configure</Button>} />
-        <SettingsRow title="Session timeout" description="30 days of inactivity" action={<Button size="small" sx={outlineButtonSx} variant="outlined">Edit</Button>} />
+      <SettingsSectionCard
+        title="Security (Read-Only)"
+        description="Global authentication, sessions, and content security policy configured by Global Admin across all organizations."
+      >
+        <SettingsRow
+          title="Single sign-on (SSO)"
+          description={
+            settings.ssoConfigured
+              ? `Configured (True · ${settings.ssoProvider.toUpperCase()})`
+              : 'Not configured (False)'
+          }
+          action={
+            <Chip
+              size="small"
+              label="Managed by Global Admin"
+              sx={{
+                height: 26,
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                borderRadius: '6px',
+                background: cv.purpleSurface,
+                color: cv.brandOrchid,
+                border: `1px solid ${cv.purpleChipBorder}`,
+              }}
+            />
+          }
+        />
+        <SettingsRow
+          title="Session timeout"
+          description={`${settings.sessionTimeoutDays} days of inactivity`}
+          action={
+            <Chip
+              size="small"
+              label="Managed by Global Admin"
+              sx={{
+                height: 26,
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                borderRadius: '6px',
+                background: cv.purpleSurface,
+                color: cv.brandOrchid,
+                border: `1px solid ${cv.purpleChipBorder}`,
+              }}
+            />
+          }
+        />
         <SettingsRow
           title="Content Security Policy"
-          description="Restrict embedded media origins for share links."
-          action={<Button size="small" sx={outlineButtonSx} variant="outlined">Manage</Button>}
+          description={
+            <Box sx={{ mt: 0.5 }}>
+              <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted, mb: 0.5 }}>
+                Allowed embed domain origins (Managed by Global Admin):
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', maxWidth: { xs: '100%', sm: 420, md: 440 } }}>
+                {(() => {
+                  const raw = settings.contentSecurityPolicy || '';
+                  let list: string[] = [];
+                  try {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) list = parsed;
+                    else list = String(raw).split(',').map((s) => s.trim()).filter(Boolean);
+                  } catch {
+                    list = String(raw).split(',').map((s) => s.trim()).filter(Boolean);
+                  }
+                  return list.map((dom) => (
+                    <Chip
+                      key={dom}
+                      size="small"
+                      label={dom}
+                      sx={{
+                        height: 24,
+                        fontSize: '0.75rem',
+                        fontWeight: 500,
+                        borderRadius: '4px',
+                        background: cv.purpleSurface,
+                        color: cv.brandOrchid,
+                        border: `1px solid ${cv.purpleChipBorder}`,
+                      }}
+                    />
+                  ));
+                })()}
+              </Box>
+            </Box>
+          }
+          action={
+            <Chip
+              size="small"
+              label="Managed by Global Admin"
+              sx={{
+                height: 26,
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                borderRadius: '6px',
+                background: cv.purpleSurface,
+                color: cv.brandOrchid,
+                border: `1px solid ${cv.purpleChipBorder}`,
+              }}
+            />
+          }
           showDivider={false}
         />
       </SettingsSectionCard>
