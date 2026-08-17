@@ -601,7 +601,7 @@ export default function DashboardPage({
         );
         const seenIds = new Set(projectMedia.map((i) => i.id));
         const extraFromLibrary = libraryItems.filter(
-          (item) => !seenIds.has(item.id) && !trashedIds.has(item.id),
+          (item) => !seenIds.has(item.id) && !trashedIds.has(item.id) && item.linkedProjectIds?.includes(folderMedia.id),
         );
         return [...projectMedia, ...extraFromLibrary];
       }
@@ -611,9 +611,9 @@ export default function DashboardPage({
           !trashedIds.has(item.id),
       );
       const seenIds = new Set(folderMediaLocal.map((i) => i.id));
-      const extraFromLibrary = libraryItems.filter(
-        (item) => !seenIds.has(item.id) && !trashedIds.has(item.id),
-      );
+        const extraFromLibrary = libraryItems.filter(
+          (item) => !seenIds.has(item.id) && !trashedIds.has(item.id) && item.parentFolderId === folderMedia.id,
+        );
       return [...folderMediaLocal, ...extraFromLibrary];
     }
 
@@ -624,7 +624,7 @@ export default function DashboardPage({
     
     const seenLocalIds = new Set(workspaceItemsLocal.map(i => i.id));
     const extraLibItems = libraryItems.filter(
-      (item) => !seenLocalIds.has(item.id) && !trashedIds.has(item.id)
+      (item) => !seenLocalIds.has(item.id) && !trashedIds.has(item.id) && item.workspaceId === activeWorkspaceId
     );
     const combinedWorkspaceItems = [...workspaceItemsLocal, ...extraLibItems];
 

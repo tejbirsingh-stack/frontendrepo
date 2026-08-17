@@ -24,6 +24,7 @@ export interface MediaAssetResponseDto {
   uploadedByUserId?: string;
   folderId?: string | null;
   folderName?: string | null;
+  workspaceId?: string;
 }
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB chunks for Backblaze B2 / AWS S3 multipart upload
