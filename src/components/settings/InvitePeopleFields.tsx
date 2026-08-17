@@ -67,6 +67,7 @@ interface InvitePeopleFieldsProps {
   onGuestSearch?: (query: string) => Promise<GuestUserSuggestion[]>;
   sendInviteEmail?: boolean;
   onSendInviteEmailChange?: (send: boolean) => void;
+  allowedTypes?: WorkspaceMemberType[];
 }
 
 export default function InvitePeopleFields({
@@ -85,6 +86,7 @@ export default function InvitePeopleFields({
   onGuestSearch,
   sendInviteEmail = false,
   onSendInviteEmailChange,
+  allowedTypes,
 }: InvitePeopleFieldsProps) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
@@ -362,6 +364,7 @@ export default function InvitePeopleFields({
                 setInput('');
                 setError('');
               }}
+              allowedTypes={allowedTypes}
             />
             <FormControl size="small">
               <Select

@@ -18,7 +18,7 @@ import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
 import GlassCard from '../components/GlassCard';
@@ -275,7 +275,9 @@ export default function VideoPlayerPage({
     user = null;
   }
 
-  const { mediaId } = useParams<{ mediaId: string }>();
+  const { mediaId, projectId: pathProjectId } = useParams<{ mediaId: string; projectId?: string }>();
+  const [searchParams] = useSearchParams();
+  const projectId = pathProjectId || searchParams.get('projectId') || undefined;
   const activeUser = useActiveUser();
   const navigate = useNavigate();
   const theme = useTheme();
@@ -442,10 +444,13 @@ export default function VideoPlayerPage({
   const { broadcastMessage } = useMediaWebSocket(wsTargetMediaId, handleWebSocketMessage);
 
 
+  const [effectivePermissions, setEffectivePermissions] = useState<string[] | null>(null);
+
   useEffect(() => {
     if (mediaId) {
       setIsFetching(true);
-      getMediaAssetByIdRequest(mediaId)
+      console.log('[MediaViewer] Fetching asset with projectId:', projectId);
+      getMediaAssetByIdRequest(mediaId, projectId)
         .then((asset) => {
           const techSpecs = (asset.metadata as any)?.technicalSpecs || asset.customMetadata?.technicalSpecs || {};
           setVideoTechnicalDetails(techSpecs);
@@ -470,7 +475,7 @@ export default function VideoPlayerPage({
             hasProxy: Boolean((asset as any).hasProxy ?? (asset.customMetadata as any)?.hasProxy),
             storageProvider: 'b2',
             uploadedBy: (asset as any).uploadedBy?.name || user?.name || (user?.email ? user.email.split('@')[0] : 'Uploader'),
-            uploadedByUserId: (asset as any).uploadedBy?.id || undefined,
+            uploadedByUserId: (asset as any).uploadedBy?.id || (asset as any).uploadedByUserId || undefined,
             tags: tagList,
             location: null,
             thumbnail: asset.thumbnail || undefined,
@@ -479,6 +484,12 @@ export default function VideoPlayerPage({
             customMetadata: asset.customMetadata,
             duration: (techSpecs.duration as string) || (asset.customMetadata?.duration as string) || undefined,
           });
+          // Store effective permissions from backend
+          const perms = (asset as any).effectivePermissions;
+          console.log('[MediaViewer] effectivePermissions from API:', perms);
+          if (perms) {
+            setEffectivePermissions(perms);
+          }
         })
         .catch((err) => {
           console.error(err);
@@ -490,7 +501,7 @@ export default function VideoPlayerPage({
     } else {
       setIsFetching(false);
     }
-  }, [mediaId]);
+  }, [mediaId, projectId]);
   const [activeTool, setActiveTool] = useState<AnnotationTool>('select');
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const [selectedStampId, setSelectedStampId] = useState<string | null>(null);
@@ -561,22 +572,30 @@ export default function VideoPlayerPage({
   const [orgUsersList, setOrgUsersList] = useState<SettingsUserRow[]>([]);
   const isAssetAdmin = useMemo(() => {
     if (isGuestMode) return false;
+    // If we have effective permissions from project/asset context, use those
+    if (effectivePermissions && effectivePermissions.length > 0) {
+      return effectivePermissions.includes('upload_media') || effectivePermissions.includes('manage_folders');
+    }
     const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
     if (currentUserCollab?.role === 'Admin') return true;
     if (item?.uploadedByUserId === user?.id || item?.uploadedBy?.id === user?.id) return true;
     if (isSharedWithUser) return false;
     return user?.role === 'Super Admin' || user?.role === 'Admin';
-  }, [isGuestMode, collaborators, isSharedWithUser, user, item?.uploadedByUserId, item?.uploadedBy?.id]);
+  }, [isGuestMode, collaborators, isSharedWithUser, user, item?.uploadedByUserId, item?.uploadedBy?.id, effectivePermissions]);
 
   const isViewer = useMemo(() => {
     if (isAssetAdmin) return false;
     if (isGuestMode) {
       return !guestPermissions?.comment;
     }
+    // If we have effective permissions from project/asset context, use those
+    if (effectivePermissions && effectivePermissions.length > 0) {
+      return !effectivePermissions.includes('timeline_annotations');
+    }
     const currentUserCollab = collaborators.find((c) => c.isCurrentUser);
     const isAssetViewer = currentUserCollab?.role === 'Viewer';
     return isAssetViewer || !user?.permissions?.includes('timeline_annotations');
-  }, [isGuestMode, guestPermissions?.comment, collaborators, user?.permissions, isAssetAdmin]);
+  }, [isGuestMode, guestPermissions?.comment, collaborators, user?.permissions, isAssetAdmin, effectivePermissions]);
 
   const canDownloadOriginal = isAssetAdmin;
   const canShare = isAssetAdmin;

@@ -2035,25 +2035,52 @@ export function WorkspacesAdminSettingsSection() {
               day: 'numeric',
               year: 'numeric',
             });
-            return {
-              id: w.id,
-              workspace: w.name,
-              status: 'Active',
-              lastUpdated: today,
-              creationDate: today,
-              storage: '0 MB',
-              projectAdmin: CURRENT_USER.name,
-              teamMembers: [
-                {
-                  id: `wm-admin-${w.id}`,
-                  name: CURRENT_USER.name,
-                  initials: CURRENT_USER.initials,
-                  access: 'Full Access',
-                  memberType: 'Member',
-                  isCurrentUser: true,
-                }
-              ]
-            } as SettingsProjectRow;
+              const adminMember = {
+                id: `wm-admin-${w.id}`,
+                name: CURRENT_USER.name,
+                initials: CURRENT_USER.initials,
+                email: CURRENT_USER.email,
+                access: 'Full Access',
+                memberType: 'Member',
+                isCurrentUser: true,
+              };
+              
+              const mappedUsers = (w.users || [])
+                .filter((u: any) => u.user && u.user.email !== CURRENT_USER.email)
+                .map((u: any) => {
+                  const displayName = u.user.name || u.user.email.split('@')[0];
+                  const inits = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2) || 'U';
+                  return {
+                    id: `wm-u-${u.user.id}`,
+                    name: displayName,
+                    initials: inits,
+                    email: u.user.email,
+                    access: u.accessLevelId === 1 ? 'Full Access' : (u.accessLevelId === 2 ? 'Can edit' : 'Can view'),
+                    memberType: 'Member', // Default to Member; Dialog might override this based on org email check if needed, or we just rely on this.
+                  };
+                });
+                
+              const mappedGroups = (w.groups || []).map((g: any) => ({
+                  id: `wm-g-${g.group.id}`,
+                  name: g.group.name,
+                  initials: g.group.name.substring(0, 2).toUpperCase() || 'G',
+                  groupId: g.group.id,
+                  access: g.accessLevelId === 1 ? 'Full Access' : (g.accessLevelId === 2 ? 'Can edit' : 'Can view'),
+                  memberType: 'Group',
+              }));
+
+              return {
+                id: w.id,
+                workspace: w.name,
+                status: 'Active',
+                lastUpdated: today,
+                creationDate: today,
+                storage: '0 MB',
+                projectAdmin: CURRENT_USER.name,
+                visibility: w.visibility === 'PUBLIC' ? 'public' : 'private',
+                isRestricted: w.visibility === 'PRIVATE',
+                teamMembers: [adminMember, ...mappedUsers, ...mappedGroups]
+              } as SettingsProjectRow;
           });
           setWorkspaces(formatted);
         }
@@ -2099,11 +2126,23 @@ export function WorkspacesAdminSettingsSection() {
       year: 'numeric',
     });
     setWorkspaces((current) =>
-      current.map((workspace) =>
-        workspace.id === editWorkspaceId
-          ? { ...workspace, workspace: data.name, lastUpdated: today }
-          : workspace,
-      ),
+      current.map((workspace) => {
+        if (workspace.id === editWorkspaceId) {
+          const newEmails = (data.inviteEmails ?? []).map(email => createWorkspaceTeamMember(email, { memberType: data.memberType as any, access: data.accessLevel as any }));
+          const newGroups = (data.inviteGroupIds ?? []).map(groupId => {
+             const group = MOCK_SETTINGS_USER_GROUPS.find(g => g.id === groupId);
+             return group ? createWorkspaceTeamMemberFromGroup(group, { access: data.accessLevel as any }) : null;
+          }).filter(Boolean) as import('../../data/mockSettingsData').WorkspaceTeamMember[];
+          
+          return {
+            ...workspace,
+            workspace: data.name,
+            lastUpdated: today,
+            teamMembers: [...(workspace.teamMembers ?? []), ...newEmails, ...newGroups],
+          };
+        }
+        return workspace;
+      }),
     );
     setEditWorkspaceId(null);
   };
@@ -2196,7 +2235,13 @@ export function WorkspacesAdminSettingsSection() {
         onCreate={handleCreateWorkspace}
         onSave={handleSaveWorkspace}
         initialWorkspace={
-          editWorkspace ? { name: editWorkspace.workspace } : undefined
+          editWorkspace
+            ? {
+                name: editWorkspace.workspace,
+                isRestricted: editWorkspace.isRestricted,
+                teamMembers: editWorkspace.teamMembers,
+              }
+            : undefined
         }
       />
       <WorkspaceMembersDialog

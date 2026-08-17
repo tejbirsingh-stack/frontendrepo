@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, Fragment } from 'react';
 import { cv } from '../theme/cssVars';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -262,6 +262,7 @@ export default function DashboardPage({
   folderMedia,
 }: DashboardPageProps) {
   const { user } = useAuth();
+  const { projectId } = useParams<{ projectId?: string }>();
   const navigate = useNavigate();
   const isFavoritesView = libraryView === 'favorites';
   const isDuplicatesView = libraryView === 'duplicates';
@@ -306,7 +307,14 @@ export default function DashboardPage({
     sidebarSelection,
     activeWorkspace,
     hasWorkspacePermission,
+    resetToWorkspacePermissions,
   } = useDashboard();
+
+  useEffect(() => {
+    if (!folderMedia?.isProject && !projectId) {
+      resetToWorkspacePermissions();
+    }
+  }, [folderMedia?.isProject, projectId, resetToWorkspacePermissions]);
 
   // Duplicates pagination and tabs state
   const [duplicateTab, setDuplicateTab] = useState<MediaType>('video');
