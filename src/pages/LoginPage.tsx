@@ -318,7 +318,8 @@ export default function LoginPage() {
                 }
               />
               <Link
-                href="#"
+                component={RouterLink}
+                to="/forgot-password"
                 underline="hover"
                 sx={{
                   color: cv.textSecondary,

@@ -14,6 +14,7 @@ import {
   ProjectPage,
   MarketingLandingPage,
   LoginPage,
+  ForgotPasswordPage,
   NotFoundPage,
   SignUpPage,
   SettingsSectionPage,
@@ -45,6 +46,14 @@ function App() {
             element={
               <GuestRoute>
                 <LoginPage />
+              </GuestRoute>
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <GuestRoute>
+                <ForgotPasswordPage />
               </GuestRoute>
             }
           />
