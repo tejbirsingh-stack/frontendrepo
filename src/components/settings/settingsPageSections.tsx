@@ -4,7 +4,16 @@ import toast from 'react-hot-toast';
 import ProjectDeleteFlowModal from '../modals/ProjectDeleteFlowModal';
 import { getUsageSummary } from '../../api/usage.service';
 import { downloadCSV } from '../../utils/csvExport';
-import { getCompanyInfoRequest, updateCompanyInfoRequest, uploadCompanyLogoRequest, updateProfileRequest, uploadProfilePhotoRequest } from '../../api';
+import {
+  getCompanyInfoRequest,
+  updateCompanyInfoRequest,
+  uploadCompanyLogoRequest,
+  updateProfileRequest,
+  uploadProfilePhotoRequest,
+  getBrandingSettingsApi,
+  updateBrandingSettingsApi,
+  uploadBrandingHeaderRequest,
+} from '../../api';
 import { logoutAllSessions, fetchOrganizationUsers } from '../../api/auth.service';
 import { fetchUserGroups } from '../../api/userGroups.service';
 import { useAuth } from '../../auth/AuthContext';
@@ -1101,8 +1110,48 @@ export function PlanSettingsSection() {
 
 export function BrandingSettingsSection() {
   const [branding, setBranding] = useState<BrandingSettingsData>(MOCK_BRANDING_SETTINGS);
+  const [initialBranding, setInitialBranding] = useState<BrandingSettingsData>(MOCK_BRANDING_SETTINGS);
   const [isDirty, setIsDirty] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingHeader, setIsUploadingHeader] = useState(false);
   const [previewLayout, setPreviewLayout] = useState<'grid' | 'list'>('grid');
+
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const headerInputRef = useRef<HTMLInputElement>(null);
+
+  const loadBranding = async () => {
+    setLoading(true);
+    try {
+      const res = await getBrandingSettingsApi();
+      if (res?.success && res.branding) {
+        const fetched: BrandingSettingsData = {
+          accountName: res.branding.accountName || "User's Account",
+          accountInitials: res.branding.accountInitials || 'UA',
+          logoUrl: res.branding.logoUrl || undefined,
+          logoKey: res.branding.logoKey || undefined,
+          headerImageUrl: res.branding.headerImageUrl || undefined,
+          headerImageKey: res.branding.headerImageKey || undefined,
+          headerImageMaxMb: res.branding.headerImageMaxMb || 25,
+          accentColor: res.branding.accentColor || '#5B53FF',
+          reelBackgroundColor: res.branding.reelBackgroundColor || 'None',
+          reelTitleColor: res.branding.reelTitleColor || 'None',
+        };
+        setBranding(fetched);
+        setInitialBranding(fetched);
+        setIsDirty(false);
+      }
+    } catch (err: any) {
+      console.error('Failed to load branding settings:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBranding();
+  }, []);
 
   const updateBranding = <K extends keyof BrandingSettingsData>(key: K, value: BrandingSettingsData[K]) => {
     setBranding((current) => ({ ...current, [key]: value }));
@@ -1115,37 +1164,130 @@ export function BrandingSettingsSection() {
   };
 
   const handleCancel = () => {
-    setBranding(MOCK_BRANDING_SETTINGS);
+    setBranding(initialBranding);
     setIsDirty(false);
   };
 
-  const handleSave = () => {
-    setIsDirty(false);
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const res = await updateBrandingSettingsApi({
+        accountName: branding.accountName,
+        accentColor: branding.accentColor,
+        reelBackgroundColor: branding.reelBackgroundColor,
+        reelTitleColor: branding.reelTitleColor,
+      });
+      if (res?.success) {
+        toast.success('Branding settings saved to database.');
+        setInitialBranding(branding);
+        setIsDirty(false);
+      }
+    } catch (err: any) {
+      console.error('Failed to save branding:', err);
+      toast.error(err?.message || 'Failed to save branding settings.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingLogo(true);
+    try {
+      const res = await uploadCompanyLogoRequest(file);
+      if (res?.success && res.logoUrl) {
+        updateBranding('logoUrl', res.logoUrl);
+        updateBranding('logoKey', res.b2Key);
+        toast.success('Logo uploaded to B2 Storage successfully!');
+      }
+    } catch (err: any) {
+      console.error('Logo upload error:', err);
+      toast.error(err?.message || 'Failed to upload logo.');
+    } finally {
+      setIsUploadingLogo(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    }
+  };
+
+  const handleHeaderFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error('Header image exceeds maximum 25 MB size limit.');
+      return;
+    }
+    setIsUploadingHeader(true);
+    try {
+      const res = await uploadBrandingHeaderRequest(file);
+      if (res?.success && res.headerImageUrl) {
+        updateBranding('headerImageUrl', res.headerImageUrl);
+        updateBranding('headerImageKey', res.b2Key);
+        toast.success('Header image banner uploaded to B2 Storage!');
+      }
+    } catch (err: any) {
+      console.error('Header image upload error:', err);
+      toast.error(err?.message || 'Failed to upload header image.');
+    } finally {
+      setIsUploadingHeader(false);
+      if (headerInputRef.current) headerInputRef.current.value = '';
+    }
   };
 
   const previewBackground =
     branding.reelBackgroundColor === 'None' ? cv.bg : branding.reelBackgroundColor;
   const previewTitleColor = branding.reelTitleColor === 'None' ? cv.textPrimary : branding.reelTitleColor;
 
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+        <CircularProgress size={32} />
+      </Box>
+    );
+  }
+
   return (
     <SettingsFormContainer>
+      {/* Hidden file inputs for Logo and Header Banner */}
+      <input
+        type="file"
+        ref={logoInputRef}
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleLogoFileChange}
+      />
+      <input
+        type="file"
+        ref={headerInputRef}
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleHeaderFileChange}
+      />
+
       <SettingsSectionCard
         title="Account name branding"
         description="Read-only badge from primary account properties · Admin & Super Admin can edit account name."
       >
         <Box sx={{ px: 2, py: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar
-            sx={{
-              width: 56,
-              height: 56,
-              fontSize: '1rem',
-              fontWeight: 700,
-              bgcolor: branding.accentColor,
-              color: cv.textInverse,
-            }}
-          >
-            {branding.accountInitials}
-          </Avatar>
+          {branding.logoUrl ? (
+            <Avatar
+              src={branding.logoUrl}
+              sx={{ width: 56, height: 56, border: `1px solid ${cv.border}` }}
+            />
+          ) : (
+            <Avatar
+              sx={{
+                width: 56,
+                height: 56,
+                fontSize: '1rem',
+                fontWeight: 700,
+                bgcolor: branding.accentColor,
+                color: cv.textInverse,
+              }}
+            >
+              {branding.accountInitials}
+            </Avatar>
+          )}
           <TextField
             label="Account name label"
             value={branding.accountName}
@@ -1163,19 +1305,37 @@ export function BrandingSettingsSection() {
       >
         <SettingsRow
           title="Logo upload"
-          description="Custom brand asset for share presentation."
+          description={branding.logoUrl ? 'Custom logo uploaded' : 'Custom brand asset for share presentation.'}
           action={
-            <Button variant="outlined" size="small" startIcon={<AddIcon />} sx={outlineButtonSx}>
-              Upload
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={isUploadingLogo}
+              onClick={() => logoInputRef.current?.click()}
+              startIcon={isUploadingLogo ? <CircularProgress size={14} /> : <AddIcon />}
+              sx={outlineButtonSx}
+            >
+              {isUploadingLogo ? 'Uploading...' : 'Upload'}
             </Button>
           }
         />
         <SettingsRow
           title="Header image upload"
-          description={`Banner thumbnail slot · maximum ${branding.headerImageMaxMb} MB`}
+          description={
+            branding.headerImageUrl
+              ? 'Header image banner uploaded'
+              : `Banner thumbnail slot · maximum ${branding.headerImageMaxMb} MB`
+          }
           action={
-            <Button variant="outlined" size="small" startIcon={<UploadOutlinedIcon />} sx={outlineButtonSx}>
-              Upload
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={isUploadingHeader}
+              onClick={() => headerInputRef.current?.click()}
+              startIcon={isUploadingHeader ? <CircularProgress size={14} /> : <UploadOutlinedIcon />}
+              sx={outlineButtonSx}
+            >
+              {isUploadingHeader ? 'Uploading...' : 'Upload'}
             </Button>
           }
         />
@@ -1239,13 +1399,25 @@ export function BrandingSettingsSection() {
               borderRadius: '12px',
               border: `1px solid ${cv.border}`,
               backgroundColor: previewBackground,
+              backgroundImage: branding.headerImageUrl ? `url(${branding.headerImageUrl})` : undefined,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
               p: 2,
-              minHeight: 120,
+              minHeight: 140,
             }}
           >
-            <Typography sx={{ fontWeight: 600, color: previewTitleColor, mb: 1 }}>
-              {branding.accountName}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+              {branding.logoUrl ? (
+                <Box
+                  component="img"
+                  src={branding.logoUrl}
+                  sx={{ width: 36, height: 36, borderRadius: '6px', objectFit: 'contain' }}
+                />
+              ) : null}
+              <Typography sx={{ fontWeight: 600, color: previewTitleColor }}>
+                {branding.accountName}
+              </Typography>
+            </Box>
             <Box
               sx={{
                 display: previewLayout === 'grid' ? 'grid' : 'flex',
@@ -1261,7 +1433,7 @@ export function BrandingSettingsSection() {
                     height: previewLayout === 'grid' ? 48 : 32,
                     borderRadius: '8px',
                     backgroundColor: cv.insetHighlight,
-                    border: `1px solid ${branding.accentColor}44`,
+                    border: `1px solid ${branding.accentColor}88`,
                   }}
                 />
               ))}
@@ -1273,16 +1445,25 @@ export function BrandingSettingsSection() {
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
         <Button
           onClick={handleReset}
-          disabled={!isDirty}
+          disabled={!isDirty || isSaving}
           sx={{ textTransform: 'none', color: cv.textSecondary }}
         >
           Reset to default
         </Button>
-        <Button onClick={handleCancel} sx={{ textTransform: 'none', color: cv.textSecondary }}>
+        <Button
+          onClick={handleCancel}
+          disabled={isSaving}
+          sx={{ textTransform: 'none', color: cv.textSecondary }}
+        >
           Cancel
         </Button>
-        <Button variant="contained" onClick={handleSave} disabled={!isDirty} sx={containedButtonSx}>
-          Save
+        <Button
+          variant="contained"
+          onClick={handleSave}
+          disabled={!isDirty || isSaving}
+          sx={containedButtonSx}
+        >
+          {isSaving ? 'Saving...' : 'Save'}
         </Button>
       </Box>
     </SettingsFormContainer>

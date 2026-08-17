@@ -1,6 +1,7 @@
 import { Link as RouterLink } from 'react-router-dom';
-import { Box, type SxProps, type Theme, keyframes } from '@mui/material';
+import { Box, Typography, type SxProps, type Theme, keyframes } from '@mui/material';
 import { cv } from '../theme/cssVars';
+import { useAuth } from '../auth/AuthContext';
 
 const LOGO_SRC = '/noah-logo.png';
 
@@ -106,6 +107,7 @@ export default function NoahLogo({
   onClick,
   ariaLabel = 'Go to dashboard',
 }: NoahLogoProps) {
+  const { orgBranding } = useAuth();
   const isInteractive = Boolean(to || onClick);
   const logoHeight = height ?? resolveLogoHeight(width);
   const useCropBox = Boolean(boxWidth && height);
@@ -137,12 +139,19 @@ export default function NoahLogo({
     ...sx,
   };
 
+  const { orgBranding, user } = useAuth();
+  const activeBranding = orgBranding?.branding || orgBranding || user?.organization?.metadata;
+  const customLogoUrl = activeBranding?.logoUrl;
+  const customAccountName = activeBranding?.accountName || user?.accountName || user?.organization?.name;
+  const hasCustomLogo = Boolean(customLogoUrl);
+
   const logoContent = (
     <Box
       sx={{
         position: 'relative',
         display: 'inline-flex',
         alignItems: 'center',
+        gap: 1.5,
         width: fitContainer || useCropBox ? '100%' : undefined,
         height: useCropBox ? '100%' : undefined,
         zIndex: 1,
@@ -159,7 +168,7 @@ export default function NoahLogo({
             top: '50%',
             left: align === 'left' ? '35%' : '50%',
             transform: 'translate(-50%, -50%)',
-            background: cv.brandGradient,
+            background: activeBranding?.accentColor || cv.brandGradient,
             filter: 'blur(40px)',
             opacity: 0.3,
             animation: animated ? `${pulse} 6s ease-in-out infinite` : 'none',
@@ -169,18 +178,19 @@ export default function NoahLogo({
       )}
       <Box
         component="img"
-        src={LOGO_SRC}
-        alt="NOAH CLOUD"
+        src={hasCustomLogo ? customLogoUrl : LOGO_SRC}
+        alt={customAccountName || "NOAH CLOUD"}
         sx={{
           display: 'block',
           flexShrink: 0,
           position: 'relative',
+          borderRadius: hasCustomLogo ? '6px' : 0,
           animation: animated ? `${drift} 8s ease-in-out infinite` : 'none',
           ...(useCropBox
             ? {
                 width: '100%',
                 height: '100%',
-                objectFit: resolvedObjectFit ?? 'cover',
+                objectFit: hasCustomLogo ? 'contain' : (resolvedObjectFit ?? 'cover'),
                 objectPosition: align === 'left' ? 'left center' : 'center',
               }
             : fitContainer
@@ -189,16 +199,34 @@ export default function NoahLogo({
                   maxWidth: '100%',
                   height: 'auto',
                   maxHeight: logoHeight,
-                  objectFit: resolvedObjectFit ?? 'contain',
+                  objectFit: hasCustomLogo ? 'contain' : (resolvedObjectFit ?? 'contain'),
                   objectPosition: align === 'left' ? 'left center' : 'center',
                 }
               : {
                   height: logoHeight,
+                  maxHeight: 44,
+                  maxWidth: 160,
                   width: 'auto',
                   verticalAlign: 'middle',
+                  objectFit: 'contain',
                 }),
         }}
       />
+      {customAccountName && hasCustomLogo && (
+        <Typography
+          sx={{
+            fontWeight: 700,
+            fontSize: '1rem',
+            letterSpacing: '-0.01em',
+            color: '#f8fafc',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {customAccountName}
+        </Typography>
+      )}
     </Box>
   );
 

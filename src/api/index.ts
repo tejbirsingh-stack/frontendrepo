@@ -41,6 +41,9 @@ export {
   getCompanyInfoRequest,
   updateCompanyInfoRequest,
   uploadCompanyLogoRequest,
+  getBrandingSettingsApi,
+  updateBrandingSettingsApi,
+  uploadBrandingHeaderRequest,
 } from './organizations.service';
 export type { UpdateCompanyInfoDto, UploadCompanyLogoResponse } from './organizations.service';
 export {
