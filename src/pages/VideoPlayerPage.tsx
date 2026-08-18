@@ -32,6 +32,8 @@ import {
 import { DEFAULT_DRAW_COLOR } from '../constants/drawColors';
 import AnnotationHistoryDrawer from '../components/media/AnnotationHistoryDrawer';
 import AudioWaveformVisualizer from '../components/media/AudioWaveformVisualizer';
+import FramePersonHighlight from '../components/media/FramePersonHighlight';
+import type { FramePerson } from '../data/mockFramePeople';
 import type {
   MediaDetailsSection,
   MediaTechnicalDetails,
@@ -967,6 +969,17 @@ export default function VideoPlayerPage({
   const [availableGroups, setAvailableGroups] = useState<SettingsUserGroup[]>([]);
   const [drawerTab, setDrawerTab] = useState<MediaRailPanel>('history');
   const [detailsSection, setDetailsSection] = useState<MediaDetailsSection>('file');
+  const [selectedFramePerson, setSelectedFramePerson] = useState<FramePerson | null>(null);
+
+  const handleFramePersonSelect = useCallback((person: FramePerson) => {
+    setSelectedFramePerson((current) => (current?.id === person.id ? null : person));
+  }, []);
+
+  useEffect(() => {
+    if (!historyOpen || drawerTab !== 'ai') {
+      setSelectedFramePerson(null);
+    }
+  }, [drawerTab, historyOpen]);
 
   const handleRailPanelSelect = (panel: MediaRailPanel) => {
     if (historyOpen && drawerTab === panel) {
@@ -4718,6 +4731,10 @@ export default function VideoPlayerPage({
                 />
                   </>
                 )}
+
+                {selectedFramePerson ? (
+                  <FramePersonHighlight person={selectedFramePerson} />
+                ) : null}
               </Box>
             </Box>
 
@@ -4945,6 +4962,8 @@ export default function VideoPlayerPage({
           onTabChange={setDrawerTab}
           detailsSection={detailsSection}
           onDetailsSectionChange={setDetailsSection}
+          selectedFramePersonId={selectedFramePerson?.id ?? null}
+          onFramePersonSelect={handleFramePersonSelect}
           onClose={() => setHistoryOpen(false)}
           onEntryClick={(entry) => {
             handleSeekToTimestamp(entry.videoTimestamp, entry.id);
