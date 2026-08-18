@@ -25,10 +25,15 @@ import {
 import {
   EmptyState,
   Panel,
+  PlatformTablePagination,
   StatusChip,
   formatBytes,
   formatMoneyCents,
 } from './PlatformUi';
+import {
+  usePaginatedRows,
+  usePlatformTablePagination,
+} from '../hooks/usePlatformTablePagination';
 import { cv } from '../../theme/cssVars';
 
 type ViewMode = 'list' | 'grid';
@@ -321,6 +326,8 @@ export function PlatformPlansCatalogSection({
   const [error, setError] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const showManageActions = Boolean(onEdit || onDelete);
+  const pagination = usePlatformTablePagination([plans.length, viewMode]);
+  const paginatedPlans = usePaginatedRows(plans, pagination.page, pagination.rowsPerPage);
 
   const setPlansAndNotify = useCallback(
     (next: PlatformPlan[] | ((prev: PlatformPlan[]) => PlatformPlan[])) => {
@@ -479,24 +486,42 @@ export function PlatformPlansCatalogSection({
         {!loading && plans.length === 0 ? <EmptyState message={emptyMessage} /> : null}
 
         {showList ? (
-          <PlansListView
-            plans={plans}
-            plansEnabled={plansEnabled}
-            togglingId={togglingId}
-            showManageActions={showManageActions}
-            onToggleActive={(plan, next) => void togglePlanActive(plan, next)}
-            renderManageActions={renderManageActions}
-          />
+          <>
+            <PlansListView
+              plans={paginatedPlans}
+              plansEnabled={plansEnabled}
+              togglingId={togglingId}
+              showManageActions={showManageActions}
+              onToggleActive={(plan, next) => void togglePlanActive(plan, next)}
+              renderManageActions={renderManageActions}
+            />
+            <PlatformTablePagination
+              count={plans.length}
+              page={pagination.page}
+              rowsPerPage={pagination.rowsPerPage}
+              onPageChange={pagination.onPageChange}
+              onRowsPerPageChange={pagination.onRowsPerPageChange}
+            />
+          </>
         ) : null}
 
         {showGrid ? (
-          <PlansGridView
-            plans={plans}
-            plansEnabled={plansEnabled}
-            togglingId={togglingId}
-            onToggleActive={(plan, next) => void togglePlanActive(plan, next)}
-            renderManageActions={renderManageActions}
-          />
+          <>
+            <PlansGridView
+              plans={paginatedPlans}
+              plansEnabled={plansEnabled}
+              togglingId={togglingId}
+              onToggleActive={(plan, next) => void togglePlanActive(plan, next)}
+              renderManageActions={renderManageActions}
+            />
+            <PlatformTablePagination
+              count={plans.length}
+              page={pagination.page}
+              rowsPerPage={pagination.rowsPerPage}
+              onPageChange={pagination.onPageChange}
+              onRowsPerPageChange={pagination.onRowsPerPageChange}
+            />
+          </>
         ) : null}
       </Panel>
     </Box>

@@ -22,7 +22,15 @@ import {
   fetchPlans,
   type PlatformPlan,
 } from '../api/platformApi';
-import { EmptyState, PageHeader, Panel, StatusChip, formatBytes } from '../components/PlatformUi';
+import {
+  EmptyState,
+  PageHeader,
+  Panel,
+  PlatformTablePagination,
+  StatusChip,
+  formatBytes,
+} from '../components/PlatformUi';
+import { usePlatformTablePagination } from '../hooks/usePlatformTablePagination';
 import { noahDialogSlotProps } from '../../constants/dialogStyles';
 import { cv } from '../../theme/cssVars';
 
@@ -46,9 +54,13 @@ export default function PlatformOrganizationsPage() {
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const pagination = usePlatformTablePagination();
 
-  const load = () => {
-    const params: Record<string, string> = {};
+  const load = (page = pagination.page, rowsPerPage = pagination.rowsPerPage) => {
+    const params: Record<string, string> = {
+      limit: String(rowsPerPage),
+      offset: String(page * rowsPerPage),
+    };
     if (q.trim()) params.q = q.trim();
     if (status) params.status = status;
     fetchOrganizations(params)
@@ -60,12 +72,23 @@ export default function PlatformOrganizationsPage() {
   };
 
   useEffect(() => {
-    load();
     fetchPlans()
       .then((res) => setPlans(res.plans || []))
       .catch(() => setPlans([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    load(pagination.page, pagination.rowsPerPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagination.page, pagination.rowsPerPage]);
+
+  const search = () => {
+    if (pagination.page === 0) {
+      load(0, pagination.rowsPerPage);
+    } else {
+      pagination.resetPage();
+    }
+  };
 
   const openCreate = () => {
     setForm(emptyForm);
@@ -137,7 +160,7 @@ export default function PlatformOrganizationsPage() {
           <MenuItem value="active">Active</MenuItem>
           <MenuItem value="suspended">Suspended</MenuItem>
         </TextField>
-        <Button variant="contained" onClick={load} sx={{ textTransform: 'none' }}>
+        <Button variant="contained" onClick={search} sx={{ textTransform: 'none' }}>
           Search
         </Button>
       </Box>
@@ -153,62 +176,71 @@ export default function PlatformOrganizationsPage() {
         {rows.length === 0 ? (
           <EmptyState message="No organizations found" />
         ) : (
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Organization</TableCell>
-                <TableCell>Plan</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Users</TableCell>
-                <TableCell>Workspaces</TableCell>
-                <TableCell>Storage</TableCell>
-                <TableCell />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((org) => {
-                const count = org._count as
-                  | { users?: number; workspaces?: number }
-                  | undefined;
-                const plan = org.currentPlan as { name?: string } | null;
-                return (
-                  <TableRow
-                    key={String(org.id)}
-                    hover
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => navigate(`/platform/organizations/${org.id}`)}
-                  >
-                    <TableCell>
-                      <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                        {String(org.name)}
-                      </Typography>
-                      <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
-                        {String(org.slug)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>{plan?.name || String(org.planType)}</TableCell>
-                    <TableCell>
-                      <StatusChip status={String(org.status || 'active')} />
-                    </TableCell>
-                    <TableCell>{count?.users ?? '—'}</TableCell>
-                    <TableCell>{count?.workspaces ?? '—'}</TableCell>
-                    <TableCell>{formatBytes(org.storageUsedBytes as string)}</TableCell>
-                    <TableCell align="right">
-                      <Button
-                        component={RouterLink}
-                        to={`/platform/organizations/${org.id}`}
-                        size="small"
-                        sx={{ textTransform: 'none' }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        Manage
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Organization</TableCell>
+                  <TableCell>Plan</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Users</TableCell>
+                  <TableCell>Workspaces</TableCell>
+                  <TableCell>Storage</TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((org) => {
+                  const count = org._count as
+                    | { users?: number; workspaces?: number }
+                    | undefined;
+                  const plan = org.currentPlan as { name?: string } | null;
+                  return (
+                    <TableRow
+                      key={String(org.id)}
+                      hover
+                      sx={{ cursor: 'pointer' }}
+                      onClick={() => navigate(`/platform/organizations/${org.id}`)}
+                    >
+                      <TableCell>
+                        <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                          {String(org.name)}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                          {String(org.slug)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>{plan?.name || String(org.planType)}</TableCell>
+                      <TableCell>
+                        <StatusChip status={String(org.status || 'active')} />
+                      </TableCell>
+                      <TableCell>{count?.users ?? '—'}</TableCell>
+                      <TableCell>{count?.workspaces ?? '—'}</TableCell>
+                      <TableCell>{formatBytes(org.storageUsedBytes as string)}</TableCell>
+                      <TableCell align="right">
+                        <Button
+                          component={RouterLink}
+                          to={`/platform/organizations/${org.id}`}
+                          size="small"
+                          sx={{ textTransform: 'none' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Manage
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+            <PlatformTablePagination
+              count={total}
+              page={pagination.page}
+              rowsPerPage={pagination.rowsPerPage}
+              onPageChange={pagination.onPageChange}
+              onRowsPerPageChange={pagination.onRowsPerPageChange}
+            />
+          </>
         )}
       </Panel>
 

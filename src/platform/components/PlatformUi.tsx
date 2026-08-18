@@ -1,7 +1,20 @@
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { Box, Chip, LinearProgress, Paper, Tooltip, Typography } from '@mui/material';
-import type { ReactNode } from 'react';
+import {
+  Box,
+  Chip,
+  LinearProgress,
+  MenuItem,
+  Paper,
+  TablePagination,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import { useId, type ChangeEvent, type ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
+import {
+  PLATFORM_ROWS_PER_PAGE_OPTIONS,
+} from '../hooks/usePlatformTablePagination';
 import { cv } from '../../theme/cssVars';
 
 export function PageHeader({
@@ -402,6 +415,104 @@ export function EmptyState({ message }: { message: string }) {
       }}
     >
       <Typography sx={{ color: cv.textMuted, fontSize: '0.875rem' }}>{message}</Typography>
+    </Box>
+  );
+}
+
+export function PlatformTablePagination({
+  count,
+  page,
+  rowsPerPage,
+  onPageChange,
+  onRowsPerPageChange,
+  rowsPerPageOptions = [...PLATFORM_ROWS_PER_PAGE_OPTIONS],
+}: Readonly<{
+  count: number;
+  page: number;
+  rowsPerPage: number;
+  onPageChange: (event: unknown, newPage: number) => void;
+  onRowsPerPageChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  rowsPerPageOptions?: number[];
+}>) {
+  const jumpFieldId = useId();
+
+  if (count === 0) {
+    return null;
+  }
+
+  const pageCount = Math.max(1, Math.ceil(count / rowsPerPage));
+  const pageOptions = Array.from({ length: pageCount }, (_, index) => index);
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        flexWrap: 'wrap',
+        gap: 1,
+        mt: 1,
+        pt: 0.5,
+        borderTop: `1px solid ${cv.border}`,
+      }}
+    >
+      {pageCount > 1 ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography
+            component="label"
+            htmlFor={jumpFieldId}
+            sx={{ fontSize: '0.8125rem', color: cv.textSecondary, whiteSpace: 'nowrap' }}
+          >
+            Go to page
+          </Typography>
+          <TextField
+            select
+            size="small"
+            id={jumpFieldId}
+            value={Math.min(page, pageCount - 1)}
+            onChange={(event) => onPageChange(event, Number(event.target.value))}
+            slotProps={{
+              select: { MenuProps: { slotProps: { paper: { sx: { maxHeight: 320 } } } } },
+            }}
+            sx={{
+              minWidth: 88,
+              '& .MuiInputBase-input': { fontSize: '0.8125rem', py: 0.75 },
+            }}
+          >
+            {pageOptions.map((pageIndex) => (
+              <MenuItem key={pageIndex} value={pageIndex} sx={{ fontSize: '0.8125rem' }}>
+                {pageIndex + 1} of {pageCount}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Box>
+      ) : null}
+      <TablePagination
+        component="div"
+        count={count}
+        page={page}
+        onPageChange={onPageChange}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={onRowsPerPageChange}
+        rowsPerPageOptions={rowsPerPageOptions}
+        showFirstButton
+        showLastButton
+        sx={{
+          color: cv.textSecondary,
+          borderTop: 'none',
+          '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+            fontSize: '0.8125rem',
+            color: cv.textSecondary,
+          },
+          '.MuiTablePagination-select': {
+            color: cv.textPrimary,
+          },
+          '.MuiIconButton-root': {
+            color: cv.textSecondary,
+            '&.Mui-disabled': { color: cv.textMuted },
+          },
+        }}
+      />
     </Box>
   );
 }

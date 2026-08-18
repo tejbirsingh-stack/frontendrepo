@@ -23,7 +23,8 @@ import {
   invitePlatformUser,
   patchPlatformUser,
 } from '../api/platformApi';
-import { EmptyState, PageHeader, Panel, StatusChip } from '../components/PlatformUi';
+import { EmptyState, PageHeader, Panel, PlatformTablePagination, StatusChip } from '../components/PlatformUi';
+import { usePlatformTablePagination } from '../hooks/usePlatformTablePagination';
 import { noahDialogSlotProps } from '../../constants/dialogStyles';
 import { cv } from '../../theme/cssVars';
 
@@ -47,12 +48,16 @@ export default function PlatformUsersPage() {
   const [invite, setInvite] = useState(emptyInvite);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const pagination = usePlatformTablePagination();
 
-  const load = () => {
-    const params: Record<string, string> = {};
+  const load = (page = pagination.page, rowsPerPage = pagination.rowsPerPage) => {
+    const params: Record<string, string> = {
+      limit: String(rowsPerPage),
+      offset: String(page * rowsPerPage),
+    };
     if (q.trim()) params.q = q.trim();
     if (status) params.status = status;
-    fetchPlatformUsers(params)
+    return fetchPlatformUsers(params)
       .then((res) => {
         setRows(res.users);
         setTotal(res.total);
@@ -61,7 +66,6 @@ export default function PlatformUsersPage() {
   };
 
   useEffect(() => {
-    load();
     fetchOrganizations({ limit: '200' })
       .then((res) =>
         setOrgOptions(
@@ -75,8 +79,20 @@ export default function PlatformUsersPage() {
     fetchPlatformRoles()
       .then((res) => setRoles(res.roles || []))
       .catch(() => setRoles([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    void load(pagination.page, pagination.rowsPerPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagination.page, pagination.rowsPerPage]);
+
+  const search = () => {
+    if (pagination.page === 0) {
+      void load(0, pagination.rowsPerPage);
+    } else {
+      pagination.resetPage();
+    }
+  };
 
   const setUserStatus = async (userId: string, nextStatus: string) => {
     setBusyId(userId);
@@ -159,7 +175,7 @@ export default function PlatformUsersPage() {
           <MenuItem value="inactive">Inactive</MenuItem>
           <MenuItem value="suspended">Suspended</MenuItem>
         </TextField>
-        <Button variant="contained" onClick={load} sx={{ textTransform: 'none' }}>
+        <Button variant="contained" onClick={search} sx={{ textTransform: 'none' }}>
           Search
         </Button>
       </Box>
@@ -172,83 +188,92 @@ export default function PlatformUsersPage() {
         {rows.length === 0 ? (
           <EmptyState message="No users found" />
         ) : (
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>User</TableCell>
-                <TableCell>Organization</TableCell>
-                <TableCell>Role</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Last login</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((user) => {
-                const org = user.organization as
-                  | { id?: string; name?: string; slug?: string }
-                  | null;
-                const role = user.roleRelation as { name?: string } | null;
-                return (
-                  <TableRow key={String(user.id)} hover>
-                    <TableCell>
-                      <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                        {String(user.name || '—')}
-                      </Typography>
-                      <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
-                        {String(user.email)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      {org?.id ? (
-                        <Button
-                          component={RouterLink}
-                          to={`/platform/organizations/${org.id}`}
-                          size="small"
-                          sx={{ textTransform: 'none', px: 0 }}
-                        >
-                          {org.name}
-                        </Button>
-                      ) : (
-                        '—'
-                      )}
-                    </TableCell>
-                    <TableCell>{role?.name || '—'}</TableCell>
-                    <TableCell>
-                      <StatusChip status={String(user.status)} />
-                    </TableCell>
-                    <TableCell>
-                      {user.lastLoginAt
-                        ? new Date(String(user.lastLoginAt)).toLocaleString()
-                        : '—'}
-                    </TableCell>
-                    <TableCell align="right">
-                      {user.status === 'active' ? (
-                        <Button
-                          size="small"
-                          color="error"
-                          disabled={busyId === String(user.id)}
-                          sx={{ textTransform: 'none' }}
-                          onClick={() => void setUserStatus(String(user.id), 'suspended')}
-                        >
-                          Suspend
-                        </Button>
-                      ) : (
-                        <Button
-                          size="small"
-                          disabled={busyId === String(user.id)}
-                          sx={{ textTransform: 'none' }}
-                          onClick={() => void setUserStatus(String(user.id), 'active')}
-                        >
-                          Activate
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>User</TableCell>
+                  <TableCell>Organization</TableCell>
+                  <TableCell>Role</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Last login</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((user) => {
+                  const org = user.organization as
+                    | { id?: string; name?: string; slug?: string }
+                    | null;
+                  const role = user.roleRelation as { name?: string } | null;
+                  return (
+                    <TableRow key={String(user.id)} hover>
+                      <TableCell>
+                        <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                          {String(user.name || '—')}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                          {String(user.email)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {org?.id ? (
+                          <Button
+                            component={RouterLink}
+                            to={`/platform/organizations/${org.id}`}
+                            size="small"
+                            sx={{ textTransform: 'none', px: 0 }}
+                          >
+                            {org.name}
+                          </Button>
+                        ) : (
+                          '—'
+                        )}
+                      </TableCell>
+                      <TableCell>{role?.name || '—'}</TableCell>
+                      <TableCell>
+                        <StatusChip status={String(user.status)} />
+                      </TableCell>
+                      <TableCell>
+                        {user.lastLoginAt
+                          ? new Date(String(user.lastLoginAt)).toLocaleString()
+                          : '—'}
+                      </TableCell>
+                      <TableCell align="right">
+                        {user.status === 'active' ? (
+                          <Button
+                            size="small"
+                            color="error"
+                            disabled={busyId === String(user.id)}
+                            sx={{ textTransform: 'none' }}
+                            onClick={() => void setUserStatus(String(user.id), 'suspended')}
+                          >
+                            Suspend
+                          </Button>
+                        ) : (
+                          <Button
+                            size="small"
+                            disabled={busyId === String(user.id)}
+                            sx={{ textTransform: 'none' }}
+                            onClick={() => void setUserStatus(String(user.id), 'active')}
+                          >
+                            Activate
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+            <PlatformTablePagination
+              count={total}
+              page={pagination.page}
+              rowsPerPage={pagination.rowsPerPage}
+              onPageChange={pagination.onPageChange}
+              onRowsPerPageChange={pagination.onRowsPerPageChange}
+            />
+          </>
         )}
       </Panel>
 

@@ -11,13 +11,24 @@ import {
   Typography,
 } from '@mui/material';
 import { fetchBillingOverview } from '../api/platformApi';
-import { EmptyState, PageHeader, Panel, StatCard } from '../components/PlatformUi';
+import {
+  EmptyState,
+  PageHeader,
+  Panel,
+  PlatformTablePagination,
+  StatCard,
+} from '../components/PlatformUi';
+import {
+  usePaginatedRows,
+  usePlatformTablePagination,
+} from '../hooks/usePlatformTablePagination';
 import { cv } from '../../theme/cssVars';
 
 export default function PlatformBillingPage() {
   const [q, setQ] = useState('');
   const [billing, setBilling] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState('');
+  const pagination = usePlatformTablePagination();
 
   const load = () => {
     const params: Record<string, string> = {};
@@ -33,6 +44,11 @@ export default function PlatformBillingPage() {
   }, []);
 
   const subscriptions = (billing?.subscriptions as Array<Record<string, unknown>>) || [];
+  const paginatedSubscriptions = usePaginatedRows(
+    subscriptions,
+    pagination.page,
+    pagination.rowsPerPage,
+  );
   const mrr = Number(billing?.estimatedMrrCents || 0) / 100;
 
   return (
@@ -49,7 +65,14 @@ export default function PlatformBillingPage() {
           }}
           sx={{ minWidth: 260 }}
         />
-        <Button variant="contained" onClick={load} sx={{ textTransform: 'none' }}>
+        <Button
+          variant="contained"
+          onClick={() => {
+            pagination.resetPage();
+            load();
+          }}
+          sx={{ textTransform: 'none' }}
+        >
           Search
         </Button>
       </Box>
@@ -62,31 +85,40 @@ export default function PlatformBillingPage() {
         {subscriptions.length === 0 ? (
           <EmptyState message="No subscriptions found" />
         ) : (
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Organization</TableCell>
-                <TableCell>Plan</TableCell>
-                <TableCell>Subscription</TableCell>
-                <TableCell>Stripe customer</TableCell>
-                <TableCell>Users</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {subscriptions.map((row) => {
-                const plan = row.plan as { name?: string } | null;
-                return (
-                  <TableRow key={String(row.id)}>
-                    <TableCell>{String(row.name)}</TableCell>
-                    <TableCell>{plan?.name || String(row.planType)}</TableCell>
-                    <TableCell>{String(row.subscriptionStatus || '—')}</TableCell>
-                    <TableCell>{String(row.stripeCustomerId || '—')}</TableCell>
-                    <TableCell>{String(row.userCount ?? '—')}</TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Organization</TableCell>
+                  <TableCell>Plan</TableCell>
+                  <TableCell>Subscription</TableCell>
+                  <TableCell>Stripe customer</TableCell>
+                  <TableCell>Users</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {paginatedSubscriptions.map((row) => {
+                  const plan = row.plan as { name?: string } | null;
+                  return (
+                    <TableRow key={String(row.id)}>
+                      <TableCell>{String(row.name)}</TableCell>
+                      <TableCell>{plan?.name || String(row.planType)}</TableCell>
+                      <TableCell>{String(row.subscriptionStatus || '—')}</TableCell>
+                      <TableCell>{String(row.stripeCustomerId || '—')}</TableCell>
+                      <TableCell>{String(row.userCount ?? '—')}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+            <PlatformTablePagination
+              count={subscriptions.length}
+              page={pagination.page}
+              rowsPerPage={pagination.rowsPerPage}
+              onPageChange={pagination.onPageChange}
+              onRowsPerPageChange={pagination.onRowsPerPageChange}
+            />
+          </>
         )}
       </Panel>
     </Box>

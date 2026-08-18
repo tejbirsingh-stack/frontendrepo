@@ -27,10 +27,15 @@ import {
   MetricBar,
   PageHeader,
   Panel,
+  PlatformTablePagination,
   StatusChip,
   formatBytes,
   formatPercent,
 } from '../components/PlatformUi';
+import {
+  usePaginatedRows,
+  usePlatformTablePagination,
+} from '../hooks/usePlatformTablePagination';
 import { cv } from '../../theme/cssVars';
 
 const tabSx = {
@@ -104,6 +109,18 @@ export default function PlatformOrganizationDetailPage() {
     [org],
   );
   const users = useMemo(() => (org?.users as Array<Record<string, unknown>>) || [], [org]);
+  const usersPagination = usePlatformTablePagination([orgId, tab === 1]);
+  const workspacesPagination = usePlatformTablePagination([orgId, tab === 2]);
+  const paginatedUsers = usePaginatedRows(
+    users,
+    usersPagination.page,
+    usersPagination.rowsPerPage,
+  );
+  const paginatedWorkspaces = usePaginatedRows(
+    workspaces,
+    workspacesPagination.page,
+    workspacesPagination.rowsPerPage,
+  );
   const settings = (org?.settings as Record<string, unknown> | null) || null;
   const count = (org?._count as { users?: number; workspaces?: number; assets?: number }) || {};
   const plan = org?.currentPlan as { name?: string } | null;
@@ -218,59 +235,68 @@ export default function PlatformOrganizationDetailPage() {
           {users.length === 0 ? (
             <EmptyState message="No users in this organization" />
           ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>User</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>MFA</TableCell>
-                  <TableCell>Last login</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {users.map((u) => {
-                  const role = u.roleRelation as { name?: string } | undefined;
-                  return (
-                    <TableRow key={String(u.id)} hover>
-                      <TableCell>
-                        <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                          {String(u.name || '—')}
-                        </Typography>
-                        <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
-                          {String(u.email)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{role?.name || '—'}</TableCell>
-                      <TableCell>
-                        <StatusChip status={String(u.status)} />
-                      </TableCell>
-                      <TableCell>{u.mfaEnabled ? 'On' : 'Off'}</TableCell>
-                      <TableCell>
-                        {u.lastLoginAt
-                          ? new Date(String(u.lastLoginAt)).toLocaleString()
-                          : '—'}
-                      </TableCell>
-                      <TableCell align="right">
-                        <Button
-                          size="small"
-                          sx={{ textTransform: 'none' }}
-                          disabled={saving}
-                          onClick={() =>
-                            void patchPlatformUser(String(u.id), {
-                              status: u.status === 'active' ? 'suspended' : 'active',
-                            }).then(reload)
-                          }
-                        >
-                          {u.status === 'active' ? 'Suspend' : 'Activate'}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>User</TableCell>
+                    <TableCell>Role</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>MFA</TableCell>
+                    <TableCell>Last login</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {paginatedUsers.map((u) => {
+                    const role = u.roleRelation as { name?: string } | undefined;
+                    return (
+                      <TableRow key={String(u.id)} hover>
+                        <TableCell>
+                          <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                            {String(u.name || '—')}
+                          </Typography>
+                          <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                            {String(u.email)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>{role?.name || '—'}</TableCell>
+                        <TableCell>
+                          <StatusChip status={String(u.status)} />
+                        </TableCell>
+                        <TableCell>{u.mfaEnabled ? 'On' : 'Off'}</TableCell>
+                        <TableCell>
+                          {u.lastLoginAt
+                            ? new Date(String(u.lastLoginAt)).toLocaleString()
+                            : '—'}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button
+                            size="small"
+                            sx={{ textTransform: 'none' }}
+                            disabled={saving}
+                            onClick={() =>
+                              void patchPlatformUser(String(u.id), {
+                                status: u.status === 'active' ? 'suspended' : 'active',
+                              }).then(reload)
+                            }
+                          >
+                            {u.status === 'active' ? 'Suspend' : 'Activate'}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              <PlatformTablePagination
+                count={users.length}
+                page={usersPagination.page}
+                rowsPerPage={usersPagination.rowsPerPage}
+                onPageChange={usersPagination.onPageChange}
+                onRowsPerPageChange={usersPagination.onRowsPerPageChange}
+              />
+            </>
           )}
         </Panel>
       ) : null}
@@ -280,57 +306,66 @@ export default function PlatformOrganizationDetailPage() {
           {workspaces.length === 0 ? (
             <EmptyState message="No workspaces yet" />
           ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Workspace</TableCell>
-                  <TableCell>Members</TableCell>
-                  <TableCell>Folders</TableCell>
-                  <TableCell>Projects</TableCell>
-                  <TableCell align="right">Rename</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {workspaces.map((ws) => {
-                  const wsCount = ws._count as
-                    | { folders?: number; projects?: number; users?: number }
-                    | undefined;
-                  return (
-                    <TableRow key={String(ws.id)} hover>
-                      <TableCell>
-                        <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                          {String(ws.name)}
-                        </Typography>
-                        {ws.description ? (
-                          <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
-                            {String(ws.description)}
+            <>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Workspace</TableCell>
+                    <TableCell>Members</TableCell>
+                    <TableCell>Folders</TableCell>
+                    <TableCell>Projects</TableCell>
+                    <TableCell align="right">Rename</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {paginatedWorkspaces.map((ws) => {
+                    const wsCount = ws._count as
+                      | { folders?: number; projects?: number; users?: number }
+                      | undefined;
+                    return (
+                      <TableRow key={String(ws.id)} hover>
+                        <TableCell>
+                          <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                            {String(ws.name)}
                           </Typography>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>{wsCount?.users ?? 0}</TableCell>
-                      <TableCell>{wsCount?.folders ?? 0}</TableCell>
-                      <TableCell>{wsCount?.projects ?? 0}</TableCell>
-                      <TableCell align="right">
-                        <Button
-                          size="small"
-                          sx={{ textTransform: 'none' }}
-                          disabled={saving}
-                          onClick={() => {
-                            const next = window.prompt('Workspace name', String(ws.name));
-                            if (!next || next.trim() === String(ws.name)) return;
-                            void patchPlatformWorkspace(orgId, String(ws.id), {
-                              name: next.trim(),
-                            }).then(reload);
-                          }}
-                        >
-                          Edit
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                          {ws.description ? (
+                            <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                              {String(ws.description)}
+                            </Typography>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>{wsCount?.users ?? 0}</TableCell>
+                        <TableCell>{wsCount?.folders ?? 0}</TableCell>
+                        <TableCell>{wsCount?.projects ?? 0}</TableCell>
+                        <TableCell align="right">
+                          <Button
+                            size="small"
+                            sx={{ textTransform: 'none' }}
+                            disabled={saving}
+                            onClick={() => {
+                              const next = window.prompt('Workspace name', String(ws.name));
+                              if (!next || next.trim() === String(ws.name)) return;
+                              void patchPlatformWorkspace(orgId, String(ws.id), {
+                                name: next.trim(),
+                              }).then(reload);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              <PlatformTablePagination
+                count={workspaces.length}
+                page={workspacesPagination.page}
+                rowsPerPage={workspacesPagination.rowsPerPage}
+                onPageChange={workspacesPagination.onPageChange}
+                onRowsPerPageChange={workspacesPagination.onRowsPerPageChange}
+              />
+            </>
           )}
         </Panel>
       ) : null}

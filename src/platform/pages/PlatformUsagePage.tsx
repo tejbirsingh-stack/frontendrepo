@@ -20,9 +20,14 @@ import {
   EmptyState,
   PageHeader,
   Panel,
+  PlatformTablePagination,
   formatBytes,
   formatPercent,
 } from '../components/PlatformUi';
+import {
+  usePaginatedRows,
+  usePlatformTablePagination,
+} from '../hooks/usePlatformTablePagination';
 import { cv } from '../../theme/cssVars';
 
 type ViewMode = 'list' | 'grid';
@@ -187,6 +192,7 @@ export default function PlatformUsagePage() {
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const pagination = usePlatformTablePagination([viewMode]);
 
   const load = () => {
     const params: Record<string, string> = {};
@@ -200,6 +206,8 @@ export default function PlatformUsagePage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const paginatedRows = usePaginatedRows(rows, pagination.page, pagination.rowsPerPage);
 
   return (
     <Box>
@@ -219,7 +227,14 @@ export default function PlatformUsagePage() {
           }}
           sx={{ minWidth: 260 }}
         />
-        <Button variant="contained" onClick={load} sx={{ textTransform: 'none' }}>
+        <Button
+          variant="contained"
+          onClick={() => {
+            pagination.resetPage();
+            load();
+          }}
+          sx={{ textTransform: 'none' }}
+        >
           Search
         </Button>
       </Box>
@@ -249,7 +264,7 @@ export default function PlatformUsagePage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map((row) => (
+              {paginatedRows.map((row) => (
                 <TableRow key={String(row.id)} hover>
                   <TableCell>
                     <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
@@ -270,25 +285,41 @@ export default function PlatformUsagePage() {
               ))}
             </TableBody>
           </Table>
+          <PlatformTablePagination
+            count={rows.length}
+            page={pagination.page}
+            rowsPerPage={pagination.rowsPerPage}
+            onPageChange={pagination.onPageChange}
+            onRowsPerPageChange={pagination.onRowsPerPageChange}
+          />
         </Panel>
       ) : null}
 
       {rows.length > 0 && viewMode === 'grid' ? (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: '1fr',
-              sm: 'repeat(2, 1fr)',
-              lg: 'repeat(3, 1fr)',
-            },
-            gap: 2,
-          }}
-        >
-          {rows.map((row) => (
-            <UsageGridCard key={String(row.id)} row={row} />
-          ))}
-        </Box>
+        <>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: 'repeat(2, 1fr)',
+                lg: 'repeat(3, 1fr)',
+              },
+              gap: 2,
+            }}
+          >
+            {paginatedRows.map((row) => (
+              <UsageGridCard key={String(row.id)} row={row} />
+            ))}
+          </Box>
+          <PlatformTablePagination
+            count={rows.length}
+            page={pagination.page}
+            rowsPerPage={pagination.rowsPerPage}
+            onPageChange={pagination.onPageChange}
+            onRowsPerPageChange={pagination.onRowsPerPageChange}
+          />
+        </>
       ) : null}
     </Box>
   );

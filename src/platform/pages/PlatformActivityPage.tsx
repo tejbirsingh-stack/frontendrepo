@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Box, Button, TextField, Typography, Table, TableBody, TableCell, TableHead, TableRow } from '@mui/material';
 import { fetchActivity } from '../api/platformApi';
-import { PageHeader, Panel } from '../components/PlatformUi';
+import { PageHeader, Panel, PlatformTablePagination } from '../components/PlatformUi';
+import {
+  usePaginatedRows,
+  usePlatformTablePagination,
+} from '../hooks/usePlatformTablePagination';
 import { cv } from '../../theme/cssVars';
 
 export default function PlatformActivityPage() {
   const [q, setQ] = useState('');
   const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
   const [error, setError] = useState('');
+  const pagination = usePlatformTablePagination();
 
   const load = () => {
-    const params: Record<string, string> = {};
+    const params: Record<string, string> = { limit: '500' };
     if (q.trim()) params.q = q.trim();
     fetchActivity(params)
       .then((res) => setRows(res.activities))
@@ -19,7 +24,10 @@ export default function PlatformActivityPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const paginatedRows = usePaginatedRows(rows, pagination.page, pagination.rowsPerPage);
 
   return (
     <Box>
@@ -32,7 +40,14 @@ export default function PlatformActivityPage() {
           onChange={(e) => setQ(e.target.value)}
           sx={{ minWidth: 260 }}
         />
-        <Button variant="contained" onClick={load} sx={{ textTransform: 'none' }}>
+        <Button
+          variant="contained"
+          onClick={() => {
+            pagination.resetPage();
+            load();
+          }}
+          sx={{ textTransform: 'none' }}
+        >
           Search
         </Button>
       </Box>
@@ -49,7 +64,7 @@ export default function PlatformActivityPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {rows.map((row) => {
+            {paginatedRows.map((row) => {
               const org = row.organization as { name?: string } | null;
               return (
                 <TableRow key={String(row.id)}>
@@ -72,6 +87,13 @@ export default function PlatformActivityPage() {
             })}
           </TableBody>
         </Table>
+        <PlatformTablePagination
+          count={rows.length}
+          page={pagination.page}
+          rowsPerPage={pagination.rowsPerPage}
+          onPageChange={pagination.onPageChange}
+          onRowsPerPageChange={pagination.onRowsPerPageChange}
+        />
       </Panel>
     </Box>
   );
