@@ -83,8 +83,41 @@ export default function ForgotPasswordPage() {
           alignItems: 'center',
         }}
       >
-        <Box sx={AUTH_LOGO_PARENT_SX}>
-          <NoahLogo to="/" ariaLabel="Back to NOAH Cloud home" sx={AUTH_LOGO_SX} showGlow={false} animated={false} />
+        <Box
+          component={RouterLink}
+          to="/"
+          aria-label="Back to NOAH Cloud home"
+          className="login-auth-logo-wrapper"
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+            maxWidth: { xs: 300, sm: 380 },
+            height: { xs: 100, sm: 140 },
+            mb: 3,
+            textDecoration: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          <Box
+            component="img"
+            src="/noah-logo.png"
+            alt="NOAH CLOUD"
+            className="login-auth-logo"
+            sx={{
+              width: '100%',
+              maxWidth: '100%',
+              height: '100%',
+              maxHeight: 140,
+              objectFit: 'contain',
+              objectPosition: 'center',
+              transform: 'scale(2.2)',
+              transformOrigin: 'center center',
+              mixBlendMode: 'lighten',
+              filter: 'drop-shadow(0 4px 24px rgba(168, 85, 247, 0.7))',
+            }}
+          />
         </Box>
 
         <GlassCard glow sx={{ width: '100%', maxWidth: 440 }}>

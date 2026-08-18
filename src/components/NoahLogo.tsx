@@ -5,38 +5,40 @@ import { useAuth } from '../auth/AuthContext';
 
 const LOGO_SRC = '/noah-logo.png';
 
-/** Parent wrapper for login / signup flow logos — fixed height, no extra vertical padding. */
+/** Parent wrapper for login / signup flow logos — matches qa.noahcloud.ai (140px height). */
 export const AUTH_LOGO_PARENT_SX = {
   width: '100%',
-  height: { xs: 120, sm: 160 },
+  height: { xs: 110, sm: 140 },
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  mb: 4,
+  mb: 3,
   overflow: 'hidden',
   background: 'transparent',
 } as const;
 
 /**
- * Auth logo — larger mark inside a fixed ~160px-tall crop.
- * `cover` + mild scale clips PNG padding without cutting off “CLOUD”.
+ * Auth logo — large prominent mark matching qa.noahcloud.ai design.
  */
 export const AUTH_LOGO_SX = {
   mb: 0,
   width: '100%',
-    maxWidth: { xs: 320, sm: 400 },
+  maxWidth: { xs: 320, sm: 440 },
   height: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   overflow: 'hidden',
   background: 'transparent',
   '& img': {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    objectPosition: 'center',
-    transform: 'scale(1.05)',
-    transformOrigin: 'center center',
-    // Logo asset has an opaque black canvas; lighten makes black transparent on dark UIs.
+    width: 'auto !important',
+    maxWidth: '100% !important',
+    height: '120px !important',
+    maxHeight: '140px !important',
+    objectFit: 'contain !important',
+    objectPosition: 'center !important',
     mixBlendMode: 'lighten',
+    filter: 'drop-shadow(0 4px 24px rgba(168, 85, 247, 0.55))',
   },
   'html[data-theme="light"] & img': {
     mixBlendMode: 'normal',
@@ -77,6 +79,8 @@ interface NoahLogoProps {
   to?: string;
   onClick?: () => void;
   ariaLabel?: string;
+  /** Variant preset for logo sizing. 'auth' uses large 120px-140px prominent logo. */
+  variant?: 'auth' | 'default';
 }
 
 function resolveLogoHeight(width: ResponsiveSize): ResponsiveSize {
@@ -106,6 +110,7 @@ export default function NoahLogo({
   to,
   onClick,
   ariaLabel = 'Go to dashboard',
+  variant = 'default',
 }: NoahLogoProps) {
   const isInteractive = Boolean(to || onClick);
   const logoHeight = height ?? resolveLogoHeight(width);
@@ -144,15 +149,20 @@ export default function NoahLogo({
   const customAccountName = activeBranding?.accountName || user?.accountName || user?.organization?.name;
   const hasCustomLogo = Boolean(customLogoUrl);
 
+  const isAuthView = variant === 'auth' || Boolean(sx);
+
   const logoContent = (
     <Box
       sx={{
         position: 'relative',
         display: 'inline-flex',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 1.25,
+        width: isAuthView || fitContainer || useCropBox ? '100%' : undefined,
+        height: isAuthView || useCropBox ? '100%' : undefined,
         maxWidth: '100%',
-        maxHeight: 44,
+        maxHeight: isAuthView || useCropBox ? undefined : (fitContainer ? 44 : undefined),
         zIndex: 1,
       }}
     >
@@ -215,30 +225,38 @@ export default function NoahLogo({
             flexShrink: 0,
             position: 'relative',
             animation: animated ? `${drift} 8s ease-in-out infinite` : 'none',
-            ...(useCropBox
+            ...(isAuthView
               ? {
                   width: '100%',
                   height: '100%',
-                  objectFit: resolvedObjectFit ?? 'cover',
-                  objectPosition: align === 'left' ? 'left center' : 'center',
+                  maxHeight: 'none',
+                  maxWidth: 'none',
+                  objectFit: 'contain',
+                  objectPosition: 'center',
                 }
-              : fitContainer
+              : useCropBox
                 ? {
-                    width: 'auto',
-                    maxWidth: '100%',
-                    height: 'auto',
-                    maxHeight: Math.min(typeof logoHeight === 'number' ? logoHeight : 40, 40),
-                    objectFit: 'contain',
+                    width: '100%',
+                    height: '100%',
+                    objectFit: resolvedObjectFit ?? 'cover',
                     objectPosition: align === 'left' ? 'left center' : 'center',
                   }
-                : {
-                    height: Math.min(typeof logoHeight === 'number' ? logoHeight : 40, 40),
-                    maxHeight: 40,
-                    maxWidth: 160,
-                    width: 'auto',
-                    verticalAlign: 'middle',
-                    objectFit: 'contain',
-                  }),
+                : fitContainer
+                  ? {
+                      width: 'auto',
+                      maxWidth: '100%',
+                      height: 'auto',
+                      maxHeight: typeof logoHeight === 'number' ? logoHeight : 40,
+                      objectFit: 'contain',
+                      objectPosition: align === 'left' ? 'left center' : 'center',
+                    }
+                  : {
+                      height: typeof logoHeight === 'number' ? logoHeight : 40,
+                      maxWidth: 240,
+                      width: 'auto',
+                      verticalAlign: 'middle',
+                      objectFit: 'contain',
+                    }),
           }}
         />
       )}
