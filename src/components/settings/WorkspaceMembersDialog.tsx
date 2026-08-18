@@ -538,13 +538,14 @@ export default function WorkspaceMembersDialog({
 
   const allInviteUsers = useMemo(() => {
     const seen = new Set<string>();
-    return [...organizationUsers, ...guestUsers].filter((user) => {
+    const usersSource = isRestricted ? [...organizationUsers, ...guestUsers] : guestUsers;
+    return usersSource.filter((user) => {
       const key = user.email.toLowerCase();
       if (seen.has(key) || memberEmails.has(key)) return false;
       seen.add(key);
       return true;
     });
-  }, [organizationUsers, guestUsers, memberEmails]);
+  }, [organizationUsers, guestUsers, memberEmails, isRestricted]);
 
   const typeaheadOptions = useMemo((): InviteTypeaheadOption[] => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -559,7 +560,7 @@ export default function WorkspaceMembersDialog({
       .slice(0, 5)
       .map((user) => ({ kind: 'user' as const, id: `user-${user.id}`, user }));
 
-    const groupOptions = suggestedGroups
+    const groupOptions = (isRestricted ? suggestedGroups : [])
       .filter((group) => !memberGroupIds.has(group.id))
       .filter(
         (group) =>
@@ -570,7 +571,7 @@ export default function WorkspaceMembersDialog({
       .map((group) => ({ kind: 'group' as const, id: `group-${group.id}`, group }));
 
     return [...userOptions, ...groupOptions];
-  }, [query, allInviteUsers, suggestedGroups, memberGroupIds]);
+  }, [query, allInviteUsers, suggestedGroups, memberGroupIds, isRestricted]);
 
   const showTypeahead = typeaheadOpen && query.trim().length > 0 && typeaheadOptions.length > 0;
 
@@ -650,7 +651,7 @@ export default function WorkspaceMembersDialog({
       return;
     }
 
-    const matchedGroup = suggestedGroups.find(
+    const matchedGroup = (isRestricted ? suggestedGroups : []).find(
       (group) =>
         !memberGroupIds.has(group.id) && group.name.toLowerCase() === trimmed.toLowerCase(),
     );
@@ -666,6 +667,10 @@ export default function WorkspaceMembersDialog({
     );
     if (matchedUser) {
       const memberType = isOrganizationUser(matchedUser) ? 'Member' : 'Guest';
+      if (!isRestricted && memberType === 'Member') {
+        setError('Organization members already have access to this public workspace.');
+        return;
+      }
       if (memberType === 'Guest') {
         openSecureShare(matchedUser.email);
         return;
@@ -681,6 +686,10 @@ export default function WorkspaceMembersDialog({
 
     const email = trimmed.toLowerCase();
     const memberType = resolveMemberType(email);
+    if (!isRestricted && memberType === 'Member') {
+      setError('Organization members already have access to this public workspace.');
+      return;
+    }
     if (memberType === 'Guest') {
       openSecureShare(email);
       return;
@@ -705,6 +714,10 @@ export default function WorkspaceMembersDialog({
     }
 
     const memberType = isOrganizationUser(option.user) ? 'Member' : 'Guest';
+    if (!isRestricted && memberType === 'Member') {
+      setError('Organization members already have access to this public workspace.');
+      return;
+    }
     if (memberType === 'Guest') {
       openSecureShare(option.user.email);
       return;
@@ -1156,35 +1169,6 @@ export default function WorkspaceMembersDialog({
 
   const directAccessSection = (
     <>
-      {!isProject ? (
-        <Box
-          sx={{
-            p: 1.5,
-            borderRadius: '12px',
-            border: `1px solid ${cv.border}`,
-            backgroundColor: cv.surfaceSubtle,
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 1.5,
-          }}
-        >
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
-              Make Restricted
-            </Typography>
-            <Typography sx={{ mt: 0.35, fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.5 }}>
-              Only people directly invited to the workspace can access, plus admins.
-            </Typography>
-          </Box>
-          <Switch
-            checked={isRestricted}
-            onChange={(event) => onRestrictedChange(event.target.checked)}
-            slotProps={{ input: { 'aria-label': 'Make workspace restricted' } }}
-          />
-        </Box>
-      ) : null}
-
       <Box
         sx={{
           flex: 1,

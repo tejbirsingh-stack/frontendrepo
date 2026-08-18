@@ -24,6 +24,7 @@ export interface MediaAssetResponseDto {
   uploadedByUserId?: string;
   folderId?: string | null;
   folderName?: string | null;
+  workspaceId?: string;
 }
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB chunks for Backblaze B2 / AWS S3 multipart upload
@@ -329,9 +330,11 @@ export async function deleteMediaFileRequest(filenameOrId: string): Promise<void
 /**
  * Fetch a single media asset by ID (with metadata).
  */
-export async function getMediaAssetByIdRequest(id: string): Promise<MediaAssetResponseDto> {
+export async function getMediaAssetByIdRequest(id: string, projectId?: string): Promise<MediaAssetResponseDto> {
+  const params = new URLSearchParams({ meta: 'true' });
+  if (projectId) params.set('projectId', projectId);
   const res = await apiClient.get<{ success: boolean; asset: MediaAssetResponseDto }>(
-    `/media/${encodeURIComponent(id)}?meta=true`,
+    `/media/${encodeURIComponent(id)}?${params.toString()}`,
   );
   return res.asset;
 }

@@ -934,7 +934,7 @@ export default function MediaUploadDetailsModal({
                   }}
                 >
                   <MenuItem value="public">Public (Entire organization)</MenuItem>
-                  <MenuItem value="private">Private (Only you)</MenuItem>
+                  <MenuItem value="private">Private</MenuItem>
                 </Select>
               </FormControl>
             </Box>

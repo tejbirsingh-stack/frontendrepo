@@ -9,6 +9,7 @@ import {
   DialogTitle,
   TextField,
   Typography,
+  Switch,
 } from '@mui/material';
 import { DEFAULT_WORKSPACE_COLOR, WORKSPACE_COLORS } from '../../constants/workspaceColors';
 import InvitePeopleFields from '../settings/InvitePeopleFields';
@@ -16,6 +17,7 @@ import CustomHexColorPickerButton from './CustomHexColorPickerButton';
 import { MOCK_SETTINGS_USER_GROUPS } from '../../data/mockSettingsData';
 import { fetchOrganizationUsers } from '../../api/auth.service';
 import type { WorkspaceMemberAccess, WorkspaceMemberType } from '../../data/mockSettingsData';
+import { TeamMemberAvatarStack } from '../common/TeamMemberAvatarStack';
 
 export interface CreateWorkspaceFormData {
   name: string;
@@ -25,6 +27,7 @@ export interface CreateWorkspaceFormData {
   inviteGroupIds?: string[];
   memberType?: string;
   accessLevel?: string;
+  isRestricted?: boolean;
 }
 
 interface CreateWorkspaceModalProps {
@@ -32,7 +35,13 @@ interface CreateWorkspaceModalProps {
   onClose: () => void;
   onCreate: (data: CreateWorkspaceFormData) => void;
   onSave?: (data: CreateWorkspaceFormData) => void;
-  initialWorkspace?: { name: string; description?: string; color?: string };
+  initialWorkspace?: { 
+    name: string; 
+    description?: string; 
+    color?: string;
+    isRestricted?: boolean;
+    teamMembers?: import('../../data/mockSettingsData').WorkspaceTeamMember[];
+  };
 }
 
 const dialogPaperSx = {
@@ -55,10 +64,12 @@ export default function CreateWorkspaceModal({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [color, setColor] = useState(DEFAULT_WORKSPACE_COLOR);
+  const [isRestricted, setIsRestricted] = useState(false);
   const [inviteEmails, setInviteEmails] = useState<string[]>([]);
   const [inviteGroupIds, setInviteGroupIds] = useState<string[]>([]);
   const [inviteMemberType, setInviteMemberType] = useState<WorkspaceMemberType>('Member');
   const [inviteAccess, setInviteAccess] = useState<string>('Full Access');
+  const [inviteSendEmail, setInviteSendEmail] = useState(false);
   const [orgUsersList, setOrgUsersList] = useState<import('../../data/mockSettingsData').SettingsUserRow[]>([]);
   const [orgGroupsList, setOrgGroupsList] = useState<import('../../data/mockSettingsData').SettingsUserGroup[]>([]);
 
@@ -68,6 +79,7 @@ export default function CreateWorkspaceModal({
       setName(initialWorkspace.name);
       setDescription(initialWorkspace.description ?? '');
       setColor(initialWorkspace.color ?? DEFAULT_WORKSPACE_COLOR);
+      setIsRestricted(initialWorkspace.isRestricted ?? false);
       setInviteEmails([]);
       setInviteGroupIds([]);
       return;
@@ -75,10 +87,12 @@ export default function CreateWorkspaceModal({
     setName('');
     setDescription('');
     setColor(DEFAULT_WORKSPACE_COLOR);
+    setIsRestricted(false);
     setInviteEmails([]);
     setInviteGroupIds([]);
-    setInviteMemberType('Member');
+    setInviteMemberType('Guest'); // always default to Guest for external invites
     setInviteAccess('Full Access');
+    setInviteSendEmail(false);
 
     if (!isEdit) {
       fetchOrganizationUsers()
@@ -129,6 +143,24 @@ export default function CreateWorkspaceModal({
     }
   }, [open, initialWorkspace, isEdit]);
 
+  // Backend guest search — validates users from another org
+  const handleGuestSearch = async (query: string): Promise<import('../settings/InvitePeopleFields').GuestUserSuggestion[]> => {
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      const res = await (apiClient as any).get(
+        `/workspaces/search-guests?q=${encodeURIComponent(query)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      // Backend returns { success, data: [...] }
+      const outer = (res as any).data ?? res;
+      const arr = Array.isArray(outer) ? outer : (Array.isArray(outer?.data) ? outer.data : []);
+      return arr;
+    } catch {
+      return [];
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -140,6 +172,7 @@ export default function CreateWorkspaceModal({
       inviteGroupIds,
       memberType: inviteMemberType.toUpperCase(),
       accessLevel: inviteAccess,
+      isRestricted,
     };
     if (isEdit) {
       onSave?.(payload);
@@ -282,24 +315,89 @@ export default function CreateWorkspaceModal({
             />
           </Box>
 
-          {!isEdit ? (
+          {/* Always show invite section — Guest-only for public, all types for private */}
           <Box sx={{ mt: 3 }}>
-            <InvitePeopleFields
-              emails={inviteEmails}
-              onChange={setInviteEmails}
-              groupIds={inviteGroupIds}
-              onGroupIdsChange={setInviteGroupIds}
-              showAccessControls
-              memberType={inviteMemberType}
-              onMemberTypeChange={setInviteMemberType}
-              access={inviteAccess}
-              onAccessChange={setInviteAccess}
-              suggestedUsers={orgUsersList}
-              suggestedGroups={orgGroupsList}
-              description="Optional — invite people or groups to join this workspace."
-            />
+            <Box
+              sx={{
+                p: 1.5,
+                mb: 3,
+                borderRadius: '12px',
+                border: `1px solid ${cv.border}`,
+                backgroundColor: cv.surfaceSubtle,
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 1.5,
+              }}
+            >
+              <Box sx={{ minWidth: 0 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
+                  Make Restricted
+                </Typography>
+                <Typography sx={{ mt: 0.35, fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.5 }}>
+                  Only people directly invited to the workspace can access, plus admins.
+                </Typography>
+              </Box>
+              <Switch
+                checked={isRestricted}
+                disabled={isEdit} // Admin cannot change private/public in edit mode per user request
+                onChange={(event) => {
+                  setIsRestricted(event.target.checked);
+                  // When switching to public, force Guest-only mode
+                  if (!event.target.checked) setInviteMemberType('Guest');
+                }}
+                slotProps={{ input: { 'aria-label': 'Make workspace restricted' } }}
+              />
+            </Box>
+
+            {isEdit && initialWorkspace?.teamMembers && initialWorkspace.teamMembers.length > 0 && (
+              <Box sx={{ mb: 3 }}>
+                <Typography
+                  sx={{
+                    fontSize: '0.6875rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: cv.textMuted,
+                    mb: 1.25,
+                  }}
+                >
+                  Existing team members
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <TeamMemberAvatarStack 
+                    members={
+                      isRestricted 
+                        ? initialWorkspace.teamMembers 
+                        : initialWorkspace.teamMembers.filter(m => m.memberType === 'Guest' || m.isCurrentUser) // keep guest and current admin
+                    } 
+                    max={10} 
+                  />
+                </Box>
+              </Box>
+            )}
+
+              <InvitePeopleFields
+                emails={inviteEmails}
+                onChange={setInviteEmails}
+                groupIds={inviteGroupIds}
+                onGroupIdsChange={setInviteGroupIds}
+                showAccessControls
+                memberType={inviteMemberType}
+                onMemberTypeChange={setInviteMemberType}
+                access={inviteAccess}
+                onAccessChange={setInviteAccess}
+                suggestedUsers={orgUsersList}
+                suggestedGroups={orgGroupsList}
+                onGuestSearch={handleGuestSearch}
+                sendInviteEmail={inviteSendEmail}
+                onSendInviteEmailChange={setInviteSendEmail}
+                allowedTypes={isRestricted ? ['Member', 'Guest', 'Group'] : ['Guest']}
+                description={isRestricted
+                  ? 'Optional — invite people or groups to join this workspace.'
+                  : 'Invite guests from other organizations to access this public workspace.'}
+              />
           </Box>
-          ) : null}
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 3, pt: 1, gap: 1 }}>

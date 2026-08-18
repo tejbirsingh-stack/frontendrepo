@@ -1925,7 +1925,10 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         </List>
 
         <Collapse in={uploadPanelOpen}>
-          <UploadPanel onUpload={(files) => uploadMediaFiles(files, { parentFolderId: sidebarSelection?.folderId ?? null })} />
+          <UploadPanel onUpload={(files) => uploadMediaFiles(files, { 
+            parentFolderId: sidebarSelection?.browseMode === 'projects' ? null : (sidebarSelection?.folderId ?? null),
+            linkedProjectId: sidebarSelection?.browseMode === 'projects' ? (sidebarSelection?.folderId ?? null) : null
+          })} />
         </Collapse>
 
         <Divider sx={{ my: 2, mx: 2, borderColor: cv.border }} />
