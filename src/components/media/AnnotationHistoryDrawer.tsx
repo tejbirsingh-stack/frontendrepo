@@ -24,6 +24,7 @@ import {
   Button,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
@@ -60,7 +61,7 @@ import {
 } from '../../constants/mediaFilters';
 import { dropdownMenuPaperSx } from '../../constants/dropdownMenu';
 
-type DrawerTab = 'history' | 'details';
+type DrawerTab = 'history' | 'details' | 'ai';
 type StatusFilter = 'all' | 'unread' | 'resolved' | 'archive';
 
 function getCommentIdForEntry(entry: AnnotationHistoryEntry): string | null {
@@ -168,6 +169,8 @@ interface AnnotationHistoryDrawerProps {
   onTagsChange?: (tags: string[]) => void;
   activeTab?: DrawerTab;
   onTabChange?: (tab: DrawerTab) => void;
+  /** Restricts which sections are selectable, e.g. guests without comment access. */
+  availableTabs?: DrawerTab[];
   detailsSection?: MediaDetailsSection;
   onDetailsSectionChange?: (section: MediaDetailsSection) => void;
   onClose: () => void;
@@ -195,10 +198,16 @@ interface AnnotationHistoryDrawerProps {
   activeHistoryEntryId?: string | null;
 }
 
-const DRAWER_TABS: { value: DrawerTab; label: string }[] = [
+const DRAWER_TABS: { value: Exclude<DrawerTab, 'ai'>; label: string }[] = [
   { value: 'history', label: 'Annotation History' },
   { value: 'details', label: 'Details' },
 ];
+
+const DRAWER_TAB_PANEL_LABELS: Record<DrawerTab, string> = {
+  history: 'Annotation history',
+  details: 'Media details',
+  ai: 'AI insights',
+};
 
 const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -896,6 +905,7 @@ export default function AnnotationHistoryDrawer({
   onTagsChange,
   activeTab: controlledTab,
   onTabChange,
+  availableTabs,
   detailsSection,
   onDetailsSectionChange,
   onClose,
@@ -921,7 +931,17 @@ export default function AnnotationHistoryDrawer({
   const activeUser = useActiveUser();
   const isDesktopPanel = useMediaQuery(theme.breakpoints.up(SIDEBAR_DESKTOP_BREAKPOINT));
   const [internalTab, setInternalTab] = useState<DrawerTab>('history');
-  const activeTab = controlledTab ?? internalTab;
+  const visibleTabs = DRAWER_TABS.filter(
+    (tab) => !availableTabs || availableTabs.includes(tab.value),
+  );
+  const requestedTab = controlledTab ?? internalTab;
+  const activeTab: DrawerTab =
+    requestedTab === 'ai'
+      ? 'ai'
+      : visibleTabs.some((tab) => tab.value === requestedTab)
+        ? requestedTab
+        : visibleTabs[0]?.value ?? 'details';
+
   
   const isTimeBasedMedia = mediaItem?.type === 'video' || mediaItem?.type === 'audio';
 
@@ -1021,64 +1041,86 @@ export default function AnnotationHistoryDrawer({
           pb: 1,
         }}
       >
-        <Box
-          role="tablist"
-          aria-label="Annotation panel sections"
-          sx={{
-            display: 'flex',
-            flex: 1,
-            gap: 0.5,
-            p: 0.5,
-            borderRadius: '12px',
-            border: "1px solid var(--noah-border)",
-            backgroundColor: cv.surface,
-          }}
-        >
-          {DRAWER_TABS.map((tab) => {
-            const isActive = activeTab === tab.value;
+        {activeTab === 'ai' ? (
+          <Typography
+            component="h2"
+            sx={{
+              flex: 1,
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              color: cv.textPrimary,
+              lineHeight: 1.3,
+            }}
+          >
+            AI insights
+          </Typography>
+        ) : (
+          <Box
+            role="tablist"
+            aria-label="Annotation panel sections"
+            sx={{
+              display: 'flex',
+              flex: 1,
+              gap: 0.5,
+              p: 0.5,
+              borderRadius: '12px',
+              border: "1px solid var(--noah-border)",
+              backgroundColor: cv.surface,
+            }}
+          >
+            {visibleTabs.map((tab) => {
+              const isActive = activeTab === tab.value;
 
-            return (
-              <Tooltip key={tab.value} title={tab.label} arrow placement="top">
-                <Box
-                  component="button"
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => handleTabChange(tab.value)}
-                  sx={{
-                    flex: 1,
-                    border: 'none',
-                    borderRadius: '8px',
-                    px: 1,
-                    py: 0.75,
-                    fontSize: '0.75rem',
-                    fontWeight: isActive ? 600 : 500,
-                    lineHeight: 1.2,
-                    cursor: 'pointer',
-                    color: isActive ? cv.textPrimary : cv.textSecondary,
-                    backgroundColor: isActive ? cv.purpleSelectionHover : 'transparent',
-                    boxShadow: isActive ? `inset 0 0 0 1px ${cv.purpleSelectionStrong}` : 'none',
-                    transition: 'background-color 0.15s ease, color 0.15s ease',
-                    '&:hover': {
-                      color: cv.textPrimary,
-                      backgroundColor: isActive
-                        ? cv.purpleSelectionMedium
-                        : cv.glassBackground,
-                    },
-                  }}
-                >
-                  {tab.label}
-                </Box>
-              </Tooltip>
-            );
-          })}
-        </Box>
+              return (
+                <Tooltip key={tab.value} title={tab.label} arrow placement="top">
+                  <Box
+                    component="button"
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => handleTabChange(tab.value)}
+                    sx={{
+                      flex: 1,
+                      border: 'none',
+                      borderRadius: '8px',
+                      px: 1,
+                      py: 0.75,
+                      fontSize: '0.75rem',
+                      fontWeight: isActive ? 600 : 500,
+                      lineHeight: 1.2,
+                      cursor: 'pointer',
+                      color: isActive ? cv.textPrimary : cv.textSecondary,
+                      backgroundColor: isActive ? cv.purpleSelectionHover : 'transparent',
+                      boxShadow: isActive ? `inset 0 0 0 1px ${cv.purpleSelectionStrong}` : 'none',
+                      transition: 'background-color 0.15s ease, color 0.15s ease',
+                      '&:hover': {
+                        color: cv.textPrimary,
+                        backgroundColor: isActive
+                          ? cv.purpleSelectionMedium
+                          : cv.glassBackground,
+                      },
+                    }}
+                  >
+                    {tab.label}
+                  </Box>
+                </Tooltip>
+              );
+            })}
+          </Box>
+        )}
 
-        <Tooltip title="Close panel" arrow placement="top">
-          <IconButton type="button" aria-label="Close panel" onClick={onClose} sx={{ color: cv.textSecondary }}>
-            <CloseOutlinedIcon sx={{ fontSize: 20 }} />
-          </IconButton>
-        </Tooltip>
+        {isDesktopPanel ? null : (
+          <Tooltip title="Close panel" arrow placement="top">
+            <IconButton
+              type="button"
+              aria-label="Close panel"
+              onClick={onClose}
+              sx={{ color: cv.textSecondary }}
+            >
+              <CloseOutlinedIcon sx={{ fontSize: 20 }} />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
 
       {activeTab === 'history' && (
@@ -1324,7 +1366,7 @@ export default function AnnotationHistoryDrawer({
 
       <Box
         role="tabpanel"
-        aria-label={activeTab === 'history' ? 'Annotation history' : 'Media details'}
+        aria-label={DRAWER_TAB_PANEL_LABELS[activeTab]}
         sx={{
           flex: 1,
           overflowY: 'auto',
@@ -1376,6 +1418,16 @@ export default function AnnotationHistoryDrawer({
               </Box>
             ))
           )
+        ) : activeTab === 'ai' ? (
+          <Box sx={{ py: 4, px: 1, textAlign: 'center' }}>
+            <AutoAwesomeOutlinedIcon sx={{ fontSize: 28, color: cv.textMuted }} />
+            <Typography sx={{ mt: 1, fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
+              AI insights
+            </Typography>
+            <Typography sx={{ mt: 0.5, fontSize: '0.8125rem', color: cv.textMuted }}>
+              AI insights for this file are not available yet.
+            </Typography>
+          </Box>
         ) : mediaItem && onTagsChange ? (
           <MediaDetailsPanel
             mediaItem={mediaItem}
@@ -1447,7 +1499,7 @@ export default function AnnotationHistoryDrawer({
   return (
     <Box
       component="aside"
-      aria-label="Annotation history"
+      aria-label="Media panel"
       sx={{
         width: 380,
         maxWidth: '100%',
@@ -1462,10 +1514,39 @@ export default function AnnotationHistoryDrawer({
         WebkitBackdropFilter: 'blur(24px) saturate(160%)',
         boxShadow:
           cv.popoverShadow,
-        overflow: 'hidden',
+        position: 'relative',
       }}
     >
-      {panelShell}
+      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1, borderRadius: '16px', overflow: 'hidden' }}>
+        {panelShell}
+      </Box>
+
+      <Tooltip title="Close panel" arrow placement="left">
+        <IconButton
+          type="button"
+          aria-label="Close panel"
+          onClick={onClose}
+          sx={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            transform: 'translate(50%, -50%)',
+            zIndex: 2,
+            width: 28,
+            height: 28,
+            color: cv.textSecondary,
+            border: '1px solid var(--noah-border)',
+            background: 'var(--noah-popover-surface-deep)',
+            boxShadow: cv.popoverShadow,
+            '&:hover': {
+              color: cv.textPrimary,
+              backgroundColor: cv.surfaceHover,
+            },
+          }}
+        >
+          <CloseOutlinedIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+      </Tooltip>
     </Box>
   );
 }
