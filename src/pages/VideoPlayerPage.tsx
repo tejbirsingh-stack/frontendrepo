@@ -264,6 +264,14 @@ const mediaTypeHeaderIcons = {
 export interface VideoPlayerPageProps {
   isGuestMode?: boolean;
   shareToken?: string;
+  guestBranding?: {
+    accountName?: string;
+    logoUrl?: string | null;
+    headerImageUrl?: string | null;
+    accentColor?: string;
+    reelBackgroundColor?: string;
+    reelTitleColor?: string;
+  };
   guestPermissions?: {
     view: boolean;
     comment: boolean;
@@ -285,6 +293,7 @@ export interface VideoPlayerPageProps {
 export default function VideoPlayerPage({
   isGuestMode = false,
   shareToken,
+  guestBranding,
   guestPermissions = { view: true, comment: true, download: true, downloadProxy: true },
   guestAssetMeta,
   guestExpiresAt,
@@ -3603,7 +3612,10 @@ export default function VideoPlayerPage({
           maxHeight: DASHBOARD_TOP_BAR_HEIGHT,
           boxSizing: 'border-box',
           borderBottom: DASHBOARD_TOP_BAR_BORDER,
-          background: 'var(--noah-header-background)',
+          backgroundColor: 'rgba(15, 17, 26, 0.85)',
+          backgroundImage: guestBranding?.headerImageUrl ? `url(${guestBranding.headerImageUrl})` : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
           backdropFilter: 'blur(20px) saturate(180%)',
           WebkitBackdropFilter: 'blur(20px) saturate(180%)',
         }}
@@ -3618,36 +3630,83 @@ export default function VideoPlayerPage({
             zIndex: 1,
           }}
         >
-          <Tooltip title="Back to dashboard" arrow placement="bottom">
-            <IconButton
-              aria-label="Back to dashboard"
-              onClick={() => {
-                if (window.history.length > 1) {
-                  navigate(-1);
-                } else {
-                  navigate('/home');
-                }
-              }}
-              sx={{
-                flexShrink: 0,
-                color: cv.textSecondary,
-                border: "1px solid var(--noah-border)",
-                '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceHover },
-              }}
-            >
-              <ArrowBackOutlinedIcon />
-            </IconButton>
-          </Tooltip>
-          <NoahLogo
-            to="/home"
-            boxWidth={{ xs: HEADER_LOGO_BOX_WIDTH_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_WIDTH_DESKTOP }}
-            height={{ xs: HEADER_LOGO_BOX_HEIGHT_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_HEIGHT_DESKTOP }}
-            objectFit="cover"
-            animated={false}
-            showGlow={false}
-            align="left"
-            sx={{ mb: 0, flexShrink: 0 }}
-          />
+          {isGuestMode ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexShrink: 0 }}>
+              {guestBranding?.logoUrl ? (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: 38,
+                    width: 38,
+                    borderRadius: '10px',
+                    overflow: 'hidden',
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.25)',
+                    p: '2px',
+                  }}
+                >
+                  <Box
+                    component="img"
+                    src={guestBranding.logoUrl}
+                    alt={guestBranding?.accountName || 'Brand Logo'}
+                    sx={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
+                  />
+                </Box>
+              ) : (
+                <Box
+                  sx={{
+                    fontWeight: 800,
+                    fontSize: '1.25rem',
+                    background: guestBranding?.accentColor || 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  {guestBranding?.accountName || 'NOAH'}
+                </Box>
+              )}
+              {guestBranding?.accountName && (
+                <Typography sx={{ fontSize: '0.975rem', fontWeight: 700, color: '#f8fafc' }}>
+                  {guestBranding.accountName}
+                </Typography>
+              )}
+            </Box>
+          ) : (
+            <>
+              <Tooltip title="Back to dashboard" arrow placement="bottom">
+                <IconButton
+                  aria-label="Back to dashboard"
+                  onClick={() => {
+                    if (window.history.length > 1) {
+                      navigate(-1);
+                    } else {
+                      navigate('/home');
+                    }
+                  }}
+                  sx={{
+                    flexShrink: 0,
+                    color: cv.textSecondary,
+                    border: "1px solid var(--noah-border)",
+                    '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceHover },
+                  }}
+                >
+                  <ArrowBackOutlinedIcon />
+                </IconButton>
+              </Tooltip>
+              <NoahLogo
+                to="/home"
+                boxWidth={{ xs: HEADER_LOGO_BOX_WIDTH_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_WIDTH_DESKTOP }}
+                height={{ xs: HEADER_LOGO_BOX_HEIGHT_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_HEIGHT_DESKTOP }}
+                objectFit="cover"
+                animated={false}
+                showGlow={false}
+                align="left"
+                sx={{ mb: 0, flexShrink: 0 }}
+              />
+            </>
+          )}
           <Box
             sx={{
               display: 'flex',

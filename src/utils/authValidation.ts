@@ -66,3 +66,15 @@ export function validateBusinessEmail(email: string): string | null {
   }
   return null;
 }
+
+export function validateEmail(email: string): string | null {
+  const trimmed = email.trim();
+  if (!trimmed) {
+    return 'Email address is required.';
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmed)) {
+    return 'Please enter a valid email address.';
+  }
+  return null;
+}
