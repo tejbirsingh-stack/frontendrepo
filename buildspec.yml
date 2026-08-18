@@ -4,7 +4,7 @@ env:
   variables:
     ENV_NAME: "uat"
     AWS_REGION: "us-east-2"
-    ECR_REPO: "noah-uat/backend"
+    ECR_REPO: "noah-uat/frontend"
     ASG_TAG_NAME: "noah-uat-ec2"
 
 phases:
@@ -19,8 +19,8 @@ phases:
 
   build:
     commands:
-      - echo "Building backend image..."
-      - docker build -f apps/api/Dockerfile -t "$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG" -t "$ECR_REGISTRY/$ECR_REPO:latest" .
+      - echo "Building frontend image..."
+      - docker build -t "$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG" -t "$ECR_REGISTRY/$ECR_REPO:latest" .
 
   post_build:
     commands:
@@ -28,7 +28,7 @@ phases:
       - docker push "$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
       - docker push "$ECR_REGISTRY/$ECR_REPO:latest"
       - echo "Deploying to all $ASG_TAG_NAME instances via SSM..."
-      - COMMAND_ID=$(aws ssm send-command --region "$AWS_REGION" --targets "Key=tag:Name,Values=${ASG_TAG_NAME}" --document-name "AWS-RunShellScript" --parameters "{\"commands\":[\"aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}\",\"docker pull ${ECR_REGISTRY}/${ECR_REPO}:latest\",\"cd /opt/noah && docker compose up -d backend\"]}" --output text --query "Command.CommandId")
+      - COMMAND_ID=$(aws ssm send-command --region "$AWS_REGION" --targets "Key=tag:Name,Values=${ASG_TAG_NAME}" --document-name "AWS-RunShellScript" --parameters "{\"commands\":[\"aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}\",\"docker pull ${ECR_REGISTRY}/${ECR_REPO}:latest\",\"cd /opt/noah && docker compose up -d frontend\"]}" --output text --query "Command.CommandId")
       - echo "SSM Command ID is $COMMAND_ID"
-      - aws ssm wait command-executed --command-id "$COMMAND_ID" --region "$AWS_REGION" || true
+      - sleep 15
       - aws ssm list-command-invocations --command-id "$COMMAND_ID" --region "$AWS_REGION" --details --query "CommandInvocations[].{Instance:InstanceId,Status:Status}"
