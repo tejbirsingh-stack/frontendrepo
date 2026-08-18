@@ -12,6 +12,7 @@ export type PlatformPlan = {
   storageQuotaBytes: string;
   maxUsers: number;
   maxWorkspaces: number;
+  maxProjects?: number;
   features: string[];
   isPublic: boolean;
   isFeatured: boolean;
