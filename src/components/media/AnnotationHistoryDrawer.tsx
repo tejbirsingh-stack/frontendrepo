@@ -37,6 +37,7 @@ import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import { useActiveUser } from '../../hooks/useActiveUser';
 import type { MediaItem } from '../../data/mockMedia';
+import { MOCK_FRAME_PEOPLE, type FramePerson } from '../../data/mockFramePeople';
 import type { AnnotationHistoryEntry, AnnotationHistoryType } from '../../types/annotationHistory';
 import type { CommentReply, VideoComment } from '../../types/videoComments';
 import CommentImageAttachment from './CommentImageAttachment';
@@ -173,6 +174,9 @@ interface AnnotationHistoryDrawerProps {
   availableTabs?: DrawerTab[];
   detailsSection?: MediaDetailsSection;
   onDetailsSectionChange?: (section: MediaDetailsSection) => void;
+  /** Person whose headshot is highlighted on the frame from the AI insights tab. */
+  selectedFramePersonId?: string | null;
+  onFramePersonSelect?: (person: FramePerson) => void;
   onClose: () => void;
   onEntryClick?: (entry: AnnotationHistoryEntry) => void;
   onToggleResolved: (entryId: string) => void;
@@ -223,6 +227,9 @@ const TYPE_FILTER_OPTIONS: { value: 'all' | AnnotationHistoryType; label: string
   { value: 'shape', label: 'Shapes' },
   { value: 'stamp', label: 'Stamps' },
 ];
+
+const AI_FRAME_PEOPLE_PREVIEW_COUNT = 8;
+const AI_FRAME_HEADSHOT_SIZE = 34;
 
 const drawerSurface = 'var(--noah-drawer-surface)';
 
@@ -894,6 +901,136 @@ function HistoryEntryRow({
   );
 }
 
+function FramePeopleHeadshots({
+  people,
+  query,
+  selectedPersonId,
+  onSelectPerson,
+}: Readonly<{
+  people: FramePerson[];
+  query: string;
+  selectedPersonId?: string | null;
+  onSelectPerson?: (person: FramePerson) => void;
+}>) {
+  const [showAll, setShowAll] = useState(false);
+  const hiddenCount = Math.max(people.length - AI_FRAME_PEOPLE_PREVIEW_COUNT, 0);
+  const visiblePeople =
+    showAll || hiddenCount === 0 ? people : people.slice(0, AI_FRAME_PEOPLE_PREVIEW_COUNT);
+
+  return (
+    <Box
+      sx={{
+        p: 1,
+        borderRadius: '12px',
+        border: `1px dashed ${cv.borderStrong}`,
+        backgroundColor: cv.surface,
+      }}
+    >
+      {people.length === 0 ? (
+        <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted, textAlign: 'center' }}>
+          No people match "{query.trim()}".
+        </Typography>
+      ) : (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box
+            component="ul"
+            aria-label="People detected in this frame"
+            sx={{
+              listStyle: 'none',
+              m: 0,
+              // Keeps the selected headshot's focus ring from being clipped by the scroller
+              p: 0.5,
+              flex: 1,
+              minWidth: 0,
+              display: 'flex',
+              flexWrap: 'nowrap',
+              gap: 1,
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              overscrollBehavior: 'contain',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            {visiblePeople.map((person) => {
+              const isSelected = person.id === selectedPersonId;
+
+              return (
+                <Box component="li" key={person.id} sx={{ display: 'flex', flexShrink: 0 }}>
+                  <Tooltip
+                    title={`${
+                      isSelected ? 'Hide' : 'Show'
+                    } ${person.name} on the frame · ${person.detail}`}
+                    arrow
+                    placement="top"
+                  >
+                    <Avatar
+                      component="button"
+                      type="button"
+                      aria-pressed={isSelected}
+                      aria-label={`${person.name}, ${person.detail}`}
+                      onClick={() => onSelectPerson?.(person)}
+                      sx={{
+                        width: AI_FRAME_HEADSHOT_SIZE,
+                        height: AI_FRAME_HEADSHOT_SIZE,
+                        p: 0,
+                        fontSize: '0.625rem',
+                        fontWeight: 600,
+                        color: cv.textPrimary,
+                        background: cv.brandGradient,
+                        border: 'none',
+                        cursor: onSelectPerson ? 'pointer' : 'default',
+                        outline: isSelected ? `2px solid ${cv.purpleLight}` : 'none',
+                        outlineOffset: '2px',
+                        transition: 'transform 0.15s ease',
+                        '&:hover': { transform: onSelectPerson ? 'scale(1.08)' : 'none' },
+                        '&:focus-visible': {
+                          outline: `2px solid ${cv.purpleFocusBorder}`,
+                          outlineOffset: '2px',
+                        },
+                      }}
+                    >
+                      {person.initials}
+                    </Avatar>
+                  </Tooltip>
+                </Box>
+              );
+            })}
+          </Box>
+
+          {hiddenCount > 0 && !showAll ? (
+            <Tooltip title={`Show ${hiddenCount} more`} arrow placement="top">
+              <Box
+                component="button"
+                type="button"
+                aria-label={`Show ${hiddenCount} more people in this frame`}
+                onClick={() => setShowAll(true)}
+                sx={{
+                  flexShrink: 0,
+                  width: AI_FRAME_HEADSHOT_SIZE,
+                  height: AI_FRAME_HEADSHOT_SIZE,
+                  borderRadius: '50%',
+                  border: `1px solid ${cv.borderStrong}`,
+                  backgroundColor: cv.glassBackground,
+                  color: cv.textSecondary,
+                  fontSize: '0.625rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  '&:hover': {
+                    color: cv.textPrimary,
+                    backgroundColor: cv.surfaceHover,
+                  },
+                }}
+              >
+                +{hiddenCount}
+              </Box>
+            </Tooltip>
+          ) : null}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 export default function AnnotationHistoryDrawer({
   open,
   activeHistoryEntryId,
@@ -908,6 +1045,8 @@ export default function AnnotationHistoryDrawer({
   availableTabs,
   detailsSection,
   onDetailsSectionChange,
+  selectedFramePersonId,
+  onFramePersonSelect,
   onClose,
   onEntryClick,
   onToggleResolved,
@@ -953,6 +1092,7 @@ export default function AnnotationHistoryDrawer({
     }
   };
   const [query, setQuery] = useState('');
+  const [aiQuery, setAiQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | AnnotationHistoryType>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>('all');
@@ -1028,6 +1168,15 @@ export default function AnnotationHistoryDrawer({
         return b.createdAt - a.createdAt;
       });
   }, [commentById, customEndDate, customStartDate, dateRangeFilter, entries, query, statusFilter, typeFilter, activeUser.name]);
+
+  const filteredFramePeople = useMemo(() => {
+    const normalizedQuery = aiQuery.trim().toLowerCase();
+    if (!normalizedQuery) return MOCK_FRAME_PEOPLE;
+
+    return MOCK_FRAME_PEOPLE.filter((person) =>
+      `${person.name} ${person.detail}`.toLowerCase().includes(normalizedQuery),
+    );
+  }, [aiQuery]);
 
   const panelBody = (
     <>
@@ -1122,6 +1271,50 @@ export default function AnnotationHistoryDrawer({
           </Tooltip>
         )}
       </Box>
+
+      {activeTab === 'ai' && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, px: 1.5, pb: 1.25 }}>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search people, objects or moments"
+            value={aiQuery}
+            onChange={(event) => setAiQuery(event.target.value)}
+            aria-label="Search AI insights"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: '999px',
+                backgroundColor: cv.surface,
+                fontSize: '0.875rem',
+                color: cv.textPrimary,
+                '& fieldset': { borderColor: cv.border },
+                '&:hover fieldset': { borderColor: cv.annotationGuide },
+                '&.Mui-focused fieldset': { borderColor: cv.purpleFocusBorder },
+              },
+              '& .MuiInputBase-input::placeholder': {
+                color: cv.textMuted,
+                opacity: 1,
+              },
+            }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+
+          <FramePeopleHeadshots
+            people={filteredFramePeople}
+            query={aiQuery}
+            selectedPersonId={selectedFramePersonId}
+            onSelectPerson={onFramePersonSelect}
+          />
+        </Box>
+      )}
 
       {activeTab === 'history' && (
         <Box
@@ -1419,13 +1612,17 @@ export default function AnnotationHistoryDrawer({
             ))
           )
         ) : activeTab === 'ai' ? (
-          <Box sx={{ py: 4, px: 1, textAlign: 'center' }}>
-            <AutoAwesomeOutlinedIcon sx={{ fontSize: 28, color: cv.textMuted }} />
-            <Typography sx={{ mt: 1, fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
-              AI insights
-            </Typography>
-            <Typography sx={{ mt: 0.5, fontSize: '0.8125rem', color: cv.textMuted }}>
-              AI insights for this file are not available yet.
+          <Box
+            sx={{
+              py: 1.5,
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 0.75,
+            }}
+          >
+            <AutoAwesomeOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted, flexShrink: 0 }} />
+            <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+              Other AI insights for this file are not available yet.
             </Typography>
           </Box>
         ) : mediaItem && onTagsChange ? (
