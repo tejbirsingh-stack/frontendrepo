@@ -10,7 +10,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   TextField,
   Typography,
@@ -18,7 +17,20 @@ import {
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import type { PlatformDefaultContentItem } from '../api/platformApi';
-import { EmptyState, PageHeader, Panel, StatusChip, formatBytes } from '../components/PlatformUi';
+import {
+  EmptyState,
+  PageHeader,
+  Panel,
+  PlatformTableHead,
+  PlatformTablePagination,
+  StatusChip,
+  formatBytes,
+} from '../components/PlatformUi';
+import { platformTableSx } from '../components/platformTableStyles';
+import {
+  usePaginatedRows,
+  usePlatformTablePagination,
+} from '../hooks/usePlatformTablePagination';
 import { cv } from '../../theme/cssVars';
 
 type LocalItem = PlatformDefaultContentItem & { localUrl?: string | null };
@@ -165,6 +177,8 @@ export default function PlatformDefaultContentPage() {
   const [title, setTitle] = useState('');
   const [viewItem, setViewItem] = useState<LocalItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const pagination = usePlatformTablePagination([items.length]);
+  const paginatedItems = usePaginatedRows(items, pagination.page, pagination.rowsPerPage);
 
   const handleUpload = (fileList: FileList | null) => {
     const file = fileList?.[0];
@@ -261,72 +275,81 @@ export default function PlatformDefaultContentPage() {
         {items.length === 0 ? (
           <EmptyState message="No default content yet — upload files above" />
         ) : (
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Title</TableCell>
-                <TableCell>Type</TableCell>
-                <TableCell>Size</TableCell>
-                <TableCell>Enabled</TableCell>
-                <TableCell>Added</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {items.map((item) => (
-                <TableRow key={item.id} hover>
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      defaultValue={item.title}
-                      key={`${item.id}-${item.title}`}
-                      disabled={busyId === item.id}
-                      onBlur={(e) => rename(item, e.target.value)}
-                      sx={{ minWidth: 200 }}
-                      inputProps={{ 'aria-label': `Title for ${item.fileName}` }}
-                    />
-                    <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.5 }}>
-                      {item.fileName}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <StatusChip status={item.assetType} />
-                  </TableCell>
-                  <TableCell>{formatBytes(item.sizeBytes)}</TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={item.isEnabled}
-                      disabled={busyId === item.id}
-                      onChange={() => toggleEnabled(item)}
-                      inputProps={{ 'aria-label': `Enable ${item.title}` }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {item.createdAt ? new Date(item.createdAt).toLocaleString() : '—'}
-                  </TableCell>
-                  <TableCell align="right">
-                    <Button
-                      size="small"
-                      startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 16 }} />}
-                      sx={{ textTransform: 'none', mr: 0.5 }}
-                      onClick={() => setViewItem(item)}
-                    >
-                      View
-                    </Button>
-                    <Button
-                      size="small"
-                      color="error"
-                      disabled={busyId === item.id}
-                      sx={{ textTransform: 'none' }}
-                      onClick={() => remove(item)}
-                    >
-                      Delete
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <>
+            <Table size="small" sx={platformTableSx}>
+              <PlatformTableHead
+                columns={[
+                  { id: 'title', label: 'Title' },
+                  { id: 'type', label: 'Type' },
+                  { id: 'size', label: 'Size' },
+                  { id: 'enabled', label: 'Enabled' },
+                  { id: 'added', label: 'Added' },
+                  { id: 'actions', label: 'Actions', align: 'right' },
+                ]}
+              />
+              <TableBody>
+                {paginatedItems.map((item) => (
+                  <TableRow key={item.id} hover>
+                    <TableCell>
+                      <TextField
+                        size="small"
+                        defaultValue={item.title}
+                        key={`${item.id}-${item.title}`}
+                        disabled={busyId === item.id}
+                        onBlur={(e) => rename(item, e.target.value)}
+                        sx={{ minWidth: 200 }}
+                        inputProps={{ 'aria-label': `Title for ${item.fileName}` }}
+                      />
+                      <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.5 }}>
+                        {item.fileName}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <StatusChip status={item.assetType} />
+                    </TableCell>
+                    <TableCell>{formatBytes(item.sizeBytes)}</TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={item.isEnabled}
+                        disabled={busyId === item.id}
+                        onChange={() => toggleEnabled(item)}
+                        inputProps={{ 'aria-label': `Enable ${item.title}` }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {item.createdAt ? new Date(item.createdAt).toLocaleString() : '—'}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Button
+                        size="small"
+                        startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 16 }} />}
+                        sx={{ textTransform: 'none', mr: 0.5 }}
+                        onClick={() => setViewItem(item)}
+                      >
+                        View
+                      </Button>
+                      <Button
+                        size="small"
+                        color="error"
+                        disabled={busyId === item.id}
+                        sx={{ textTransform: 'none' }}
+                        onClick={() => remove(item)}
+                      >
+                        Delete
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <PlatformTablePagination
+              count={items.length}
+              page={pagination.page}
+              rowsPerPage={pagination.rowsPerPage}
+              onPageChange={pagination.onPageChange}
+              onRowsPerPageChange={pagination.onRowsPerPageChange}
+            />
+          </>
         )}
       </Panel>
 
