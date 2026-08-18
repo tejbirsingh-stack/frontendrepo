@@ -10,7 +10,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   TextField,
   Typography,
@@ -22,10 +21,12 @@ import {
   EmptyState,
   PageHeader,
   Panel,
+  PlatformTableHead,
   PlatformTablePagination,
   StatusChip,
   formatBytes,
 } from '../components/PlatformUi';
+import { platformTableSx } from '../components/platformTableStyles';
 import {
   usePaginatedRows,
   usePlatformTablePagination,
@@ -275,17 +276,17 @@ export default function PlatformDefaultContentPage() {
           <EmptyState message="No default content yet — upload files above" />
         ) : (
           <>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Title</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Size</TableCell>
-                  <TableCell>Enabled</TableCell>
-                  <TableCell>Added</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
+            <Table size="small" sx={platformTableSx}>
+              <PlatformTableHead
+                columns={[
+                  { id: 'title', label: 'Title' },
+                  { id: 'type', label: 'Type' },
+                  { id: 'size', label: 'Size' },
+                  { id: 'enabled', label: 'Enabled' },
+                  { id: 'added', label: 'Added' },
+                  { id: 'actions', label: 'Actions', align: 'right' },
+                ]}
+              />
               <TableBody>
                 {paginatedItems.map((item) => (
                   <TableRow key={item.id} hover>

@@ -1,38 +1,98 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Button,
   IconButton,
+  LinearProgress,
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
-  TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
 import GridViewIcon from '@mui/icons-material/GridView';
 import ViewListIcon from '@mui/icons-material/ViewList';
-import { fetchUsageOverview } from '../api/platformApi';
+import { fetchPlans, fetchUsageOverview, type PlatformPlan } from '../api/platformApi';
 import { RadialGauge } from '../components/PlatformCharts';
 import {
+  ActiveFilterChips,
   EmptyState,
+  FilterBar,
+  FilterSelect,
   PageHeader,
   Panel,
+  PlatformTableHead,
   PlatformTablePagination,
+  SearchField,
+  StatusChip,
+  TableLoadingBar,
   formatBytes,
   formatPercent,
+  type FilterOption,
+  type PlatformTableColumn,
 } from '../components/PlatformUi';
+import { platformTableSx } from '../components/platformTableStyles';
+import { usePlatformTablePagination } from '../hooks/usePlatformTablePagination';
+import { usePlatformTableSort } from '../hooks/usePlatformTableSort';
 import {
-  usePaginatedRows,
-  usePlatformTablePagination,
-} from '../hooks/usePlatformTablePagination';
+  STORAGE_FILTER_OPTIONS,
+  SUBSCRIPTION_FILTER_OPTIONS,
+  applyStorageParams,
+  text,
+} from '../utils/platformListHelpers';
 import { cv } from '../../theme/cssVars';
 
 type ViewMode = 'list' | 'grid';
-
 type UsageRow = Record<string, unknown>;
+
+type UsageSortField =
+  | 'name'
+  | 'plan'
+  | 'storageUsedBytes'
+  | 'users'
+  | 'assets'
+  | 'workspaces'
+  | 'status';
+
+const DESCENDING_FIRST: readonly UsageSortField[] = [
+  'storageUsedBytes',
+  'users',
+  'assets',
+  'workspaces',
+];
+
+const COLUMNS: ReadonlyArray<PlatformTableColumn<UsageSortField>> = [
+  { id: 'org', label: 'Organization', sortField: 'name' },
+  { id: 'plan', label: 'Plan', sortField: 'plan' },
+  { id: 'status', label: 'Status', sortField: 'status' },
+  { id: 'storage', label: 'Storage', sortField: 'storageUsedBytes', width: 180 },
+  { id: 'users', label: 'Users', sortField: 'users', align: 'right' },
+  { id: 'assets', label: 'Assets', sortField: 'assets', align: 'right' },
+  { id: 'workspaces', label: 'Workspaces', sortField: 'workspaces', align: 'right' },
+];
+
+const STATUS_OPTIONS: ReadonlyArray<FilterOption> = [
+  { value: '', label: 'All statuses' },
+  { value: 'active', label: 'Active' },
+  { value: 'suspended', label: 'Suspended' },
+];
+
+type UsageFilters = {
+  q: string;
+  status: string;
+  planId: string;
+  subscriptionStatus: string;
+  storage: string;
+};
+
+const emptyFilters: UsageFilters = {
+  q: '',
+  status: '',
+  planId: '',
+  subscriptionStatus: '',
+  storage: '',
+};
 
 function storagePct(row: UsageRow) {
   return formatPercent(row.storageUsedBytes as string, row.storageQuotaBytes as string);
@@ -102,7 +162,8 @@ function UsageGridCard({ row }: Readonly<{ row: UsageRow }>) {
   const maxUsers = Number(row.maxUsers ?? 0);
   const assetsCount = Number(row.assetsCount ?? 0);
   const workspacesCount = Number(row.workspacesCount ?? 0);
-  const planLabel = typeof row.planType === 'string' && row.planType ? row.planType : '—';
+  const plan = row.currentPlan as { name?: string } | null;
+  const planLabel = plan?.name || (typeof row.planType === 'string' && row.planType ? row.planType : '—');
 
   return (
     <Panel
@@ -117,14 +178,7 @@ function UsageGridCard({ row }: Readonly<{ row: UsageRow }>) {
         },
       }}
     >
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 1,
-          mb: 1.5,
-        }}
-      >
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 1.5 }}>
         <RadialGauge
           percent={storagePct(row)}
           label="Storage"
@@ -188,26 +242,139 @@ function UsageGridCard({ row }: Readonly<{ row: UsageRow }>) {
 }
 
 export default function PlatformUsagePage() {
-  const [q, setQ] = useState('');
+  const [filters, setFilters] = useState<UsageFilters>(emptyFilters);
+  const [searchTerm, setSearchTerm] = useState('');
   const [rows, setRows] = useState<UsageRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loadedKey, setLoadedKey] = useState('');
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [plans, setPlans] = useState<PlatformPlan[]>([]);
   const pagination = usePlatformTablePagination([viewMode]);
+  const sort = usePlatformTableSort<UsageSortField>('storageUsedBytes', 'desc', DESCENDING_FIRST);
+  const requestIdRef = useRef(0);
 
-  const load = () => {
-    const params: Record<string, string> = {};
-    if (q.trim()) params.q = q.trim();
-    fetchUsageOverview(params)
-      .then((res) => setRows(res.usage))
-      .catch((err: Error) => setError(err.message));
+  const planOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: '', label: 'All plans' },
+      ...plans.map((plan) => ({ value: plan.id, label: plan.name })),
+      { value: 'none', label: 'No plan' },
+    ],
+    [plans],
+  );
+
+  const queryParams = useMemo(() => {
+    const params: Record<string, string> = {
+      limit: String(pagination.rowsPerPage),
+      offset: String(pagination.page * pagination.rowsPerPage),
+      sortBy: sort.sortBy,
+      sortDir: sort.sortDir,
+    };
+    if (filters.q) params.q = filters.q;
+    if (filters.status) params.status = filters.status;
+    if (filters.planId) params.planId = filters.planId;
+    if (filters.subscriptionStatus) params.subscriptionStatus = filters.subscriptionStatus;
+    applyStorageParams(params, filters.storage);
+    return params;
+  }, [filters, sort.sortBy, sort.sortDir, pagination.page, pagination.rowsPerPage]);
+
+  const queryKey = useMemo(() => JSON.stringify(queryParams), [queryParams]);
+  const loading = loadedKey !== queryKey;
+
+  useEffect(() => {
+    fetchPlans()
+      .then((res) => setPlans(res.plans || []))
+      .catch(() => setPlans([]));
+  }, []);
+
+  useEffect(() => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    fetchUsageOverview(queryParams)
+      .then((res) => {
+        if (requestIdRef.current !== requestId) return;
+        setRows(res.usage);
+        setTotal(Number((res as { total?: number }).total ?? res.usage.length));
+        setError('');
+      })
+      .catch((err: Error) => {
+        if (requestIdRef.current !== requestId) return;
+        setError(err.message);
+      })
+      .finally(() => {
+        if (requestIdRef.current === requestId) setLoadedKey(queryKey);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryKey]);
+
+  const patchFilters = (patch: Partial<UsageFilters>) => {
+    setFilters((current) => ({ ...current, ...patch }));
+    pagination.setPage(0);
   };
 
   useEffect(() => {
-    load();
+    const timer = setTimeout(() => {
+      const trimmed = searchTerm.trim();
+      setFilters((current) => (current.q === trimmed ? current : { ...current, q: trimmed }));
+      pagination.setPage(0);
+    }, 350);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchTerm]);
 
-  const paginatedRows = usePaginatedRows(rows, pagination.page, pagination.rowsPerPage);
+  const handleSort = (field: UsageSortField) => {
+    sort.toggleSort(field);
+    pagination.setPage(0);
+  };
+
+  const clearFilter = (key: string) => {
+    if (key === 'q') {
+      setSearchTerm('');
+      patchFilters({ q: '' });
+      return;
+    }
+    patchFilters({ [key]: '' } as Partial<UsageFilters>);
+  };
+
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setFilters(emptyFilters);
+    pagination.setPage(0);
+  };
+
+  const activeFilterChips = useMemo(() => {
+    const chips: Array<{ key: string; label: string }> = [];
+    if (filters.q) chips.push({ key: 'q', label: `Search: ${filters.q}` });
+    if (filters.status) {
+      chips.push({
+        key: 'status',
+        label: `Status: ${STATUS_OPTIONS.find((o) => o.value === filters.status)?.label ?? filters.status}`,
+      });
+    }
+    if (filters.planId) {
+      chips.push({
+        key: 'planId',
+        label: `Plan: ${planOptions.find((o) => o.value === filters.planId)?.label ?? filters.planId}`,
+      });
+    }
+    if (filters.subscriptionStatus) {
+      chips.push({
+        key: 'subscriptionStatus',
+        label: `Subscription: ${SUBSCRIPTION_FILTER_OPTIONS.find((o) => o.value === filters.subscriptionStatus)?.label ?? filters.subscriptionStatus}`,
+      });
+    }
+    if (filters.storage) {
+      chips.push({
+        key: 'storage',
+        label: `Storage: ${STORAGE_FILTER_OPTIONS.find((o) => o.value === filters.storage)?.label ?? filters.storage}`,
+      });
+    }
+    return chips;
+  }, [filters, planOptions]);
+
+  let emptyMessage = 'No usage data found';
+  if (loading) emptyMessage = 'Loading usage…';
+  else if (activeFilterChips.length > 0) emptyMessage = 'No organizations match these filters';
 
   return (
     <Box>
@@ -216,77 +383,169 @@ export default function PlatformUsagePage() {
         subtitle="Storage, seats, and assets by organization"
         actions={<ViewToggle value={viewMode} onChange={setViewMode} />}
       />
-      <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
-        <TextField
-          size="small"
+
+      <FilterBar
+        actions={
+          activeFilterChips.length > 0 ? (
+            <Button onClick={clearAllFilters} size="small" sx={{ textTransform: 'none' }}>
+              Reset filters
+            </Button>
+          ) : null
+        }
+      >
+        <SearchField
+          value={searchTerm}
+          onChange={setSearchTerm}
           placeholder="Search organization or plan"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') load();
-          }}
-          sx={{ minWidth: 260 }}
+          minWidth={280}
         />
-        <Button
-          variant="contained"
-          onClick={() => {
-            pagination.resetPage();
-            load();
-          }}
-          sx={{ textTransform: 'none' }}
-        >
-          Search
-        </Button>
-      </Box>
+        <FilterSelect
+          label="Status"
+          value={filters.status}
+          options={STATUS_OPTIONS}
+          onChange={(value) => patchFilters({ status: value })}
+        />
+        <FilterSelect
+          label="Plan"
+          value={filters.planId}
+          options={planOptions}
+          onChange={(value) => patchFilters({ planId: value })}
+        />
+        <FilterSelect
+          label="Subscription"
+          value={filters.subscriptionStatus}
+          options={[...SUBSCRIPTION_FILTER_OPTIONS]}
+          onChange={(value) => patchFilters({ subscriptionStatus: value })}
+          minWidth={170}
+        />
+        <FilterSelect
+          label="Storage used"
+          value={filters.storage}
+          options={[...STORAGE_FILTER_OPTIONS]}
+          onChange={(value) => patchFilters({ storage: value })}
+          minWidth={160}
+        />
+      </FilterBar>
+
+      <ActiveFilterChips
+        filters={activeFilterChips}
+        onClear={clearFilter}
+        onClearAll={clearAllFilters}
+      />
+
       {error ? (
         <Typography sx={{ color: cv.destructive, mb: 2 }} role="alert">
           {error}
         </Typography>
       ) : null}
 
-      {rows.length === 0 && !error ? (
+      <TableLoadingBar loading={loading} />
+
+      {rows.length === 0 ? (
         <Panel>
-          <EmptyState message="No usage data found" />
+          <EmptyState message={emptyMessage} />
         </Panel>
       ) : null}
 
       {rows.length > 0 && viewMode === 'list' ? (
-        <Panel>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Organization</TableCell>
-                <TableCell>Plan</TableCell>
-                <TableCell>Storage</TableCell>
-                <TableCell>Users</TableCell>
-                <TableCell>Assets</TableCell>
-                <TableCell>Workspaces</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {paginatedRows.map((row) => (
-                <TableRow key={String(row.id)} hover>
-                  <TableCell>
-                    <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                      {String(row.name)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>{String(row.planType)}</TableCell>
-                  <TableCell>
-                    {formatBytes(row.storageUsedBytes as string)} /{' '}
-                    {formatBytes(row.storageQuotaBytes as string)}
-                  </TableCell>
-                  <TableCell>
-                    {String(row.usersUsed)} / {String(row.maxUsers)}
-                  </TableCell>
-                  <TableCell>{String(row.assetsCount)}</TableCell>
-                  <TableCell>{String(row.workspacesCount)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <Panel
+          title={`${total} ${total === 1 ? 'organization' : 'organizations'}`}
+          subtitle="Click a column header to sort"
+        >
+          <Box sx={{ overflowX: 'auto', opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s ease' }}>
+            <Table size="small" sx={platformTableSx}>
+              <PlatformTableHead
+                columns={COLUMNS}
+                sortBy={sort.sortBy}
+                sortDir={sort.sortDir}
+                onSort={handleSort}
+              />
+              <TableBody>
+                {rows.map((row) => {
+                  const plan = row.currentPlan as { name?: string } | null;
+                  const used = row.storageUsedBytes as string;
+                  const quota = row.storageQuotaBytes as string | undefined;
+                  const percent = formatPercent(used, quota);
+                  return (
+                    <TableRow key={String(row.id)} hover>
+                      <TableCell>
+                        <Typography sx={{ fontWeight: 600, fontSize: '0.875rem', color: cv.textPrimary }}>
+                          {text(row.name)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Box
+                          component="span"
+                          sx={{
+                            display: 'inline-block',
+                            px: 1,
+                            py: 0.25,
+                            borderRadius: '6px',
+                            border: `1px solid ${cv.border}`,
+                            background: cv.surfaceMuted,
+                            color: cv.textSecondary,
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            textTransform: 'capitalize',
+                          }}
+                        >
+                          {plan?.name || text(row.planType)}
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <StatusChip status={text(row.status, 'active')} />
+                      </TableCell>
+                      <TableCell>
+                        <Typography
+                          sx={{
+                            fontSize: '0.8125rem',
+                            fontWeight: 600,
+                            color: cv.textPrimary,
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                        >
+                          {formatBytes(used)}
+                          {quota ? (
+                            <Typography component="span" sx={{ color: cv.textMuted, fontWeight: 400 }}>
+                              {' '}
+                              / {formatBytes(quota)}
+                            </Typography>
+                          ) : null}
+                        </Typography>
+                        {quota && Number(quota) > 0 ? (
+                          <LinearProgress
+                            variant="determinate"
+                            value={Math.min(100, percent)}
+                            sx={{
+                              mt: 0.5,
+                              height: 4,
+                              borderRadius: 999,
+                              background: cv.surfaceMuted,
+                              '& .MuiLinearProgress-bar': {
+                                borderRadius: 999,
+                                background: percent >= 85 ? cv.destructive : cv.brandGradient,
+                              },
+                            }}
+                          />
+                        ) : null}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {text(row.usersUsed)} / {text(row.maxUsers)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {text(row.assetsCount)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {text(row.workspacesCount)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Box>
           <PlatformTablePagination
-            count={rows.length}
+            count={total}
             page={pagination.page}
             rowsPerPage={pagination.rowsPerPage}
             onPageChange={pagination.onPageChange}
@@ -306,14 +565,16 @@ export default function PlatformUsagePage() {
                 lg: 'repeat(3, 1fr)',
               },
               gap: 2,
+              opacity: loading ? 0.6 : 1,
+              transition: 'opacity 0.15s ease',
             }}
           >
-            {paginatedRows.map((row) => (
+            {rows.map((row) => (
               <UsageGridCard key={String(row.id)} row={row} />
             ))}
           </Box>
           <PlatformTablePagination
-            count={rows.length}
+            count={total}
             page={pagination.page}
             rowsPerPage={pagination.rowsPerPage}
             onPageChange={pagination.onPageChange}

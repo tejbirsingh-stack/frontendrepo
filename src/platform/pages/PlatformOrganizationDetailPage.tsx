@@ -11,7 +11,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
 } from '@mui/material';
 import {
@@ -27,11 +26,13 @@ import {
   MetricBar,
   PageHeader,
   Panel,
+  PlatformTableHead,
   PlatformTablePagination,
   StatusChip,
   formatBytes,
   formatPercent,
 } from '../components/PlatformUi';
+import { platformTableSx } from '../components/platformTableStyles';
 import {
   usePaginatedRows,
   usePlatformTablePagination,
@@ -236,17 +237,17 @@ export default function PlatformOrganizationDetailPage() {
             <EmptyState message="No users in this organization" />
           ) : (
             <>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>User</TableCell>
-                    <TableCell>Role</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>MFA</TableCell>
-                    <TableCell>Last login</TableCell>
-                    <TableCell align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
+              <Table size="small" sx={platformTableSx}>
+                <PlatformTableHead
+                  columns={[
+                    { id: 'user', label: 'User' },
+                    { id: 'role', label: 'Role' },
+                    { id: 'status', label: 'Status' },
+                    { id: 'mfa', label: 'MFA' },
+                    { id: 'lastLogin', label: 'Last login' },
+                    { id: 'actions', label: '', align: 'right' },
+                  ]}
+                />
                 <TableBody>
                   {paginatedUsers.map((u) => {
                     const role = u.roleRelation as { name?: string } | undefined;
@@ -307,16 +308,16 @@ export default function PlatformOrganizationDetailPage() {
             <EmptyState message="No workspaces yet" />
           ) : (
             <>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Workspace</TableCell>
-                    <TableCell>Members</TableCell>
-                    <TableCell>Folders</TableCell>
-                    <TableCell>Projects</TableCell>
-                    <TableCell align="right">Rename</TableCell>
-                  </TableRow>
-                </TableHead>
+              <Table size="small" sx={platformTableSx}>
+                <PlatformTableHead
+                  columns={[
+                    { id: 'workspace', label: 'Workspace' },
+                    { id: 'members', label: 'Members' },
+                    { id: 'folders', label: 'Folders' },
+                    { id: 'projects', label: 'Projects' },
+                    { id: 'rename', label: 'Rename', align: 'right' },
+                  ]}
+                />
                 <TableBody>
                   {paginatedWorkspaces.map((ws) => {
                     const wsCount = ws._count as
