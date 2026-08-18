@@ -11,7 +11,7 @@ import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { MediaItem, MediaType } from '../../data/mockMedia';
 import { getMediaViewerPath } from '../../utils/mediaNavigation';
 import { getMediaDragPayload, hasMediaDragPayload, setMediaDragPayload } from '../../utils/mediaDrag';
@@ -82,7 +82,11 @@ export default function MediaListRow({
     : null;
   const selectionActive = selectedMediaIds.size > 0;
 
-  const openPath = getMediaViewerPath(item);
+  const { projectId: pathProjectId } = useParams<{ projectId: string }>();
+  const [searchParams] = useSearchParams();
+  const activeProjectId = pathProjectId || searchParams.get('projectId') || undefined;
+
+  const openPath = getMediaViewerPath(item, activeProjectId);
   const documentUrl = item.videoSrc || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : undefined);
   const isClickable = (Boolean(openPath) || (item.type === 'document' && Boolean(documentUrl))) && !selectionActive;
 

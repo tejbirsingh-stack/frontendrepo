@@ -14,6 +14,7 @@ import {
   ProjectPage,
   MarketingLandingPage,
   LoginPage,
+  ForgotPasswordPage,
   NotFoundPage,
   SignUpPage,
   SettingsSectionPage,
@@ -45,6 +46,14 @@ function App() {
             element={
               <GuestRoute>
                 <LoginPage />
+              </GuestRoute>
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <GuestRoute>
+                <ForgotPasswordPage />
               </GuestRoute>
             }
           />
@@ -90,6 +99,7 @@ function App() {
             <Route path="projects" element={<DashboardPage libraryView="projects" />} />
             <Route path="folder/:folderId" element={<FolderPage />} />
             <Route path="project/:projectId" element={<ProjectPage />} />
+            <Route path="project/:projectId/folder/:folderId" element={<FolderPage />} />
             <Route path="tags" element={<TagsManagementPage />} />
             <Route path="user-activities" element={<UserActivitiesPage />} />
             <Route path="trash" element={<TrashPage />} />
@@ -101,6 +111,18 @@ function App() {
           </Route>
           <Route
             path="/media/:mediaId"
+            element={
+              <ProtectedRoute>
+                <RouteErrorBoundary>
+                  <MediaViewerLayout />
+                </RouteErrorBoundary>
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<VideoPlayerPage />} />
+          </Route>
+          <Route
+            path="/home/project/:projectId/media/:mediaId"
             element={
               <ProtectedRoute>
                 <RouteErrorBoundary>

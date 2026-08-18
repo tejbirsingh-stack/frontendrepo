@@ -158,10 +158,11 @@ interface DashboardContextValue {
   setSidebarSelection: (selection: SidebarSelection) => void;
   clearSidebarSelection: () => void;
   fetchWorkspaceData: (tagIds?: string[]) => Promise<void>;
-  fetchFolderData: (folderId: string) => Promise<string[]>;
+  fetchFolderData: (folderId: string, projectId?: string) => Promise<string[]>;
   fetchProjectData: (projectId: string) => Promise<void>;
   effectivePermissions: string[];
   hasWorkspacePermission: (slug: string) => boolean;
+  resetToWorkspacePermissions: () => void;
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -181,10 +182,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setActiveWorkspaceIdState(id);
   }, []);
 
+  const [workspacePermissions, setWorkspacePermissions] = useState<string[]>([]);
   const [effectivePermissions, setEffectivePermissions] = useState<string[]>([]);
+  
   const hasWorkspacePermission = useCallback((slug: string) => {
     return effectivePermissions.includes(slug);
   }, [effectivePermissions]);
+
+  const resetToWorkspacePermissions = useCallback(() => {
+    setEffectivePermissions(workspacePermissions);
+  }, [workspacePermissions]);
 
   const [systemTimezone, setSystemTimezone] = useState<string>('Europe/London');
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(initialMediaItems);
@@ -331,8 +338,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const actualData = resBody.data || resBody;
       
       if (actualData && Array.isArray(actualData.effectivePermissions)) {
+        setWorkspacePermissions(actualData.effectivePermissions);
         setEffectivePermissions(actualData.effectivePermissions);
       } else {
+        setWorkspacePermissions([]);
         setEffectivePermissions([]);
       }
 
@@ -499,13 +508,19 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     };
   }, [fetchWorkspaceData, fetchLibraryFirstPage]);
 
-  const fetchFolderData = useCallback(async (folderId: string): Promise<string[]> => {
+  const fetchFolderData = useCallback(async (folderId: string, projectId?: string): Promise<string[]> => {
     try {
       const { apiClient } = await import('../api/client');
-      const response = await apiClient.get<any>(`/workspaces/folder/find-all-data/${folderId}`);
+      const url = projectId ? `/workspaces/folder/find-all-data/${folderId}?projectId=${projectId}` : `/workspaces/folder/find-all-data/${folderId}`;
+      const response = await apiClient.get<any>(url);
 
       const resBody = (response as any).data || response;
       const actualData = resBody.data || resBody;
+      
+      if (actualData && Array.isArray(actualData.effectivePermissions)) {
+        setEffectivePermissions(actualData.effectivePermissions);
+      }
+
       if (actualData && (Array.isArray(actualData.folders) || Array.isArray(actualData.projects) || Array.isArray(actualData.media) || actualData.folderInfo)) {
         const { folders, projects, media, folderInfo } = actualData;
 
@@ -640,6 +655,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       const resBody = (response as any).data || response;
       const actualData = resBody.data || resBody;
+      
+      if (actualData && Array.isArray(actualData.effectivePermissions)) {
+        setEffectivePermissions(actualData.effectivePermissions);
+      }
+
       if (actualData && (Array.isArray(actualData.folders) || Array.isArray(actualData.media))) {
         const { folders, media } = actualData;
 
@@ -1060,6 +1080,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         inviteGroupIds: data.inviteGroupIds,
         memberType: data.memberType,
         accessLevel: data.accessLevel,
+        isRestricted: data.isRestricted,
       };
 
       const response = await apiClient.post<Workspace>('/workspaces/add', payload);
@@ -2164,7 +2185,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         title: trimmedTitle,
         ...(trimmedSummary ? { summary: trimmedSummary } : {}),
         type: current.type,
-        workspaceId: activeWorkspaceId,
+        workspaceId: (uploadedAssetDto as any)?.workspaceId || activeWorkspaceId,
         createdAt: uploadedAssetDto?.uploadDate || new Date().toISOString(),
         sizeBytes: current.file.size,
         storageProvider: uploadedAssetDto ? 'b2' : 'local',
@@ -2286,7 +2307,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           id: folderId,
           title: resData?.name || trimmed,
           type: 'folder',
-          workspaceId: activeWorkspaceId,
+          workspaceId: resData?.workspaceId || activeWorkspaceId,
           createdAt: new Date().toISOString(),
           sizeBytes: 0,
           storageProvider: 'b2',
@@ -2553,6 +2574,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       fetchProjectData,
       effectivePermissions,
       hasWorkspacePermission,
+      resetToWorkspacePermissions,
       libraryItems,
       nextPageToken,
       libraryLoading,

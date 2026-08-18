@@ -37,6 +37,7 @@ import {
   fetchCurrentUserRequest,
   mapAuthUserDtoToSessionUser,
 } from '../api/auth.service';
+import { fetchGlobalSecuritySettings } from '../platform/api/platformApi';
 import { useUploadManager } from '../context/UploadManagerContext';
 
 type SignupPhase = 'email' | 'verify' | 'workspace' | 'usage' | 'upload' | 'done' | 'plans';
@@ -254,6 +255,20 @@ export default function SignUpPage() {
   const [error, setError] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [isSsoLoading, setIsSsoLoading] = useState(false);
+
+  const [ssoConfigured, setSsoConfigured] = useState<boolean>(true);
+  const [ssoProvider, setSsoProvider] = useState<string>('google, microsoft');
+
+  useEffect(() => {
+    fetchGlobalSecuritySettings()
+      .then((res) => {
+        if (res?.settings) {
+          setSsoConfigured(Boolean(res.settings.ssoConfigured));
+          setSsoProvider(res.settings.ssoProvider || 'google, microsoft');
+        }
+      })
+      .catch((err) => console.error('Failed to fetch security settings for signup:', err));
+  }, []);
   const { enqueueFiles } = useUploadManager();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1053,60 +1068,68 @@ export default function SignUpPage() {
                     : 'Continue with email'}
               </Button>
 
-              <Divider
-                sx={{
-                  my: 2,
-                  '&::before, &::after': { borderColor: cv.border },
-                  color: cv.textMuted,
-                  fontSize: '0.8125rem',
-                }}
-              >
-                or
-              </Divider>
+              {ssoConfigured ? (
+                <>
+                  <Divider
+                    sx={{
+                      my: 2,
+                      '&::before, &::after': { borderColor: cv.border },
+                      color: cv.textMuted,
+                      fontSize: '0.8125rem',
+                    }}
+                  >
+                    or
+                  </Divider>
 
-              <Box sx={{ display: 'flex', gap: 2, width: '100%', mb: 2 }}>
-                <Button
-                  type="button"
-                  fullWidth
-                  variant="outlined"
-                  disabled={isChecking || isSsoLoading}
-                  onClick={() => void handleGoogleSignup()}
-                  startIcon={<GoogleIcon />}
-                  sx={{
-                    py: 1.5,
-                    borderColor: cv.border,
-                    color: cv.textPrimary,
-                    backgroundColor: cv.footerTint,
-                    '&:hover': {
-                      borderColor: cv.borderStrong,
-                      backgroundColor: cv.surfaceHover,
-                    },
-                  }}
-                >
-                  Google
-                </Button>
+                  <Box sx={{ display: 'flex', gap: 2, width: '100%', mb: 2 }}>
+                    {ssoProvider.toLowerCase().includes('google') && (
+                      <Button
+                        type="button"
+                        fullWidth
+                        variant="outlined"
+                        disabled={isChecking || isSsoLoading}
+                        onClick={() => void handleGoogleSignup()}
+                        startIcon={<GoogleIcon />}
+                        sx={{
+                          py: 1.5,
+                          borderColor: cv.border,
+                          color: cv.textPrimary,
+                          backgroundColor: cv.footerTint,
+                          '&:hover': {
+                            borderColor: cv.borderStrong,
+                            backgroundColor: cv.surfaceHover,
+                          },
+                        }}
+                      >
+                        Google
+                      </Button>
+                    )}
 
-                <Button
-                  type="button"
-                  fullWidth
-                  variant="outlined"
-                  disabled={isChecking || isSsoLoading}
-                  onClick={() => void handleMicrosoftSignup()}
-                  startIcon={<MicrosoftIcon />}
-                  sx={{
-                    py: 1.5,
-                    borderColor: cv.border,
-                    color: cv.textPrimary,
-                    backgroundColor: cv.footerTint,
-                    '&:hover': {
-                      borderColor: cv.borderStrong,
-                      backgroundColor: cv.surfaceHover,
-                    },
-                  }}
-                >
-                  Microsoft
-                </Button>
-              </Box>
+                    {ssoProvider.toLowerCase().includes('microsoft') && (
+                      <Button
+                        type="button"
+                        fullWidth
+                        variant="outlined"
+                        disabled={isChecking || isSsoLoading}
+                        onClick={() => void handleMicrosoftSignup()}
+                        startIcon={<MicrosoftIcon />}
+                        sx={{
+                          py: 1.5,
+                          borderColor: cv.border,
+                          color: cv.textPrimary,
+                          backgroundColor: cv.footerTint,
+                          '&:hover': {
+                            borderColor: cv.borderStrong,
+                            backgroundColor: cv.surfaceHover,
+                          },
+                        }}
+                      >
+                        Microsoft
+                      </Button>
+                    )}
+                  </Box>
+                </>
+              ) : null}
 
               <Typography
                 variant="body2"

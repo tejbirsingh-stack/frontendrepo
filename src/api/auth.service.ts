@@ -156,7 +156,7 @@ export const updateOrganizationUser = async (userId: string, data: { email?: str
   return response.data?.user || response.data;
 };
 
-export const resetPasswordRequest = async (data: { token: string; password?: string; newPassword?: string; name?: string }) => {
+export const resetPasswordRequest = async (data: { token: string; password?: string; confirmPassword?: string; newPassword?: string; name?: string }) => {
   const response = await axios.post(
     `${API_BASE_URL}/auth/reset-password`,
     data
@@ -164,11 +164,18 @@ export const resetPasswordRequest = async (data: { token: string; password?: str
   return response.data;
 };
 
-
 export const forgotPasswordRequest = async (email: string) => {
   const response = await axios.post(
     `${API_BASE_URL}/auth/forgot-password`,
     { email }
+  );
+  return response.data;
+};
+
+export const validateResetTokenRequest = async (token: string) => {
+  const response = await axios.get(
+    `${API_BASE_URL}/auth/validate-reset-token`,
+    { params: { token } }
   );
   return response.data;
 };

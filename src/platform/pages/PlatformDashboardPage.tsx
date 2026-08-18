@@ -8,6 +8,7 @@ import FolderCopyOutlinedIcon from '@mui/icons-material/FolderCopyOutlined';
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
+import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
@@ -384,6 +385,13 @@ export default function PlatformDashboardPage() {
           description="Growth, conversion, and storage sold vs used"
           meta="Filters & CSV"
           icon={<AssessmentOutlinedIcon sx={{ fontSize: 18 }} />}
+        />
+        <QuickLinkCard
+          to="/platform/security"
+          title="Security"
+          description="Single sign-on (SSO), session timeout, and content security policy"
+          meta="Authentication & policy"
+          icon={<SecurityOutlinedIcon sx={{ fontSize: 18 }} />}
         />
         <QuickLinkCard
           to="/platform/landing"

@@ -29,6 +29,7 @@ export const SettingsSectionPage = lazyPage(() => import('../pages/settings/Sett
 export const VideoPlayerPage = lazyPage(() => import('../pages/VideoPlayerPage'));
 export const NotFoundPage = lazyPage(() => import('../pages/NotFoundPage'));
 export const MfaAuthPage = lazyPage(() => import('../pages/MfaAuthPage'));
+export const ForgotPasswordPage = lazyPage(() => import('../pages/ForgotPasswordPage'));
 export const ResetPasswordPage = lazyPage(() => import('../pages/ResetPasswordPage'));
 export const VerifyEmailPage = lazyPage(() => import('../pages/VerifyEmailPage'));
 export const DeletionRequestsPage = lazyPage(() => import('../pages/DeletionRequestsPage'));
