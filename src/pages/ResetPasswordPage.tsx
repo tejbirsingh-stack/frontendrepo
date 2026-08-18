@@ -1,17 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Button,
+  CircularProgress,
   IconButton,
   InputAdornment,
-  Link,
   TextField,
   Typography,
 } from '@mui/material';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
@@ -19,7 +20,7 @@ import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahL
 import { cv } from '../theme/cssVars';
 import { useForcedDarkTheme } from '../context/ThemePreferenceContext';
 import { validatePassword } from '../utils/authValidation';
-import { resetPasswordRequest } from '../api/auth.service';
+import { resetPasswordRequest, validateResetTokenRequest } from '../api/auth.service';
 
 export default function ResetPasswordPage() {
   useForcedDarkTheme();
@@ -27,59 +28,100 @@ export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') || '';
 
-  const [name, setName] = useState('');
+  const [validatingToken, setValidatingToken] = useState(true);
+  const [tokenValid, setTokenValid] = useState(false);
+  const [validationError, setValidationError] = useState('');
+
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [submitError, setSubmitError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  // Validate token on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function checkToken() {
+      if (!token) {
+        if (isMounted) {
+          setValidationError('This password reset link is invalid or has expired. Please request a new reset link.');
+          setTokenValid(false);
+          setValidatingToken(false);
+        }
+        return;
+      }
+
+      try {
+        const res = await validateResetTokenRequest(token);
+        if (isMounted) {
+          if (res?.valid) {
+            setTokenValid(true);
+          } else {
+            setTokenValid(false);
+            setValidationError(res?.message || 'This password reset link is invalid or has expired. Please request a new reset link.');
+          }
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          console.error('Reset token validation error:', err);
+          setTokenValid(false);
+          setValidationError(
+            err.response?.data?.message ||
+              'This password reset link is invalid or has expired. Please request a new reset link.'
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setValidatingToken(false);
+        }
+      }
+    }
+
+    checkToken();
+    return () => {
+      isMounted = false;
+    };
+  }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setSubmitError('');
 
-    if (!token) {
-      setError('Missing token in URL. Please use the exact setup link from your invitation email.');
+    if (!tokenValid) {
+      setSubmitError('Invalid or expired token.');
       return;
     }
 
-    if (!name.trim()) {
-      setError('Please enter your full name.');
-      return;
-    }
-
-    const passwordError = validatePassword(password);
-    if (passwordError) {
-      setError(passwordError);
+    const passError = validatePassword(password);
+    if (passError) {
+      setSubmitError(passError);
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setSubmitError('Password and confirm password must match');
       return;
     }
 
-    setLoading(true);
+    setSubmitting(true);
     try {
       await resetPasswordRequest({
         token,
-        name: name.trim(),
         password,
-        newPassword: password,
+        confirmPassword,
       });
 
-      setSuccessMessage('Your account setup is complete! You can now sign in with your new credentials.');
-      setTimeout(() => {
-        navigate('/login', { replace: true });
-      }, 3000);
+      setSuccess(true);
     } catch (err: any) {
-      console.error('Account setup error:', err);
-      setError(err.response?.data?.message || err.message || 'Failed to complete account setup. The link may have expired.');
+      console.error('Reset password error:', err);
+      setSubmitError(
+        err.response?.data?.message || err.message || 'Failed to update password. Please try requesting a new reset link.'
+      );
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -110,11 +152,61 @@ export default function ResetPasswordPage() {
         }}
       >
         <Box sx={AUTH_LOGO_PARENT_SX}>
-          <NoahLogo sx={AUTH_LOGO_SX} showGlow={false} animated={false} />
+          <NoahLogo to="/" ariaLabel="Back to NOAH Cloud home" sx={AUTH_LOGO_SX} showGlow={false} animated={false} />
         </Box>
 
         <GlassCard glow sx={{ width: '100%', maxWidth: 460 }}>
-          {successMessage ? (
+          {validatingToken ? (
+            <Box
+              sx={{
+                p: { xs: 5, sm: 6 },
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                textAlign: 'center',
+              }}
+            >
+              <CircularProgress size={48} sx={{ color: cv.brandBlue, mb: 2 }} />
+              <Typography variant="body1" sx={{ color: cv.textSecondary }}>
+                Validating security token...
+              </Typography>
+            </Box>
+          ) : !tokenValid ? (
+            <Box
+              sx={{
+                p: { xs: 4, sm: 5 },
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                textAlign: 'center',
+              }}
+            >
+              <ErrorOutlinedIcon sx={{ fontSize: 64, color: cv.destructive, mb: 2 }} />
+              <Typography variant="h5" sx={{ fontWeight: 600, mb: 1.5, color: cv.textPrimary }}>
+                Invalid or Expired Link
+              </Typography>
+              <Typography variant="body2" sx={{ color: cv.textSecondary, mb: 3.5, lineHeight: 1.6 }}>
+                {validationError || 'This password reset link is invalid or has expired. Please request a new reset link.'}
+              </Typography>
+              <Button
+                component={RouterLink}
+                to="/forgot-password"
+                variant="contained"
+                fullWidth
+                sx={{
+                  py: 1.5,
+                  background: cv.brandGradient,
+                  boxShadow: cv.loginBrandShadow,
+                  '&:hover': {
+                    background: cv.brandGradientHover,
+                    boxShadow: cv.loginBrandShadowHover,
+                  },
+                }}
+              >
+                Request New Reset Link
+              </Button>
+            </Box>
+          ) : success ? (
             <Box
               sx={{
                 p: { xs: 4, sm: 5 },
@@ -126,22 +218,27 @@ export default function ResetPasswordPage() {
             >
               <CheckCircleOutlinedIcon sx={{ fontSize: 64, color: cv.success, mb: 2 }} />
               <Typography variant="h5" sx={{ fontWeight: 600, mb: 1.5, color: cv.textPrimary }}>
-                Account Setup Complete
+                Password Updated
               </Typography>
-              <Typography variant="body2" sx={{ color: cv.textSecondary, mb: 3 }}>
-                {successMessage}
+              <Typography variant="body2" sx={{ color: cv.textSecondary, mb: 3.5, fontSize: '0.9375rem' }}>
+                Password updated successfully.
               </Typography>
               <Button
+                component={RouterLink}
+                to="/login"
                 variant="contained"
                 fullWidth
-                onClick={() => navigate('/login', { replace: true })}
                 sx={{
                   py: 1.5,
                   background: cv.brandGradient,
                   boxShadow: cv.loginBrandShadow,
+                  '&:hover': {
+                    background: cv.brandGradientHover,
+                    boxShadow: cv.loginBrandShadowHover,
+                  },
                 }}
               >
-                Go to Sign In
+                Go to Login
               </Button>
             </Box>
           ) : (
@@ -162,42 +259,27 @@ export default function ResetPasswordPage() {
                   fontSize: { xs: '1.5rem', sm: '1.75rem' },
                 }}
               >
-                Set up your account
+                Reset Your Password
               </Typography>
               <Typography
                 variant="body2"
-                sx={{ color: cv.textSecondary, mb: 3, fontSize: '0.9375rem' }}
+                sx={{ color: cv.textSecondary, mb: 3.5, fontSize: '0.9375rem' }}
               >
-                Please provide your full name and choose a secure password to activate your account.
+                Create a new secure password for your Noah Cloud account.
               </Typography>
 
-              {!token && (
-                <Typography sx={{ mb: 2, fontSize: '0.8125rem', color: cv.destructive }}>
-                  Warning: No setup token found in URL. Please click the link from your email.
-                </Typography>
-              )}
-
               <TextField
                 fullWidth
-                label="Full Name"
-                placeholder="John Doe"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoComplete="name"
-                sx={{ mb: 2.5 }}
-                slotProps={{
-                  inputLabel: { shrink: true },
-                }}
-              />
-
-              <TextField
-                fullWidth
-                label="Password"
+                label="New Password"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Password 8–16 characters"
+                placeholder="New Password (min 8 chars, 1 upper, 1 lower, 1 number)"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (submitError) setSubmitError('');
+                }}
                 autoComplete="new-password"
+                disabled={submitting}
                 sx={{ mb: 2.5 }}
                 slotProps={{
                   inputLabel: { shrink: true },
@@ -220,12 +302,16 @@ export default function ResetPasswordPage() {
 
               <TextField
                 fullWidth
-                label="Confirm password"
+                label="Confirm Password"
                 type={showConfirmPassword ? 'text' : 'password'}
-                placeholder="Confirm your password"
+                placeholder="Confirm New Password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  if (submitError) setSubmitError('');
+                }}
                 autoComplete="new-password"
+                disabled={submitting}
                 sx={{ mb: 3 }}
                 slotProps={{
                   inputLabel: { shrink: true },
@@ -250,9 +336,9 @@ export default function ResetPasswordPage() {
                 }}
               />
 
-              {error ? (
+              {submitError ? (
                 <Typography sx={{ mb: 2, fontSize: '0.8125rem', color: cv.destructive }}>
-                  {error}
+                  {submitError}
                 </Typography>
               ) : null}
 
@@ -260,7 +346,7 @@ export default function ResetPasswordPage() {
                 type="submit"
                 fullWidth
                 variant="contained"
-                disabled={loading || !token}
+                disabled={submitting}
                 sx={{
                   py: 1.5,
                   mb: 2,
@@ -272,31 +358,8 @@ export default function ResetPasswordPage() {
                   },
                 }}
               >
-                {loading ? 'Saving to Database & HubSpot...' : 'Save & Activate Account'}
+                {submitting ? 'Updating Password...' : 'Update Password'}
               </Button>
-
-              <Typography
-                variant="body2"
-                sx={{
-                  mt: 2,
-                  textAlign: 'center',
-                  color: cv.textSecondary,
-                }}
-              >
-                Already set up?{' '}
-                <Link
-                  component={RouterLink}
-                  to="/login"
-                  underline="hover"
-                  sx={{
-                    color: cv.textPrimary,
-                    fontWeight: 500,
-                    '&:hover': { color: cv.brandBlue },
-                  }}
-                >
-                  Sign in
-                </Link>
-              </Typography>
             </Box>
           )}
         </GlassCard>

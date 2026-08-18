@@ -17,7 +17,7 @@ import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
 import GlassCard from '../components/GlassCard';
@@ -264,6 +264,14 @@ const mediaTypeHeaderIcons = {
 export interface VideoPlayerPageProps {
   isGuestMode?: boolean;
   shareToken?: string;
+  guestBranding?: {
+    accountName?: string;
+    logoUrl?: string | null;
+    headerImageUrl?: string | null;
+    accentColor?: string;
+    reelBackgroundColor?: string;
+    reelTitleColor?: string;
+  };
   guestPermissions?: {
     view: boolean;
     comment: boolean;
@@ -285,6 +293,7 @@ export interface VideoPlayerPageProps {
 export default function VideoPlayerPage({
   isGuestMode = false,
   shareToken,
+  guestBranding,
   guestPermissions = { view: true, comment: true, download: true, downloadProxy: true },
   guestAssetMeta,
   guestExpiresAt,
@@ -298,7 +307,9 @@ export default function VideoPlayerPage({
     user = null;
   }
 
-  const { mediaId } = useParams<{ mediaId: string }>();
+  const { mediaId, projectId: pathProjectId } = useParams<{ mediaId: string; projectId?: string }>();
+  const [searchParams] = useSearchParams();
+  const projectId = pathProjectId || searchParams.get('projectId') || undefined;
   const activeUser = useActiveUser();
   const navigate = useNavigate();
   const theme = useTheme();
@@ -465,10 +476,13 @@ export default function VideoPlayerPage({
   const { broadcastMessage } = useMediaWebSocket(wsTargetMediaId, handleWebSocketMessage);
 
 
+  const [effectivePermissions, setEffectivePermissions] = useState<string[] | null>(null);
+
   useEffect(() => {
     if (mediaId) {
       setIsFetching(true);
-      getMediaAssetByIdRequest(mediaId)
+      console.log('[MediaViewer] Fetching asset with projectId:', projectId);
+      getMediaAssetByIdRequest(mediaId, projectId)
         .then((asset) => {
           const techSpecs = (asset.metadata as any)?.technicalSpecs || asset.customMetadata?.technicalSpecs || {};
           setVideoTechnicalDetails(techSpecs);
@@ -493,7 +507,7 @@ export default function VideoPlayerPage({
             hasProxy: Boolean((asset as any).hasProxy ?? (asset.customMetadata as any)?.hasProxy),
             storageProvider: 'b2',
             uploadedBy: (asset as any).uploadedBy?.name || user?.name || (user?.email ? user.email.split('@')[0] : 'Uploader'),
-            uploadedByUserId: (asset as any).uploadedBy?.id || undefined,
+            uploadedByUserId: (asset as any).uploadedBy?.id || (asset as any).uploadedByUserId || undefined,
             tags: tagList,
             location: null,
             thumbnail: asset.thumbnail || undefined,
@@ -502,6 +516,12 @@ export default function VideoPlayerPage({
             customMetadata: asset.customMetadata,
             duration: (techSpecs.duration as string) || (asset.customMetadata?.duration as string) || undefined,
           });
+          // Store effective permissions from backend
+          const perms = (asset as any).effectivePermissions;
+          console.log('[MediaViewer] effectivePermissions from API:', perms);
+          if (perms) {
+            setEffectivePermissions(perms);
+          }
         })
         .catch((err) => {
           console.error(err);
@@ -513,7 +533,7 @@ export default function VideoPlayerPage({
     } else {
       setIsFetching(false);
     }
-  }, [mediaId]);
+  }, [mediaId, projectId]);
   const [activeTool, setActiveTool] = useState<AnnotationTool>('select');
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const [selectedStampId, setSelectedStampId] = useState<string | null>(null);
@@ -588,28 +608,39 @@ export default function VideoPlayerPage({
 
   const isAssetAdmin = useMemo(() => {
     if (isGuestMode) return false;
+    if (effectivePermissions && effectivePermissions.length > 0) {
+      return effectivePermissions.includes('upload_media') || effectivePermissions.includes('manage_folders');
+    }
     if (currentUserCollab?.role === 'Admin') return true;
     if (item?.uploadedByUserId === user?.id || item?.uploadedBy?.id === user?.id) return true;
+    if (isSharedWithUser) return false;
     if (user?.role === 'Super Admin' || user?.role === 'Admin') return true;
     return false;
-  }, [isGuestMode, currentUserCollab, user, item?.uploadedByUserId, item?.uploadedBy?.id]);
+  }, [isGuestMode, currentUserCollab, isSharedWithUser, user, item?.uploadedByUserId, item?.uploadedBy?.id, effectivePermissions]);
 
   const isAssetEditor = useMemo(() => {
     if (isGuestMode) return false;
+    if (effectivePermissions && effectivePermissions.length > 0) {
+      return effectivePermissions.includes('timeline_annotations') || effectivePermissions.includes('manage_folders');
+    }
     if (isAssetAdmin) return true;
     return currentUserCollab?.role === 'Editor';
-  }, [isGuestMode, isAssetAdmin, currentUserCollab]);
+  }, [isGuestMode, isAssetAdmin, currentUserCollab, effectivePermissions]);
 
   const isViewer = useMemo(() => {
     if (isGuestMode) {
       return !guestPermissions?.comment;
     }
     if (isAssetAdmin || isAssetEditor) return false;
+    if (effectivePermissions && effectivePermissions.length > 0) {
+      return !effectivePermissions.includes('timeline_annotations');
+    }
     if (currentUserCollab?.role === 'Viewer') return true;
     const rawRole = (user?.role || user?.roleRelation?.name || '').trim().toLowerCase();
     if (rawRole === 'admin' || rawRole === 'super admin' || rawRole === 'editor') return false;
+    if (user?.permissions?.length && !user.permissions.includes('timeline_annotations')) return true;
     return true;
-  }, [isGuestMode, guestPermissions?.comment, currentUserCollab, isAssetAdmin, isAssetEditor, user]);
+  }, [isGuestMode, guestPermissions?.comment, currentUserCollab, isAssetAdmin, isAssetEditor, user, effectivePermissions]);
 
   const canDownloadOriginal = isGuestMode
     ? Boolean(guestPermissions?.download)
@@ -3591,7 +3622,10 @@ export default function VideoPlayerPage({
           maxHeight: DASHBOARD_TOP_BAR_HEIGHT,
           boxSizing: 'border-box',
           borderBottom: DASHBOARD_TOP_BAR_BORDER,
-          background: 'var(--noah-header-background)',
+          backgroundColor: 'rgba(15, 17, 26, 0.85)',
+          backgroundImage: guestBranding?.headerImageUrl ? `url(${guestBranding.headerImageUrl})` : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
           backdropFilter: 'blur(20px) saturate(180%)',
           WebkitBackdropFilter: 'blur(20px) saturate(180%)',
         }}
@@ -3606,36 +3640,83 @@ export default function VideoPlayerPage({
             zIndex: 1,
           }}
         >
-          <Tooltip title="Back to dashboard" arrow placement="bottom">
-            <IconButton
-              aria-label="Back to dashboard"
-              onClick={() => {
-                if (window.history.length > 1) {
-                  navigate(-1);
-                } else {
-                  navigate('/home');
-                }
-              }}
-              sx={{
-                flexShrink: 0,
-                color: cv.textSecondary,
-                border: "1px solid var(--noah-border)",
-                '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceHover },
-              }}
-            >
-              <ArrowBackOutlinedIcon />
-            </IconButton>
-          </Tooltip>
-          <NoahLogo
-            to="/home"
-            boxWidth={{ xs: HEADER_LOGO_BOX_WIDTH_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_WIDTH_DESKTOP }}
-            height={{ xs: HEADER_LOGO_BOX_HEIGHT_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_HEIGHT_DESKTOP }}
-            objectFit="cover"
-            animated={false}
-            showGlow={false}
-            align="left"
-            sx={{ mb: 0, flexShrink: 0 }}
-          />
+          {isGuestMode ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexShrink: 0 }}>
+              {guestBranding?.logoUrl ? (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: 38,
+                    width: 38,
+                    borderRadius: '10px',
+                    overflow: 'hidden',
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.25)',
+                    p: '2px',
+                  }}
+                >
+                  <Box
+                    component="img"
+                    src={guestBranding.logoUrl}
+                    alt={guestBranding?.accountName || 'Brand Logo'}
+                    sx={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
+                  />
+                </Box>
+              ) : (
+                <Box
+                  sx={{
+                    fontWeight: 800,
+                    fontSize: '1.25rem',
+                    background: guestBranding?.accentColor || 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  {guestBranding?.accountName || 'NOAH'}
+                </Box>
+              )}
+              {guestBranding?.accountName && (
+                <Typography sx={{ fontSize: '0.975rem', fontWeight: 700, color: '#f8fafc' }}>
+                  {guestBranding.accountName}
+                </Typography>
+              )}
+            </Box>
+          ) : (
+            <>
+              <Tooltip title="Back to dashboard" arrow placement="bottom">
+                <IconButton
+                  aria-label="Back to dashboard"
+                  onClick={() => {
+                    if (window.history.length > 1) {
+                      navigate(-1);
+                    } else {
+                      navigate('/home');
+                    }
+                  }}
+                  sx={{
+                    flexShrink: 0,
+                    color: cv.textSecondary,
+                    border: "1px solid var(--noah-border)",
+                    '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceHover },
+                  }}
+                >
+                  <ArrowBackOutlinedIcon />
+                </IconButton>
+              </Tooltip>
+              <NoahLogo
+                to="/home"
+                boxWidth={{ xs: HEADER_LOGO_BOX_WIDTH_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_WIDTH_DESKTOP }}
+                height={{ xs: HEADER_LOGO_BOX_HEIGHT_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_HEIGHT_DESKTOP }}
+                objectFit="cover"
+                animated={false}
+                showGlow={false}
+                align="left"
+                sx={{ mb: 0, flexShrink: 0 }}
+              />
+            </>
+          )}
           <Box
             sx={{
               display: 'flex',

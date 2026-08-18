@@ -171,16 +171,20 @@ export async function fetchBillingOverview(params: Record<string, string> = {}) 
 
 export async function fetchUsageOverview(params: Record<string, string> = {}) {
   const qs = new URLSearchParams(params).toString();
-  return platformRequest<{ success: boolean; usage: Array<Record<string, unknown>> }>(
-    `/platform/usage/overview${qs ? `?${qs}` : ''}`,
-  );
+  return platformRequest<{
+    success: boolean;
+    total?: number;
+    usage: Array<Record<string, unknown>>;
+  }>(`/platform/usage/overview${qs ? `?${qs}` : ''}`);
 }
 
 export async function fetchActivity(params: Record<string, string> = {}) {
   const qs = new URLSearchParams(params).toString();
-  return platformRequest<{ success: boolean; activities: Array<Record<string, unknown>> }>(
-    `/platform/activity${qs ? `?${qs}` : ''}`,
-  );
+  return platformRequest<{
+    success: boolean;
+    total?: number;
+    activities: Array<Record<string, unknown>>;
+  }>(`/platform/activity${qs ? `?${qs}` : ''}`);
 }
 
 export async function fetchReportingSummary(params: Record<string, string> = {}) {
@@ -285,4 +289,29 @@ export async function deleteDefaultContent(id: string) {
   return platformRequest<{ success: boolean }>(`/platform/default-content/${id}`, {
     method: 'DELETE',
   });
+}
+
+export type GlobalSecuritySettings = {
+  ssoConfigured: boolean;
+  ssoProvider: string;
+  ssoDomain: string;
+  sessionTimeoutDays: number;
+  contentSecurityPolicy: string;
+  updatedAt?: string;
+};
+
+export async function fetchGlobalSecuritySettings() {
+  return platformRequest<{ success: boolean; settings: GlobalSecuritySettings }>('/platform/security', {
+    skipAuth: true,
+  });
+}
+
+export async function updateGlobalSecuritySettings(body: Partial<GlobalSecuritySettings>) {
+  return platformRequest<{ success: boolean; message: string; settings: GlobalSecuritySettings }>(
+    '/platform/security',
+    {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    },
+  );
 }

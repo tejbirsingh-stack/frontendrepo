@@ -8,11 +8,16 @@ const MEMBER_TYPE_OPTIONS: WorkspaceMemberType[] = ['Member', 'Guest', 'Group'];
 export default function MemberTypeToggle({
   value,
   onChange,
+  allowedTypes,
 }: {
   value: WorkspaceMemberType;
   onChange: (value: WorkspaceMemberType) => void;
+  allowedTypes?: WorkspaceMemberType[];
 }) {
   const activeDetails = MEMBER_TYPE_DETAILS[value];
+  const visibleOptions = allowedTypes && allowedTypes.length > 0
+    ? MEMBER_TYPE_OPTIONS.filter((o) => allowedTypes.includes(o))
+    : MEMBER_TYPE_OPTIONS;
 
   return (
     <Box>
@@ -26,7 +31,7 @@ export default function MemberTypeToggle({
           width: '100%',
         }}
       >
-        {MEMBER_TYPE_OPTIONS.map((option) => {
+        {visibleOptions.map((option) => {
           const selected = value === option;
           return (
             <Box

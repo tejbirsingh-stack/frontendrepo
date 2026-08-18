@@ -1,41 +1,44 @@
 import { Link as RouterLink } from 'react-router-dom';
-import { Box, type SxProps, type Theme, keyframes } from '@mui/material';
+import { Box, Typography, type SxProps, type Theme, keyframes } from '@mui/material';
 import { cv } from '../theme/cssVars';
+import { useAuth } from '../auth/AuthContext';
 
 const LOGO_SRC = '/noah-logo.png';
 
-/** Parent wrapper for login / signup flow logos — fixed height, no extra vertical padding. */
+/** Parent wrapper for login / signup flow logos — matches qa.noahcloud.ai (140px height). */
 export const AUTH_LOGO_PARENT_SX = {
   width: '100%',
-  height: { xs: 120, sm: 160 },
+  height: { xs: 110, sm: 140 },
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  mb: 4,
+  mb: 3,
   overflow: 'hidden',
   background: 'transparent',
 } as const;
 
 /**
- * Auth logo — larger mark inside a fixed ~160px-tall crop.
- * `cover` + mild scale clips PNG padding without cutting off “CLOUD”.
+ * Auth logo — large prominent mark matching qa.noahcloud.ai design.
  */
 export const AUTH_LOGO_SX = {
   mb: 0,
   width: '100%',
-    maxWidth: { xs: 320, sm: 400 },
+  maxWidth: { xs: 320, sm: 440 },
   height: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   overflow: 'hidden',
   background: 'transparent',
   '& img': {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    objectPosition: 'center',
-    transform: 'scale(1.05)',
-    transformOrigin: 'center center',
-    // Logo asset has an opaque black canvas; lighten makes black transparent on dark UIs.
+    width: 'auto !important',
+    maxWidth: '100% !important',
+    height: '120px !important',
+    maxHeight: '140px !important',
+    objectFit: 'contain !important',
+    objectPosition: 'center !important',
     mixBlendMode: 'lighten',
+    filter: 'drop-shadow(0 4px 24px rgba(168, 85, 247, 0.55))',
   },
   'html[data-theme="light"] & img': {
     mixBlendMode: 'normal',
@@ -76,6 +79,8 @@ interface NoahLogoProps {
   to?: string;
   onClick?: () => void;
   ariaLabel?: string;
+  /** Variant preset for logo sizing. 'auth' uses large 120px-140px prominent logo. */
+  variant?: 'auth' | 'default';
 }
 
 function resolveLogoHeight(width: ResponsiveSize): ResponsiveSize {
@@ -105,6 +110,7 @@ export default function NoahLogo({
   to,
   onClick,
   ariaLabel = 'Go to dashboard',
+  variant = 'default',
 }: NoahLogoProps) {
   const isInteractive = Boolean(to || onClick);
   const logoHeight = height ?? resolveLogoHeight(width);
@@ -137,16 +143,27 @@ export default function NoahLogo({
     ...sx,
   };
 
+  const { orgBranding, user } = useAuth();
+  const activeBranding = orgBranding?.branding || orgBranding || user?.organization?.metadata;
+  const customLogoUrl = activeBranding?.logoUrl;
+  const customAccountName = activeBranding?.accountName || user?.accountName || user?.organization?.name;
+  const hasCustomLogo = Boolean(customLogoUrl);
+
+  const isAuthView = variant === 'auth' || Boolean(sx);
+
   const logoContent = (
     <Box
       sx={{
         position: 'relative',
         display: 'inline-flex',
         alignItems: 'center',
-        width: fitContainer || useCropBox ? '100%' : undefined,
-        height: useCropBox ? '100%' : undefined,
+        justifyContent: 'center',
+        gap: 1.25,
+        width: isAuthView || fitContainer || useCropBox ? '100%' : undefined,
+        height: isAuthView || useCropBox ? '100%' : undefined,
+        maxWidth: '100%',
+        maxHeight: isAuthView || useCropBox ? undefined : (fitContainer ? 44 : undefined),
         zIndex: 1,
-        overflow: useCropBox ? 'hidden' : undefined,
       }}
     >
       {showGlow && (
@@ -154,51 +171,112 @@ export default function NoahLogo({
           aria-hidden
           sx={{
             position: 'absolute',
-            width: typeof logoHeight === 'number' ? logoHeight * 5 : { xs: 140, sm: 180 },
-            height: typeof logoHeight === 'number' ? logoHeight * 1.4 : { xs: 36, sm: 48 },
+            width: typeof logoHeight === 'number' ? logoHeight * 4 : 140,
+            height: typeof logoHeight === 'number' ? logoHeight * 1.2 : 36,
             top: '50%',
             left: align === 'left' ? '35%' : '50%',
             transform: 'translate(-50%, -50%)',
-            background: cv.brandGradient,
-            filter: 'blur(40px)',
-            opacity: 0.3,
+            background: activeBranding?.accentColor || cv.brandGradient,
+            filter: 'blur(32px)',
+            opacity: 0.25,
             animation: animated ? `${pulse} 6s ease-in-out infinite` : 'none',
             pointerEvents: 'none',
           }}
         />
       )}
-      <Box
-        component="img"
-        src={LOGO_SRC}
-        alt="NOAH CLOUD"
-        sx={{
-          display: 'block',
-          flexShrink: 0,
-          position: 'relative',
-          animation: animated ? `${drift} 8s ease-in-out infinite` : 'none',
-          ...(useCropBox
-            ? {
-                width: '100%',
-                height: '100%',
-                objectFit: resolvedObjectFit ?? 'cover',
-                objectPosition: align === 'left' ? 'left center' : 'center',
-              }
-            : fitContainer
+
+      {hasCustomLogo ? (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 38,
+            width: 38,
+            minWidth: 38,
+            borderRadius: '10px',
+            overflow: 'hidden',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.25)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            p: '2px',
+            flexShrink: 0,
+          }}
+        >
+          <Box
+            component="img"
+            src={customLogoUrl}
+            alt={customAccountName || "Brand Logo"}
+            sx={{
+              maxHeight: '100%',
+              maxWidth: '100%',
+              objectFit: 'contain',
+              display: 'block',
+            }}
+          />
+        </Box>
+      ) : (
+        <Box
+          component="img"
+          src={LOGO_SRC}
+          alt="NOAH CLOUD"
+          sx={{
+            display: 'block',
+            flexShrink: 0,
+            position: 'relative',
+            animation: animated ? `${drift} 8s ease-in-out infinite` : 'none',
+            ...(isAuthView
               ? {
                   width: '100%',
-                  maxWidth: '100%',
-                  height: 'auto',
-                  maxHeight: logoHeight,
-                  objectFit: resolvedObjectFit ?? 'contain',
-                  objectPosition: align === 'left' ? 'left center' : 'center',
+                  height: '100%',
+                  maxHeight: 'none',
+                  maxWidth: 'none',
+                  objectFit: 'contain',
+                  objectPosition: 'center',
                 }
-              : {
-                  height: logoHeight,
-                  width: 'auto',
-                  verticalAlign: 'middle',
-                }),
-        }}
-      />
+              : useCropBox
+                ? {
+                    width: '100%',
+                    height: '100%',
+                    objectFit: resolvedObjectFit ?? 'cover',
+                    objectPosition: align === 'left' ? 'left center' : 'center',
+                  }
+                : fitContainer
+                  ? {
+                      width: 'auto',
+                      maxWidth: '100%',
+                      height: 'auto',
+                      maxHeight: typeof logoHeight === 'number' ? logoHeight : 40,
+                      objectFit: 'contain',
+                      objectPosition: align === 'left' ? 'left center' : 'center',
+                    }
+                  : {
+                      height: typeof logoHeight === 'number' ? logoHeight : 40,
+                      maxWidth: 240,
+                      width: 'auto',
+                      verticalAlign: 'middle',
+                      objectFit: 'contain',
+                    }),
+          }}
+        />
+      )}
+
+      {hasCustomLogo && customAccountName && (
+        <Typography
+          sx={{
+            fontWeight: 700,
+            fontSize: '0.975rem',
+            letterSpacing: '-0.015em',
+            color: '#f8fafc',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: 130,
+          }}
+        >
+          {customAccountName}
+        </Typography>
+      )}
     </Box>
   );
 

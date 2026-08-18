@@ -1,7 +1,29 @@
+import ClearIcon from '@mui/icons-material/Clear';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { Box, Chip, LinearProgress, Paper, Tooltip, Typography } from '@mui/material';
-import type { ReactNode } from 'react';
+import SearchIcon from '@mui/icons-material/Search';
+import {
+  Box,
+  Chip,
+  IconButton,
+  InputAdornment,
+  LinearProgress,
+  MenuItem,
+  Paper,
+  TableCell,
+  TableHead,
+  TableRow,
+  TablePagination,
+  TableSortLabel,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import { useId, type ChangeEvent, type ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
+import {
+  PLATFORM_ROWS_PER_PAGE_OPTIONS,
+} from '../hooks/usePlatformTablePagination';
+import type { PlatformSortDirection } from '../hooks/usePlatformTableSort';
 import { cv } from '../../theme/cssVars';
 
 export function PageHeader({
@@ -402,6 +424,379 @@ export function EmptyState({ message }: { message: string }) {
       }}
     >
       <Typography sx={{ color: cv.textMuted, fontSize: '0.875rem' }}>{message}</Typography>
+    </Box>
+  );
+}
+
+export function PlatformTablePagination({
+  count,
+  page,
+  rowsPerPage,
+  onPageChange,
+  onRowsPerPageChange,
+  rowsPerPageOptions = [...PLATFORM_ROWS_PER_PAGE_OPTIONS],
+}: Readonly<{
+  count: number;
+  page: number;
+  rowsPerPage: number;
+  onPageChange: (event: unknown, newPage: number) => void;
+  onRowsPerPageChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  rowsPerPageOptions?: number[];
+}>) {
+  const jumpFieldId = useId();
+
+  if (count === 0) {
+    return null;
+  }
+
+  const pageCount = Math.max(1, Math.ceil(count / rowsPerPage));
+  const pageOptions = Array.from({ length: pageCount }, (_, index) => index);
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        flexWrap: 'wrap',
+        gap: 1,
+        mt: 1,
+        pt: 0.5,
+        borderTop: `1px solid ${cv.border}`,
+      }}
+    >
+      {pageCount > 1 ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography
+            component="label"
+            htmlFor={jumpFieldId}
+            sx={{ fontSize: '0.8125rem', color: cv.textSecondary, whiteSpace: 'nowrap' }}
+          >
+            Go to page
+          </Typography>
+          <TextField
+            select
+            size="small"
+            id={jumpFieldId}
+            value={Math.min(page, pageCount - 1)}
+            onChange={(event) => onPageChange(event, Number(event.target.value))}
+            slotProps={{
+              select: { MenuProps: { slotProps: { paper: { sx: { maxHeight: 320 } } } } },
+            }}
+            sx={{
+              minWidth: 88,
+              '& .MuiInputBase-input': { fontSize: '0.8125rem', py: 0.75 },
+            }}
+          >
+            {pageOptions.map((pageIndex) => (
+              <MenuItem key={pageIndex} value={pageIndex} sx={{ fontSize: '0.8125rem' }}>
+                {pageIndex + 1} of {pageCount}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Box>
+      ) : null}
+      <TablePagination
+        component="div"
+        count={count}
+        page={page}
+        onPageChange={onPageChange}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={onRowsPerPageChange}
+        rowsPerPageOptions={rowsPerPageOptions}
+        showFirstButton
+        showLastButton
+        sx={{
+          color: cv.textSecondary,
+          borderTop: 'none',
+          '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+            fontSize: '0.8125rem',
+            color: cv.textSecondary,
+          },
+          '.MuiTablePagination-select': {
+            color: cv.textPrimary,
+          },
+          '.MuiIconButton-root': {
+            color: cv.textSecondary,
+            '&.Mui-disabled': { color: cv.textMuted },
+          },
+        }}
+      />
+    </Box>
+  );
+}
+
+export type PlatformTableColumn<Field extends string = string> = {
+  /** Stable key for the column. */
+  id: string;
+  label?: ReactNode;
+  align?: 'left' | 'center' | 'right';
+  /** Sort key sent to the API. Omit to make the column unsortable. */
+  sortField?: Field;
+  tooltip?: string;
+  width?: number | string;
+};
+
+export function PlatformTableHead<Field extends string>({
+  columns,
+  sortBy,
+  sortDir,
+  onSort,
+}: Readonly<{
+  columns: ReadonlyArray<PlatformTableColumn<Field>>;
+  sortBy?: Field;
+  sortDir?: PlatformSortDirection;
+  onSort?: (field: Field) => void;
+}>) {
+  return (
+    <TableHead>
+      <TableRow>
+        {columns.map((column) => {
+          const sortable = Boolean(column.sortField && onSort);
+          const active = sortable && column.sortField === sortBy;
+          const direction = active ? (sortDir ?? 'asc') : undefined;
+          const header = column.tooltip ? (
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}>
+              {column.label}
+              <InfoTip title={column.tooltip} />
+            </Box>
+          ) : (
+            column.label
+          );
+
+          return (
+            <TableCell
+              key={column.id}
+              align={column.align}
+              sortDirection={active ? (direction ?? false) : false}
+              sx={{ width: column.width }}
+            >
+              {sortable ? (
+                <TableSortLabel
+                  active={active}
+                  direction={direction ?? 'asc'}
+                  onClick={() => onSort?.(column.sortField as Field)}
+                  sx={{
+                    color: 'inherit',
+                    '&:hover': { color: cv.textPrimary },
+                    '&.Mui-active': { color: cv.textPrimary },
+                    '&.Mui-focusVisible': {
+                      outline: `2px solid ${cv.brandOrchid}`,
+                      outlineOffset: 2,
+                      borderRadius: '4px',
+                    },
+                    '& .MuiTableSortLabel-icon': {
+                      opacity: active ? 1 : 0.35,
+                      color: active ? cv.brandOrchid : 'inherit',
+                      fontSize: '1rem',
+                    },
+                  }}
+                >
+                  {header}
+                </TableSortLabel>
+              ) : (
+                header
+              )}
+            </TableCell>
+          );
+        })}
+      </TableRow>
+    </TableHead>
+  );
+}
+
+export function FilterBar({
+  children,
+  actions,
+}: Readonly<{ children: ReactNode; actions?: ReactNode }>) {
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 1.5,
+        mb: 2,
+        borderRadius: '6px',
+        border: `1px solid ${cv.border}`,
+        background: cv.surface,
+        boxShadow: cv.cardShadow,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 1.5,
+        flexWrap: 'wrap',
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap', minWidth: 0 }}>
+        {children}
+      </Box>
+      {actions ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>{actions}</Box>
+      ) : null}
+    </Paper>
+  );
+}
+
+export function SearchField({
+  value,
+  onChange,
+  placeholder = 'Search',
+  label,
+  minWidth = 260,
+}: Readonly<{
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  label?: string;
+  minWidth?: number;
+}>) {
+  return (
+    <TextField
+      size="small"
+      value={value}
+      label={label}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      slotProps={{
+        htmlInput: { 'aria-label': label || placeholder },
+        input: {
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+            </InputAdornment>
+          ),
+          endAdornment: value ? (
+            <InputAdornment position="end">
+              <IconButton
+                size="small"
+                aria-label="Clear search"
+                onClick={() => onChange('')}
+                sx={{ color: cv.textMuted, '&:hover': { color: cv.textPrimary } }}
+              >
+                <ClearIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </InputAdornment>
+          ) : null,
+        },
+      }}
+      sx={{ minWidth, '& .MuiInputBase-input': { fontSize: '0.8125rem' } }}
+    />
+  );
+}
+
+export type FilterOption = { value: string; label: string };
+
+export function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+  minWidth = 150,
+}: Readonly<{
+  label: string;
+  value: string;
+  options: ReadonlyArray<FilterOption>;
+  onChange: (value: string) => void;
+  minWidth?: number;
+}>) {
+  const active = value !== '';
+  return (
+    <TextField
+      select
+      size="small"
+      label={label}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      sx={{
+        minWidth,
+        '& .MuiInputBase-input': { fontSize: '0.8125rem' },
+        ...(active
+          ? {
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: cv.brandOrchid },
+              '& .MuiInputLabel-root': { color: cv.brandOrchid },
+            }
+          : {}),
+      }}
+    >
+      {options.map((option) => (
+        <MenuItem key={option.value} value={option.value} sx={{ fontSize: '0.8125rem' }}>
+          {option.label}
+        </MenuItem>
+      ))}
+    </TextField>
+  );
+}
+
+export function ActiveFilterChips({
+  filters,
+  onClear,
+  onClearAll,
+}: Readonly<{
+  filters: ReadonlyArray<{ key: string; label: string }>;
+  onClear: (key: string) => void;
+  onClearAll?: () => void;
+}>) {
+  if (filters.length === 0) return null;
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 2 }}>
+      <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, fontWeight: 600 }}>
+        Filters
+      </Typography>
+      {filters.map((filter) => (
+        <Chip
+          key={filter.key}
+          size="small"
+          label={filter.label}
+          onDelete={() => onClear(filter.key)}
+          deleteIcon={<ClearIcon sx={{ fontSize: 14 }} />}
+          sx={{
+            height: 24,
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            borderRadius: '6px',
+            background: cv.purpleSurface,
+            color: cv.textSecondary,
+            border: `1px solid ${cv.purpleChipBorder}`,
+            '& .MuiChip-deleteIcon': {
+              color: cv.textMuted,
+              '&:hover': { color: cv.destructive },
+            },
+          }}
+        />
+      ))}
+      {onClearAll ? (
+        <Chip
+          size="small"
+          label="Clear all"
+          onClick={onClearAll}
+          sx={{
+            height: 24,
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            borderRadius: '6px',
+            background: 'transparent',
+            color: cv.brandOrchid,
+            border: `1px dashed ${cv.purpleChipBorder}`,
+            '&:hover': { background: cv.purpleSurface },
+          }}
+        />
+      ) : null}
+    </Box>
+  );
+}
+
+export function TableLoadingBar({ loading }: Readonly<{ loading: boolean }>) {
+  return (
+    <Box sx={{ height: 2, mb: 0.5 }}>
+      {loading ? (
+        <LinearProgress
+          sx={{
+            height: 2,
+            borderRadius: 999,
+            background: 'transparent',
+            '& .MuiLinearProgress-bar': { background: cv.brandGradient },
+          }}
+        />
+      ) : null}
     </Box>
   );
 }

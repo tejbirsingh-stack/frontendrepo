@@ -16,7 +16,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
 import TruncatedText from '../TruncatedText';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { MediaItem, MediaType } from '../../data/mockMedia';
 import { getMediaViewerPath } from '../../utils/mediaNavigation';
 import { getMediaDragPayload, hasMediaDragPayload, setMediaDragPayload } from '../../utils/mediaDrag';
@@ -471,7 +471,11 @@ export default function MediaItemCard({
     : config.accent;
   const selectionActive = selectedMediaIds.size > 0;
 
-  const openPath = getMediaViewerPath(item);
+  const { projectId: pathProjectId } = useParams<{ projectId: string }>();
+  const [searchParams] = useSearchParams();
+  const activeProjectId = pathProjectId || searchParams.get('projectId') || undefined;
+
+  const openPath = getMediaViewerPath(item, activeProjectId);
 
   // Allow clicking if it's a navigatable path OR if it's a document (which opens in a new tab)
   // But wait, the url is needed. Where is the url stored? Assuming `item.videoSrc` or similar for now?

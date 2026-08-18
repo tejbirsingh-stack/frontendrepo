@@ -39,6 +39,7 @@ export default function ShareGuestPage() {
   const [status, setStatus] = useState<'loading' | 'password' | 'unlocked' | 'expired' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [assetMeta, setAssetMeta] = useState<any>(null);
+  const [branding, setBranding] = useState<any>(null);
   const [permissions, setPermissions] = useState({ view: true, comment: false, download: false, downloadProxy: false });
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<string>('public');
@@ -71,6 +72,7 @@ export default function ShareGuestPage() {
           return;
         }
         setAssetMeta(res.assetMeta);
+        if (res.branding) setBranding(res.branding);
         setPermissions(res.permissions || { view: true, comment: false, download: false, downloadProxy: false });
         setExpiresAt(res.expiresAt);
         if (res.visibility) setVisibility(res.visibility);
@@ -86,7 +88,10 @@ export default function ShareGuestPage() {
         }
       })
       .catch((err: any) => {
-        if (err?.status === 404 || err?.data?.expired) {
+        if (err?.status === 403 || err?.response?.status === 403 || err?.data?.error === 'Forbidden' || err?.message?.includes('Content Security Policy')) {
+          setStatus('error');
+          setErrorMessage(err?.response?.data?.message || err?.data?.message || err?.message || 'Media embedding is restricted to allowed domain origins configured by Global Admin.');
+        } else if (err?.status === 404 || err?.data?.expired) {
           setStatus('expired');
         } else {
           setStatus('error');
@@ -158,6 +163,7 @@ export default function ShareGuestPage() {
       <VideoPlayerPage
         isGuestMode={true}
         shareToken={token}
+        guestBranding={branding}
         guestPermissions={permissions}
         guestAssetMeta={assetMeta}
         guestExpiresAt={expiresAt}
@@ -175,13 +181,16 @@ export default function ShareGuestPage() {
         flexDirection: 'column',
       }}
     >
-      {/* Header */}
+      {/* Header with Custom Organization Branding */}
       <Box
         sx={{
           px: 3,
           py: 2,
           borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          backgroundColor: 'rgba(15, 17, 26, 0.8)',
+          backgroundColor: 'rgba(15, 17, 26, 0.85)',
+          backgroundImage: branding?.headerImageUrl ? `url(${branding.headerImageUrl})` : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
           backdropFilter: 'blur(12px)',
           display: 'flex',
           alignItems: 'center',
@@ -189,20 +198,34 @@ export default function ShareGuestPage() {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box
-            sx={{
-              fontWeight: 800,
-              fontSize: '1.25rem',
-              letterSpacing: '-0.02em',
-              background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-            }}
-          >
-            NOAH
-          </Box>
-          <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
-            Secure Share Review
+          {branding?.logoUrl ? (
+            <Box
+              component="img"
+              src={branding.logoUrl}
+              alt={branding.accountName || 'Brand Logo'}
+              sx={{
+                maxHeight: 40,
+                maxWidth: 140,
+                objectFit: 'contain',
+                borderRadius: '6px',
+              }}
+            />
+          ) : (
+            <Box
+              sx={{
+                fontWeight: 800,
+                fontSize: '1.25rem',
+                letterSpacing: '-0.02em',
+                background: branding?.accentColor ? branding.accentColor : 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              {branding?.accountName || 'NOAH'}
+            </Box>
+          )}
+          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: '#f8fafc' }}>
+            {branding?.accountName ? branding.accountName : 'Secure Share Review'}
           </Typography>
         </Box>
 
