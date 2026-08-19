@@ -1,17 +1,26 @@
-FROM node:20-alpine
-
+# ── Stage 1: Build the static assets ──────────────────────────
+FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package.json ./
-
 RUN npm install --ignore-scripts
 
 COPY . .
+RUN npm run build
+# Output lands in /app/dist (per vite.config.ts build.outDir)
 
-RUN node -e "const fs=require('fs');let c=fs.readFileSync('vite.config.ts','utf8');c=c.replace(/target:\s*'http:\/\/localhost:3000'/g,\"target:'http://noah-backend:3000'\");c=c.replace(/target:\s*'ws:\/\/localhost:3000'/g,\"target:'ws://noah-backend:3000'\");fs.writeFileSync('vite.config.ts',c);console.log('Proxy updated');"
+# ── Stage 2: Serve with nginx ──────────────────────────────────
+FROM nginx:1.27-alpine AS production
+
+# Remove default nginx site, add ours
+RUN rm -f /etc/nginx/conf.d/default.conf
+COPY nginx-frontend.conf /etc/nginx/conf.d/default.conf
+
+COPY --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 3002
 
-ENV VITE_HMR_ENABLED=false
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:3002/ || exit 1
 
-CMD ["npx", "vite", "--host", "0.0.0.0", "--port", "3002"]
+CMD ["nginx", "-g", "daemon off;"]
