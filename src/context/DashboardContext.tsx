@@ -81,6 +81,11 @@ interface DashboardContextValue {
   moveMediaToDashboardFolder: (mediaIds: string[], folderId: string) => Promise<void>;
   moveMediaToTrash: (mediaId: string, reason?: string) => void;
   moveMediaToTrashBulk: (mediaIds: string[], reason?: string) => void;
+  removeFolderAndItemsFromState: (
+    targetFolderId: string,
+    selectedFileIds?: string[],
+    selectedFolderIds?: string[],
+  ) => void;
   moveMediaToWorkspaceFolder: (
     mediaIds: string[],
     workspaceId: string,
@@ -1422,8 +1427,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       // Send DELETE to backend (with reason)
       uniqueIds.forEach((id) => {
-        apiClient.delete(`/media/${id}`, { body: { reason } })
-          .then(() => { void fetchTrashItems(); })
+        apiClient.delete<any>(`/media/${id}`, { body: { reason } })
+          .then((res) => {
+            if (res?.status !== 'pending_super_admin') {
+              void fetchTrashItems();
+            }
+          })
           .catch(err => console.error('Failed to sync delete with backend', err));
       });
 
@@ -1439,25 +1448,22 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         return changed ? next : prev;
       });
 
-      // Mark items as trash in local state (no localStorage)
+      // Remove items from active media list so they vanish from view (if Admin, it goes to Pending Super Admin, not Trash)
       setMediaItems((prev) =>
-        prev.map((item) => {
-          if (uniqueIds.includes(item.id)) {
-            return { ...item, status: 'trash', location: null, parentFolderId: null };
-          }
-
-          if (item.type === 'folder' && folderCountDelta.has(item.id)) {
-            return {
-              ...item,
-              itemCount: Math.max(
-                0,
-                (item.itemCount ?? 0) + (folderCountDelta.get(item.id) ?? 0),
-              ),
-            };
-          }
-
-          return item;
-        }),
+        prev
+          .filter((item) => !uniqueIds.includes(item.id))
+          .map((item) => {
+            if (item.type === 'folder' && folderCountDelta.has(item.id)) {
+              return {
+                ...item,
+                itemCount: Math.max(
+                  0,
+                  (item.itemCount ?? 0) + (folderCountDelta.get(item.id) ?? 0),
+                ),
+              };
+            }
+            return item;
+          }),
       );
 
       setLibraryItems((prev) => prev.filter(item => !uniqueIds.includes(item.id)));
@@ -1477,6 +1483,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     },
     [moveMediaToTrashBulk],
   );
+
 
   const restoreFromTrashBulk = useCallback((mediaIds: string[]) => {
     const uniqueIds = [...new Set(mediaIds)].filter((id) => trashedIds.has(id));
@@ -1902,6 +1909,56 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       );
     },
     [activeWorkspaceId, mediaItems, moveMediaToTrashBulk, trashedIds],
+  );
+
+  const removeFolderAndItemsFromState = useCallback(
+    (targetFolderId: string, selectedFileIds: string[] = [], selectedFolderIds: string[] = []) => {
+      const idsToRemove = new Set([targetFolderId, ...selectedFileIds, ...selectedFolderIds]);
+
+      setMediaItems((prev) => {
+        const allFolderIdsToRemove = new Set(idsToRemove);
+        let expanded = true;
+        while (expanded) {
+          expanded = false;
+          prev.forEach((item) => {
+            if (
+              item.type === 'folder' &&
+              item.parentFolderId &&
+              allFolderIdsToRemove.has(item.parentFolderId) &&
+              !allFolderIdsToRemove.has(item.id)
+            ) {
+              allFolderIdsToRemove.add(item.id);
+              expanded = true;
+            }
+          });
+        }
+
+        return prev.filter((item) => {
+          if (allFolderIdsToRemove.has(item.id)) return false;
+          if (item.parentFolderId && allFolderIdsToRemove.has(item.parentFolderId)) return false;
+          return true;
+        });
+      });
+
+      setLibraryItems((prev) =>
+        prev.filter((item) => {
+          if (idsToRemove.has(item.id)) return false;
+          if (item.parentFolderId && idsToRemove.has(item.parentFolderId)) return false;
+          return true;
+        }),
+      );
+
+      deleteWorkspaceFolder(targetFolderId);
+      if (selectedFolderIds.length > 0) {
+        selectedFolderIds.forEach((fId) => deleteWorkspaceFolder(fId));
+      }
+
+      void fetchWorkspaceData();
+      if (listParamsRef.current) {
+        void fetchLibraryFirstPage(listParamsRef.current);
+      }
+    },
+    [deleteWorkspaceFolder, fetchWorkspaceData, fetchLibraryFirstPage],
   );
 
   const renameWorkspaceFolderChild = useCallback(
@@ -2517,6 +2574,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       moveMediaToWorkspaceFolder,
       moveMediaToTrash,
       moveMediaToTrashBulk,
+      removeFolderAndItemsFromState,
       trashedMediaItems,
       trashedAtById,
       restoreFromTrashBulk,

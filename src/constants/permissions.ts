@@ -44,3 +44,27 @@ export function hasAnyPermission(
 ): boolean {
   return slugs.some((slug) => hasPermission(user, slug));
 }
+
+/**
+ * Returns true if the user role is Super Admin or Admin.
+ * Folder deletion is strictly restricted to Super Admin and Admin roles.
+ */
+export function canDeleteFolder(
+  user: Partial<AuthSessionUser> | null | undefined,
+): boolean {
+  if (!user) return false;
+  const roleName = (user.role || user.roleRelation?.name || '').trim().toLowerCase();
+  const roleId = user.roleId;
+
+  const isSuperAdmin =
+    roleName === 'super admin' ||
+    roleName === 'superadmin' ||
+    roleName === 'super_admin' ||
+    roleId === ROLE_IDS.SUPER_ADMIN;
+
+  const isAdmin =
+    roleName === 'admin' ||
+    roleId === ROLE_IDS.ADMIN;
+
+  return isSuperAdmin || isAdmin;
+}

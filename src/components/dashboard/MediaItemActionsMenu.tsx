@@ -1,7 +1,7 @@
 import { useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
-import { PERMISSIONS, hasPermission } from '../../constants/permissions';
+import { PERMISSIONS, hasPermission, canDeleteFolder } from '../../constants/permissions';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
@@ -31,6 +31,11 @@ import MoveItemsModal, { type MoveDestination } from './MoveItemsModal';
 import { FOLDER_COLORS } from '../../constants/folderColors';
 import { resolveFolderColor } from '../../utils/folderColorStyle';
 
+import { ROLE_IDS } from '../../constants/userRoles';
+import { apiClient } from '../../api/client';
+import FolderDeleteFlowModal from '../modals/FolderDeleteFlowModal';
+import SuperAdminFolderDeleteFlowModal from '../modals/SuperAdminFolderDeleteFlowModal';
+
 const menuPaperSx = {
   mt: 0.5,
   minWidth: 160,
@@ -57,6 +62,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
   const {
     renameMedia,
     moveMediaToTrash,
+    removeFolderAndItemsFromState,
     moveMediaToDashboardFolder,
     moveMediaToWorkspaceFolder,
     updateMediaFolderColor,
@@ -72,9 +78,16 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [folderDeleteOpen, setFolderDeleteOpen] = useState(false);
+  const [superAdminFolderDeleteOpen, setSuperAdminFolderDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [colorPickerAnchor, setColorPickerAnchor] = useState<null | HTMLElement>(null);
   const isFolder = item.type === 'folder';
+
+  const isSuperAdmin =
+    user?.role === 'Super Admin' ||
+    user?.roleId === ROLE_IDS.SUPER_ADMIN ||
+    user?.role === 'super_admin';
 
   const closeMenu = () => setMenuAnchor(null);
 
@@ -85,7 +98,15 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
 
   const openDelete = () => {
     closeMenu();
-    setDeleteOpen(true);
+    if (isFolder) {
+      if (isSuperAdmin) {
+        setSuperAdminFolderDeleteOpen(true);
+      } else {
+        setFolderDeleteOpen(true);
+      }
+    } else {
+      setDeleteOpen(true);
+    }
   };
 
   const openColorPicker = () => {
@@ -292,7 +313,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           </ListItemIcon>
           Rename
         </MenuItem>
-        
+
         {item.type === 'video' ? (
           <>
             {item.compressionStatus !== 'failed' && (
@@ -369,28 +390,42 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             Download File
           </MenuItem>
         )}
-        <MenuItem
-          disabled={isFolder ? !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS) : !hasPermission(user, PERMISSIONS.MANAGE_TRASH)}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
-            if (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) return;
-            openDelete();
-          }}
-          sx={{
-            py: 1,
-            fontSize: '0.875rem',
-            color: (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) || (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) ? cv.textMuted : cv.destructive,
-            opacity: (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) || (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) ? 0.6 : 1,
-            cursor: (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) || (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) || (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) ? 'transparent' : cv.destructiveHover },
-          }}
-        >
-          <ListItemIcon sx={{ minWidth: 32 }}>
-            <DeleteOutlinedIcon sx={{ fontSize: 18, color: (isFolder && !hasPermission(user, PERMISSIONS.MANAGE_ROOT_FOLDERS)) || (!isFolder && !hasPermission(user, PERMISSIONS.MANAGE_TRASH)) ? cv.textMuted : cv.destructive }} />
-          </ListItemIcon>
-          Delete
-        </MenuItem>
+        {(() => {
+          const isDeleteDisabled = isFolder
+            ? !canDeleteFolder(user)
+            : !hasPermission(user, PERMISSIONS.MANAGE_TRASH);
+          return (
+            <MenuItem
+              disabled={isDeleteDisabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isDeleteDisabled) return;
+                openDelete();
+              }}
+              onMouseDown={consumeMenuPointerEvent}
+              sx={{
+                py: 1,
+                fontSize: '0.875rem',
+                color: isDeleteDisabled ? cv.textMuted : cv.destructive,
+                opacity: isDeleteDisabled ? 0.6 : 1,
+                cursor: isDeleteDisabled ? 'not-allowed' : 'pointer',
+                '&:hover': {
+                  backgroundColor: isDeleteDisabled ? 'transparent' : cv.destructiveHover,
+                },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 32 }}>
+                <DeleteOutlinedIcon
+                  sx={{
+                    fontSize: 18,
+                    color: isDeleteDisabled ? cv.textMuted : cv.destructive,
+                  }}
+                />
+              </ListItemIcon>
+              Delete
+            </MenuItem>
+          );
+        })()}
       </Menu>
 
       <WorkspaceColorPicker
@@ -433,6 +468,45 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
         onConfirm={(reason) => {
           moveMediaToTrash(item.id, reason);
           setDeleteOpen(false);
+        }}
+      />
+
+      <FolderDeleteFlowModal
+        open={folderDeleteOpen}
+        folderId={item.id}
+        folderName={item.title}
+        onClose={() => setFolderDeleteOpen(false)}
+        onConfirmDelete={async (targetFolderId, isWholeFolder, selectedFileIds, selectedFolderIds) => {
+          try {
+            await apiClient.post(`/workspaces/folder/delete/${targetFolderId}`, {
+              isWholeFolder,
+              deleteFileIds: selectedFileIds,
+              deleteFolderIds: selectedFolderIds,
+            });
+            removeFolderAndItemsFromState(targetFolderId, selectedFileIds, selectedFolderIds);
+          } catch (err: any) {
+            console.error('Failed to submit folder delete request:', err);
+          }
+        }}
+      />
+
+      <SuperAdminFolderDeleteFlowModal
+        open={superAdminFolderDeleteOpen}
+        folderId={item.id}
+        folderName={item.title}
+        onClose={() => setFolderDeleteOpen(false)}
+        onConfirmPermanentDelete={async (targetFolderId, isWholeFolder, selectedFileIds, selectedFolderIds) => {
+          try {
+            await apiClient.post(`/workspaces/folder/delete/${targetFolderId}`, {
+              isWholeFolder,
+              deleteFileIds: selectedFileIds,
+              deleteFolderIds: selectedFolderIds,
+              isPermanent: true,
+            });
+            removeFolderAndItemsFromState(targetFolderId, selectedFileIds, selectedFolderIds);
+          } catch (err: any) {
+            console.error('Failed to execute permanent folder delete:', err);
+          }
         }}
       />
     </Box>
