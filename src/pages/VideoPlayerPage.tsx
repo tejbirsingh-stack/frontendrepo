@@ -7,7 +7,6 @@ import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import StarIcon from '@mui/icons-material/Star';
-import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
@@ -46,6 +45,7 @@ import {
 } from '../components/media/LabeledToolbarButton';
 import ClearAnnotationsModal from '../components/media/ClearAnnotationsModal';
 import WorkspaceControlsIsland from '../components/media/WorkspaceControlsIsland';
+import MediaSideRail, { type MediaRailPanel } from '../components/media/MediaSideRail';
 import PlayerToolsDrawer from '../components/media/PlayerToolsDrawer';
 import PeopleCollaboratorsPopover from '../components/media/PeopleCollaboratorsPopover';
 import WorkspaceMembersDialog from '../components/settings/WorkspaceMembersDialog';
@@ -954,8 +954,9 @@ export default function VideoPlayerPage({
   const [draftComment, setDraftComment] = useState<DraftVideoComment | null>(null);
   const [activeHistoryEntryId, setActiveHistoryEntryId] = useState<string | null>(null);
   const [history, setHistory] = useState<AnnotationHistoryEntry[]>([]);
+  const annotationsAllowed = !isGuestMode || Boolean(guestPermissions?.comment);
   const [historyOpen, setHistoryOpen] = useState(() => {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === 'undefined' || !annotationsAllowed) return false;
     return window.matchMedia(`(min-width:${theme.breakpoints.values.lg}px)`).matches;
   });
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -964,8 +965,17 @@ export default function VideoPlayerPage({
   const [focusLinkNameCounter, setFocusLinkNameCounter] = useState(0);
   const [shareTeamMembers, setShareTeamMembers] = useState<WorkspaceTeamMember[]>([]);
   const [availableGroups, setAvailableGroups] = useState<SettingsUserGroup[]>([]);
-  const [drawerTab, setDrawerTab] = useState<'history' | 'details'>('history');
+  const [drawerTab, setDrawerTab] = useState<MediaRailPanel>('history');
   const [detailsSection, setDetailsSection] = useState<MediaDetailsSection>('file');
+
+  const handleRailPanelSelect = (panel: MediaRailPanel) => {
+    if (historyOpen && drawerTab === panel) {
+      setHistoryOpen(false);
+      return;
+    }
+    setDrawerTab(panel);
+    setHistoryOpen(true);
+  };
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
 
   const [annotationGroups, setAnnotationGroups] = useState<AnnotationAccessGroup[]>([]);
@@ -4256,34 +4266,6 @@ export default function VideoPlayerPage({
             );
           })()}
 
-          {(!isGuestMode || guestPermissions?.comment) && !historyOpen ? (
-            <Tooltip title="Show annotation history" arrow placement="bottom">
-              <IconButton
-                type="button"
-                aria-label="Show annotation history"
-                onClick={() => setHistoryOpen(true)}
-                sx={{
-                  position: 'absolute',
-                  right: { xs: 16, sm: 24 },
-                  top: '100%',
-                  mt: 1.25,
-                  zIndex: 3,
-                  width: 44,
-                  height: 44,
-                  color: cv.textPrimary,
-                  border: '1px solid var(--noah-border)',
-                  backgroundColor: 'var(--noah-popover-surface-deep)',
-                  boxShadow: cv.popoverShadow,
-                  '&:hover': {
-                    color: cv.textPrimary,
-                    backgroundColor: cv.surfaceHover,
-                  },
-                }}
-              >
-                <ForumOutlinedIcon sx={{ fontSize: 22 }} />
-              </IconButton>
-            </Tooltip>
-          ) : null}
         </Box>
       </Box>
 
@@ -4335,13 +4317,24 @@ export default function VideoPlayerPage({
           flex: 1,
           minHeight: 0,
           display: 'flex',
-          flexDirection: { xs: 'column', lg: 'row' },
+          flexDirection: 'row',
           alignItems: 'stretch',
-          gap: { xs: 1.5, lg: 2 },
+          gap: { xs: 1.5, md: 2 },
           px: { xs: 2, md: 3 },
           py: { xs: 1.5, md: 2 },
         }}
       >
+        <Box
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: { xs: 'column', lg: 'row' },
+            alignItems: 'stretch',
+            gap: { xs: 1.5, lg: 2 },
+          }}
+        >
         <GlassCard
           glow
           sx={{
@@ -4895,7 +4888,6 @@ export default function VideoPlayerPage({
                       onZoomOut={handleWorkspaceZoomOut}
                       onZoomIn={handleWorkspaceZoomIn}
                       onZoomReset={handleWorkspaceZoomReset}
-                      onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
                       hideZoomControls={item?.type === 'audio'}
                     />
                   </Box>
@@ -4949,9 +4941,8 @@ export default function VideoPlayerPage({
                       onZoomOut={handleWorkspaceZoomOut}
                       onZoomIn={handleWorkspaceZoomIn}
                       onZoomReset={handleWorkspaceZoomReset}
-                      onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
                       hideZoomControls={item?.type === 'audio'}
-                      insertBeforeHelp={
+                      trailingContent={
                         showClearIsland && !isViewer ? (
                           <AnnotationUndoIsland
                             compact
@@ -4969,9 +4960,9 @@ export default function VideoPlayerPage({
           </Box>
         </GlassCard>
 
-        {(!isGuestMode || guestPermissions?.comment) && (
-          <AnnotationHistoryDrawer
-            open={historyOpen}
+        <AnnotationHistoryDrawer
+          open={historyOpen}
+          availableTabs={annotationsAllowed ? undefined : ['details']}
           activeHistoryEntryId={activeHistoryEntryId}
           entries={history}
           comments={comments}
@@ -5007,7 +4998,14 @@ export default function VideoPlayerPage({
           onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
           onAddCollaborator={handleAddCollaboratorForGroup}
         />
-        )}
+        </Box>
+
+        <MediaSideRail
+          activePanel={historyOpen ? drawerTab : null}
+          onPanelSelect={handleRailPanelSelect}
+          onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
+          showAnnotations={annotationsAllowed}
+        />
       </Box>
 
       <PlayerToolsDrawer
