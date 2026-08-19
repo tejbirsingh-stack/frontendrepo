@@ -28,6 +28,7 @@ export interface CreateWorkspaceFormData {
   memberType?: string;
   accessLevel?: string;
   isRestricted?: boolean;
+  sendInviteEmail?: boolean;
 }
 
 interface CreateWorkspaceModalProps {
@@ -173,6 +174,7 @@ export default function CreateWorkspaceModal({
       memberType: inviteMemberType.toUpperCase(),
       accessLevel: inviteAccess,
       isRestricted,
+      sendInviteEmail: inviteSendEmail,
     };
     if (isEdit) {
       onSave?.(payload);

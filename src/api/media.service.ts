@@ -376,10 +376,10 @@ export async function getAssetAccessOverrides(id: string): Promise<{ overrides: 
 /**
  * Update an asset-specific role override (direct access user).
  */
-export async function updateAssetAccessOverride(id: string, userId: string, accessLevel: string): Promise<void> {
+export async function updateAssetAccessOverride(id: string, userId: string, accessLevel: string, sendInviteEmail?: boolean): Promise<void> {
   await apiClient.patch(
     `/media/${encodeURIComponent(id)}/access/${encodeURIComponent(userId)}`,
-    { accessLevel },
+    { accessLevel, sendInviteEmail },
   );
 }
 
