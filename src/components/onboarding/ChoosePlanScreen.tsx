@@ -11,6 +11,7 @@ import { cv } from '../../theme/cssVars';
 import { fetchPublicCatalogPlans } from '../../platform/api/platformApi';
 import { useAuth } from '../../auth/AuthContext';
 import { billingService } from '../../api/billing.service';
+import { formatBytes } from '../../platform/components/PlatformUi';
 
 type BillingCycle = 'annual' | 'monthly';
 type PlanId = string;
@@ -25,6 +26,10 @@ interface PlanDefinition {
   yearlyPriceId?: string;
   cta: string;
   featured?: boolean;
+  maxUsers?: number;
+  maxWorkspaces?: number;
+  maxProjects?: number;
+  storageQuotaBytes?: string;
   features: string[];
 }
 
@@ -179,6 +184,10 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
             yearlyPriceId: p.yearlyPriceId,
             cta: p.ctaLabel || `Start with ${p.name}`,
             featured: Boolean(p.isFeatured),
+            maxUsers: p.maxUsers,
+            maxWorkspaces: p.maxWorkspaces,
+            maxProjects: p.maxProjects,
+            storageQuotaBytes: p.storageQuotaBytes,
             features: Array.isArray(p.features) ? p.features : [],
           })),
         );
@@ -650,35 +659,60 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
                       mb: 2.5,
                     }}
                   >
-                    {plan.features.map((feature) => (
-                      <Box
-                        component="li"
-                        key={feature}
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: 0.85,
-                        }}
-                      >
-                        <CheckRoundedIcon
+                    {/* Render dynamic limits first */}
+                    {(function () {
+                      const dynamicPoints: string[] = [];
+                      if (plan.maxProjects !== undefined && plan.maxWorkspaces !== undefined) {
+                        dynamicPoints.push(`${plan.maxProjects} Project${plan.maxProjects !== 1 ? 's' : ''} & ${plan.maxWorkspaces} Workspace${plan.maxWorkspaces !== 1 ? 's' : ''}`);
+                      }
+                      if (plan.storageQuotaBytes !== undefined) {
+                        dynamicPoints.push(`${formatBytes(plan.storageQuotaBytes)} Storage`);
+                      }
+                      if (plan.maxUsers !== undefined) {
+                        dynamicPoints.push(`${plan.maxUsers} Member${plan.maxUsers !== 1 ? 's' : ''}`);
+                      }
+
+                      // Deduplicate: filter out any custom feature that essentially says the same thing
+                      const cleanCustomFeatures = plan.features.filter((feat) => {
+                        const low = feat.toLowerCase();
+                        if (low.includes('storage')) return false;
+                        if (low.includes('workspace') || low.includes('project')) return false;
+                        if (low.includes('member') || low.includes('user')) return false;
+                        return true;
+                      });
+
+                      const allFeatures = [...dynamicPoints, ...cleanCustomFeatures];
+
+                      return allFeatures.map((feature) => (
+                        <Box
+                          component="li"
+                          key={feature}
                           sx={{
-                            fontSize: 16,
-                            mt: '2px',
-                            color: cv.brandOrchid,
-                            flexShrink: 0,
-                          }}
-                        />
-                        <Typography
-                          sx={{
-                            fontSize: '0.8125rem',
-                            color: cv.textSecondary,
-                            lineHeight: 1.4,
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 0.85,
                           }}
                         >
-                          {feature}
-                        </Typography>
-                      </Box>
-                    ))}
+                          <CheckRoundedIcon
+                            sx={{
+                              fontSize: 16,
+                              mt: '2px',
+                              color: cv.brandOrchid,
+                              flexShrink: 0,
+                            }}
+                          />
+                          <Typography
+                            sx={{
+                              fontSize: '0.8125rem',
+                              color: cv.textSecondary,
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {feature}
+                          </Typography>
+                        </Box>
+                      ));
+                    })()}
                   </Box>
 
                   <Button
