@@ -365,6 +365,10 @@ export default function MarketingLandingPage() {
     return `$${Math.round(monthly)}`;
   };
 
+  const activeNavLinks = NAV_LINKS.filter(
+    (item) => plansEnabled || item.href !== '#plans'
+  );
+
   const handlePlanCta = (plan: LandingPlan) => {
     const name = (plan.name || '').toLowerCase();
     if (name.includes('enterprise') || (plan.ctaLabel || '').toLowerCase().includes('contact')) {
@@ -469,7 +473,7 @@ export default function MarketingLandingPage() {
             aria-label="Page sections"
             sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.5 }}
           >
-            {NAV_LINKS.map((item) => (
+            {activeNavLinks.map((item) => (
               <Button
                 key={item.href}
                 href={item.href}
@@ -527,7 +531,7 @@ export default function MarketingLandingPage() {
           </IconButton>
         </Box>
         <Box component="nav" aria-label="Mobile" sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          {NAV_LINKS.map((item) => (
+          {activeNavLinks.map((item) => (
             <Button key={item.href} href={item.href} onClick={closeMenu} sx={{ justifyContent: 'flex-start', minHeight: 44, color: cv.textPrimary }}>
               {item.label}
             </Button>
@@ -827,12 +831,15 @@ export default function MarketingLandingPage() {
                         ) : null}
                       </Typography>
                       <Box component="ul" sx={{ m: 0, mt: 2, pl: 0, listStyle: 'none', flex: 1 }}>
-                        {(Array.isArray(plan.features) ? plan.features : []).slice(0, 6).map((feature) => (
-                          <Box key={feature} sx={{ display: 'flex', gap: 1, mb: 0.85, alignItems: 'flex-start' }}>
-                            <CheckRoundedIcon sx={{ fontSize: 16, color: cv.brandOrchid, mt: '2px' }} aria-hidden />
-                            <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.4 }}>{feature}</Typography>
-                          </Box>
-                        ))}
+                        {(Array.isArray(plan.features) ? plan.features : []).slice(0, 6).map((feature) => {
+                          const label = typeof feature === 'string' ? feature : feature.name;
+                          return (
+                            <Box key={label} sx={{ display: 'flex', gap: 1, mb: 0.85, alignItems: 'flex-start' }}>
+                              <CheckRoundedIcon sx={{ fontSize: 16, color: cv.brandOrchid, mt: '2px' }} aria-hidden />
+                              <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.4 }}>{label}</Typography>
+                            </Box>
+                          );
+                        })}
                       </Box>
                       <Button
                         onClick={() => handlePlanCta(plan)}
@@ -934,7 +941,7 @@ export default function MarketingLandingPage() {
           </Box>
           <Box>
             <Typography sx={{ fontWeight: 700, mb: 1.25 }}>Product</Typography>
-            {NAV_LINKS.map((item) => (
+            {activeNavLinks.map((item) => (
               <Link key={item.href} href={item.href} underline="none" sx={{ display: 'block', color: cv.textSecondary, py: 0.6, transition: `color 0.22s ${EASE}`, '&:hover': { color: cv.brandOrchid } }}>
                 {item.label}
               </Link>
