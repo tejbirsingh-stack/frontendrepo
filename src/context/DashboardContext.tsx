@@ -28,6 +28,7 @@ import { initialMediaItems, type MediaItem, type MediaLocation, type MediaType, 
 import { getMediaTypeFromFile } from '../utils/fileMediaType';
 import { DEFAULT_FOLDER_COLOR } from '../constants/folderColors';
 import { CURRENT_USER } from '../constants/currentUser';
+import { useAuth } from '../auth/AuthContext';
 import {
   defaultWorkspaceFolders,
   defaultWorkspaceProjectFolders,
@@ -176,6 +177,7 @@ const DashboardContext = createContext<DashboardContextValue | null>(null);
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>(initialWorkspaces);
   const [fetchedFavorites, setFetchedFavorites] = useState<MediaItem[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceIdState] = useState(() => {
@@ -191,8 +193,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [effectivePermissions, setEffectivePermissions] = useState<string[]>([]);
   
   const hasWorkspacePermission = useCallback((slug: string) => {
+    const roleName = (user?.role || '').trim().toLowerCase();
+    if (roleName === 'super admin' || roleName === 'admin' || roleName === 'superadmin') return true;
+    if ((roleName === 'editor' || roleName === 'producer' || roleName === 'colorist' || roleName === 'designer') && slug === 'upload_media') return true;
+    if (user?.permissions && Array.isArray(user.permissions) && user.permissions.includes(slug)) return true;
     return effectivePermissions.includes(slug);
-  }, [effectivePermissions]);
+  }, [effectivePermissions, user?.role, user?.permissions]);
 
   const resetToWorkspacePermissions = useCallback(() => {
     setEffectivePermissions(workspacePermissions);

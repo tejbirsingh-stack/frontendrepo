@@ -494,7 +494,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
         open={superAdminFolderDeleteOpen}
         folderId={item.id}
         folderName={item.title}
-        onClose={() => setFolderDeleteOpen(false)}
+        onClose={() => setSuperAdminFolderDeleteOpen(false)}
         onConfirmPermanentDelete={async (targetFolderId, isWholeFolder, selectedFileIds, selectedFolderIds) => {
           try {
             await apiClient.post(`/workspaces/folder/delete/${targetFolderId}`, {
