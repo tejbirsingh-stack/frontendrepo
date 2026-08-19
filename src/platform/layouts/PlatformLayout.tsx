@@ -215,6 +215,7 @@ export default function PlatformLayout() {
             showGlow={false}
             align="left"
             ariaLabel="NOAH Platform Console"
+            disableCustomBranding
             sx={{ mb: 0, width: '100%', maxWidth: '100%' }}
           />
         </Box>
