@@ -55,6 +55,7 @@ export type WorkspaceMemberAccess = 'Full Access' | 'Can edit' | 'Can view';
 export type WorkspaceMemberType = 'Member' | 'Guest' | 'Group';
 
 export interface WorkspaceInvitePayload {
+  userId?: string;
   email?: string;
   name?: string;
   groupId?: string;

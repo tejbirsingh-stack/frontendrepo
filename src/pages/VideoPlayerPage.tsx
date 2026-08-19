@@ -1831,13 +1831,13 @@ export default function VideoPlayerPage({
           } as any);
         }
 
-        // Also add any user IDs from overrides if missing
+        // Also add any user IDs from overrides if missing (e.g. cross-org guests)
         overrides.forEach((ov: any) => {
           if (ov.userId && !baseUsers.some((u) => u.id === ov.userId)) {
             baseUsers.push({
               id: ov.userId,
-              name: 'User',
-              email: '',
+              name: ov.user?.name || 'User',
+              email: ov.user?.email || '',
               role: 'Viewer',
               status: 'active',
             } as any);
@@ -3090,7 +3090,7 @@ export default function VideoPlayerPage({
 
         // Call backend
         if (mediaId) {
-          updateAssetAccessOverride(mediaId, existingMember.id, payload.access).catch(err => {
+          updateAssetAccessOverride(mediaId, existingMember.id, payload.access, payload.sendInviteEmail).catch(err => {
             console.error("Failed to add override", err);
           });
         }
@@ -3098,6 +3098,34 @@ export default function VideoPlayerPage({
         setStatusToast({
           open: true,
           message: `Invite sent to ${existingMember.name}`,
+          variant: 'resolved',
+        });
+        return true;
+      } else if (payload.userId) {
+        // It's a cross-org user or known user who wasn't in shareTeamMembers yet!
+        const newUserId = payload.userId;
+        const newGroupMember = {
+          id: newUserId,
+          name: payload.name || email,
+          initials: (payload.name || email).substring(0, 2).toUpperCase(),
+          access: payload.access,
+          memberType: payload.memberType,
+          email: payload.email,
+          isCurrentUser: false,
+          hasOverride: true
+        };
+        setShareTeamMembers(current => [...current, newGroupMember]);
+        setCollaborators(current => [...current, { ...newGroupMember, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' }]);
+        
+        if (mediaId) {
+          updateAssetAccessOverride(mediaId, newUserId, payload.access, payload.sendInviteEmail).catch(err => {
+            console.error("Failed to add override for cross-org user", err);
+          });
+        }
+
+        setStatusToast({
+          open: true,
+          message: `Invite sent to ${payload.name || email}`,
           variant: 'resolved',
         });
         return true;
@@ -4264,6 +4292,7 @@ export default function VideoPlayerPage({
           suggestedGroups={availableGroups}
           resourceType="project"
           visibility={shareInviteVisibility}
+          isRestricted={shareInviteVisibility === 'private'}
           shareLinks={shareLinks}
           activeShareLinkId={activeShareLinkId}
           focusLinkNameCounter={focusLinkNameCounter}
