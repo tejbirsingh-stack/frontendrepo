@@ -11,7 +11,7 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ['qa.noahcloud.ai', 'all'],
+    allowedHosts: true,
     port: 3002,
     host: true,
     // clientPort 443 is for HTTPS tunnel/QA hosts; local Vite uses the same port as the app
