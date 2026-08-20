@@ -141,6 +141,8 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
   };
 
   const handleMove = (destination: MoveDestination) => {
+    setMoveOpen(false);
+
     if (isRestoreFolder) {
       toast.error("The 'Restore' folder is protected and cannot be moved.");
       return;

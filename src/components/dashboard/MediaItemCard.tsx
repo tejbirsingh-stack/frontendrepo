@@ -256,6 +256,10 @@ function FolderPreview({ item, childCount }: { item: MediaItem; childCount: numb
     isProject: item.isProject,
   });
 
+  if (item.isProject) {
+    console.log(`Project Preview ${item.title}: color=${item.folderColor}, accent=${accentColor}`);
+  }
+
   return (
     <Box
       sx={{
@@ -265,7 +269,7 @@ function FolderPreview({ item, childCount }: { item: MediaItem; childCount: numb
         alignItems: 'center',
         justifyContent: 'center',
         background: item.isProject
-          ? projectAccentBackground()
+          ? projectAccentBackground(item.folderColor)
           : folderAccentBackground(item.folderColor),
         gap: 1,
       }}
@@ -466,7 +470,7 @@ export default function MediaItemCard({
     : 0;
   const folderFooterAccent = isFolder
     ? item.isProject
-      ? projectAccentTint()
+      ? projectAccentTint(item.folderColor)
       : folderAccentTint(item.folderColor)
     : config.accent;
   const selectionActive = selectedMediaIds.size > 0;

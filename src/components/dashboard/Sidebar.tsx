@@ -423,7 +423,7 @@ function SidebarMediaFolderRow({
     Boolean(mediaFolder.isProject) ||
     Boolean(activeWorkspace?.projectFolders?.some((project) => project.id === mediaFolder.id));
   const folderAccent = isProject
-    ? PROJECT_ACCENT_COLOR
+    ? (mediaFolder.folderColor ?? PROJECT_ACCENT_COLOR)
     : (resolveFolderColor(mediaFolder.folderColor) ?? parentAccentColor);
   const openKey = getMediaFolderOpenKey(mediaFolder.id);
   const isOpen = Boolean(openMediaFolders[openKey]);
@@ -622,10 +622,10 @@ function FolderItem({
   const location = useLocation();
   const isProjectRoot = browseMode === 'projects';
   const folderColor = isProjectRoot
-    ? PROJECT_ACCENT_COLOR
+    ? (folder.color ?? PROJECT_ACCENT_COLOR)
     : resolveFolderColor(folder.color);
   const selectedBackground = isProjectRoot
-    ? projectAccentTint()
+    ? projectAccentTint(folder.color)
     : folderAccentTint(folder.color);
   const isPersonalRoot = folder.id === 'personal';
 
@@ -1182,7 +1182,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     createWorkspace,
     mediaItems,
     trashedIds,
-    moveMediaToFolderBulk,
+    moveMediaToDashboardFolder,
     moveMediaToTrashBulk,
     removeFolderAndItemsFromState,
     trashedMediaItems,
@@ -1474,7 +1474,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     event.preventDefault();
     const mediaIds = getMediaDragPayload(event);
     if (mediaIds.length > 0) {
-      moveMediaToFolderBulk(mediaIds, folderId, childLabel);
+      moveMediaToDashboardFolder(mediaIds, folderId);
     }
     setDropTargetKey(null);
     clearDraggingMedia();
