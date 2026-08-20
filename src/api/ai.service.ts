@@ -47,7 +47,7 @@ export async function retryAiAnalyzeRequest(assetId: string, force = true): Prom
   return apiClient.post(`/ai/assets/${encodeURIComponent(assetId)}/retry`, { force });
 }
 
-export async function searchAiTranscriptRequest(q: string, page = 1): Promise<{
+export async function searchAiRequest(q: string, page = 1): Promise<{
   success: boolean;
   items: AiSearchHitDto[];
   total: number;
@@ -57,3 +57,6 @@ export async function searchAiTranscriptRequest(q: string, page = 1): Promise<{
   const params = new URLSearchParams({ q, page: String(page), pageSize: '24' });
   return apiClient.get(`/ai/search?${params.toString()}`);
 }
+
+/** @deprecated Use searchAiRequest */
+export const searchAiTranscriptRequest = searchAiRequest;

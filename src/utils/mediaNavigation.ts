@@ -41,10 +41,14 @@ export function getMediaViewerPath(item: MediaItem, projectId?: string): string 
   }
 
   if (item.type === 'video' || item.type === 'audio' || item.type === 'image') {
-    if (projectId) {
-      return `/home/project/${projectId}/media/${item.id}`;
+    const base = projectId
+      ? `/home/project/${projectId}/media/${item.id}`
+      : `/media/${item.id}`;
+    const startMs = item.searchMatch?.startMs;
+    if (typeof startMs === 'number' && startMs >= 0) {
+      return `${base}?t=${(startMs / 1000).toFixed(3)}`;
     }
-    return `/media/${item.id}`;
+    return base;
   }
 
   return null;

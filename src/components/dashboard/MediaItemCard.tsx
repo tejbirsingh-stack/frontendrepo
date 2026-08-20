@@ -127,6 +127,42 @@ function FavoriteButton({
   );
 }
 
+function SearchMatchBadge({ matchType }: { matchType?: string }) {
+  if (matchType !== 'semantic' && matchType !== 'transcript') return null;
+  const isSemantic = matchType === 'semantic';
+  const label = isSemantic ? 'Related' : 'Transcript';
+  const ariaLabel = isSemantic
+    ? 'Matched because the spoken content is related'
+    : 'Matched because the transcript contains this search';
+
+  return (
+    <Tooltip title={label} arrow placement="top">
+      <Box
+        component="span"
+        aria-label={ariaLabel}
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          px: 0.875,
+          py: 0.25,
+          borderRadius: '999px',
+          minHeight: 22,
+          ...thumbnailOverlayChipStyles,
+          border: `1px solid ${cv.purpleChipBorder}`,
+          backgroundColor: cv.purpleSurface,
+        }}
+      >
+        <Typography
+          variant="caption"
+          sx={{ fontSize: '0.6875rem', fontWeight: 600, color: cv.brandPurpleLight }}
+        >
+          {label}
+        </Typography>
+      </Box>
+    </Tooltip>
+  );
+}
+
 function TypeBadge({ type, isProject }: { type: MediaType; isProject?: boolean }) {
   const config = typeConfig[type];
   const Icon = type === 'folder' && isProject ? WorkOutlineOutlinedIcon : config.icon;
@@ -575,7 +611,7 @@ export default function MediaItemCard({
       <Box sx={{ position: 'relative', aspectRatio: '16 / 9', overflow: 'hidden' }}>
         <MediaPreview item={item} folderChildCount={folderChildCount} />
 
-        {item.type === 'video' && item.summary?.trim() ? (
+        {(item.type === 'video' || item.type === 'audio') && (item.searchMatch?.snippet || item.summary)?.trim() ? (
           <Box
             className="video-summary-overlay"
             aria-hidden
@@ -606,7 +642,7 @@ export default function MediaItemCard({
                 overflow: 'hidden',
               }}
             >
-              {item.summary.trim()}
+              {item.searchMatch?.snippet?.trim() || item.summary?.trim()}
             </Typography>
           </Box>
         ) : null}
@@ -626,6 +662,7 @@ export default function MediaItemCard({
             onToggle={() => onToggleFavorite(item.id, item.isProject ? 'project' : (item.type === 'folder' ? 'folder' : 'asset'))}
           />
           <TypeBadge type={item.type} isProject={item.isProject} />
+          <SearchMatchBadge matchType={item.searchMatch?.matchType} />
           <ReviewStatusBadge item={item} />
         </Box>
 

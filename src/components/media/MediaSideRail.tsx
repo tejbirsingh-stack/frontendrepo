@@ -37,6 +37,8 @@ interface MediaSideRailProps {
   onKeyboardShortcuts: () => void;
   /** Hides the annotation panel button when the viewer has no comment access. */
   showAnnotations?: boolean;
+  /** Hides the AI insights rail button when the org is not entitled. */
+  showAi?: boolean;
 }
 
 export default function MediaSideRail({
@@ -44,6 +46,7 @@ export default function MediaSideRail({
   onPanelSelect,
   onKeyboardShortcuts,
   showAnnotations = true,
+  showAi = true,
 }: MediaSideRailProps) {
   const helpButtonRef = useRef<HTMLButtonElement>(null);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
@@ -72,7 +75,9 @@ export default function MediaSideRail({
       ? [{ panel: 'history' as const, label: 'Annotations', icon: ForumOutlinedIcon }]
       : []),
     { panel: 'details', label: 'Details', icon: InfoOutlinedIcon },
-    { panel: 'ai', label: 'AI insights', icon: AutoAwesomeOutlinedIcon },
+    ...(showAi
+      ? [{ panel: 'ai' as const, label: 'AI insights', icon: AutoAwesomeOutlinedIcon }]
+      : []),
   ];
 
   return (

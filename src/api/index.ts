@@ -26,6 +26,7 @@ export {
   getTranscriptRequest,
   getAiStatusRequest,
   retryAiAnalyzeRequest,
+  searchAiRequest,
   searchAiTranscriptRequest,
 } from './ai.service';
 export type {

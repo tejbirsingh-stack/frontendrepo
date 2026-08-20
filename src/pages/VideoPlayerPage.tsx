@@ -34,6 +34,7 @@ import AnnotationHistoryDrawer from '../components/media/AnnotationHistoryDrawer
 import AudioWaveformVisualizer from '../components/media/AudioWaveformVisualizer';
 import FramePersonHighlight from '../components/media/FramePersonHighlight';
 import type { FramePerson } from '../data/mockFramePeople';
+import { useAiEntitled } from '../hooks/useAiEntitled';
 import type {
   MediaDetailsSection,
   MediaTechnicalDetails,
@@ -968,6 +969,7 @@ export default function VideoPlayerPage({
   const [shareTeamMembers, setShareTeamMembers] = useState<WorkspaceTeamMember[]>([]);
   const [availableGroups, setAvailableGroups] = useState<SettingsUserGroup[]>([]);
   const [drawerTab, setDrawerTab] = useState<MediaRailPanel>('history');
+  const aiEntitled = useAiEntitled() && !isGuestMode;
   const [detailsSection, setDetailsSection] = useState<MediaDetailsSection>('file');
   const [selectedFramePerson, setSelectedFramePerson] = useState<FramePerson | null>(null);
 
@@ -977,6 +979,12 @@ export default function VideoPlayerPage({
 
   // People detection runs on frames, so audio and documents have no faces to highlight.
   const supportsFramePeople = item?.type === 'video' || item?.type === 'image';
+
+  useEffect(() => {
+    if (!aiEntitled && drawerTab === 'ai') {
+      setDrawerTab(annotationsAllowed ? 'history' : 'details');
+    }
+  }, [aiEntitled, annotationsAllowed, drawerTab]);
 
   useEffect(() => {
     if (!historyOpen || drawerTab !== 'ai') {
@@ -4963,7 +4971,11 @@ export default function VideoPlayerPage({
 
         <AnnotationHistoryDrawer
           open={historyOpen}
-          availableTabs={annotationsAllowed ? undefined : ['details']}
+          availableTabs={
+            annotationsAllowed
+              ? (aiEntitled ? undefined : ['history', 'details'])
+              : ['details']
+          }
           activeHistoryEntryId={activeHistoryEntryId}
           entries={history}
           comments={comments}
@@ -5010,6 +5022,7 @@ export default function VideoPlayerPage({
           onPanelSelect={handleRailPanelSelect}
           onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
           showAnnotations={annotationsAllowed}
+          showAi={aiEntitled}
         />
       </Box>
 

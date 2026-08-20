@@ -50,6 +50,11 @@ export interface MediaItem {
   deletedAt?: string;
   isProject?: boolean;
   isSharedByMe?: boolean;
+  searchMatch?: {
+    matchType: 'semantic' | 'transcript' | 'title' | string;
+    snippet?: string;
+    startMs?: number;
+  };
 }
 
 export const initialMediaItems: MediaItem[] = [];
