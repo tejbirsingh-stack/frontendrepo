@@ -24,7 +24,6 @@ import {
   Button,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
@@ -38,6 +37,7 @@ import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import { useActiveUser } from '../../hooks/useActiveUser';
 import type { MediaItem } from '../../data/mockMedia';
 import { MOCK_FRAME_PEOPLE, type FramePerson } from '../../data/mockFramePeople';
+import TranscriptPanel from './TranscriptPanel';
 import type { AnnotationHistoryEntry, AnnotationHistoryType } from '../../types/annotationHistory';
 import type { CommentReply, VideoComment } from '../../types/videoComments';
 import CommentImageAttachment from './CommentImageAttachment';
@@ -177,6 +177,8 @@ interface AnnotationHistoryDrawerProps {
   /** Person whose headshot is highlighted on the frame from the AI insights tab. */
   selectedFramePersonId?: string | null;
   onFramePersonSelect?: (person: FramePerson) => void;
+  /** Seek player to a transcript segment (milliseconds). */
+  onTranscriptSeek?: (startMs: number) => void;
   onClose: () => void;
   onEntryClick?: (entry: AnnotationHistoryEntry) => void;
   onToggleResolved: (entryId: string) => void;
@@ -1047,6 +1049,7 @@ export default function AnnotationHistoryDrawer({
   onDetailsSectionChange,
   selectedFramePersonId,
   onFramePersonSelect,
+  onTranscriptSeek,
   onClose,
   onEntryClick,
   onToggleResolved,
@@ -1612,19 +1615,11 @@ export default function AnnotationHistoryDrawer({
             ))
           )
         ) : activeTab === 'ai' ? (
-          <Box
-            sx={{
-              py: 1.5,
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 0.75,
-            }}
-          >
-            <AutoAwesomeOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted, flexShrink: 0 }} />
-            <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
-              Other AI insights for this file are not available yet.
-            </Typography>
-          </Box>
+          <TranscriptPanel
+            assetId={mediaItem?.id}
+            filterQuery={aiQuery}
+            onSeekMs={onTranscriptSeek}
+          />
         ) : mediaItem && onTagsChange ? (
           <MediaDetailsPanel
             mediaItem={mediaItem}

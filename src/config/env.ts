@@ -28,4 +28,5 @@ export const env = {
   apiTimeoutMs: readPositiveInt(readEnv('VITE_API_TIMEOUT_MS'), 30_000),
   // Empty means proxy to local backend, not mock auth
   isApiConfigured: true,
+  aiEnabled: readEnv('VITE_AI_ENABLED', 'true') !== 'false',
 } as const;

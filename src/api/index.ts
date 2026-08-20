@@ -22,6 +22,18 @@ export {
   removeAssetGroupAccessOverride,
   getSharedMediaAssetsRequest
 } from './media.service';
+export {
+  getTranscriptRequest,
+  getAiStatusRequest,
+  retryAiAnalyzeRequest,
+  searchAiTranscriptRequest,
+} from './ai.service';
+export type {
+  TranscriptSegmentDto,
+  TranscriptResponseDto,
+  AiStatusResponseDto,
+  AiSearchHitDto,
+} from './ai.service';
 export type { MediaAssetResponseDto, UploadMediaProgress } from './media.service';
 export {
   toggleFavoriteRequest,

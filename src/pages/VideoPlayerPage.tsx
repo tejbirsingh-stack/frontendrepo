@@ -2096,7 +2096,7 @@ export default function VideoPlayerPage({
   }, [item, mediaId]);
 
   useEffect(() => {
-    if (!item || item.type !== 'video') return;
+    if (!item || (item.type !== 'video' && item.type !== 'audio')) return;
 
     const video = videoRef.current;
     if (!video) return;
@@ -4964,6 +4964,7 @@ export default function VideoPlayerPage({
           onDetailsSectionChange={setDetailsSection}
           selectedFramePersonId={selectedFramePerson?.id ?? null}
           onFramePersonSelect={handleFramePersonSelect}
+          onTranscriptSeek={(startMs) => handleSeekToTimestamp(startMs / 1000)}
           onClose={() => setHistoryOpen(false)}
           onEntryClick={(entry) => {
             handleSeekToTimestamp(entry.videoTimestamp, entry.id);
