@@ -103,6 +103,8 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
   };
 
   const handleMove = (destination: MoveDestination) => {
+    setMoveOpen(false);
+    
     if (destination.kind === 'project') {
       const performAssignAndMove = async () => {
         // Cross-workspace: physically move the item to the project's parent folder first,

@@ -94,7 +94,7 @@ interface DashboardContextValue {
   toggleMediaSelection: (mediaId: string) => void;
   setMediaSelection: (mediaIds: string[]) => void;
   clearMediaSelection: () => void;
-  renameMedia: (mediaId: string, newTitle: string) => void;
+  renameMedia: (mediaId: string, newTitle: string) => Promise<void>;
   updateMediaTags: (mediaId: string, tags: string[]) => void;
   updateMediaReviewStatus: (mediaId: string, reviewStatus: string) => void;
   managedTags: ManagedTag[];
@@ -111,8 +111,8 @@ interface DashboardContextValue {
   renameWorkspaceFolderChild: (folderId: string, oldLabel: string, newLabel: string) => void;
   deleteWorkspaceFolderChild: (folderId: string, childLabel: string) => void;
   addWorkspaceFile: (folderId: string, name: string, type: MediaType) => void;
-  updateSidebarFolderColor: (folderId: string, color: string) => void;
-  updateMediaFolderColor: (mediaId: string, color: string) => void;
+  updateSidebarFolderColor: (folderId: string, color: string) => Promise<void>;
+  updateMediaFolderColor: (mediaId: string, color: string) => Promise<void>;
   uploadMediaFiles: (files: File[], options?: MediaUploadOptions) => number;
   pendingMediaUpload: PendingMediaUpload | null;
   pendingMediaUploadCount: number;
@@ -362,6 +362,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             .map((p: any) => ({
               id: p.id,
               label: p.name,
+              color: p.color || undefined,
             }));
 
           setWorkspaces((prev) =>
@@ -373,6 +374,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           );
         }
 
+        console.log("PROJECTS FROM API:", allProjects || projects);
         const projectMediaItems: MediaItem[] = (allProjects || projects || []).map((p: any) => ({
           id: p.id,
           title: p.name,
@@ -384,6 +386,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           uploadedBy: CURRENT_USER.name,
           status: 'active',
           isProject: true,
+          folderColor: p.color || undefined,
           parentFolderId: p.ownerType === 'FOLDER' ? p.folderId : undefined,
         }));
 
@@ -552,6 +555,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           uploadedBy: CURRENT_USER.name,
           status: 'active',
           isProject: true,
+          folderColor: p.color || undefined,
         }));
 
         const projectIds = new Set(projectMediaItems.map((item) => item.id));
@@ -916,6 +920,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                 uploadedBy: CURRENT_USER.name,
                 status: 'active',
                 isProject: true,
+                folderColor: p.color || undefined,
                 linkedProjectIds: [],
                 projectLocations: [],
               });
@@ -1104,7 +1109,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const moveMediaToFolder = useCallback(
     (mediaId: string, folderId: string, childLabel?: string) => {
-      const media = mediaItems.find((m) => m.id === mediaId);
+      const media = mediaItems.find((m) => m.id === mediaId) || libraryItems.find((m) => m.id === mediaId);
       if (!media) return;
 
       setWorkspaces((prev) =>
@@ -1143,7 +1148,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         ),
       );
     },
-    [activeWorkspaceId, mediaItems],
+    [activeWorkspaceId, mediaItems, libraryItems],
   );
 
   const moveMediaToFolderBulk = useCallback(
@@ -1153,7 +1158,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       const folderCountDelta = new Map<string, number>();
       uniqueIds.forEach((mediaId) => {
-        const media = mediaItems.find((item) => item.id === mediaId);
+        const media = mediaItems.find((item) => item.id === mediaId) || libraryItems.find((item) => item.id === mediaId);
         if (media?.parentFolderId) {
           folderCountDelta.set(
             media.parentFolderId,
@@ -1174,7 +1179,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
               const children = folder.children ?? [];
               const labelsToAdd = uniqueIds
                 .map((mediaId) => {
-                  const media = mediaItems.find((item) => item.id === mediaId);
+                  const media = mediaItems.find((item) => item.id === mediaId) || libraryItems.find((item) => item.id === mediaId);
                   if (!media) return null;
                   return childLabel ?? media.title;
                 })
@@ -1225,23 +1230,28 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
-    [activeWorkspaceId, mediaItems],
+    [activeWorkspaceId, mediaItems, libraryItems],
   );
 
   const moveMediaToDashboardFolder = useCallback(
     async (mediaIds: string[], folderId: string) => {
+      console.log('moveMediaToDashboardFolder called with', mediaIds, folderId);
       const uniqueIds = [...new Set(mediaIds)].filter((id) => id !== folderId);
-      if (uniqueIds.length === 0) return;
+      if (uniqueIds.length === 0) {
+        toast.error('Invalid move operation: Source and destination are the same.');
+        return;
+      }
 
       const targetFolder = mediaItems.find(
         (item) => item.id === folderId && item.type === 'folder',
+      ) || libraryItems.find(
+        (item) => item.id === folderId && item.type === 'folder',
       );
-      if (!targetFolder) return;
 
       const folderCountDelta = new Map<string, number>();
 
       uniqueIds.forEach((mediaId) => {
-        const media = mediaItems.find((item) => item.id === mediaId);
+        const media = mediaItems.find((item) => item.id === mediaId) || libraryItems.find((item) => item.id === mediaId);
         if (!media) return;
 
         if (media.parentFolderId && media.parentFolderId !== folderId) {
@@ -1281,6 +1291,30 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }),
       );
 
+      setLibraryItems((prev) =>
+        prev.map((item) => {
+          if (uniqueIds.includes(item.id)) {
+            return {
+              ...item,
+              parentFolderId: folderId,
+              location: null,
+            };
+          }
+
+          if (item.type === 'folder' && folderCountDelta.has(item.id)) {
+            return {
+              ...item,
+              itemCount: Math.max(
+                0,
+                (item.itemCount ?? 0) + (folderCountDelta.get(item.id) ?? 0),
+              ),
+            };
+          }
+
+          return item;
+        }),
+      );
+
       setSelectedMediaIds((prev) => {
         const next = new Set(prev);
         uniqueIds.forEach((id) => next.delete(id));
@@ -1289,10 +1323,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       // API Call
       try {
+        console.log('Making API calls for uniqueIds:', uniqueIds);
         const { apiClient } = await import('../api/client');
         await Promise.all(uniqueIds.map(id => {
-          const item = mediaItems.find(m => m.id === id);
-          if (!item) return Promise.resolve();
+          const item = mediaItems.find(m => m.id === id) || libraryItems.find(m => m.id === id);
+          if (!item) {
+            console.error(`Item with ID ${id} not found in mediaItems or libraryItems!`);
+            toast.error(`Item not found! API call aborted. ID: ${id}`);
+            return Promise.resolve();
+          }
           if (item.type === 'folder') {
             return apiClient.put(`/workspaces/folder/${id}/move`, { targetFolderId: folderId });
           } else {
@@ -1302,11 +1341,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         
         // Refresh sidebar folder structure
         void fetchWorkspaceData();
-      } catch (err) {
+        toast.success("Move successful!");
+      } catch (err: any) {
         console.error('Failed to move media to folder:', err);
+        toast.error('Failed to move: ' + (err.message || String(err)));
       }
     },
-    [mediaItems, removeMediaFromSidebar, fetchWorkspaceData],
+    [mediaItems, libraryItems, removeMediaFromSidebar, fetchWorkspaceData],
   );
 
   const moveMediaToWorkspaceFolder = useCallback(
@@ -1322,7 +1363,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const folderCountDelta = new Map<string, number>();
 
       uniqueIds.forEach((mediaId) => {
-        const media = mediaItems.find((item) => item.id === mediaId);
+        const media = mediaItems.find((item) => item.id === mediaId) || libraryItems.find((item) => item.id === mediaId);
         if (!media) return;
 
         if (media.parentFolderId && media.parentFolderId !== folderId) {
@@ -1363,6 +1404,31 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }),
       );
 
+      setLibraryItems((prev) =>
+        prev.map((item) => {
+          if (uniqueIds.includes(item.id)) {
+            return {
+              ...item,
+              workspaceId,
+              parentFolderId: folderId || undefined,
+              location: null,
+            };
+          }
+
+          if (item.type === 'folder' && folderCountDelta.has(item.id)) {
+            return {
+              ...item,
+              itemCount: Math.max(
+                0,
+                (item.itemCount ?? 0) + (folderCountDelta.get(item.id) ?? 0),
+              ),
+            };
+          }
+
+          return item;
+        }),
+      );
+
       setSelectedMediaIds((prev) => {
         const next = new Set(prev);
         uniqueIds.forEach((id) => next.delete(id));
@@ -1373,7 +1439,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       try {
         const { apiClient } = await import('../api/client');
         await Promise.all(uniqueIds.map(id => {
-          const item = mediaItems.find(m => m.id === id);
+          const item = mediaItems.find(m => m.id === id) || libraryItems.find(m => m.id === id);
           if (!item) return Promise.resolve();
           if (item.type === 'folder') {
             return apiClient.put(`/workspaces/folder/${id}/move`, { targetFolderId: folderId, targetWorkspaceId: workspaceId });
@@ -1386,13 +1452,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         if (workspaceId === activeWorkspaceId || mediaItems.some(m => uniqueIds.includes(m.id) && m.workspaceId === activeWorkspaceId)) {
           void fetchWorkspaceData();
         }
-      } catch (err) {
+        toast.success("Move successful!");
+      } catch (err: any) {
         console.error('Failed to move media to workspace folder:', err);
+        toast.error('Failed to move: ' + (err.message || String(err)));
       }
     },
     [
       activeWorkspaceId,
       mediaItems,
+      libraryItems,
       moveMediaToDashboardFolder,
       removeMediaFromSidebar,
       fetchWorkspaceData,
@@ -1407,7 +1476,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const folderCountDelta = new Map<string, number>();
 
       uniqueIds.forEach((mediaId) => {
-        const media = mediaItems.find((item) => item.id === mediaId);
+        const media = mediaItems.find((item) => item.id === mediaId) || libraryItems.find((item) => item.id === mediaId);
         if (!media) return;
 
         if (media.parentFolderId) {
@@ -1468,7 +1537,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
-    [mediaItems, removeMediaFromSidebar, trashedIds],
+    [mediaItems, libraryItems, removeMediaFromSidebar, trashedIds],
   );
 
   const moveMediaToTrash = useCallback(
@@ -1712,12 +1781,30 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   );
 
   const renameMedia = useCallback(
-    (mediaId: string, newTitle: string) => {
+    async (mediaId: string, newTitle: string) => {
       const trimmed = newTitle.trim();
       if (!trimmed) return;
 
-      const media = mediaItems.find((m) => m.id === mediaId);
-      if (!media) return;
+      const media = mediaItems.find((m) => m.id === mediaId) || libraryItems.find((m) => m.id === mediaId);
+      if (!media) {
+        toast.error('Could not find item to rename.');
+        return;
+      }
+
+      try {
+        const { apiClient } = await import('../api/client');
+        if (media.isProject) {
+          await apiClient.put(`/workspaces/project/update/${mediaId}`, { name: trimmed });
+        } else if (media.type === 'folder') {
+          await apiClient.put(`/workspaces/folder/update/${mediaId}`, { name: trimmed });
+        } else {
+          await apiClient.put(`/media/${mediaId}/rename`, { title: trimmed });
+        }
+      } catch (err) {
+        console.error('Failed to rename item:', err);
+        toast.error('Failed to rename item. Please try again.');
+        return; // Don't update local state if backend call fails
+      }
 
       const oldLabel = media.location?.childLabel ?? media.title;
 
@@ -1770,7 +1857,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         );
       }
     },
-    [mediaItems],
+    [mediaItems, libraryItems],
   );
 
   const addWorkspaceFolder = useCallback(
@@ -2379,6 +2466,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           uploadedBy: CURRENT_USER.name,
           status: 'active',
           isProject: true,
+          folderColor: resData?.color || undefined,
           ...(resolvedFolderId ? { parentFolderId: resolvedFolderId } : {}),
         };
 
@@ -2454,42 +2542,113 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           return { ...item, linkedProjectIds: newLinkedProjectIds, projectLocations: newProjectLocations };
         }),
       );
+
+      setLibraryItems((prev) =>
+        prev.map((item) => {
+          if (item.id !== mediaId) return item;
+          if (!projectLocation) return item;
+
+          const newLinkedProjectIds = [projectLocation.folderId];
+          const newProjectLocations = [projectLocation];
+
+          return { ...item, linkedProjectIds: newLinkedProjectIds, projectLocations: newProjectLocations };
+        }),
+      );
     },
     [],
   );
 
   const updateSidebarFolderColor = useCallback(
-    (folderId: string, color: string) => {
-      const applyColor = (folder: SidebarFolder) =>
-        folder.id === folderId ? { ...folder, color } : folder;
+    async (folderId: string, color: string) => {
+      try {
+        const { apiClient } = await import('../api/client');
+        
+        const media = mediaItems.find(m => m.id === folderId) || libraryItems.find(m => m.id === folderId);
+        let isProject = media?.isProject;
+        
+        if (isProject === undefined) {
+           const workspace = workspaces.find(w => w.id === activeWorkspaceId);
+           if (workspace?.projectFolders.some(p => p.id === folderId)) {
+             isProject = true;
+           }
+        }
 
-      setWorkspaces((prev) =>
-        prev.map((workspace) => {
-          if (workspace.id !== activeWorkspaceId) return workspace;
+        if (isProject) {
+          await apiClient.put(`/workspaces/project/update/${folderId}`, { color });
+        } else {
+          await apiClient.put(`/workspaces/folder/update/${folderId}`, { color });
+        }
 
-          return {
-            ...workspace,
-            folders: workspace.folders.map(applyColor),
-            projectFolders: workspace.projectFolders.map(applyColor),
-          };
-        }),
-      );
+        const applyColor = (folder: SidebarFolder) =>
+          folder.id === folderId ? { ...folder, color } : folder;
+
+        setWorkspaces((prev) =>
+          prev.map((workspace) => {
+            if (workspace.id !== activeWorkspaceId) return workspace;
+
+            return {
+              ...workspace,
+              folders: workspace.folders.map(applyColor),
+              projectFolders: workspace.projectFolders.map(applyColor),
+            };
+          }),
+        );
+        
+        setMediaItems((prev) =>
+          prev.map((item) =>
+            item.id === folderId && (item.type === 'folder' || item.isProject) ? { ...item, folderColor: color } : item,
+          ),
+        );
+        setLibraryItems((prev) =>
+          prev.map((item) =>
+            item.id === folderId && (item.type === 'folder' || item.isProject) ? { ...item, folderColor: color } : item,
+          ),
+        );
+      } catch (err) {
+        console.error('Failed to recolor sidebar folder:', err);
+        toast.error('Failed to change color.');
+      }
     },
-    [activeWorkspaceId],
+    [activeWorkspaceId, mediaItems, libraryItems, workspaces],
   );
 
-  const updateMediaFolderColor = useCallback((mediaId: string, color: string) => {
-    setMediaItems((prev) =>
-      prev.map((item) =>
-        item.id === mediaId && item.type === 'folder' ? { ...item, folderColor: color } : item,
-      ),
-    );
-    setLibraryItems((prev) =>
-      prev.map((item) =>
-        item.id === mediaId && item.type === 'folder' ? { ...item, folderColor: color } : item,
-      ),
-    );
-  }, []);
+  const updateMediaFolderColor = useCallback(async (mediaId: string, color: string) => {
+    try {
+      const { apiClient } = await import('../api/client');
+      
+      const media = mediaItems.find(m => m.id === mediaId) || libraryItems.find(m => m.id === mediaId);
+      if (media?.isProject) {
+        await apiClient.put(`/workspaces/project/update/${mediaId}`, { color });
+      } else {
+        await apiClient.put(`/workspaces/folder/update/${mediaId}`, { color });
+      }
+
+      setMediaItems((prev) =>
+        prev.map((item) =>
+          item.id === mediaId && (item.type === 'folder' || item.isProject) ? { ...item, folderColor: color } : item,
+        ),
+      );
+      setLibraryItems((prev) =>
+        prev.map((item) =>
+          item.id === mediaId && (item.type === 'folder' || item.isProject) ? { ...item, folderColor: color } : item,
+        ),
+      );
+      
+      const applyColor = (folder: SidebarFolder) =>
+        folder.id === mediaId ? { ...folder, color } : folder;
+
+      setWorkspaces((prev) =>
+        prev.map((workspace) => ({
+          ...workspace,
+          folders: workspace.folders.map(applyColor),
+          projectFolders: workspace.projectFolders.map(applyColor),
+        }))
+      );
+    } catch (err) {
+      console.error('Failed to recolor media:', err);
+      toast.error('Failed to change color.');
+    }
+  }, [mediaItems, libraryItems]);
 
   const cancelVideoUpload = cancelMediaUpload;
   const completeVideoUpload = completeMediaUpload;
