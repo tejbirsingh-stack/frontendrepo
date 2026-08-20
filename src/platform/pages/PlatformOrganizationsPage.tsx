@@ -43,6 +43,7 @@ import { platformTableSx } from '../components/platformTableStyles';
 import { usePlatformTablePagination } from '../hooks/usePlatformTablePagination';
 import { usePlatformTableSort } from '../hooks/usePlatformTableSort';
 import { noahDialogSlotProps } from '../../constants/dialogStyles';
+import { dropdownMenuInDialogProps } from '../../constants/dropdownMenu';
 import { cv } from '../../theme/cssVars';
 
 const emptyForm = {
@@ -339,7 +340,23 @@ export default function PlatformOrganizationsPage() {
   else if (activeFilterChips.length > 0) emptyMessage = 'No organizations match these filters';
 
   const openCreate = () => {
-    setForm(emptyForm);
+    if (plans.length === 0) {
+      fetchPlans()
+        .then((res) => {
+          const list = res.plans || [];
+          setPlans(list);
+          const freePlan = list.find(
+            (p) => p.id === 'free' || p.name?.toLowerCase() === 'free' || p.monthlyPriceCents === 0,
+          );
+          setForm({ ...emptyForm, planId: freePlan?.id || list[0]?.id || '' });
+        })
+        .catch(() => undefined);
+    } else {
+      const freePlan = plans.find(
+        (p) => p.id === 'free' || p.name?.toLowerCase() === 'free' || p.monthlyPriceCents === 0,
+      );
+      setForm({ ...emptyForm, planId: freePlan?.id || plans[0]?.id || '' });
+    }
     setFormError('');
     setModalOpen(true);
   };
@@ -358,6 +375,14 @@ export default function PlatformOrganizationsPage() {
     if (!form.name.trim()) {
       setFormError('Organization name is required');
       return;
+    }
+    if (form.adminEmail.trim()) {
+      const genericDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com'];
+      const domain = form.adminEmail.trim().split('@')[1]?.toLowerCase();
+      if (domain && genericDomains.includes(domain)) {
+        setFormError('Please enter a valid business email address (personal email providers like @gmail.com are not allowed)');
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -709,17 +734,30 @@ export default function PlatformOrganizationsPage() {
               size="small"
               value={form.planId}
               onChange={(e) => setForm((f) => ({ ...f, planId: e.target.value }))}
-              helperText="Defaults to Free if left blank"
+              helperText="Select plan for this organization (Free or Paid)"
+              SelectProps={{
+                displayEmpty: true,
+                MenuProps: dropdownMenuInDialogProps,
+              }}
+              slotProps={{
+                select: {
+                  displayEmpty: true,
+                  MenuProps: dropdownMenuInDialogProps,
+                },
+              }}
             >
-              <MenuItem value="">Default (Free)</MenuItem>
-              {plans.map((plan) => (
-                <MenuItem key={plan.id} value={plan.id}>
-                  {plan.name}
-                </MenuItem>
-              ))}
+              {plans.map((plan) => {
+                const cents = plan.monthlyPriceCents ?? 0;
+                const label = cents > 0 ? `${plan.name} — $${(cents / 100).toFixed(0)}/mo` : `${plan.name} ($0)`;
+                return (
+                  <MenuItem key={plan.id} value={plan.id}>
+                    {label}
+                  </MenuItem>
+                );
+              })}
             </TextField>
             <Typography sx={{ fontSize: '0.8rem', color: cv.textMuted, mt: 0.5 }}>
-              Optional Super Admin invite
+              Super Admin Invite & Onboarding
             </Typography>
             <TextField
               label="Admin email"
@@ -727,6 +765,7 @@ export default function PlatformOrganizationsPage() {
               type="email"
               value={form.adminEmail}
               onChange={(e) => setForm((f) => ({ ...f, adminEmail: e.target.value }))}
+              helperText="Must be a valid business email. An invitation link to set up password will be sent."
             />
             <TextField
               label="Admin name"

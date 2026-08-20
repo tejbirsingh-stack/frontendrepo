@@ -1,6 +1,14 @@
 import { platformRequest } from './platformClient';
 import type { PlatformAdmin } from '../auth/platformStorage';
 
+export type PlanFeature = {
+  id: string;
+  name: string;
+  description?: string | null;
+  sortOrder: number;
+  isActive: boolean;
+};
+
 export type PlatformPlan = {
   id: string;
   slug?: string;
@@ -12,7 +20,11 @@ export type PlatformPlan = {
   storageQuotaBytes: string;
   maxUsers: number;
   maxWorkspaces: number;
-  features: string[];
+  maxProjects?: number;
+  showProjectQuota?: boolean;
+  showStorageQuota?: boolean;
+  showMemberQuota?: boolean;
+  features: PlanFeature[];  // Now an array of feature objects from the DB
   isPublic: boolean;
   isFeatured: boolean;
   isActive?: boolean;
@@ -160,6 +172,28 @@ export async function updatePlan(planId: string, body: Record<string, unknown>) 
 
 export async function deletePlan(planId: string) {
   return platformRequest<{ success: boolean }>(`/platform/plans/${planId}`, { method: 'DELETE' });
+}
+
+export async function fetchPlanFeatures() {
+  return platformRequest<{ success: boolean; features: PlanFeature[] }>('/platform/plan-features');
+}
+
+export async function createPlanFeature(body: { name: string; description?: string; sortOrder?: number }) {
+  return platformRequest<{ success: boolean; feature: PlanFeature }>('/platform/plan-features', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updatePlanFeature(featureId: string, body: Partial<{ name: string; description: string; sortOrder: number; isActive: boolean }>) {
+  return platformRequest<{ success: boolean; feature: PlanFeature }>(`/platform/plan-features/${featureId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deletePlanFeature(featureId: string) {
+  return platformRequest<{ success: boolean }>(`/platform/plan-features/${featureId}`, { method: 'DELETE' });
 }
 
 export async function fetchBillingOverview(params: Record<string, string> = {}) {

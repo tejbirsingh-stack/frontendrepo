@@ -269,13 +269,15 @@ export function StatusChip({
 }) {
   const value = (label || status || 'unknown').toLowerCase();
   const tone =
-    value.includes('active') || value.includes('resolved') || value.includes('success')
-      ? { bg: cv.successSurface, color: cv.successText, border: cv.success }
-      : value.includes('suspend') || value.includes('error') || value.includes('danger')
-        ? { bg: cv.destructiveSurface, color: cv.destructive, border: cv.destructiveBorder }
-        : value.includes('warn') || value.includes('open') || value.includes('quarantine')
-          ? { bg: cv.warningSurface, color: cv.warning, border: cv.warning }
-          : { bg: cv.purpleSurface, color: cv.textSecondary, border: cv.border };
+    value === 'inactive' || value.includes('disabled') || value.includes('draft')
+      ? { bg: cv.purpleSurface, color: cv.textSecondary, border: cv.border }
+      : value.includes('active') || value.includes('resolved') || value.includes('success')
+        ? { bg: cv.successSurface, color: cv.successText, border: cv.success }
+        : value.includes('suspend') || value.includes('error') || value.includes('danger')
+          ? { bg: cv.destructiveSurface, color: cv.destructive, border: cv.destructiveBorder }
+          : value.includes('warn') || value.includes('open') || value.includes('quarantine')
+            ? { bg: cv.warningSurface, color: cv.warning, border: cv.warning }
+            : { bg: cv.purpleSurface, color: cv.textSecondary, border: cv.border };
 
   return (
     <Chip

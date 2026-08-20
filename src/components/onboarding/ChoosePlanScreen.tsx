@@ -8,9 +8,10 @@ import LiquidBackground from '../LiquidBackground';
 import WaveBackground from '../WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../NoahLogo';
 import { cv } from '../../theme/cssVars';
-import { fetchPublicCatalogPlans } from '../../platform/api/platformApi';
+import { fetchPublicCatalogPlans, fetchPublicLanding } from '../../platform/api/platformApi';
 import { useAuth } from '../../auth/AuthContext';
 import { billingService } from '../../api/billing.service';
+import { formatBytes } from '../../platform/components/PlatformUi';
 
 type BillingCycle = 'annual' | 'monthly';
 type PlanId = string;
@@ -25,7 +26,14 @@ interface PlanDefinition {
   yearlyPriceId?: string;
   cta: string;
   featured?: boolean;
-  features: string[];
+  maxUsers?: number;
+  maxWorkspaces?: number;
+  maxProjects?: number;
+  storageQuotaBytes?: number | string | bigint;
+  showProjectQuota?: boolean;
+  showStorageQuota?: boolean;
+  showMemberQuota?: boolean;
+  features: (string | { name: string })[];
 }
 
 const ANNUAL_DISCOUNT = 0.1;
@@ -38,10 +46,14 @@ const FALLBACK_PLANS: PlanDefinition[] = [
     description: 'For individuals exploring Noah with core library tools.',
     monthlyPrice: 0,
     cta: 'Continue with Free',
+    maxUsers: 5,
+    maxWorkspaces: 1,
+    maxProjects: 1,
+    storageQuotaBytes: 0,
+    showProjectQuota: true,
+    showStorageQuota: true,
+    showMemberQuota: true,
     features: [
-      '1 Project & 1 Workspace',
-      '0 Storage',
-      '5 Members',
       'Basic media library & folders',
       'Share links with view access',
       'Mobile & desktop access',
@@ -54,10 +66,14 @@ const FALLBACK_PLANS: PlanDefinition[] = [
     description: 'For individuals and small teams getting started.',
     monthlyPrice: 10,
     cta: 'Get started',
+    maxUsers: 5,
+    maxWorkspaces: 2,
+    maxProjects: 2,
+    storageQuotaBytes: 10 * 1024 ** 3,
+    showProjectQuota: true,
+    showStorageQuota: true,
+    showMemberQuota: true,
     features: [
-      '2 Projects & 2 Workspaces',
-      '10 GB Storage',
-      '5 Members',
       'Media library essentials',
       'Share links & file comments',
       'Activity feed & project overview',
@@ -72,10 +88,14 @@ const FALLBACK_PLANS: PlanDefinition[] = [
     monthlyPrice: 25,
     cta: 'Start with Premium',
     featured: true,
+    maxUsers: 10,
+    maxWorkspaces: 3,
+    maxProjects: 3,
+    storageQuotaBytes: 15 * 1024 ** 3,
+    showProjectQuota: true,
+    showStorageQuota: true,
+    showMemberQuota: true,
     features: [
-      '3 Projects & 3 Workspaces',
-      '15 GB Storage',
-      '10 Members',
       'Review & annotate video/audio',
       'Advanced filters & reporting',
       'Custom labels, priorities & checklists',
@@ -90,10 +110,14 @@ const FALLBACK_PLANS: PlanDefinition[] = [
     description: 'For large organizations with advanced needs.',
     monthlyPrice: 50,
     cta: 'Contact Sales',
+    maxUsers: 15,
+    maxWorkspaces: 4,
+    maxProjects: 4,
+    storageQuotaBytes: 20 * 1024 ** 3,
+    showProjectQuota: true,
+    showStorageQuota: true,
+    showMemberQuota: true,
     features: [
-      '4 Projects & 4 Workspaces',
-      '20 GB Storage',
-      '15 Members',
       'Dedicated account manager',
       'Custom integrations & automation',
       'SSO & role-based access control',
@@ -137,6 +161,7 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('annual');
   const [selectedPlan, setSelectedPlan] = useState<PlanId>(() => (currentPlanId || DEFAULT_PLAN).toLowerCase());
   const [plans, setPlans] = useState<PlanDefinition[]>(FALLBACK_PLANS);
+  const [plansEnabled, setPlansEnabled] = useState(true);
   const [savedCards, setSavedCards] = useState<any[]>([]);
   const [paymentOption, setPaymentOption] = useState<'saved' | 'new'>('saved');
   const isSettingsFlow = Boolean(currentPlanId && currentPlanId.trim() !== '');
@@ -165,11 +190,20 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
   }, [currentPlanId]);
 
   useEffect(() => {
-    fetchPublicCatalogPlans()
-      .then((res) => {
-        if (!res.plans?.length) return;
+    Promise.all([fetchPublicLanding(), fetchPublicCatalogPlans()])
+      .then(([landingRes, plansRes]) => {
+        const page = landingRes.page || {};
+        let enabled = true;
+        if (typeof page.plansEnabled === 'boolean') {
+          enabled = page.plansEnabled;
+        } else if (page.sections && typeof page.sections.plansEnabled === 'boolean') {
+          enabled = page.sections.plansEnabled;
+        }
+        setPlansEnabled(enabled);
+
+        if (!plansRes.plans?.length) return;
         setPlans(
-          res.plans.map((p) => ({
+          plansRes.plans.map((p) => ({
             id: p.name ? p.name.toLowerCase() : p.id.toLowerCase(),
             name: p.name,
             description: p.description || '',
@@ -179,6 +213,13 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
             yearlyPriceId: p.yearlyPriceId,
             cta: p.ctaLabel || `Start with ${p.name}`,
             featured: Boolean(p.isFeatured),
+            maxUsers: p.maxUsers,
+            maxWorkspaces: p.maxWorkspaces,
+            maxProjects: p.maxProjects,
+            storageQuotaBytes: p.storageQuotaBytes,
+            showProjectQuota: p.showProjectQuota ?? true,
+            showStorageQuota: p.showStorageQuota ?? true,
+            showMemberQuota: p.showMemberQuota ?? true,
             features: Array.isArray(p.features) ? p.features : [],
           })),
         );
@@ -292,10 +333,14 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
             lineHeight: 1.5,
           }}
         >
-          Affordable and adaptable pricing to suit your goals.
+          {plansEnabled 
+            ? 'Affordable and adaptable pricing to suit your goals.' 
+            : 'Self-serve plan management is currently unavailable.'}
         </Typography>
 
-        {/* Billing cycle toggle */}
+        {plansEnabled ? (
+          <>
+            {/* Billing cycle toggle */}
         <Box
           role="group"
           aria-label="Billing cycle"
@@ -650,35 +695,63 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
                       mb: 2.5,
                     }}
                   >
-                    {plan.features.map((feature) => (
-                      <Box
-                        component="li"
-                        key={feature}
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: 0.85,
-                        }}
-                      >
-                        <CheckRoundedIcon
+                    {/* Render dynamic limits first */}
+                    {(function () {
+                      const dynamicPoints: string[] = [];
+                      if (plan.showProjectQuota && plan.maxProjects !== undefined && plan.maxWorkspaces !== undefined) {
+                        dynamicPoints.push(`${plan.maxProjects} Project${plan.maxProjects !== 1 ? 's' : ''} & ${plan.maxWorkspaces} Workspace${plan.maxWorkspaces !== 1 ? 's' : ''}`);
+                      }
+                      if (plan.showStorageQuota && plan.storageQuotaBytes !== undefined) {
+                        dynamicPoints.push(`${formatBytes(plan.storageQuotaBytes)} Storage`);
+                      }
+                      if (plan.showMemberQuota && plan.maxUsers !== undefined) {
+                        dynamicPoints.push(`${plan.maxUsers} Member${plan.maxUsers !== 1 ? 's' : ''}`);
+                      }
+
+                      // Deduplicate: filter out any custom feature that essentially says the same thing
+                      const cleanCustomFeatures = (plan.features || [])
+                        .map((feat) => typeof feat === 'string' ? feat : feat.name)
+                        .filter((featStr) => {
+                          if (!featStr) return false;
+                          const low = featStr.toLowerCase();
+                          if (low.includes('storage')) return false;
+                          if (low.includes('workspace') || low.includes('project')) return false;
+                          if (low.includes('member') || low.includes('user')) return false;
+                          return true;
+                        });
+
+                      const allFeatures = [...dynamicPoints, ...cleanCustomFeatures];
+
+                      return allFeatures.map((feature) => (
+                        <Box
+                          component="li"
+                          key={feature}
                           sx={{
-                            fontSize: 16,
-                            mt: '2px',
-                            color: cv.brandOrchid,
-                            flexShrink: 0,
-                          }}
-                        />
-                        <Typography
-                          sx={{
-                            fontSize: '0.8125rem',
-                            color: cv.textSecondary,
-                            lineHeight: 1.4,
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 0.85,
                           }}
                         >
-                          {feature}
-                        </Typography>
-                      </Box>
-                    ))}
+                          <CheckRoundedIcon
+                            sx={{
+                              fontSize: 16,
+                              mt: '2px',
+                              color: cv.brandOrchid,
+                              flexShrink: 0,
+                            }}
+                          />
+                          <Typography
+                            sx={{
+                              fontSize: '0.8125rem',
+                              color: cv.textSecondary,
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {feature}
+                          </Typography>
+                        </Box>
+                      ));
+                    })()}
                   </Box>
 
                   <Button
@@ -732,6 +805,27 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
             );
           })}
         </Box>
+          </>
+        ) : (
+          <Box
+            sx={{
+              p: 4,
+              textAlign: 'center',
+              backgroundColor: cv.surface,
+              borderRadius: 3,
+              border: `1px solid ${cv.border}`,
+              maxWidth: 600,
+              width: '100%',
+            }}
+          >
+            <Typography sx={{ color: cv.textPrimary, fontWeight: 600, fontSize: '1.25rem', mb: 1.5 }}>
+              Account Upgrades Paused
+            </Typography>
+            <Typography sx={{ color: cv.textSecondary, lineHeight: 1.6 }}>
+              Self-serve plan upgrades are currently disabled. Please contact your account manager or reach out to support for pricing and modifications.
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       {/* Confirmation Dialog before switching plans */}

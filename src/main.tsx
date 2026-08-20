@@ -13,9 +13,14 @@ import { msalConfig } from './config/msalConfig';
 
 const msalInstance = new PublicClientApplication(msalConfig);
 
-msalInstance.initialize().then(() => {
-  createRoot(document.getElementById('root')!).render(
-    <MsalProvider instance={msalInstance}>
+msalInstance
+  .initialize()
+  .then(() => {
+    return msalInstance.handleRedirectPromise();
+  })
+  .then(() => {
+    createRoot(document.getElementById('root')!).render(
+      <MsalProvider instance={msalInstance}>
       <ThemePreferenceProvider>
         <AppSkeletonTheme>
           <AuthProvider>

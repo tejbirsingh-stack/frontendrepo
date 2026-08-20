@@ -27,6 +27,8 @@ export default function ResetPasswordPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') || '';
+  const mode = searchParams.get('type') || searchParams.get('mode') || '';
+  const [isInvite, setIsInvite] = useState(mode === 'invite' || mode === 'setup');
 
   const [validatingToken, setValidatingToken] = useState(true);
   const [tokenValid, setTokenValid] = useState(false);
@@ -47,7 +49,11 @@ export default function ResetPasswordPage() {
     async function checkToken() {
       if (!token) {
         if (isMounted) {
-          setValidationError('This password reset link is invalid or has expired. Please request a new reset link.');
+          setValidationError(
+            isInvite
+              ? 'This setup link is invalid or has expired. Please request a new invite link from your administrator.'
+              : 'This password reset link is invalid or has expired. Please request a new reset link.',
+          );
           setTokenValid(false);
           setValidatingToken(false);
         }
@@ -59,9 +65,17 @@ export default function ResetPasswordPage() {
         if (isMounted) {
           if (res?.valid) {
             setTokenValid(true);
+            if (res.isInvite || (res as any).userStatus === 'inactive' || (res as any).userStatus === 'pending') {
+              setIsInvite(true);
+            }
           } else {
             setTokenValid(false);
-            setValidationError(res?.message || 'This password reset link is invalid or has expired. Please request a new reset link.');
+            setValidationError(
+              res?.message ||
+                (isInvite
+                  ? 'This setup link is invalid or has expired. Please request a new invite link from your administrator.'
+                  : 'This password reset link is invalid or has expired. Please request a new reset link.'),
+            );
           }
         }
       } catch (err: any) {
@@ -70,7 +84,9 @@ export default function ResetPasswordPage() {
           setTokenValid(false);
           setValidationError(
             err.response?.data?.message ||
-              'This password reset link is invalid or has expired. Please request a new reset link.'
+              (isInvite
+                ? 'This setup link is invalid or has expired. Please request a new invite link from your administrator.'
+                : 'This password reset link is invalid or has expired. Please request a new reset link.'),
           );
         }
       } finally {
@@ -118,7 +134,9 @@ export default function ResetPasswordPage() {
     } catch (err: any) {
       console.error('Reset password error:', err);
       setSubmitError(
-        err.response?.data?.message || err.message || 'Failed to update password. Please try requesting a new reset link.'
+        err.response?.data?.message ||
+          err.message ||
+          (isInvite ? 'Failed to set password.' : 'Failed to update password. Please try requesting a new reset link.'),
       );
     } finally {
       setSubmitting(false);
@@ -186,11 +204,14 @@ export default function ResetPasswordPage() {
                 Invalid or Expired Link
               </Typography>
               <Typography variant="body2" sx={{ color: cv.textSecondary, mb: 3.5, lineHeight: 1.6 }}>
-                {validationError || 'This password reset link is invalid or has expired. Please request a new reset link.'}
+                {validationError ||
+                  (isInvite
+                    ? 'This setup link is invalid or has expired. Please request a new invite link.'
+                    : 'This password reset link is invalid or has expired. Please request a new reset link.')}
               </Typography>
               <Button
                 component={RouterLink}
-                to="/forgot-password"
+                to={isInvite ? '/login' : '/forgot-password'}
                 variant="contained"
                 fullWidth
                 sx={{
@@ -203,7 +224,7 @@ export default function ResetPasswordPage() {
                   },
                 }}
               >
-                Request New Reset Link
+                {isInvite ? 'Go to Login' : 'Request New Reset Link'}
               </Button>
             </Box>
           ) : success ? (
@@ -218,10 +239,12 @@ export default function ResetPasswordPage() {
             >
               <CheckCircleOutlinedIcon sx={{ fontSize: 64, color: cv.success, mb: 2 }} />
               <Typography variant="h5" sx={{ fontWeight: 600, mb: 1.5, color: cv.textPrimary }}>
-                Password Updated
+                {isInvite ? 'Account Activated!' : 'Password Updated'}
               </Typography>
               <Typography variant="body2" sx={{ color: cv.textSecondary, mb: 3.5, fontSize: '0.9375rem' }}>
-                Password updated successfully.
+                {isInvite
+                  ? 'Your password has been set successfully and your account is active. You can now log in.'
+                  : 'Password updated successfully.'}
               </Typography>
               <Button
                 component={RouterLink}
@@ -259,13 +282,15 @@ export default function ResetPasswordPage() {
                   fontSize: { xs: '1.5rem', sm: '1.75rem' },
                 }}
               >
-                Reset Your Password
+                {isInvite ? 'Set Up Your Password' : 'Reset Your Password'}
               </Typography>
               <Typography
                 variant="body2"
                 sx={{ color: cv.textSecondary, mb: 3.5, fontSize: '0.9375rem' }}
               >
-                Create a new secure password for your Noah Cloud account.
+                {isInvite
+                  ? 'Create a secure password to activate your new Noah Cloud account.'
+                  : 'Create a new secure password for your Noah Cloud account.'}
               </Typography>
 
               <TextField
@@ -358,7 +383,13 @@ export default function ResetPasswordPage() {
                   },
                 }}
               >
-                {submitting ? 'Updating Password...' : 'Update Password'}
+                {submitting
+                  ? isInvite
+                    ? 'Activating Account...'
+                    : 'Updating Password...'
+                  : isInvite
+                  ? 'Set Password & Activate Account'
+                  : 'Update Password'}
               </Button>
             </Box>
           )}
