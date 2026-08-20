@@ -11,6 +11,7 @@ interface MediaSelectionBarProps {
   onClearSelection: () => void;
   onMove: () => void;
   onDelete: () => void;
+  isDeleteDisabled?: boolean;
 }
 
 export default function MediaSelectionBar({
@@ -20,6 +21,7 @@ export default function MediaSelectionBar({
   onClearSelection,
   onMove,
   onDelete,
+  isDeleteDisabled = false,
 }: MediaSelectionBarProps) {
   if (selectedCount === 0) return null;
 
@@ -87,19 +89,29 @@ export default function MediaSelectionBar({
 
       <Button
         size="small"
-        startIcon={<DeleteOutlinedIcon sx={{ fontSize: 18 }} />}
-        onClick={onDelete}
+        disabled={isDeleteDisabled}
+        startIcon={
+          <DeleteOutlinedIcon
+            sx={{
+              fontSize: 18,
+              color: isDeleteDisabled ? cv.textMuted : cv.destructive,
+            }}
+          />
+        }
+        onClick={isDeleteDisabled ? undefined : onDelete}
         sx={{
           px: 1.5,
           py: 0.65,
           fontSize: '0.8125rem',
           fontWeight: 600,
-          color: cv.destructive,
+          color: isDeleteDisabled ? cv.textMuted : cv.destructive,
+          opacity: isDeleteDisabled ? 0.6 : 1,
+          cursor: isDeleteDisabled ? 'not-allowed' : 'pointer',
           borderRadius: '8px',
-          border: `1px solid ${cv.destructiveBorderSoft}`,
+          border: `1px solid ${isDeleteDisabled ? cv.border : cv.destructiveBorderSoft}`,
           '&:hover': {
-            backgroundColor: cv.destructiveHover,
-            borderColor: cv.destructiveBorder,
+            backgroundColor: isDeleteDisabled ? 'transparent' : cv.destructiveHover,
+            borderColor: isDeleteDisabled ? cv.border : cv.destructiveBorder,
           },
         }}
       >
@@ -119,8 +131,4 @@ export default function MediaSelectionBar({
       </IconButton>
     </Box>
   );
-}
-
-export function getDashboardFolderDropTargetKey(folderId: string) {
-  return `dashboard-folder:${folderId}`;
 }
