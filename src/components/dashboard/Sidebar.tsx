@@ -444,7 +444,7 @@ function SidebarMediaFolderRow({
     children,
     mediaFolder.title,
     searchQuery,
-  );
+  ).filter(child => child.type === 'folder' && !child.isProject);
 
   const handleClick = () => {
     if (!isOpen) {
@@ -519,76 +519,31 @@ function SidebarMediaFolderRow({
         />
       </ListItemButton>
 
-      <Collapse in={showChildren} timeout="auto" unmountOnExit>
-        <List disablePadding sx={{ pl: 1.5 }}>
-          {visibleChildren.length > 0 ? (
-            visibleChildren.map((child) =>
-              child.type === 'folder' ? (
-                <SidebarMediaFolderRow
-                  key={child.id}
-                  mediaFolder={child}
-                  depth={depth + 1}
-                  parentAccentColor={folderAccent}
-                  categoryChildLabel={categoryChildLabel}
-                  sidebarFolderId={sidebarFolderId}
-                  sidebarFolderLabel={sidebarFolderLabel}
-                  browseMode={browseMode}
-                  mediaItems={mediaItems}
-                  workspaceId={workspaceId}
-                  trashedIds={trashedIds}
-                  searchQuery={searchQuery}
-                  openMediaFolders={openMediaFolders}
-                  onToggleMediaFolder={onToggleMediaFolder}
-                  onSelectMediaFile={onSelectMediaFile}
-                />
-              ) : (
-                <ListItemButton
-                  key={child.id}
-                  onClick={() => onSelectMediaFile(child, selection)}
-                  sx={{
-                    py: 0.35,
-                    pl: 2.5 + depth * 1.5,
-                    pr: 1,
-                    borderRadius: '8px',
-                    mb: 0.1,
-                    color: cv.textMuted,
-                    '&:hover': {
-                      backgroundColor: cv.surfaceHover,
-                      color: cv.textPrimary,
-                    },
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: 24 }}>
-                    {getSidebarFileIcon(child.type)}
-                  </ListItemIcon>
-                  <ListItemText
-                    disableTypography
-                    primary={
-                      <TruncatedText
-                        text={getMediaFileName(child)}
-                        sx={{ fontSize: '0.75rem' }}
-                      />
-                    }
-                    sx={{ minWidth: 0 }}
-                  />
-                </ListItemButton>
-              ),
-            )
-          ) : (
-            <Typography
-              sx={{
-                pl: 3 + depth * 1.5,
-                py: 0.5,
-                fontSize: '0.6875rem',
-                color: cv.textMuted,
-                fontStyle: 'italic',
-              }}
-            >
-              No files
-            </Typography>
-          )}
-        </List>
-      </Collapse>
+      {visibleChildren.length > 0 && (
+        <Collapse in={showChildren} timeout="auto" unmountOnExit>
+          <List disablePadding sx={{ pl: 1.5 }}>
+            {visibleChildren.map((child) => (
+              <SidebarMediaFolderRow
+                key={child.id}
+                mediaFolder={child}
+                depth={depth + 1}
+                parentAccentColor={folderAccent}
+                categoryChildLabel={categoryChildLabel}
+                sidebarFolderId={sidebarFolderId}
+                sidebarFolderLabel={sidebarFolderLabel}
+                browseMode={browseMode}
+                mediaItems={mediaItems}
+                workspaceId={workspaceId}
+                trashedIds={trashedIds}
+                searchQuery={searchQuery}
+                openMediaFolders={openMediaFolders}
+                onToggleMediaFolder={onToggleMediaFolder}
+                onSelectMediaFile={onSelectMediaFile}
+              />
+            ))}
+          </List>
+        </Collapse>
+      )}
     </Box>
   );
 }
@@ -630,14 +585,14 @@ function FolderItem({
   const projectRoots = useMemo(
     () =>
       isProjectRoot
-        ? getProjectRootItems(folder.id, mediaItems, workspaceId, trashedIds)
+        ? getProjectRootItems(folder.id, mediaItems, workspaceId, trashedIds).filter(item => item.type === 'folder')
         : [],
     [folder.id, isProjectRoot, mediaItems, trashedIds, workspaceId],
   );
 
   const personalRoots = useMemo(
     () =>
-      isPersonalRoot ? getPersonalRootItems(mediaItems, workspaceId, trashedIds) : [],
+      isPersonalRoot ? getPersonalRootItems(mediaItems, workspaceId, trashedIds).filter(item => item.type === 'folder' && !item.isProject) : [],
     [isPersonalRoot, mediaItems, trashedIds, workspaceId],
   );
 
@@ -646,7 +601,7 @@ function FolderItem({
   const customFolderRoots = useMemo(
     () =>
       isCustomFolder
-        ? getMediaLibraryFolderChildren(folder.id, mediaItems, workspaceId, trashedIds)
+        ? getMediaLibraryFolderChildren(folder.id, mediaItems, workspaceId, trashedIds).filter(item => item.type === 'folder' && !item.isProject)
         : [],
     [folder.id, isCustomFolder, mediaItems, trashedIds, workspaceId],
   );
@@ -891,77 +846,25 @@ function FolderItem({
         <Collapse in={showChildren} timeout="auto" unmountOnExit>
           <List disablePadding sx={{ pl: 3.5, pr: 1 }}>
             {isProjectRoot || isPersonalRoot || isCustomFolder ? (
-              (isProjectRoot ? projectRoots : isPersonalRoot ? personalRoots : customFolderRoots).length > 0 ? (
-                (isProjectRoot ? projectRoots : isPersonalRoot ? personalRoots : customFolderRoots).map((item) =>
-                  item.type === 'folder' ? (
-                    <SidebarMediaFolderRow
-                      key={item.id}
-                      mediaFolder={item}
-                      depth={0}
-                      parentAccentColor={folderColor}
-                      categoryChildLabel=""
-                      sidebarFolderId={folder.id}
-                      sidebarFolderLabel={folder.label}
-                      browseMode={browseMode}
-                      mediaItems={mediaItems}
-                      workspaceId={workspaceId}
-                      trashedIds={trashedIds}
-                      searchQuery={searchQuery}
-                      openMediaFolders={openMediaFolders}
-                      onToggleMediaFolder={onToggleMediaFolder}
-                      onSelectMediaFile={onSelectMediaFile}
-                    />
-                  ) : (
-                    <ListItemButton
-                      key={item.id}
-                      onClick={() =>
-                        onSelectMediaFile(item, {
-                          folderId: folder.id,
-                          folderLabel: folder.label,
-                        })
-                      }
-                      sx={{
-                        py: 0.4,
-                        pl: 1.5,
-                        pr: 1,
-                        borderRadius: '8px',
-                        mb: 0.15,
-                        color: cv.textMuted,
-                        '&:hover': {
-                          backgroundColor: cv.surfaceHover,
-                          color: cv.textPrimary,
-                        },
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 24 }}>
-                        {getSidebarFileIcon(item.type)}
-                      </ListItemIcon>
-                      <ListItemText
-                        disableTypography
-                        primary={
-                          <TruncatedText
-                            text={getMediaFileName(item)}
-                            sx={{ fontSize: '0.75rem' }}
-                          />
-                        }
-                        sx={{ minWidth: 0 }}
-                      />
-                    </ListItemButton>
-                  ),
-                )
-              ) : (
-                <Typography
-                  sx={{
-                    pl: 1.5,
-                    py: 0.5,
-                    fontSize: '0.6875rem',
-                    color: cv.textMuted,
-                    fontStyle: 'italic',
-                  }}
-                >
-                  No items
-                </Typography>
-              )
+              (isProjectRoot ? projectRoots : isPersonalRoot ? personalRoots : customFolderRoots).map((item) => (
+                <SidebarMediaFolderRow
+                  key={item.id}
+                  mediaFolder={item}
+                  depth={0}
+                  parentAccentColor={folderColor}
+                  categoryChildLabel=""
+                  sidebarFolderId={folder.id}
+                  sidebarFolderLabel={folder.label}
+                  browseMode={browseMode}
+                  mediaItems={mediaItems}
+                  workspaceId={workspaceId}
+                  trashedIds={trashedIds}
+                  searchQuery={searchQuery}
+                  openMediaFolders={openMediaFolders}
+                  onToggleMediaFolder={onToggleMediaFolder}
+                  onSelectMediaFile={onSelectMediaFile}
+                />
+              ))
             ) : (
               filteredChildren.map((child) => {
                 const childTargetKey = `folder-${folder.id}-${child}`;
@@ -979,7 +882,9 @@ function FolderItem({
                   bucketFilesOnly ? childMedia.filter((item) => item.type !== 'folder') : childMedia,
                   child,
                   searchQuery,
-                );
+                ).filter(item => item.type === 'folder' && !item.isProject);
+                
+                const hasNestedChildren = visibleChildMedia.length > 0;
 
                 return (
                   <Box key={child}>
@@ -1083,56 +988,31 @@ function FolderItem({
                       </IconButton>
                     </ListItemButton>
 
-                    <Collapse in={showChildFiles} timeout="auto" unmountOnExit>
-                      <List disablePadding sx={{ pl: 3.5, pr: 0.5, pb: 0.25 }}>
-                        {visibleChildMedia.length > 0 ? (
-                          visibleChildMedia.map((file) => (
-                            <ListItemButton
+                    {hasNestedChildren && (
+                      <Collapse in={showChildFiles} timeout="auto" unmountOnExit>
+                        <List disablePadding sx={{ pl: 3.5, pr: 0.5, pb: 0.25 }}>
+                          {visibleChildMedia.map((file) => (
+                            <SidebarMediaFolderRow
                               key={file.id}
-                              onClick={() => handleChildFileClick(file, child)}
-                              sx={{
-                                py: 0.4,
-                                pl: 1.5,
-                                pr: 1,
-                                borderRadius: '8px',
-                                mb: 0.15,
-                                color: cv.textMuted,
-                                '&:hover': {
-                                  backgroundColor: cv.surfaceHover,
-                                  color: cv.textPrimary,
-                                },
-                              }}
-                            >
-                              <ListItemIcon sx={{ minWidth: 24 }}>
-                                {getSidebarFileIcon(file.type)}
-                              </ListItemIcon>
-                              <ListItemText
-                                disableTypography
-                                primary={
-                                  <TruncatedText
-                                    text={getMediaFileName(file)}
-                                    sx={{ fontSize: '0.75rem' }}
-                                  />
-                                }
-                                sx={{ minWidth: 0 }}
-                              />
-                            </ListItemButton>
-                          ))
-                        ) : (
-                          <Typography
-                            sx={{
-                              pl: 4.5,
-                              py: 0.5,
-                              fontSize: '0.6875rem',
-                              color: cv.textMuted,
-                              fontStyle: 'italic',
-                            }}
-                          >
-                            No files
-                          </Typography>
-                        )}
-                      </List>
-                    </Collapse>
+                              mediaFolder={file}
+                              depth={1}
+                              parentAccentColor={folderColor}
+                              categoryChildLabel={child}
+                              sidebarFolderId={folder.id}
+                              sidebarFolderLabel={folder.label}
+                              browseMode={browseMode}
+                              mediaItems={mediaItems}
+                              workspaceId={workspaceId}
+                              trashedIds={trashedIds}
+                              searchQuery={searchQuery}
+                              openMediaFolders={openMediaFolders}
+                              onToggleMediaFolder={onToggleMediaFolder}
+                              onSelectMediaFile={onSelectMediaFile}
+                            />
+                          ))}
+                        </List>
+                      </Collapse>
+                    )}
                   </Box>
                 );
               })
