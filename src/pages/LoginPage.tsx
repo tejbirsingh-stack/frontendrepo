@@ -174,33 +174,17 @@ export default function LoginPage() {
 
   const handleMicrosoftLogin = async () => {
     setError('');
-    const redirectPath = redirectFromState(location.state);
-
     try {
-      let response: any = null;
-      try {
-        response = await instance.loginPopup({
-          scopes: ['User.Read', 'profile', 'email', 'openid'],
-          redirectUri: `${window.location.origin}/redirect.html`,
-          prompt: 'select_account',
-        });
-      } catch (popupErr: any) {
-        console.warn('MSAL Popup failed/blocked, falling back to redirect:', popupErr);
-        sessionStorage.setItem('msal_redirecting', 'true');
-        sessionStorage.setItem('msal_auth_mode', 'login');
-        await instance.loginRedirect({
-          scopes: ['User.Read', 'profile', 'email', 'openid'],
-          redirectUri: window.location.href,
-          prompt: 'select_account',
-        });
-        return;
-      }
-
-      if (response && response.idToken) {
-        await loginMicrosoft(response.idToken, rememberMe, { mode: 'login', isSignUp: false });
-        navigate(redirectPath);
-      }
+      sessionStorage.setItem('msal_redirecting', 'true');
+      sessionStorage.setItem('msal_auth_mode', 'login');
+      await instance.loginRedirect({
+        scopes: ['User.Read', 'profile', 'email', 'openid'],
+        redirectUri: window.location.origin,
+        prompt: 'select_account',
+      });
     } catch (err: any) {
+      sessionStorage.removeItem('msal_redirecting');
+      sessionStorage.removeItem('msal_auth_mode');
       console.error(err);
       setError(err.response?.data?.message || err.message || 'Microsoft Login Failed.');
     }
