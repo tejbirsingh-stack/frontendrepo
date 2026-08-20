@@ -74,7 +74,7 @@ export default function SuperAdminFolderDeleteFlowModal({
   onClose,
   onConfirmPermanentDelete,
 }: SuperAdminFolderDeleteFlowModalProps) {
-  const [step, setStep] = useState<SuperAdminDeleteStep>('choice');
+  const [step, setStep] = useState<SuperAdminDeleteStep>('select_tree');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -85,10 +85,10 @@ export default function SuperAdminFolderDeleteFlowModal({
   const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
 
-  // Reset modal state when opening
+  // Load folder tree when modal opens
   useEffect(() => {
-    if (open) {
-      setStep('choice');
+    if (!open || !folderId) {
+      setStep('select_tree');
       setLoading(false);
       setSubmitting(false);
       setFiles([]);
@@ -96,17 +96,18 @@ export default function SuperAdminFolderDeleteFlowModal({
       setSelectedFileIds(new Set());
       setSelectedFolderIds(new Set());
       setExpandedFolderIds(new Set());
+      return;
     }
-  }, [open]);
 
-  // Load folder tree when open or entering 'select_tree'
-  useEffect(() => {
-    if (!open || !folderId) return;
+    let isMounted = true;
+    setStep('select_tree');
+    setLoading(true);
 
     const fetchFolderTree = async () => {
-      setLoading(true);
       try {
         const res = await apiClient.get<any>(`/workspaces/folder/find-all-tree/${folderId}`);
+        if (!isMounted) return;
+
         const payload = (res && (Array.isArray(res.folders) || Array.isArray(res.media)))
           ? res
           : (res?.data?.data || res?.data || res);
@@ -140,16 +141,20 @@ export default function SuperAdminFolderDeleteFlowModal({
         setFolders(formattedFolders);
 
         setSelectedFileIds(new Set(formattedFiles.map((f) => f.id)));
-        setSelectedFolderIds(new Set(formattedFolders.map((f) => f.id)));
+        setSelectedFolderIds(new Set([folderId, ...formattedFolders.map((f) => f.id)]));
         setExpandedFolderIds(new Set([folderId]));
       } catch (err) {
         console.error('Error fetching folder tree for Super Admin:', err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     void fetchFolderTree();
+
+    return () => {
+      isMounted = false;
+    };
   }, [open, folderId]);
 
 const isWorkspaceDateContainer = (name?: string): boolean => {
@@ -270,27 +275,33 @@ const isWorkspaceDateContainer = (name?: string): boolean => {
 
   const getFolderSelectionStatus = (node: TreeNode): 'all' | 'some' | 'none' => {
     if (!node.isFolder) return 'none';
-    const totalAssets = node.allDescendantAssetIds.length;
-    const totalFolders = node.allDescendantFolderIds.length;
+
+    const descendantSubFolderIds = node.allDescendantFolderIds.filter((id) => id !== node.id);
+    const descendantAssetIds = node.allDescendantAssetIds;
+
+    const totalAssets = descendantAssetIds.length;
+    const totalFolders = descendantSubFolderIds.length;
+
     if (totalAssets === 0 && totalFolders === 0) {
       return selectedFolderIds.has(node.id) ? 'all' : 'none';
     }
 
     let selectedAssetsCount = 0;
-    node.allDescendantAssetIds.forEach((id) => {
+    descendantAssetIds.forEach((id) => {
       if (selectedFileIds.has(id)) selectedAssetsCount++;
     });
 
     let selectedFoldersCount = 0;
-    node.allDescendantFolderIds.forEach((id) => {
+    descendantSubFolderIds.forEach((id) => {
       if (selectedFolderIds.has(id)) selectedFoldersCount++;
     });
 
     const totalItems = totalAssets + totalFolders;
     const selectedItems = selectedAssetsCount + selectedFoldersCount;
+    const isThisFolderSelected = selectedFolderIds.has(node.id);
 
-    if (selectedItems === 0) return 'none';
-    if (selectedItems === totalItems) return 'all';
+    if (selectedItems === 0 && !isThisFolderSelected) return 'none';
+    if (selectedItems === totalItems && isThisFolderSelected) return 'all';
     return 'some';
   };
 
@@ -298,15 +309,22 @@ const isWorkspaceDateContainer = (name?: string): boolean => {
     const isRoot = node.id === folderId;
 
     if (isRoot) {
-      const currentStatus = getFolderSelectionStatus(rootNode!);
+      const currentStatus = getFolderSelectionStatus(node);
       const shouldSelect = currentStatus !== 'all';
+
+      const nextAssets = new Set(selectedFileIds);
+      const nextFolders = new Set(selectedFolderIds);
+
       if (shouldSelect) {
-        setSelectedFileIds(new Set(files.map((f) => f.id)));
-        setSelectedFolderIds(new Set(folders.map((f) => f.id)));
+        files.forEach((f) => nextAssets.add(f.id));
+        folders.forEach((f) => nextFolders.add(f.id));
+        nextFolders.add(folderId);
       } else {
-        setSelectedFileIds(new Set());
-        setSelectedFolderIds(new Set());
+        nextAssets.clear();
+        nextFolders.clear();
       }
+      setSelectedFileIds(nextAssets);
+      setSelectedFolderIds(nextFolders);
       return;
     }
 
@@ -321,6 +339,12 @@ const isWorkspaceDateContainer = (name?: string): boolean => {
 
       const nextAssets = new Set(selectedFileIds);
       const nextFolders = new Set(selectedFolderIds);
+
+      if (shouldSelect) {
+        nextFolders.add(node.id);
+      } else {
+        nextFolders.delete(node.id);
+      }
 
       node.allDescendantAssetIds.forEach((id) => {
         if (shouldSelect) nextAssets.add(id);
@@ -368,10 +392,11 @@ const isWorkspaceDateContainer = (name?: string): boolean => {
   };
 
   const renderTreeNode = (node: TreeNode, depth = 0) => {
+    const isRoot = node.id === folderId;
     const isExpanded = expandedFolderIds.has(node.id);
     const selectionStatus = node.isFolder ? getFolderSelectionStatus(node) : 'none';
-    const isChecked = node.isFolder ? selectionStatus === 'all' : selectedFileIds.has(node.id);
-    const isIndeterminate = node.isFolder && selectionStatus === 'some';
+    const isChecked = isRoot ? true : (node.isFolder ? selectionStatus === 'all' : selectedFileIds.has(node.id));
+    const isIndeterminate = isRoot ? false : (node.isFolder && selectionStatus === 'some');
 
     const getIcon = () => {
       if (node.isFolder) {
@@ -416,13 +441,15 @@ const isWorkspaceDateContainer = (name?: string): boolean => {
             size="small"
             checked={isChecked}
             indeterminate={isIndeterminate}
-            onChange={() => handleToggleNode(node)}
+            disabled={isRoot}
+            onChange={() => !isRoot && handleToggleNode(node)}
             sx={{
               p: 0.5,
               mr: 1,
               color: cv.borderFocus,
               '&.Mui-checked': { color: cv.destructive },
               '&.MuiCheckbox-indeterminate': { color: cv.destructive },
+              '&.Mui-disabled': { color: cv.destructive, opacity: 0.85 },
             }}
           />
 
