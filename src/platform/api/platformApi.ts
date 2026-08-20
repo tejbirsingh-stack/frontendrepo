@@ -203,6 +203,26 @@ export async function fetchBillingOverview(params: Record<string, string> = {}) 
   );
 }
 
+export async function fetchPaymentLogOrgs() {
+  return platformRequest<{ success: boolean; orgs: Array<{ id: string; name: string }> }>(
+    '/platform/billing/logs/orgs',
+  );
+}
+
+export async function fetchPaymentLogs(params: Record<string, string> = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return platformRequest<{
+    success: boolean;
+    logs: any[];
+    total: number;
+    failed30Days: number;
+  }>(`/platform/billing/logs${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchPaymentLogEvents(logId: string) {
+  return platformRequest<{ success: boolean; events: any[] }>(`/platform/billing/logs/${logId}/events`);
+}
+
 export async function fetchUsageOverview(params: Record<string, string> = {}) {
   const qs = new URLSearchParams(params).toString();
   return platformRequest<{

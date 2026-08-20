@@ -68,7 +68,6 @@ export const CREATED_FILTER_OPTIONS = [
   { value: '30d', label: 'Last 30 days', days: 30 },
   { value: '90d', label: 'Last 90 days', days: 90 },
   { value: '365d', label: 'Last 12 months', days: 365 },
-  { value: 'custom', label: 'Custom range' },
 ] as const;
 
 export const SUBSCRIPTION_FILTER_OPTIONS = [
@@ -106,4 +105,9 @@ export function applyCreatedParams(
   if (option && 'days' in option && option.days) {
     params.createdFrom = daysAgoIso(option.days);
   }
+}
+
+export function formatMoneyCents(cents: number | undefined | null): string {
+  if (typeof cents !== 'number' || isNaN(cents)) return '—';
+  return `$${(cents / 100).toFixed(2)}`;
 }
