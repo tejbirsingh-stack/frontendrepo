@@ -975,6 +975,9 @@ export default function VideoPlayerPage({
     setSelectedFramePerson((current) => (current?.id === person.id ? null : person));
   }, []);
 
+  // People detection runs on frames, so audio and documents have no faces to highlight.
+  const supportsFramePeople = item?.type === 'video' || item?.type === 'image';
+
   useEffect(() => {
     if (!historyOpen || drawerTab !== 'ai') {
       setSelectedFramePerson(null);
@@ -2575,6 +2578,16 @@ export default function VideoPlayerPage({
       });
     }
   }, [mediaId]);
+
+  // Transcript clicks keep the current play state, unlike handleSeekToTimestamp which
+  // pauses so an annotation can be inspected on a still frame.
+  const handleTranscriptSeek = useCallback((startMs: number) => {
+    const element = videoRef.current;
+    if (!element) return;
+    const wasPlaying = !element.paused && !element.ended;
+    element.currentTime = Math.max(0, startMs / 1000);
+    if (wasPlaying) void element.play().catch(() => { });
+  }, []);
 
   const handleTagsChange = useCallback(
     async (tags: string[]) => {
@@ -4732,7 +4745,7 @@ export default function VideoPlayerPage({
                   </>
                 )}
 
-                {selectedFramePerson ? (
+                {selectedFramePerson && supportsFramePeople ? (
                   <FramePersonHighlight person={selectedFramePerson} />
                 ) : null}
               </Box>
@@ -4964,7 +4977,8 @@ export default function VideoPlayerPage({
           onDetailsSectionChange={setDetailsSection}
           selectedFramePersonId={selectedFramePerson?.id ?? null}
           onFramePersonSelect={handleFramePersonSelect}
-          onTranscriptSeek={(startMs) => handleSeekToTimestamp(startMs / 1000)}
+          onTranscriptSeek={handleTranscriptSeek}
+          videoRef={videoRef}
           onClose={() => setHistoryOpen(false)}
           onEntryClick={(entry) => {
             handleSeekToTimestamp(entry.videoTimestamp, entry.id);

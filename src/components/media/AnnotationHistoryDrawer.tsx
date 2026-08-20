@@ -179,6 +179,8 @@ interface AnnotationHistoryDrawerProps {
   onFramePersonSelect?: (person: FramePerson) => void;
   /** Seek player to a transcript segment (milliseconds). */
   onTranscriptSeek?: (startMs: number) => void;
+  /** Media element the transcript follows to highlight the line being spoken. */
+  videoRef?: React.RefObject<HTMLVideoElement | null>;
   onClose: () => void;
   onEntryClick?: (entry: AnnotationHistoryEntry) => void;
   onToggleResolved: (entryId: string) => void;
@@ -1050,6 +1052,7 @@ export default function AnnotationHistoryDrawer({
   selectedFramePersonId,
   onFramePersonSelect,
   onTranscriptSeek,
+  videoRef,
   onClose,
   onEntryClick,
   onToggleResolved,
@@ -1181,6 +1184,9 @@ export default function AnnotationHistoryDrawer({
     );
   }, [aiQuery]);
 
+  // People detection runs on frames, so audio and documents have no faces to list.
+  const supportsFramePeople = mediaItem?.type === 'video' || mediaItem?.type === 'image';
+
   const panelBody = (
     <>
       <Box
@@ -1280,7 +1286,7 @@ export default function AnnotationHistoryDrawer({
           <TextField
             fullWidth
             size="small"
-            placeholder="Search people, objects or moments"
+            placeholder={supportsFramePeople ? 'Search people, objects or moments' : 'Search transcript'}
             value={aiQuery}
             onChange={(event) => setAiQuery(event.target.value)}
             aria-label="Search AI insights"
@@ -1310,12 +1316,14 @@ export default function AnnotationHistoryDrawer({
             }}
           />
 
-          <FramePeopleHeadshots
-            people={filteredFramePeople}
-            query={aiQuery}
-            selectedPersonId={selectedFramePersonId}
-            onSelectPerson={onFramePersonSelect}
-          />
+          {supportsFramePeople && (
+            <FramePeopleHeadshots
+              people={filteredFramePeople}
+              query={aiQuery}
+              selectedPersonId={selectedFramePersonId}
+              onSelectPerson={onFramePersonSelect}
+            />
+          )}
         </Box>
       )}
 
@@ -1619,6 +1627,7 @@ export default function AnnotationHistoryDrawer({
             assetId={mediaItem?.id}
             filterQuery={aiQuery}
             onSeekMs={onTranscriptSeek}
+            videoRef={videoRef}
           />
         ) : mediaItem && onTagsChange ? (
           <MediaDetailsPanel

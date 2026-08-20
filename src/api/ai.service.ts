@@ -13,6 +13,7 @@ export interface TranscriptResponseDto {
   assetId: string;
   status: string;
   asr?: string;
+  error?: string | null;
   segments: TranscriptSegmentDto[];
 }
 
