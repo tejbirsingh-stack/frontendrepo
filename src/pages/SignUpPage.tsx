@@ -617,60 +617,18 @@ export default function SignUpPage() {
     setError('');
     setIsSsoLoading(true);
     try {
-      let response: any = null;
-      try {
-        response = await instance.loginPopup({
-          scopes: ['User.Read', 'profile', 'email', 'openid'],
-          redirectUri: `${window.location.origin}/redirect.html`,
-          prompt: 'select_account',
-        });
-      } catch (popupErr: any) {
-        console.warn('Popup login failed/blocked, falling back to redirect:', popupErr);
-        sessionStorage.setItem('msal_redirecting', 'true');
-        sessionStorage.setItem('msal_auth_mode', 'signup');
-        await instance.loginRedirect({
-          scopes: ['User.Read', 'profile', 'email', 'openid'],
-          redirectUri: window.location.href,
-          prompt: 'select_account',
-        });
-        return;
-      }
-
-      if (response && response.account) {
-        const account = response.account;
-        const claims = (account.idTokenClaims as any) || {};
-        const msEmail = (account.username || claims.email || claims.preferred_username || '').toLowerCase().trim();
-        const msName = account.name || claims.name || '';
-
-        if (msEmail) {
-          try {
-            await checkEmailRequest(msEmail);
-          } catch (checkErr: any) {
-            if (checkErr.response?.status === 409 || checkErr.response?.data?.exists) {
-              setError('Email ID is already registered with this email');
-              return;
-            }
-            setError(checkErr.response?.data?.message || checkErr.message || 'Failed to verify Microsoft email.');
-            return;
-          }
-          setEmail(msEmail);
-        }
-
-        if (claims.given_name || claims.family_name) {
-          setFirstName(claims.given_name || '');
-          setLastName(claims.family_name || '');
-        } else if (msName) {
-          const nameParts = msName.trim().split(' ');
-          setFirstName(nameParts[0] || '');
-          setLastName(nameParts.slice(1).join(' ') || '');
-        }
-
-        setPhase('workspace');
-      }
+      sessionStorage.setItem('msal_redirecting', 'true');
+      sessionStorage.setItem('msal_auth_mode', 'signup');
+      await instance.loginRedirect({
+        scopes: ['User.Read', 'profile', 'email', 'openid'],
+        redirectUri: window.location.origin,
+        prompt: 'select_account',
+      });
     } catch (err: any) {
+      sessionStorage.removeItem('msal_redirecting');
+      sessionStorage.removeItem('msal_auth_mode');
       console.error('Microsoft sign-up error:', err);
       setError(err.response?.data?.message || err.message || 'Microsoft sign-up failed.');
-    } finally {
       setIsSsoLoading(false);
     }
   };

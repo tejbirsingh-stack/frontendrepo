@@ -1,9 +1,78 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <meta charset="utf-8" />
     <title>Authenticating...</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background-color: #0f1117;
+        color: #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+      }
+      .spinner {
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-top: 3px solid #6366f1;
+        border-radius: 50%;
+        width: 28px;
+        height: 28px;
+        animation: spin 0.8s linear infinite;
+        margin-bottom: 12px;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      .container {
+        text-align: center;
+      }
+    </style>
+    <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
   </head>
   <body>
-    Please wait...
+    <div class="container">
+      <div class="spinner"></div>
+      <div>Completing sign in, please wait...</div>
+    </div>
+    <script>
+      (function () {
+        function finish() {
+          if (window.opener && !window.closed) {
+            try { window.close(); } catch (e) {}
+          }
+        }
+        if (typeof msal !== 'undefined') {
+          try {
+            const pca = new msal.PublicClientApplication({
+              auth: {
+                clientId: "c3f3c839-56fa-414c-97c8-46a02c1a6147",
+                authority: "https://login.microsoftonline.com/common"
+              },
+              cache: {
+                cacheLocation: "sessionStorage",
+                storeAuthStateInCookie: false
+              }
+            });
+            pca.initialize().then(function () {
+              return pca.handleRedirectPromise();
+            }).then(function () {
+              finish();
+            }).catch(function (err) {
+              console.error("MSAL redirect error:", err);
+              finish();
+            });
+          } catch (e) {
+            console.error("MSAL init error:", e);
+            finish();
+          }
+        } else {
+          setTimeout(finish, 1000);
+        }
+      })();
+    </script>
   </body>
 </html>
