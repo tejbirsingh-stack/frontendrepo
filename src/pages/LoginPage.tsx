@@ -181,6 +181,8 @@ export default function LoginPage() {
       try {
         response = await instance.loginPopup({
           scopes: ['User.Read', 'profile', 'email', 'openid'],
+          redirectUri: `${window.location.origin}/redirect.html`,
+          prompt: 'select_account',
         });
       } catch (popupErr: any) {
         console.warn('MSAL Popup failed/blocked, falling back to redirect:', popupErr);
@@ -188,6 +190,8 @@ export default function LoginPage() {
         sessionStorage.setItem('msal_auth_mode', 'login');
         await instance.loginRedirect({
           scopes: ['User.Read', 'profile', 'email', 'openid'],
+          redirectUri: window.location.href,
+          prompt: 'select_account',
         });
         return;
       }
