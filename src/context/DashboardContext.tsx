@@ -684,7 +684,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           type: 'folder',
           workspaceId: activeWorkspaceId!,
           parentFolderId: f.parentId || null,
-          linkedProjectIds: [projectId],
+          linkedProjectIds: f.sources?.map((s: any) => s.projectId) || [],
           createdAt: f.createdAt || new Date().toISOString(),
           sizeBytes: 0,
           storageProvider: 'b2',
