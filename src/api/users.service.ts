@@ -5,6 +5,7 @@ import { env } from '../config/env';
 export interface UpdateProfileDto {
   name?: string;
   timezone?: string;
+  shareLinkActivityEnabled?: boolean;
 }
 
 export interface UploadProfilePhotoResponse {

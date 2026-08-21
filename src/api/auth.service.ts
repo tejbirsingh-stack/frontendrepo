@@ -385,6 +385,7 @@ export function mapAuthUserDtoToSessionUser(input: any) {
     avatarUrl: user.avatarUrl,
     accountName: user.accountName || (user.organization && user.organization.name) || `${name}'s Account`,
     accountInitials: user.accountInitials || getNameInitials((user.organization && user.organization.name) || name),
+    shareLinkActivityEnabled: user.shareLinkActivityEnabled ?? true,
   };
 }
 
@@ -436,6 +437,7 @@ export function extractUserFromTokenOrResponse(response: LoginResponseDto): Auth
       avatarUrl: decoded.avatarUrl,
       accountName: decoded.organization?.name || decoded.accountName || `${name}'s Account`,
       accountInitials: getNameInitials(decoded.organization?.name || name),
+      shareLinkActivityEnabled: decoded.shareLinkActivityEnabled ?? true,
     };
   } catch (err) {
     console.error('Failed to decode JWT token payload:', err);
