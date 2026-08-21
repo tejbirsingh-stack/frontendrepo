@@ -1113,9 +1113,7 @@ function BillingInvoicesTab() {
             size="small"
             disabled={!link}
             onClick={() => {
-              if (link) {
-                window.open(link, '_blank', 'noopener,noreferrer');
-              }
+              billingService.downloadCustomInvoicePdf(link, row.id);
             }}
             endIcon={<OpenInNewOutlinedIcon sx={{ fontSize: 16 }} />}
             sx={{ color: cv.textSecondary, textTransform: 'none', '&:hover': { color: '#ffffff' } }}
