@@ -54,7 +54,6 @@ import toast from 'react-hot-toast';
 import { getUsageSummary } from '../api/usage.service';
 import { type LibraryListParams, getLibraryItems } from '../api/library.service';
 import { mergeLibraryWithAiHits } from '../api/mergeLibraryWithAiHits';
-import { useAuth } from '../auth/AuthContext';
 import { env } from '../config/env';
 
 
