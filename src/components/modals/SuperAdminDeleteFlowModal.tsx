@@ -299,7 +299,7 @@ export default function SuperAdminDeleteFlowModal({
     if (!projectId) return;
     setSubmitting(true);
     try {
-      const isWhole = treeData.length === 0;
+      const isWhole = treeData.length === 0 || (files.length > 0 && selectedFileIds.size === files.length && selectedFolderIds.size === folders.length);
       await onConfirmPermanentDelete(
         projectId,
         isWhole,
