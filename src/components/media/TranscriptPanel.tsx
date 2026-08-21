@@ -89,7 +89,7 @@ function TranscriptRow({ segment, isActive, isRead, rowRef, onSeekMs }: Readonly
         px: 0.5,
         py: 0.75,
         minHeight: 44,
-        borderRadius: 1,
+        borderRadius: '6px',
         borderLeft: '2px solid',
         borderLeftColor: isActive ? cv.brandPurpleLight : 'transparent',
         backgroundColor: isActive ? cv.purpleSurface : 'transparent',
