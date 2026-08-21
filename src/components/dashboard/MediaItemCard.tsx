@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, Checkbox, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, Checkbox, IconButton, Popover, Tooltip, Typography } from '@mui/material';
 import { cv } from '../../theme/cssVars';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import StarIcon from '@mui/icons-material/Star';
@@ -14,8 +14,9 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import LinkIcon from '@mui/icons-material/Link';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
-import AiSummaryDialog from './AiSummaryDialog';
+import AiSummaryBlock from '../media/AiSummaryBlock';
 import TruncatedText from '../TruncatedText';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { MediaItem, MediaType } from '../../data/mockMedia';
@@ -495,7 +496,7 @@ export default function MediaItemCard({
 }: MediaItemCardProps) {
   const navigate = useNavigate();
   const { mediaItems, trashedIds } = useDashboard();
-  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryAnchor, setSummaryAnchor] = useState<HTMLElement | null>(null);
   const config = typeConfig[item.type];
   const isFolder = item.type === 'folder';
   const folderChildCount = isFolder
@@ -530,13 +531,13 @@ export default function MediaItemCard({
   const isClickable = (Boolean(openPath) || (item.type === 'document' && Boolean(documentUrl))) && !selectionActive;
 
   const fullSummary = item.summary?.trim() || '';
-  const previewText = (item.searchMatch?.snippet?.trim() || fullSummary).trim();
   const aiTagList = Array.isArray(item.aiTags)
     ? item.aiTags.filter((t) => typeof t === 'string' && t.trim().length > 0)
     : [];
-  const canViewFullSummary =
+  const showAiSummaryIcon =
     (item.type === 'video' || item.type === 'audio') &&
     (Boolean(fullSummary) || aiTagList.length > 0);
+  const summaryPopoverOpen = Boolean(summaryAnchor);
 
   const handleOpen = () => {
     if (!isClickable) return;
@@ -614,9 +615,6 @@ export default function MediaItemCard({
         '&:hover .media-select-checkbox': {
           opacity: 1,
         },
-        '&:hover .video-summary-overlay': {
-          opacity: 1,
-        },
         '&:hover': {
           borderColor: isDropTarget ? cv.brandPurple : cv.borderInputHover,
           transform: isDragging || isDropTarget ? 'none' : 'translateY(-2px)',
@@ -627,82 +625,6 @@ export default function MediaItemCard({
     >
       <Box sx={{ position: 'relative', aspectRatio: '16 / 9', overflow: 'hidden' }}>
         <MediaPreview item={item} folderChildCount={folderChildCount} />
-
-        {(item.type === 'video' || item.type === 'audio') && (previewText || canViewFullSummary) ? (
-          <Box
-            className="video-summary-overlay"
-            sx={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'flex-end',
-              alignItems: 'flex-start',
-              gap: 0.75,
-              p: 1.5,
-              pb: 2,
-              pr: item.duration ? 5 : 1.5,
-              background:
-                cv.videoScrimGradient,
-              opacity: 0,
-              transition: 'opacity 0.2s ease',
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            {previewText ? (
-              <Typography
-                aria-hidden
-                sx={{
-                  fontSize: '0.8125rem',
-                  lineHeight: 1.45,
-                  color: cv.textInverse,
-                  display: '-webkit-box',
-                  WebkitLineClamp: 4,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                }}
-              >
-                {previewText}
-              </Typography>
-            ) : null}
-            {canViewFullSummary ? (
-              <Box
-                component="button"
-                type="button"
-                aria-label="View full summary"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setSummaryOpen(true);
-                }}
-                onMouseDown={(event) => event.stopPropagation()}
-                sx={{
-                  pointerEvents: 'auto',
-                  border: `1px solid ${cv.purpleChipBorder}`,
-                  backgroundColor: cv.purpleSurface,
-                  color: cv.brandPurpleLight,
-                  borderRadius: '999px',
-                  px: 1,
-                  py: 0.35,
-                  fontSize: '0.6875rem',
-                  fontWeight: 600,
-                  lineHeight: 1.2,
-                  cursor: 'pointer',
-                  '&:hover': {
-                    filter: 'brightness(1.08)',
-                  },
-                  '&:focus-visible': {
-                    outline: `2px solid ${cv.brandPurpleLight}`,
-                    outlineOffset: 2,
-                  },
-                }}
-              >
-                View full summary
-              </Box>
-            ) : null}
-          </Box>
-        ) : null}
 
         <Box
           sx={{
@@ -720,6 +642,36 @@ export default function MediaItemCard({
           />
           <TypeBadge type={item.type} isProject={item.isProject} />
           <SearchMatchBadge matchType={item.searchMatch?.matchType} />
+          {showAiSummaryIcon ? (
+            <Tooltip title="AI summary" arrow placement="top">
+              <IconButton
+                type="button"
+                size="small"
+                aria-label="AI summary"
+                aria-haspopup="dialog"
+                aria-expanded={summaryPopoverOpen}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const target = event.currentTarget;
+                  setSummaryAnchor((current) => (current ? null : target));
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                sx={{
+                  width: 28,
+                  height: 28,
+                  ...thumbnailOverlayChipStyles,
+                  borderRadius: '8px',
+                  color: cv.textInverse,
+                  '&:hover': {
+                    ...thumbnailOverlayChipHoverStyles,
+                  },
+                }}
+              >
+                <AutoAwesomeOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          ) : null}
           <ReviewStatusBadge item={item} />
         </Box>
 
@@ -824,65 +776,57 @@ export default function MediaItemCard({
           px: 2,
           py: 1.5,
           display: 'flex',
-          flexDirection: 'column',
-          gap: 0.75,
+          alignItems: 'center',
+          gap: 1,
           borderTop: "1px solid var(--noah-border)",
           background: folderFooterAccent,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <TruncatedText
-            variant="body2"
-            text={item.title}
-            sx={{ flex: 1, minWidth: 0, fontWeight: 500, fontSize: '0.875rem', textAlign: 'left' }}
-          />
-          <ShareStatusBadge item={item} />
-          <MediaItemActionsMenu item={item} />
-        </Box>
-        {(item.type === 'video' || item.type === 'audio') &&
-        Array.isArray(item.aiTags) &&
-        item.aiTags.length > 0 ? (
-          <Box
-            sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}
-            aria-label="AI tags"
-          >
-            {item.aiTags.slice(0, 3).map((tag) => (
-              <Box
-                key={tag}
-                component="span"
-                sx={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  px: 0.75,
-                  py: 0.125,
-                  borderRadius: '999px',
-                  border: `1px solid ${cv.purpleChipBorder}`,
-                  backgroundColor: cv.purpleSurface,
-                }}
-              >
-                <Typography
-                  component="span"
-                  sx={{
-                    fontSize: '0.625rem',
-                    fontWeight: 600,
-                    color: cv.brandPurpleLight,
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {tag}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-        ) : null}
+        <TruncatedText
+          variant="body2"
+          text={item.title}
+          sx={{ flex: 1, minWidth: 0, fontWeight: 500, fontSize: '0.875rem', textAlign: 'left' }}
+        />
+        <ShareStatusBadge item={item} />
+        <MediaItemActionsMenu item={item} />
       </Box>
     </Box>
-    <AiSummaryDialog
-      open={summaryOpen}
-      onClose={() => setSummaryOpen(false)}
-      summary={fullSummary}
-      tags={aiTagList}
-    />
+    <Popover
+      open={summaryPopoverOpen}
+      anchorEl={summaryAnchor}
+      onClose={() => setSummaryAnchor(null)}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+      slotProps={{
+        paper: {
+          sx: {
+            mt: 0.75,
+            p: 1.5,
+            maxWidth: 320,
+            borderRadius: '12px',
+            border: `1px solid ${cv.border}`,
+            background: 'var(--noah-dialog-surface)',
+            boxShadow: cv.dialogShadow,
+          },
+        },
+      }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <Typography
+        component="h3"
+        sx={{
+          mb: 0.75,
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          color: cv.textSecondary,
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+        }}
+      >
+        Summary
+      </Typography>
+      <AiSummaryBlock compact summary={fullSummary} tags={aiTagList} />
+    </Popover>
     </>
   );
 }
