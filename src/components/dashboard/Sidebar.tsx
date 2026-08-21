@@ -2284,8 +2284,8 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         requireNameConfirmation
         description={
           isFolderDeleteTarget
-            ? 'This folder will be removed from the sidebar. Any files inside it will be moved to trash.'
-            : 'This item will be removed from the folder and moved to trash if it is linked to a file.'
+            ? 'All files, folders, and projects inside this folder will also go to Super Admin Delete Management.'
+            : 'This item will be sent to Super Admin Delete Management.'
         }
         onClose={() => {
           setDeleteFolderOpen(false);
