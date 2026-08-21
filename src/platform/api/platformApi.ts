@@ -27,7 +27,7 @@ export type PlatformPlan = {
   features: PlanFeature[];  // Now an array of feature objects from the DB
   isPublic: boolean;
   isFeatured: boolean;
-  isActive?: boolean;
+  hasAI: boolean;
   sortOrder: number;
   ctaLabel?: string | null;
   monthlyPriceId?: string | null;

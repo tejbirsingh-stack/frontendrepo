@@ -28,6 +28,7 @@ import {
   DeletionRequestsPage,
   ShareGuestPage,
   PlatformApp,
+  OnboardingPlanPage,
 } from './routes/lazyPages';
 
 import { UploadManagerProvider } from './context/UploadManagerContext';
@@ -74,6 +75,16 @@ function App() {
             }
           />
           <Route path="/platform/*" element={<PlatformApp />} />
+          <Route
+            path="/onboarding/plan"
+            element={
+              <ProtectedRoute>
+                <RouteErrorBoundary>
+                  <OnboardingPlanPage />
+                </RouteErrorBoundary>
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/reset-password"
             element={<ResetPasswordPage />}

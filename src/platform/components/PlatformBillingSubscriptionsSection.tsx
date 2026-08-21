@@ -12,6 +12,7 @@ import {
   IconButton,
 } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { fetchBillingOverview, fetchPlans, type PlatformPlan } from '../api/platformApi';
 import {
   ActiveFilterChips,
@@ -39,7 +40,7 @@ import {
 } from '../utils/platformListHelpers';
 import { cv } from '../../theme/cssVars';
 
-type BillingSortField = 'name' | 'plan' | 'subscriptionStatus' | 'users' | 'updatedAt';
+type BillingSortField = 'name' | 'plan' | 'subscriptionStatus' | 'users' | 'updatedAt' | 'stripeCustomerId';
 
 const DESCENDING_FIRST: readonly BillingSortField[] = ['users', 'updatedAt'];
 
@@ -299,7 +300,7 @@ export function PlatformBillingSubscriptionsSection({ onRowClick }: { onRowClick
                             {text(row.name)}
                           </Button>
                           <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
-                            {text(row.slug, '')}
+                            {text(row.ownerEmail || row.slug, '')}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -357,18 +358,33 @@ export function PlatformBillingSubscriptionsSection({ onRowClick }: { onRowClick
                               {text(row.stripeCustomerId)}
                             </Typography>
                             {row.stripeCustomerId && typeof row.stripeCustomerId === 'string' && (
-                              <Tooltip title="Copy ID">
-                                <IconButton
-                                  size="small"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigator.clipboard.writeText(row.stripeCustomerId as string);
-                                  }}
-                                  sx={{ p: 0.5, color: cv.textMuted, '&:hover': { color: cv.text } }}
-                                >
-                                  <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
-                                </IconButton>
-                              </Tooltip>
+                              <>
+                                <Tooltip title="Copy ID">
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigator.clipboard.writeText(row.stripeCustomerId as string);
+                                    }}
+                                    sx={{ p: 0.5, color: cv.textMuted, '&:hover': { color: cv.text } }}
+                                  >
+                                    <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="View in Stripe">
+                                  <IconButton
+                                    size="small"
+                                    component="a"
+                                    href={`https://dashboard.stripe.com/test/customers/${row.stripeCustomerId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    sx={{ p: 0.5, color: cv.textMuted, '&:hover': { color: cv.text } }}
+                                  >
+                                    <OpenInNewIcon sx={{ fontSize: '0.875rem' }} />
+                                  </IconButton>
+                                </Tooltip>
+                              </>
                             )}
                           </Box>
                         </TableCell>

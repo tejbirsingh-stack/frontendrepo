@@ -79,6 +79,7 @@ const emptyForm = {
   ctaLabel: 'Get started',
   isPublic: true,
   isFeatured: false,
+  hasAI: false,
   sortOrder: '',
   // Visibility flags for dynamic features
   showProjectQuota: true,
@@ -147,6 +148,7 @@ export default function PlatformPlansPage() {
       ctaLabel: plan.ctaLabel || '',
       isPublic: plan.isPublic,
       isFeatured: plan.isFeatured,
+      hasAI: plan.hasAI,
       sortOrder: String(plan.sortOrder || ''),
       showProjectQuota: plan.showProjectQuota ?? true,
       showStorageQuota: plan.showStorageQuota ?? true,
@@ -201,6 +203,7 @@ export default function PlatformPlansPage() {
       ctaLabel: form.ctaLabel,
       isPublic: form.isPublic,
       isFeatured: form.isFeatured,
+      hasAI: form.hasAI,
       sortOrder: Number(form.sortOrder),
     };
 
@@ -666,6 +669,15 @@ export default function PlatformPlansPage() {
                 />
               }
               label="Featured"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={form.hasAI}
+                  onChange={(e) => setForm((f) => ({ ...f, hasAI: e.target.checked }))}
+                />
+              }
+              label="AI"
             />
           </Box>
         </DialogContent>

@@ -5,8 +5,8 @@ export const billingService = {
    * Creates a Stripe Checkout session and returns the checkout URL.
    * @param priceId The Stripe Price ID
    */
-  createCheckoutSession: async (priceId: string, useSavedCard: boolean = true): Promise<{ url?: string; directUpgrade?: boolean; message?: string }> => {
-    return apiClient.post<{ url?: string; directUpgrade?: boolean; message?: string }>('/stripe/checkout', { priceId, useSavedCard });
+  createCheckoutSession: async (priceId: string, useSavedCard: boolean = true, successUrl?: string, cancelUrl?: string): Promise<{ url?: string; directUpgrade?: boolean; message?: string }> => {
+    return apiClient.post<{ url?: string; directUpgrade?: boolean; message?: string }>('/stripe/checkout', { priceId, useSavedCard, successUrl, cancelUrl });
   },
 
   /**

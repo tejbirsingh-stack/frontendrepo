@@ -4,6 +4,7 @@ import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded';
 import CreditCardOutlinedIcon from '@mui/icons-material/CreditCardOutlined';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import LiquidBackground from '../LiquidBackground';
 import WaveBackground from '../WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../NoahLogo';
@@ -26,6 +27,7 @@ interface PlanDefinition {
   yearlyPriceId?: string;
   cta: string;
   featured?: boolean;
+  hasAI?: boolean;
   maxUsers?: number;
   maxWorkspaces?: number;
   maxProjects?: number;
@@ -213,6 +215,7 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
             yearlyPriceId: p.yearlyPriceId,
             cta: p.ctaLabel || `Start with ${p.name}`,
             featured: Boolean(p.isFeatured),
+            hasAI: Boolean(p.hasAI),
             maxUsers: p.maxUsers,
             maxWorkspaces: p.maxWorkspaces,
             maxProjects: p.maxProjects,
@@ -247,7 +250,7 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
       ? (targetPlan?.yearlyPriceId || targetPlan?.monthlyPriceId) 
       : targetPlan?.monthlyPriceId;
 
-    if (isSettingsFlow) {
+    if (isSettingsFlow || pId !== 'free') {
       const isSame = normCurrentPlan === pId || normCurrentPlan === (targetPlan?.name || '').toLowerCase();
       setConfirmPlanModal({
         planId,
@@ -597,16 +600,36 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
                     }}
                   />
 
-                  <Typography
-                    sx={{
-                      fontWeight: 700,
-                      fontSize: '1.125rem',
-                      color: cv.textPrimary,
-                      mb: 0.75,
-                    }}
-                  >
-                    {plan.name}
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.75, gap: 1 }}>
+                    <Typography
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: '1.125rem',
+                        color: cv.textPrimary,
+                      }}
+                    >
+                      {plan.name}
+                    </Typography>
+                    {plan.hasAI && (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.5,
+                          px: 0.85,
+                          py: 0.25,
+                          borderRadius: '999px',
+                          background: `linear-gradient(135deg, ${cv.brandOrchid} 0%, #6366f1 100%)`,
+                          color: '#fff',
+                        }}
+                      >
+                        <AutoAwesomeIcon sx={{ fontSize: 14 }} />
+                        <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em' }}>
+                          AI
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
                   <Typography
                     sx={{
                       fontSize: '0.8125rem',

@@ -15,6 +15,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { downloadCSV } from '../../utils/csvExport';
 import { fetchPaymentLogs, fetchPaymentLogEvents, fetchPaymentLogOrgs } from '../api/platformApi';
 import {
@@ -45,12 +46,12 @@ import TimelineContent from '@mui/lab/TimelineContent';
 import TimelineDot from '@mui/lab/TimelineDot';
 import TimelineOppositeContent from '@mui/lab/TimelineOppositeContent';
 
-type LogSortField = 'createdAt';
+type LogSortField = 'createdAt' | 'org' | 'amount' | 'status' | 'paymentId';
 
 const COLUMNS: ReadonlyArray<PlatformTableColumn<LogSortField>> = [
-  { id: 'org', label: 'Organization' },
-  { id: 'amount', label: 'Amount', align: 'right' },
-  { id: 'status', label: 'Status' },
+  { id: 'org', label: 'Organization', sortField: 'org' },
+  { id: 'amount', label: 'Amount', align: 'right', sortField: 'amount' },
+  { id: 'status', label: 'Status', sortField: 'status' },
   { id: 'stripe', label: 'Payment ID' },
   { id: 'date', label: 'Date', sortField: 'createdAt' },
 ];
@@ -74,6 +75,17 @@ const emptyFilters: LogFilters = {
   status: '',
   orgId: '',
   created: '',
+};
+
+const getStripeUrl = (id?: string) => {
+  if (!id) return '';
+  if (id.startsWith('pi_') || id.startsWith('ch_')) {
+    return `https://dashboard.stripe.com/test/payments/${id}`;
+  }
+  if (id.startsWith('in_')) {
+    return `https://dashboard.stripe.com/test/invoices/${id}`;
+  }
+  return `https://dashboard.stripe.com/test/search?query=${id}`;
 };
 
 export function PlatformBillingTransactionsSection({ defaultOrgId }: { defaultOrgId?: string }) {
@@ -385,18 +397,33 @@ export function PlatformBillingTransactionsSection({ defaultOrgId }: { defaultOr
                             {text(row.stripePaymentIntentId || row.stripeSessionId)}
                           </Typography>
                           {(row.stripePaymentIntentId || row.stripeSessionId) && (
-                            <Tooltip title="Copy ID">
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigator.clipboard.writeText(row.stripePaymentIntentId || row.stripeSessionId);
-                                }}
-                                sx={{ p: 0.5, color: cv.textMuted, '&:hover': { color: cv.text } }}
-                              >
-                                <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
-                              </IconButton>
-                            </Tooltip>
+                            <>
+                              <Tooltip title="Copy ID">
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(row.stripePaymentIntentId || row.stripeSessionId);
+                                  }}
+                                  sx={{ p: 0.5, color: cv.textMuted, '&:hover': { color: cv.text } }}
+                                >
+                                  <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="View in Stripe">
+                                <IconButton
+                                  size="small"
+                                  component="a"
+                                  href={getStripeUrl(row.stripePaymentIntentId || row.stripeSessionId)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  sx={{ p: 0.5, color: cv.textMuted, '&:hover': { color: cv.text } }}
+                                >
+                                  <OpenInNewIcon sx={{ fontSize: '0.875rem' }} />
+                                </IconButton>
+                              </Tooltip>
+                            </>
                           )}
                         </Box>
                       </TableCell>
