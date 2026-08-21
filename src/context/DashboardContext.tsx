@@ -1244,6 +1244,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const uniqueIds = [...new Set(mediaIds)].filter((id) => id !== folderId);
       if (uniqueIds.length === 0) return;
 
+      const safeUniqueIds = uniqueIds.filter((id) => {
+        const item = mediaItems.find((m) => m.id === id);
+        if (item && item.type === 'folder' && ((item.title && item.title.trim().toLowerCase() === 'restore') || (item.name && item.name.trim().toLowerCase() === 'restore'))) {
+          toast.error("The 'Restore' folder is protected and cannot be moved.");
+          return false;
+        }
+        return true;
+      });
+      if (safeUniqueIds.length === 0) return;
+
       const targetFolder = mediaItems.find(
         (item) => item.id === folderId && item.type === 'folder',
       );
@@ -1251,7 +1261,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       const folderCountDelta = new Map<string, number>();
 
-      uniqueIds.forEach((mediaId) => {
+      safeUniqueIds.forEach((mediaId) => {
         const media = mediaItems.find((item) => item.id === mediaId);
         if (!media) return;
 
@@ -1270,7 +1280,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       setMediaItems((prev) =>
         prev.map((item) => {
-          if (uniqueIds.includes(item.id)) {
+          if (safeUniqueIds.includes(item.id)) {
             return {
               ...item,
               parentFolderId: folderId,
@@ -1294,14 +1304,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       setSelectedMediaIds((prev) => {
         const next = new Set(prev);
-        uniqueIds.forEach((id) => next.delete(id));
+        safeUniqueIds.forEach((id) => next.delete(id));
         return next;
       });
 
       // API Call
       try {
         const { apiClient } = await import('../api/client');
-        await Promise.all(uniqueIds.map(id => {
+        await Promise.all(safeUniqueIds.map(id => {
           const item = mediaItems.find(m => m.id === id);
           if (!item) return Promise.resolve();
           if (item.type === 'folder') {
@@ -1325,14 +1335,24 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const uniqueIds = [...new Set(mediaIds)].filter((id) => id !== folderId);
       if (uniqueIds.length === 0) return;
 
+      const safeUniqueIds = uniqueIds.filter((id) => {
+        const item = mediaItems.find((m) => m.id === id);
+        if (item && item.type === 'folder' && ((item.title && item.title.trim().toLowerCase() === 'restore') || (item.name && item.name.trim().toLowerCase() === 'restore'))) {
+          toast.error("The 'Restore' folder is protected and cannot be moved.");
+          return false;
+        }
+        return true;
+      });
+      if (safeUniqueIds.length === 0) return;
+
       if (folderId && workspaceId === activeWorkspaceId) {
-        moveMediaToDashboardFolder(uniqueIds, folderId);
+        moveMediaToDashboardFolder(safeUniqueIds, folderId);
         return;
       }
 
       const folderCountDelta = new Map<string, number>();
 
-      uniqueIds.forEach((mediaId) => {
+      safeUniqueIds.forEach((mediaId) => {
         const media = mediaItems.find((item) => item.id === mediaId);
         if (!media) return;
 
@@ -1351,7 +1371,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       setMediaItems((prev) =>
         prev.map((item) => {
-          if (uniqueIds.includes(item.id)) {
+          if (safeUniqueIds.includes(item.id)) {
             return {
               ...item,
               workspaceId,
@@ -1376,14 +1396,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       setSelectedMediaIds((prev) => {
         const next = new Set(prev);
-        uniqueIds.forEach((id) => next.delete(id));
+        safeUniqueIds.forEach((id) => next.delete(id));
         return next;
       });
 
       // API Call
       try {
         const { apiClient } = await import('../api/client');
-        await Promise.all(uniqueIds.map(id => {
+        await Promise.all(safeUniqueIds.map(id => {
           const item = mediaItems.find(m => m.id === id);
           if (!item) return Promise.resolve();
           if (item.type === 'folder') {
@@ -1394,7 +1414,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }));
         
         // Refresh sidebar folder structure if moving within or affecting the active workspace
-        if (workspaceId === activeWorkspaceId || mediaItems.some(m => uniqueIds.includes(m.id) && m.workspaceId === activeWorkspaceId)) {
+        if (workspaceId === activeWorkspaceId || mediaItems.some(m => safeUniqueIds.includes(m.id) && m.workspaceId === activeWorkspaceId)) {
           void fetchWorkspaceData();
         }
       } catch (err) {
@@ -1415,9 +1435,19 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const uniqueIds = [...new Set(mediaIds)].filter((id) => !trashedIds.has(id));
       if (uniqueIds.length === 0) return;
 
+      const safeUniqueIds = uniqueIds.filter((id) => {
+        const item = mediaItems.find((m) => m.id === id);
+        if (item && item.type === 'folder' && ((item.title && item.title.trim().toLowerCase() === 'restore') || (item.name && item.name.trim().toLowerCase() === 'restore'))) {
+          toast.error("The 'Restore' folder is protected and cannot be deleted.");
+          return false;
+        }
+        return true;
+      });
+      if (safeUniqueIds.length === 0) return;
+
       const folderCountDelta = new Map<string, number>();
 
-      uniqueIds.forEach((mediaId) => {
+      safeUniqueIds.forEach((mediaId) => {
         const media = mediaItems.find((item) => item.id === mediaId);
         if (!media) return;
 
@@ -1429,58 +1459,127 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }
 
         removeMediaFromSidebar(media);
+
+        apiClient.post(`/media/${mediaId}/trash`, { reason })
+          .catch((err) => console.error(`Failed to move media ${mediaId} to trash:`, err));
       });
 
-      // Send DELETE to backend (with reason)
-      uniqueIds.forEach((id) => {
-        apiClient.delete<any>(`/media/${id}`, { body: { reason } })
-          .then((res) => {
-            if (res?.status !== 'pending_super_admin') {
-              void fetchTrashItems();
-            }
-          })
-          .catch(err => console.error('Failed to sync delete with backend', err));
-      });
-
-      setFavorites((prev) => {
+      setTrashedIds((prev) => {
         const next = new Set(prev);
-        let changed = false;
-        uniqueIds.forEach((id) => {
-          if (next.has(id)) {
-            next.delete(id);
-            changed = true;
-          }
-        });
-        return changed ? next : prev;
+        safeUniqueIds.forEach((id) => next.add(id));
+        return next;
       });
 
-      // Remove items from active media list so they vanish from view (if Admin, it goes to Pending Super Admin, not Trash)
       setMediaItems((prev) =>
-        prev
-          .filter((item) => !uniqueIds.includes(item.id))
-          .map((item) => {
-            if (item.type === 'folder' && folderCountDelta.has(item.id)) {
-              return {
-                ...item,
-                itemCount: Math.max(
-                  0,
-                  (item.itemCount ?? 0) + (folderCountDelta.get(item.id) ?? 0),
-                ),
-              };
-            }
-            return item;
-          }),
-      );
+        prev.map((item) => {
+          if (safeUniqueIds.includes(item.id)) {
+            return { ...item, status: 'trash' as const };
+          }
 
-      setLibraryItems((prev) => prev.filter(item => !uniqueIds.includes(item.id)));
+          if (item.type === 'folder' && folderCountDelta.has(item.id)) {
+            return {
+              ...item,
+              itemCount: Math.max(
+                0,
+                (item.itemCount ?? 0) + (folderCountDelta.get(item.id) ?? 0),
+              ),
+            };
+          }
+
+          return item;
+        }),
+      );
 
       setSelectedMediaIds((prev) => {
         const next = new Set(prev);
-        uniqueIds.forEach((id) => next.delete(id));
+        safeUniqueIds.forEach((id) => next.delete(id));
         return next;
       });
     },
     [mediaItems, removeMediaFromSidebar, trashedIds],
+  );
+
+  const renameWorkspaceFolder = useCallback(
+    async (folderId: string, newLabel: string) => {
+      const targetMedia = mediaItems.find((m) => m.id === folderId);
+      if (targetMedia && targetMedia.type === 'folder' && ((targetMedia.title && targetMedia.title.trim().toLowerCase() === 'restore') || (targetMedia.name && targetMedia.name.trim().toLowerCase() === 'restore'))) {
+        toast.error("The 'Restore' folder is protected and cannot be renamed.");
+        return;
+      }
+
+      const trimmed = newLabel.trim();
+      if (!trimmed) return;
+
+      try {
+        const { apiClient } = await import('../api/client');
+        await apiClient.put(`/workspaces/folder/update/${folderId}`, {
+          name: trimmed,
+        });
+
+        setWorkspaces((prev) =>
+          prev.map((workspace) => {
+            if (workspace.id !== activeWorkspaceId) return workspace;
+
+            return {
+              ...workspace,
+              folders: workspace.folders.map((folder) =>
+                folder.id === folderId ? { ...folder, label: trimmed } : folder,
+              ),
+            };
+          }),
+        );
+
+        setMediaItems((prev) =>
+          prev.map((item) =>
+            item.id === folderId ? { ...item, title: trimmed } : item
+          )
+        );
+
+        setLibraryItems((prev) =>
+          prev.map((item) =>
+            item.id === folderId ? { ...item, title: trimmed } : item
+          )
+        );
+      } catch (err) {
+        console.error('Failed to rename folder:', err);
+      }
+    },
+    [activeWorkspaceId, mediaItems],
+  );
+
+  const deleteWorkspaceFolder = useCallback(
+    (folderId: string) => {
+      const targetMedia = mediaItems.find((m) => m.id === folderId);
+      if (targetMedia && targetMedia.type === 'folder' && ((targetMedia.title && targetMedia.title.trim().toLowerCase() === 'restore') || (targetMedia.name && targetMedia.name.trim().toLowerCase() === 'restore'))) {
+        toast.error("The 'Restore' folder is protected and cannot be deleted.");
+        return;
+      }
+
+      const mediaIds = mediaItems
+        .filter(
+          (item) =>
+            item.workspaceId === activeWorkspaceId &&
+            item.location?.folderId === folderId &&
+            item.status !== 'trash',
+        )
+        .map((item) => item.id);
+
+      if (mediaIds.length > 0) {
+        moveMediaToTrashBulk(mediaIds);
+      }
+
+      setWorkspaces((prev) =>
+        prev.map((workspace) => {
+          if (workspace.id !== activeWorkspaceId) return workspace;
+
+          return {
+            ...workspace,
+            folders: workspace.folders.filter((folder) => folder.id !== folderId),
+          };
+        }),
+      );
+    },
+    [activeWorkspaceId, mediaItems, moveMediaToTrashBulk, trashedIds],
   );
 
   const moveMediaToTrash = useCallback(
@@ -1846,76 +1945,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     [activeWorkspaceId],
   );
 
-  const renameWorkspaceFolder = useCallback(
-    async (folderId: string, newLabel: string) => {
-      const trimmed = newLabel.trim();
-      if (!trimmed) return;
 
-      try {
-        const { apiClient } = await import('../api/client');
-        await apiClient.put(`/workspaces/folder/update/${folderId}`, {
-          name: trimmed,
-        });
-
-        setWorkspaces((prev) =>
-          prev.map((workspace) => {
-            if (workspace.id !== activeWorkspaceId) return workspace;
-
-            return {
-              ...workspace,
-              folders: workspace.folders.map((folder) =>
-                folder.id === folderId ? { ...folder, label: trimmed } : folder,
-              ),
-            };
-          }),
-        );
-
-        setMediaItems((prev) =>
-          prev.map((item) =>
-            item.id === folderId ? { ...item, title: trimmed } : item
-          )
-        );
-
-        setLibraryItems((prev) =>
-          prev.map((item) =>
-            item.id === folderId ? { ...item, title: trimmed } : item
-          )
-        );
-      } catch (err) {
-        console.error('Failed to rename folder:', err);
-      }
-    },
-    [activeWorkspaceId],
-  );
-
-  const deleteWorkspaceFolder = useCallback(
-    (folderId: string) => {
-      const mediaIds = mediaItems
-        .filter(
-          (item) =>
-            item.workspaceId === activeWorkspaceId &&
-            item.location?.folderId === folderId &&
-            item.status !== 'trash',
-        )
-        .map((item) => item.id);
-
-      if (mediaIds.length > 0) {
-        moveMediaToTrashBulk(mediaIds);
-      }
-
-      setWorkspaces((prev) =>
-        prev.map((workspace) => {
-          if (workspace.id !== activeWorkspaceId) return workspace;
-
-          return {
-            ...workspace,
-            folders: workspace.folders.filter((folder) => folder.id !== folderId),
-          };
-        }),
-      );
-    },
-    [activeWorkspaceId, mediaItems, moveMediaToTrashBulk, trashedIds],
-  );
 
   const removeFolderAndItemsFromState = useCallback(
     (targetFolderId: string, selectedFileIds: string[] = [], selectedFolderIds: string[] = []) => {
