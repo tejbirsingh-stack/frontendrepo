@@ -469,11 +469,11 @@ export default function SignUpPage() {
       }
 
       // If they chose a paid plan, redirect them to Stripe Checkout
-      if (selectedPlanId && selectedPlanId.toLowerCase() !== 'free') {
+      if (planId && planId.toLowerCase() !== 'free') {
         const { fetchPublicCatalogPlans } = await import('../platform/api/platformApi');
         const catalog = await fetchPublicCatalogPlans().catch(() => null);
         const match = catalog?.plans?.find(
-          (p: any) => p.name?.toLowerCase() === selectedPlanId.toLowerCase() || p.id?.toLowerCase() === selectedPlanId.toLowerCase()
+          (p: any) => p.name?.toLowerCase() === planId.toLowerCase() || p.id?.toLowerCase() === planId.toLowerCase()
         );
         
         let activePriceId = null;
