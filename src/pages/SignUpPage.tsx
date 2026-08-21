@@ -24,6 +24,7 @@ import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
 import ChoosePlanScreen from '../components/onboarding/ChoosePlanScreen';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../auth/AuthContext';
 import { persistSession } from '../auth/authStorage';
 import { cv } from '../theme/cssVars';
@@ -433,7 +434,7 @@ export default function SignUpPage() {
         mobileNumber,
         teamSize,
         firstFocus,
-        planId,
+        planId: 'free', // Always provision as free initially, upgrade happens via Stripe
         billingCycle,
         hubspotUtk: hubspotUtkCookie,
       });
@@ -465,6 +466,42 @@ export default function SignUpPage() {
           ownerType: 'WORKSPACE',
           ownerId: targetWorkspaceId,
         });
+      }
+
+      // If they chose a paid plan, redirect them to Stripe Checkout
+      if (selectedPlanId && selectedPlanId.toLowerCase() !== 'free') {
+        const { fetchPublicCatalogPlans } = await import('../platform/api/platformApi');
+        const catalog = await fetchPublicCatalogPlans().catch(() => null);
+        const match = catalog?.plans?.find(
+          (p: any) => p.name?.toLowerCase() === selectedPlanId.toLowerCase() || p.id?.toLowerCase() === selectedPlanId.toLowerCase()
+        );
+        
+        let activePriceId = null;
+        if (match) {
+          activePriceId = billingCycle === 'annual' ? (match.yearlyPriceId || match.monthlyPriceId) : match.monthlyPriceId;
+        }
+        
+        if (activePriceId) {
+          const { billingService } = await import('../api/billing.service');
+          toast.loading('Redirecting to secure checkout...', { id: 'stripe-signup-checkout' });
+          try {
+            const res: any = await billingService.createCheckoutSession(
+              activePriceId, 
+              false,
+              '/home?payment_success=true',
+              '/onboarding/plan?canceled=true'
+            );
+            if (res?.url) {
+              window.location.href = res.url;
+              return; // Halt navigation to /home, they go to Stripe
+            }
+          } catch (checkoutErr: any) {
+            console.error('Failed to initiate Stripe checkout:', checkoutErr);
+            toast.dismiss('stripe-signup-checkout');
+            toast.error('Could not start checkout. You have been placed on the Free plan.');
+            // Proceed to home
+          }
+        }
       }
 
       navigate('/home', { replace: true });

@@ -73,7 +73,7 @@ export default function FolderDeleteFlowModal({
   onConfirmDelete,
 }: FolderDeleteFlowModalProps) {
   // Modal step: directly open 'select_tree' with items pre-selected
-  const [step, setStep] = useState<'confirm1' | 'confirm_whole' | 'select_tree' | 'confirm_selected'>('select_tree');
+  const [step, setStep] = useState<'confirm1' | 'confirm_whole' | 'select_tree' | 'confirm_selected'>('confirm_whole');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -88,7 +88,7 @@ export default function FolderDeleteFlowModal({
   // Load folder tree data when modal opens
   useEffect(() => {
     if (!open || !folderId) {
-      setStep('select_tree');
+      setStep('confirm_whole');
       setFiles([]);
       setFolders([]);
       setSelectedFileIds(new Set());
@@ -100,7 +100,7 @@ export default function FolderDeleteFlowModal({
     }
 
     let isMounted = true;
-    setStep('select_tree');
+    setStep('confirm_whole');
     setLoading(true);
 
     const fetchFolderTree = async () => {
@@ -590,13 +590,16 @@ const isWorkspaceDateContainer = (name?: string): boolean => {
         </>
       )}
 
-      {/* Step 2: Confirm Entire Folder Deletion */}
+      {/* Step: Confirm Folder Deletion Warning */}
       {step === 'confirm_whole' && (
         <>
           <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              Confirm Whole Folder Deletion
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+              <WarningAmberOutlinedIcon sx={{ color: cv.warning, fontSize: 26 }} />
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                Delete folder "{folderName}"?
+              </Typography>
+            </Box>
             <IconButton onClick={onClose} size="small" sx={{ color: cv.textMuted }}>
               <CloseIcon />
             </IconButton>
@@ -614,14 +617,14 @@ const isWorkspaceDateContainer = (name?: string): boolean => {
               }}
             >
               <WarningAmberOutlinedIcon sx={{ color: cv.warning, mt: 0.25, flexShrink: 0 }} />
-              <Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary, lineHeight: 1.5 }}>
-                You are requesting deletion of the entire folder <strong>"{folderName}"</strong>. Super Admin will review this request in Delete Management.
+              <Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary, lineHeight: 1.55 }}>
+                Are you sure you want to delete folder <strong>"{folderName}"</strong>? All files, subfolders, and projects inside this folder will be deleted and sent to <strong>Super Admin Delete Management</strong> for review.
               </Typography>
             </Box>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-            <Button onClick={() => setStep('confirm1')} variant="outlined" sx={{ color: cv.textSecondary, borderColor: cv.border }}>
-              Back
+          <DialogActions sx={{ px: 3, pb: 2.5, gap: 1, justifyContent: 'flex-end' }}>
+            <Button onClick={onClose} variant="outlined" sx={{ color: cv.textSecondary, borderColor: cv.border }}>
+              Cancel
             </Button>
             <Button
               onClick={() => handleExecuteDelete(true)}
@@ -632,7 +635,7 @@ const isWorkspaceDateContainer = (name?: string): boolean => {
                 '&:hover': { backgroundColor: cv.destructiveHover },
               }}
             >
-              {submitting ? 'Submitting...' : 'Submit Deletion Request'}
+              {submitting ? 'Submitting...' : 'Yes, Delete Folder'}
             </Button>
           </DialogActions>
         </>
@@ -650,6 +653,23 @@ const isWorkspaceDateContainer = (name?: string): boolean => {
             </IconButton>
           </DialogTitle>
           <DialogContent sx={{ pt: 1 }}>
+            <Box
+              sx={{
+                p: 1.75,
+                borderRadius: '10px',
+                border: `1px solid ${cv.warningBorderSoft}`,
+                backgroundColor: cv.warningSurface,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                mb: 2,
+              }}
+            >
+              <WarningAmberOutlinedIcon sx={{ color: cv.warning, fontSize: 20, flexShrink: 0 }} />
+              <Typography sx={{ fontSize: '0.84rem', color: cv.textPrimary, lineHeight: 1.45 }}>
+                Deleting <strong>"{folderName}"</strong> will move all files, folders, and projects inside it to <strong>Super Admin Delete Management</strong>.
+              </Typography>
+            </Box>
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
                 <CircularProgress size={32} sx={{ color: cv.brandOrchid }} />
@@ -718,8 +738,8 @@ const isWorkspaceDateContainer = (name?: string): boolean => {
             >
               <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
                 {isWholeFolderSelected
-                  ? 'All items inside this folder are selected. This will request whole folder deletion.'
-                  : 'Selected items will be submitted for Super Admin review in Delete Management.'}
+                  ? 'All files, folders, and projects inside this folder will also go to Super Admin Delete Management.'
+                  : 'All selected files, folders, and projects will be sent to Super Admin Delete Management for review.'}
               </Typography>
             </Box>
           </DialogContent>
