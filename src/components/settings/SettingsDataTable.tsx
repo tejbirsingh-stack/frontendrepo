@@ -29,6 +29,7 @@ interface SettingsDataTableProps<T> {
   selectable?: boolean;
   selectedRowIds?: Set<string>;
   onSelectionChange?: (selectedIds: Set<string>) => void;
+  isRowSelectable?: (row: T) => boolean;
 }
 
 const CHECKBOX_COLUMN_WIDTH = 36;
@@ -111,10 +112,14 @@ export default function SettingsDataTable<T>({
   selectable = false,
   selectedRowIds = new Set(),
   onSelectionChange,
+  isRowSelectable,
 }: SettingsDataTableProps<T>) {
   const visibleRowIds = rows.map(getRowId);
-  const selectedVisibleCount = visibleRowIds.filter((id) => selectedRowIds.has(id)).length;
-  const allVisibleSelected = rows.length > 0 && selectedVisibleCount === rows.length;
+  const selectableRows = isRowSelectable ? rows.filter(isRowSelectable) : rows;
+  const selectableRowIds = selectableRows.map(getRowId);
+
+  const selectedVisibleCount = selectableRowIds.filter((id) => selectedRowIds.has(id)).length;
+  const allVisibleSelected = selectableRows.length > 0 && selectedVisibleCount === selectableRows.length;
   const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
 
   const handleToggleAll = () => {
@@ -122,18 +127,19 @@ export default function SettingsDataTable<T>({
 
     if (allVisibleSelected) {
       const next = new Set(selectedRowIds);
-      visibleRowIds.forEach((id) => next.delete(id));
+      selectableRowIds.forEach((id) => next.delete(id));
       onSelectionChange(next);
       return;
     }
 
     const next = new Set(selectedRowIds);
-    visibleRowIds.forEach((id) => next.add(id));
+    selectableRowIds.forEach((id) => next.add(id));
     onSelectionChange(next);
   };
 
-  const handleToggleRow = (rowId: string) => {
+  const handleToggleRow = (rowId: string, row: T) => {
     if (!onSelectionChange) return;
+    if (isRowSelectable && !isRowSelectable(row)) return;
 
     const next = new Set(selectedRowIds);
     if (next.has(rowId)) {
@@ -216,6 +222,7 @@ export default function SettingsDataTable<T>({
             rows.map((row) => {
               const rowId = getRowId(row);
               const selected = selectedRowIds.has(rowId);
+              const rowSelectable = isRowSelectable ? isRowSelectable(row) : true;
               return (
                 <TableRow
                   key={rowId}
@@ -228,15 +235,17 @@ export default function SettingsDataTable<T>({
                 >
                   {selectable ? (
                     <TableCell sx={checkboxCellSx}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-                        <Checkbox
-                          size="small"
-                          checked={selected}
-                          onChange={() => handleToggleRow(rowId)}
-                          aria-label={`Select row ${rowId}`}
-                          sx={checkboxSx}
-                        />
-                      </Box>
+                      {rowSelectable ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+                          <Checkbox
+                            size="small"
+                            checked={selected}
+                            onChange={() => handleToggleRow(rowId, row)}
+                            aria-label={`Select row ${rowId}`}
+                            sx={checkboxSx}
+                          />
+                        </Box>
+                      ) : null}
                     </TableCell>
                   ) : null}
                   {columns.map((column, index) => (

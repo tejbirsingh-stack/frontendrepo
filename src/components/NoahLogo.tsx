@@ -81,6 +81,8 @@ interface NoahLogoProps {
   ariaLabel?: string;
   /** Variant preset for logo sizing. 'auth' uses large 120px-140px prominent logo. */
   variant?: 'auth' | 'default';
+  /** When true, forces the default NOAH logo and bypasses any tenant custom logo/name. */
+  disableCustomBranding?: boolean;
 }
 
 function resolveLogoHeight(width: ResponsiveSize): ResponsiveSize {
@@ -111,6 +113,7 @@ export default function NoahLogo({
   onClick,
   ariaLabel = 'Go to dashboard',
   variant = 'default',
+  disableCustomBranding = false,
 }: NoahLogoProps) {
   const isInteractive = Boolean(to || onClick);
   const logoHeight = height ?? resolveLogoHeight(width);
@@ -144,9 +147,13 @@ export default function NoahLogo({
   };
 
   const { orgBranding, user } = useAuth();
-  const activeBranding = orgBranding?.branding || orgBranding || user?.organization?.metadata;
-  const customLogoUrl = activeBranding?.logoUrl;
-  const customAccountName = activeBranding?.accountName || user?.accountName || user?.organization?.name;
+  const activeBranding = disableCustomBranding
+    ? null
+    : (orgBranding?.branding || orgBranding || user?.organization?.metadata);
+  const customLogoUrl = disableCustomBranding ? null : activeBranding?.logoUrl;
+  const customAccountName = disableCustomBranding
+    ? null
+    : (activeBranding?.accountName || user?.accountName || user?.organization?.name);
   const hasCustomLogo = Boolean(customLogoUrl);
 
   const isAuthView = variant === 'auth' || Boolean(sx);
