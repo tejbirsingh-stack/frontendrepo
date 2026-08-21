@@ -145,6 +145,7 @@ function PlanCard({
         <StatusChip status={active ? 'active' : 'inactive'} />
         {plan.isPublic ? <StatusChip label="Public" /> : <StatusChip label="Private" />}
         {plan.isFeatured ? <StatusChip label="Featured" status="active" /> : null}
+        <StatusChip label={`Order: ${plan.sortOrder}`} />
       </Box>
 
       <Box
@@ -232,6 +233,7 @@ function PlansListView({
           { id: 'monthly', label: 'Monthly' },
           { id: 'public', label: 'Public' },
           { id: 'featured', label: 'Featured' },
+          { id: 'sortOrder', label: 'Sort Order' },
           { id: 'active', label: 'Active', align: 'right' },
           ...(showManageActions ? [{ id: 'actions', label: '', align: 'right' as const }] : []),
         ]}
@@ -248,6 +250,7 @@ function PlansListView({
               <TableCell>{formatMoneyCents(plan.monthlyPriceCents)}</TableCell>
               <TableCell>{plan.isPublic ? 'Yes' : 'No'}</TableCell>
               <TableCell>{plan.isFeatured ? 'Yes' : 'No'}</TableCell>
+              <TableCell>{plan.sortOrder}</TableCell>
               <TableCell align="right">
                 <Switch
                   size="small"

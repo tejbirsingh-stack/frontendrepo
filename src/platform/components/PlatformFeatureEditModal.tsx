@@ -13,14 +13,14 @@ import {
   Typography,
 } from '@mui/material';
 import { toast } from 'react-hot-toast';
-import { createPlanFeature, updatePlanFeature, type PlanFeature } from '../api/platformApi';
+import { createPlanFeature, fetchPlanFeatures, updatePlanFeature, type PlanFeature } from '../api/platformApi';
 import { noahDialogSlotProps } from '../../constants/dialogStyles';
 import { cv } from '../../theme/cssVars';
 
 const emptyForm = {
   name: '',
   description: '',
-  sortOrder: '0',
+  sortOrder: '',
   isActive: true,
 };
 
@@ -49,7 +49,13 @@ export function PlatformFeatureEditModal({
           isActive: feature.isActive,
         });
       } else {
-        setForm(emptyForm);
+        // Auto-compute the next sort order (last + 1) for new features
+        fetchPlanFeatures()
+          .then((res) => {
+            const maxOrder = Math.max(0, ...(res.features || []).map((f) => f.sortOrder));
+            setForm({ ...emptyForm, sortOrder: String(maxOrder + 1) });
+          })
+          .catch(() => setForm({ ...emptyForm, sortOrder: '1' }));
       }
       setError('');
     }
@@ -57,10 +63,15 @@ export function PlatformFeatureEditModal({
 
   const save = async () => {
     setError('');
+    const parsedSortOrder = Number(form.sortOrder);
+    if (!form.sortOrder || parsedSortOrder <= 0 || !Number.isInteger(parsedSortOrder)) {
+      setError('Sort order must be a whole number greater than zero');
+      return;
+    }
     const body = {
       name: form.name.trim(),
       description: form.description.trim() || undefined,
-      sortOrder: Number(form.sortOrder) || 0,
+      sortOrder: parsedSortOrder,
       isActive: form.isActive,
     };
 
@@ -137,7 +148,8 @@ export function PlatformFeatureEditModal({
             fullWidth
             value={form.sortOrder}
             onChange={(e) => setForm({ ...form, sortOrder: e.target.value })}
-            helperText="Lower numbers appear first in the pricing table"
+            inputProps={{ min: 1, step: 1 }}
+            helperText="Must be ≥ 1 — lower numbers appear first. Defaults to last position."
           />
 
           <FormControlLabel
