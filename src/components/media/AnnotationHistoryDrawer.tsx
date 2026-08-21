@@ -38,7 +38,10 @@ import { useActiveUser } from '../../hooks/useActiveUser';
 import type { MediaItem } from '../../data/mockMedia';
 import { MOCK_FRAME_PEOPLE, type FramePerson } from '../../data/mockFramePeople';
 import TranscriptPanel from './TranscriptPanel';
+import AiSummaryBlock from './AiSummaryBlock';
 import type { AnnotationHistoryEntry, AnnotationHistoryType } from '../../types/annotationHistory';
+import { getAiHighlightsRequest } from '../../api/ai.service';
+import { useAiEntitled } from '../../hooks/useAiEntitled';
 import type { CommentReply, VideoComment } from '../../types/videoComments';
 import CommentImageAttachment from './CommentImageAttachment';
 import type { AnnotationAccessGroup, AnnotationVisibility } from '../../types/annotationVisibility';
@@ -1105,6 +1108,11 @@ export default function AnnotationHistoryDrawer({
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
+  const aiEntitled = useAiEntitled();
+  const [highlightSummary, setHighlightSummary] = useState<string | null>(null);
+  const [highlightTags, setHighlightTags] = useState<string[]>([]);
+  const [highlightLoading, setHighlightLoading] = useState(false);
+  const [highlightError, setHighlightError] = useState<string | null>(null);
 
   const commentById = useMemo(
     () => new Map(comments.map((comment) => [comment.id, comment])),
@@ -1186,6 +1194,57 @@ export default function AnnotationHistoryDrawer({
 
   // People detection runs on frames, so audio and documents have no faces to list.
   const supportsFramePeople = mediaItem?.type === 'video' || mediaItem?.type === 'image';
+
+  useEffect(() => {
+    if (activeTab !== 'ai' || !aiEntitled || !mediaItem?.id) {
+      return;
+    }
+
+    let cancelled = false;
+    setHighlightLoading(true);
+    setHighlightError(null);
+
+    void getAiHighlightsRequest(mediaItem.id)
+      .then((res) => {
+        if (cancelled) return;
+        const apiSummary = res.summary?.trim() || '';
+        const apiTags = Array.isArray(res.tags)
+          ? res.tags.filter((t) => typeof t === 'string' && t.trim())
+          : [];
+        setHighlightSummary(apiSummary || null);
+        setHighlightTags(apiTags);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHighlightError('Could not load AI summary.');
+        setHighlightSummary(null);
+        setHighlightTags([]);
+      })
+      .finally(() => {
+        if (!cancelled) setHighlightLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, aiEntitled, mediaItem?.id]);
+
+  const insightsSummary = useMemo(() => {
+    if (highlightSummary?.trim()) return highlightSummary.trim();
+    const userSummary =
+      (typeof mediaItem?.customMetadata?.summary === 'string' &&
+        mediaItem.customMetadata.summary.trim()) ||
+      mediaItem?.summary?.trim() ||
+      '';
+    return userSummary || null;
+  }, [highlightSummary, mediaItem?.customMetadata, mediaItem?.summary]);
+
+  const insightsTags = useMemo(() => {
+    if (highlightTags.length > 0) return highlightTags;
+    return Array.isArray(mediaItem?.aiTags)
+      ? mediaItem.aiTags.filter((t) => typeof t === 'string' && t.trim())
+      : [];
+  }, [highlightTags, mediaItem?.aiTags]);
 
   const panelBody = (
     <>
@@ -1315,6 +1374,43 @@ export default function AnnotationHistoryDrawer({
               },
             }}
           />
+
+          {aiEntitled ? (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.75,
+                p: 1.25,
+                borderRadius: '12px',
+                border: `1px solid ${cv.border}`,
+                backgroundColor: cv.surface,
+                maxHeight: 180,
+                overflowY: 'auto',
+              }}
+            >
+              <Typography
+                component="h3"
+                sx={{
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  color: cv.textSecondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Summary
+              </Typography>
+              <AiSummaryBlock
+                compact
+                summary={insightsSummary}
+                tags={insightsTags}
+                loading={highlightLoading}
+                error={highlightError}
+                emptyMessage="No AI summary yet."
+              />
+            </Box>
+          ) : null}
 
           {supportsFramePeople && (
             <FramePeopleHeadshots

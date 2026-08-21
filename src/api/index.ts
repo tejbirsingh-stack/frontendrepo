@@ -28,12 +28,15 @@ export {
   retryAiAnalyzeRequest,
   searchAiRequest,
   searchAiTranscriptRequest,
+  getAiHighlightsRequest,
+  listAiTagsRequest,
 } from './ai.service';
 export type {
   TranscriptSegmentDto,
   TranscriptResponseDto,
   AiStatusResponseDto,
   AiSearchHitDto,
+  AiHighlightsResponseDto,
 } from './ai.service';
 export type { MediaAssetResponseDto, UploadMediaProgress } from './media.service';
 export {

@@ -20,6 +20,7 @@ import VideoLibraryRoundedIcon from '@mui/icons-material/VideoLibraryRounded';
 import RateReviewRoundedIcon from '@mui/icons-material/RateReviewRounded';
 import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded';
 import NoahLogo from '../components/NoahLogo';
+import NoahMascot from '../components/NoahMascot';
 import WaveBackground from '../components/WaveBackground';
 import LandingCtaDialogs from '../components/landing/LandingCtaDialogs';
 import {
@@ -448,9 +449,9 @@ export default function MarketingLandingPage() {
         >
           <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
             <NoahLogo
-              width={{ xs: 200, sm: 248, md: 292 }}
-              height={{ xs: 56, sm: 64, md: 72 }}
-              boxWidth={{ xs: 200, sm: 248, md: 292 }}
+              width={{ xs: 200, sm: 200, md: 292 }}
+              height={{ xs: 56, sm: 56, md: 72 }}
+              boxWidth={{ xs: 200, sm: 200, md: 292 }}
               objectFit="cover"
               animated={false}
               showGlow={false}
@@ -459,10 +460,14 @@ export default function MarketingLandingPage() {
               sx={{
                 mb: 0,
                 overflow: 'hidden',
+                maxWidth: { xs: 200, sm: 200, md: 'none' },
                 '& img': {
                   mixBlendMode: 'lighten',
                   objectPosition: 'center',
                   transform: 'scale(1)',
+                  maxWidth: { xs: '200px', sm: '200px', md: 'none' },
+                  width: { xs: '100%', sm: '100%', md: 'auto' },
+                  height: 'auto',
                 },
                 'html[data-theme="light"] & img': { mixBlendMode: 'normal' },
               }}
@@ -561,11 +566,14 @@ export default function MarketingLandingPage() {
           sx={{
             ...sectionPad,
             pt: { xs: 8, md: 12 },
+            position: 'relative',
+            overflow: 'hidden',
             background:
               'radial-gradient(ellipse 80% 50% at 50% -10%, rgba(142,68,173,0.22), transparent 55%), radial-gradient(ellipse 40% 40% at 90% 10%, rgba(210,140,255,0.12), transparent 50%)',
           }}
         >
-          <Box sx={{ maxWidth: MAX, mx: 'auto', textAlign: 'center' }}>
+          <NoahMascot pose="gesture" preset="hero" />
+          <Box sx={{ position: 'relative', zIndex: 1, maxWidth: MAX, mx: 'auto', textAlign: 'center' }}>
             <Box
               component="div"
               sx={{
@@ -917,9 +925,9 @@ export default function MarketingLandingPage() {
         >
           <Box>
             <NoahLogo
-              width={{ xs: 200, sm: 248, md: 292 }}
-              height={{ xs: 56, sm: 64, md: 72 }}
-              boxWidth={{ xs: 200, sm: 248, md: 292 }}
+              width={{ xs: 200, sm: 200, md: 292 }}
+              height={{ xs: 56, sm: 56, md: 72 }}
+              boxWidth={{ xs: 200, sm: 200, md: 292 }}
               objectFit="cover"
               animated={false}
               showGlow={false}
@@ -927,10 +935,14 @@ export default function MarketingLandingPage() {
               sx={{
                 mb: 1.5,
                 overflow: 'hidden',
+                maxWidth: { xs: 200, sm: 200, md: 'none' },
                 '& img': {
                   mixBlendMode: 'lighten',
                   objectPosition: 'center',
                   transform: 'scale(1)',
+                  maxWidth: { xs: '200px', sm: '200px', md: 'none' },
+                  width: { xs: '100%', sm: '100%', md: 'auto' },
+                  height: 'auto',
                 },
                 'html[data-theme="light"] & img': { mixBlendMode: 'normal' },
               }}

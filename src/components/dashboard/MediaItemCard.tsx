@@ -15,6 +15,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
+import AiSummaryDialog from './AiSummaryDialog';
 import TruncatedText from '../TruncatedText';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { MediaItem, MediaType } from '../../data/mockMedia';
@@ -128,12 +129,17 @@ function FavoriteButton({
 }
 
 function SearchMatchBadge({ matchType }: { matchType?: string }) {
-  if (matchType !== 'semantic' && matchType !== 'transcript') return null;
+  if (matchType !== 'semantic' && matchType !== 'transcript' && matchType !== 'highlight') {
+    return null;
+  }
   const isSemantic = matchType === 'semantic';
-  const label = isSemantic ? 'Related' : 'Transcript';
+  const isHighlight = matchType === 'highlight';
+  const label = isSemantic ? 'Related' : isHighlight ? 'AI Tags' : 'Transcript';
   const ariaLabel = isSemantic
     ? 'Matched because the spoken content is related'
-    : 'Matched because the transcript contains this search';
+    : isHighlight
+      ? 'Matched because AI summary or tags contain this search'
+      : 'Matched because the transcript contains this search';
 
   return (
     <Tooltip title={label} arrow placement="top">
@@ -489,6 +495,7 @@ export default function MediaItemCard({
 }: MediaItemCardProps) {
   const navigate = useNavigate();
   const { mediaItems, trashedIds } = useDashboard();
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const config = typeConfig[item.type];
   const isFolder = item.type === 'folder';
   const folderChildCount = isFolder
@@ -521,6 +528,15 @@ export default function MediaItemCard({
   // The frontend `MediaItem` has `videoSrc` mapped to the raw asset if it's not a video? Yes, it's mapped in `apiToFrontendMedia`.
   const documentUrl = item.videoSrc || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : undefined);
   const isClickable = (Boolean(openPath) || (item.type === 'document' && Boolean(documentUrl))) && !selectionActive;
+
+  const fullSummary = item.summary?.trim() || '';
+  const previewText = (item.searchMatch?.snippet?.trim() || fullSummary).trim();
+  const aiTagList = Array.isArray(item.aiTags)
+    ? item.aiTags.filter((t) => typeof t === 'string' && t.trim().length > 0)
+    : [];
+  const canViewFullSummary =
+    (item.type === 'video' || item.type === 'audio') &&
+    (Boolean(fullSummary) || aiTagList.length > 0);
 
   const handleOpen = () => {
     if (!isClickable) return;
@@ -580,6 +596,7 @@ export default function MediaItemCard({
         : cv.border;
 
   return (
+    <>
     <Box
       onClick={isClickable ? handleOpen : undefined}
       onDragOver={handleFolderDragOver}
@@ -611,15 +628,17 @@ export default function MediaItemCard({
       <Box sx={{ position: 'relative', aspectRatio: '16 / 9', overflow: 'hidden' }}>
         <MediaPreview item={item} folderChildCount={folderChildCount} />
 
-        {(item.type === 'video' || item.type === 'audio') && (item.searchMatch?.snippet || item.summary)?.trim() ? (
+        {(item.type === 'video' || item.type === 'audio') && (previewText || canViewFullSummary) ? (
           <Box
             className="video-summary-overlay"
-            aria-hidden
             sx={{
               position: 'absolute',
               inset: 0,
               display: 'flex',
-              alignItems: 'flex-end',
+              flexDirection: 'column',
+              justifyContent: 'flex-end',
+              alignItems: 'flex-start',
+              gap: 0.75,
               p: 1.5,
               pb: 2,
               pr: item.duration ? 5 : 1.5,
@@ -631,19 +650,57 @@ export default function MediaItemCard({
               zIndex: 1,
             }}
           >
-            <Typography
-              sx={{
-                fontSize: '0.8125rem',
-                lineHeight: 1.45,
-                color: cv.textInverse,
-                display: '-webkit-box',
-                WebkitLineClamp: 4,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-              }}
-            >
-              {item.searchMatch?.snippet?.trim() || item.summary?.trim()}
-            </Typography>
+            {previewText ? (
+              <Typography
+                aria-hidden
+                sx={{
+                  fontSize: '0.8125rem',
+                  lineHeight: 1.45,
+                  color: cv.textInverse,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 4,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}
+              >
+                {previewText}
+              </Typography>
+            ) : null}
+            {canViewFullSummary ? (
+              <Box
+                component="button"
+                type="button"
+                aria-label="View full summary"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setSummaryOpen(true);
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                sx={{
+                  pointerEvents: 'auto',
+                  border: `1px solid ${cv.purpleChipBorder}`,
+                  backgroundColor: cv.purpleSurface,
+                  color: cv.brandPurpleLight,
+                  borderRadius: '999px',
+                  px: 1,
+                  py: 0.35,
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                  lineHeight: 1.2,
+                  cursor: 'pointer',
+                  '&:hover': {
+                    filter: 'brightness(1.08)',
+                  },
+                  '&:focus-visible': {
+                    outline: `2px solid ${cv.brandPurpleLight}`,
+                    outlineOffset: 2,
+                  },
+                }}
+              >
+                View full summary
+              </Box>
+            ) : null}
           </Box>
         ) : null}
 
@@ -767,20 +824,65 @@ export default function MediaItemCard({
           px: 2,
           py: 1.5,
           display: 'flex',
-          alignItems: 'center',
-          gap: 1,
+          flexDirection: 'column',
+          gap: 0.75,
           borderTop: "1px solid var(--noah-border)",
           background: folderFooterAccent,
         }}
       >
-        <TruncatedText
-          variant="body2"
-          text={item.title}
-          sx={{ flex: 1, minWidth: 0, fontWeight: 500, fontSize: '0.875rem', textAlign: 'left' }}
-        />
-        <ShareStatusBadge item={item} />
-        <MediaItemActionsMenu item={item} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <TruncatedText
+            variant="body2"
+            text={item.title}
+            sx={{ flex: 1, minWidth: 0, fontWeight: 500, fontSize: '0.875rem', textAlign: 'left' }}
+          />
+          <ShareStatusBadge item={item} />
+          <MediaItemActionsMenu item={item} />
+        </Box>
+        {(item.type === 'video' || item.type === 'audio') &&
+        Array.isArray(item.aiTags) &&
+        item.aiTags.length > 0 ? (
+          <Box
+            sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}
+            aria-label="AI tags"
+          >
+            {item.aiTags.slice(0, 3).map((tag) => (
+              <Box
+                key={tag}
+                component="span"
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  px: 0.75,
+                  py: 0.125,
+                  borderRadius: '999px',
+                  border: `1px solid ${cv.purpleChipBorder}`,
+                  backgroundColor: cv.purpleSurface,
+                }}
+              >
+                <Typography
+                  component="span"
+                  sx={{
+                    fontSize: '0.625rem',
+                    fontWeight: 600,
+                    color: cv.brandPurpleLight,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {tag}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        ) : null}
       </Box>
     </Box>
+    <AiSummaryDialog
+      open={summaryOpen}
+      onClose={() => setSummaryOpen(false)}
+      summary={fullSummary}
+      tags={aiTagList}
+    />
+    </>
   );
 }

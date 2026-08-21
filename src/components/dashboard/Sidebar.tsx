@@ -96,9 +96,9 @@ const sidebarLogoSx = {
   alignItems: 'center',
   '& img': {
     maxHeight: '40px',
-    maxWidth: '140px',
+    maxWidth: '220px',
     height: 'auto',
-    width: 'auto',
+    width: 'stretch',
     objectFit: 'contain',
     borderRadius: '8px',
   },

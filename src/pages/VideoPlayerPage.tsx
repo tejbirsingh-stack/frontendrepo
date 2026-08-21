@@ -502,6 +502,9 @@ export default function VideoPlayerPage({
             id: asset.id,
             title: asset.name,
             summary: asset.customMetadata?.summary || (asset.metadata as any)?.customProperties?.summary || undefined,
+            aiTags: Array.isArray((asset as any).aiTags)
+              ? (asset as any).aiTags.filter((t: unknown) => typeof t === 'string')
+              : undefined,
             type: (asset.type.split('/')[0] as MediaType) || 'document',
             workspaceId: 'default',
             createdAt: asset.uploadDate || new Date().toISOString(),

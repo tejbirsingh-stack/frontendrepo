@@ -58,5 +58,21 @@ export async function searchAiRequest(q: string, page = 1): Promise<{
   return apiClient.get(`/ai/search?${params.toString()}`);
 }
 
+export interface AiHighlightsResponseDto {
+  success: boolean;
+  assetId: string;
+  status: string;
+  summary: string | null;
+  tags: string[];
+}
+
+export async function getAiHighlightsRequest(assetId: string): Promise<AiHighlightsResponseDto> {
+  return apiClient.get(`/ai/assets/${encodeURIComponent(assetId)}/highlights`);
+}
+
+export async function listAiTagsRequest(): Promise<{ success: boolean; tags: string[] }> {
+  return apiClient.get('/ai/tags');
+}
+
 /** @deprecated Use searchAiRequest */
 export const searchAiTranscriptRequest = searchAiRequest;
