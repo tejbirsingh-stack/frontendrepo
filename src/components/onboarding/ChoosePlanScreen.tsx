@@ -250,7 +250,8 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
       ? (targetPlan?.yearlyPriceId || targetPlan?.monthlyPriceId) 
       : targetPlan?.monthlyPriceId;
 
-    if (isSettingsFlow || pId !== 'free') {
+    const isFreePlan = (targetPlan?.name || pId).toLowerCase().includes('free');
+    if (isSettingsFlow || !isFreePlan) {
       const isSame = normCurrentPlan === pId || normCurrentPlan === (targetPlan?.name || '').toLowerCase();
       setConfirmPlanModal({
         planId,
