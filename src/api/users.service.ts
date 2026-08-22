@@ -6,6 +6,7 @@ export interface UpdateProfileDto {
   name?: string;
   timezone?: string;
   shareLinkActivityEnabled?: boolean;
+  preferences?: Record<string, any>;
 }
 
 export interface UploadProfilePhotoResponse {
