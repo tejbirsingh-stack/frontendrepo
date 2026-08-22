@@ -38,7 +38,7 @@ import {
 import { formatFolderItemCount, getFolderChildCount } from '../../utils/folderItemCount';
 import { useDashboard } from '../../context/DashboardContext';
 import { decodeClientImageToDataUrl } from '../../utils/clientImageDecoder';
-import { parseFileReviewStatus } from '../../constants/fileReviewStatus';
+import { parseFileReviewStatus, getFileReviewStatusColor } from '../../constants/fileReviewStatus';
 
 interface MediaItemCardProps {
   item: MediaItem;
@@ -185,7 +185,7 @@ function VisibilityBadge({ item }: { item: MediaItem }) {
   );
 }
 
-/** Approved / Rejected badge shown next to the type pill on media cards. */
+/** Badge shown next to the type pill on media cards to indicate review progress. */
 function ReviewStatusBadge({ item }: { item: MediaItem }) {
   if (item.type === 'folder' || item.isProject) return null;
 
@@ -194,51 +194,24 @@ function ReviewStatusBadge({ item }: { item: MediaItem }) {
       (item as { reviewStatus?: unknown }).reviewStatus,
   );
 
-  if (status !== 'Approved' && status !== 'Rejected') return null;
+  if (status === 'New') return null;
 
-  const isApproved = status === 'Approved';
+  const color = getFileReviewStatusColor(status);
 
   return (
-    <Tooltip title={status} arrow placement="top">
+    <Tooltip title={`Review status: ${status}`} arrow placement="top">
       <Box
-        aria-label={status}
+        aria-label={`Review status: ${status}`}
         sx={{
-          width: 28,
-          height: 28,
+          width: 8,
+          height: 8,
           borderRadius: '50%',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          backgroundColor: color,
+          boxShadow: status === 'Approved' ? `0 0 6px ${color}` : 'none',
           flexShrink: 0,
-          ...(isApproved
-            ? {
-                backgroundColor: cv.brandTeal,
-                border: `1.5px solid ${cv.brandTeal}`,
-                boxShadow: `0 0 0 1.5px rgba(0,0,0,0.35)`,
-              }
-            : {
-                ...thumbnailOverlayChipStyles,
-              }),
+          ml: 0.5,
         }}
-      >
-        {isApproved ? (
-          <CheckIcon sx={{ fontSize: 16, color: '#fff', strokeWidth: 2 }} />
-        ) : (
-          <Box
-            sx={{
-              width: 18,
-              height: 18,
-              borderRadius: '50%',
-              backgroundColor: cv.destructive,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <CloseIcon sx={{ fontSize: 12, color: '#fff' }} />
-          </Box>
-        )}
-      </Box>
+      />
     </Tooltip>
   );
 }
@@ -655,7 +628,6 @@ export default function MediaItemCard({
           />
           <VisibilityBadge item={item} />
           <TypeBadge type={item.type} isProject={item.isProject} />
-          <ReviewStatusBadge item={item} />
         </Box>
 
         <Box

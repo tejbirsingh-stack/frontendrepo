@@ -873,6 +873,16 @@ export default function VideoPlayerPage({
               videoTimestamp: vTime,
               parentId: anyC.parentId || null
             });
+            
+            // Sync frontend status if it was New
+            if (fileReviewStatus === 'New' || !fileReviewStatus) {
+              setFileReviewStatus('In-Progress');
+              setFetchedItem((prev) => 
+                prev && prev.id === mediaId 
+                  ? { ...prev, customMetadata: { ...(prev.customMetadata || {}), reviewStatus: 'In-Progress' } } 
+                  : prev
+              );
+            }
           }
           broadcastMessage({ type: 'NEW_ANNOTATION', payload: c as any });
           // Generate client-side in-app notifications if text is present
