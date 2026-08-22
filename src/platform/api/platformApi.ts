@@ -100,11 +100,12 @@ export async function invitePlatformUser(body: Record<string, unknown>) {
   });
 }
 
-export async function fetchPlatformRoles() {
+export async function fetchPlatformRoles(params: Record<string, string> = {}) {
+  const qs = new URLSearchParams(params).toString();
   return platformRequest<{
     success: boolean;
     roles: Array<{ id: string; name: string; show?: number | null }>;
-  }>('/platform/roles');
+  }>(`/platform/roles${qs ? `?${qs}` : ''}`);
 }
 
 export async function patchPlatformUser(userId: string, body: Record<string, unknown>) {
