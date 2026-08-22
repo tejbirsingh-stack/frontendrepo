@@ -119,6 +119,9 @@ interface VideoPlayerControlsProps {
   onAnnotationClick?: (id: string, type: TimelineAnnotationType) => void;
   frameRateLabel?: string;
   mediaTitle?: string;
+  inPoint?: number | null;
+  outPoint?: number | null;
+  rangeEnabled?: boolean;
 }
 
 export default function VideoPlayerControls({
@@ -134,6 +137,9 @@ export default function VideoPlayerControls({
   onAnnotationClick,
   frameRateLabel,
   mediaTitle,
+  inPoint,
+  outPoint,
+  rangeEnabled,
 }: VideoPlayerControlsProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -791,6 +797,9 @@ export default function VideoPlayerControls({
           onScrubEnd={() => setIsScrubbing(false)}
           fallbackDuration={timelineFallbackDuration}
           onAnnotationClick={onAnnotationClick}
+          inPoint={inPoint}
+          outPoint={outPoint}
+          rangeEnabled={rangeEnabled}
         />
       ) : null}
     </Box>

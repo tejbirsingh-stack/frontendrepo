@@ -1,16 +1,19 @@
 import { cv } from '../../theme/cssVars';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import ChatBubbleOutlineOutlinedIcon from '@mui/icons-material/ChatBubbleOutlineOutlined';
 import type { VideoDrawingStroke } from '../../types/videoDrawings';
 import { parsePathPoints } from '../../utils/drawStrokeStyle';
 
 interface SelectedDrawingToolbarProps {
   stroke: VideoDrawingStroke;
+  onAddComment?: () => void;
   onDelete?: () => void;
 }
 
 export default function SelectedDrawingToolbar({
   stroke,
+  onAddComment,
   onDelete,
 }: SelectedDrawingToolbarProps) {
   const points = parsePathPoints(stroke.points);
@@ -79,6 +82,27 @@ export default function SelectedDrawingToolbar({
           pointerEvents: 'auto',
         }}
       >
+        {onAddComment && (
+          <Tooltip title="Add comment" placement="top">
+            <IconButton
+              aria-label="Add comment"
+              onClick={onAddComment}
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: '10px',
+                color: cv.textSecondary,
+                '&:hover': {
+                  color: cv.textPrimary,
+                  backgroundColor: cv.surfaceHover,
+                },
+              }}
+            >
+              <ChatBubbleOutlineOutlinedIcon sx={{ fontSize: 22 }} />
+            </IconButton>
+          </Tooltip>
+        )}
+
         {onDelete && (
           <Tooltip title="Delete drawing" placement="top">
             <IconButton

@@ -5,6 +5,8 @@ import { cv } from '../theme/cssVars';
 import { Alert, Box, Button, Chip, CircularProgress, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import StarIcon from '@mui/icons-material/Star';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
@@ -138,6 +140,7 @@ import {
   getStampHistoryEntryId,
 } from '../utils/annotationOverlayVisibility';
 import { shapeSummary } from '../components/media/ShapeGraphic';
+import AudioMeterOverlay from '../components/media/AudioMeterOverlay';
 import { getStampSummary } from '../constants/stamps';
 import type { AnnotationCommentPromptRequest } from '../utils/annotationCommentPrompt';
 import { hasAnnotationContent } from '../utils/annotationSnapshot';
@@ -152,7 +155,7 @@ import {
   parseFileReviewStatus,
   type FileReviewStatus,
 } from '../constants/fileReviewStatus';
-import { formatVideoTimestamp, parseMediaDurationLabel } from '../utils/formatVideoTimestamp';
+import { formatVideoTimestamp, formatVideoTimecode, parseMediaDurationLabel } from '../utils/formatVideoTimestamp';
 import {
   extractPlaybackQualityMetadata,
   extractVideoStreamMetadata,
@@ -405,6 +408,7 @@ export default function VideoPlayerPage({
         sizeBytes: (contextItem as any).sizeBytes || (fetchedItem as any).sizeBytes,
         proxySizeBytes: fetchedItem.proxySizeBytes ?? contextItem.proxySizeBytes,
         hasProxy: fetchedItem.hasProxy ?? contextItem.hasProxy,
+        visibility: (fetchedItem as any).visibility || (contextItem as any).visibility,
       }
       : contextItem || fetchedItem;
   }, [isGuestMode, guestItem, contextItem, fetchedItem]);
@@ -516,6 +520,7 @@ export default function VideoPlayerPage({
             videoSrc: asset.url,
             compressionStatus: asset.compressionStatus || 'completed',
             customMetadata: asset.customMetadata,
+            visibility: (asset as any).visibility,
             duration: (techSpecs.duration as string) || (asset.customMetadata?.duration as string) || undefined,
           });
           // Store effective permissions from backend
@@ -1465,12 +1470,18 @@ export default function VideoPlayerPage({
 
   const handleReadTimecode = useCallback(() => {
     const time = getVideoTimestamp();
+    const fpsValue = (item as any)?.fps || (item as any)?.metadata?.fps || 24;
+    const fps = typeof fpsValue === 'string' ? parseFloat(fpsValue) : fpsValue;
+    const formatted = formatVideoTimecode(time, fps);
+    
+    navigator.clipboard.writeText(formatted).catch(() => {});
+    
     setStatusToast({
       open: true,
-      message: `Timecode ${formatVideoTimestamp(time)}`,
+      message: `Timecode ${formatted} copied to clipboard`,
       variant: 'resolved',
     });
-  }, [getVideoTimestamp]);
+  }, [getVideoTimestamp, item]);
 
   const resolvedOverlayEntryIds = useMemo(
     () => buildResolvedOverlayEntryIds(history),
@@ -1511,15 +1522,46 @@ export default function VideoPlayerPage({
       onToggleFlop: () => setPlayerFlipVertical((current) => !current),
       onRotateLeft: () => setPlayerRotationSteps((current) => (current + 3) % 4),
       onRotateRight: () => setPlayerRotationSteps((current) => (current + 1) % 4),
-      onSetInPoint: () => setPlayerInPoint(getVideoTimestamp()),
-      onSetOutPoint: () => setPlayerOutPoint(getVideoTimestamp()),
+      onSetInPoint: () => {
+        const time = getVideoTimestamp();
+        setPlayerInPoint(time);
+        setStatusToast({
+          open: true,
+          message: `In point set to ${formatVideoTimestamp(time)}`,
+          variant: 'resolved',
+        });
+      },
+      onSetOutPoint: () => {
+        const time = getVideoTimestamp();
+        setPlayerOutPoint(time);
+        setStatusToast({
+          open: true,
+          message: `Out point set to ${formatVideoTimestamp(time)}`,
+          variant: 'resolved',
+        });
+      },
       onReadTimecode: handleReadTimecode,
-      onToggleRange: () => setPlayerRangeEnabled((current) => !current),
+      onToggleRange: () => {
+        if (!playerRangeEnabled && (playerInPoint == null || playerOutPoint == null)) {
+          setStatusToast({
+            open: true,
+            message: 'Tip: Set In (I) and Out (O) points first to define the loop section.',
+            variant: 'resolved',
+          });
+        } else {
+          setStatusToast({
+            open: true,
+            message: !playerRangeEnabled ? 'Loop range enabled' : 'Loop range disabled',
+            variant: 'resolved',
+          });
+        }
+        setPlayerRangeEnabled((current) => !current);
+      },
       onToggleAudioMeter: () => setPlayerShowAudioMeter((current) => !current),
       onToggleActualMediaSize: () => setPlayerActualMediaSize((current) => !current),
       onPlayerBackgroundChange: setPlayerBackground,
     }),
-    [getVideoTimestamp, handleReadTimecode],
+    [getVideoTimestamp, handleReadTimecode, playerInPoint, playerOutPoint, playerRangeEnabled],
   );
 
   useEffect(() => {
@@ -2243,25 +2285,8 @@ export default function VideoPlayerPage({
 
   const handleCancelDraft = useCallback(() => {
     if (!draftComment) return;
-
-    if (draftComment.linkedDrawingId) {
-      pushSnapshot(getAnnotationSnapshot());
-      const drawingEntryId = getDrawingHistoryEntryId(draftComment.linkedDrawingId);
-      setDrawings((prev) =>
-        prev.filter((stroke) => stroke.id !== draftComment.linkedDrawingId),
-      );
-      setHistory((current) => current.filter((entry) => entry.id !== drawingEntryId));
-    }
-
-    if (draftComment.linkedShapeId) {
-      pushSnapshot(getAnnotationSnapshot());
-      const shapeEntryId = getShapeHistoryEntryId(draftComment.linkedShapeId);
-      setShapes((prev) => prev.filter((shape) => shape.id !== draftComment.linkedShapeId));
-      setHistory((current) => current.filter((entry) => entry.id !== shapeEntryId));
-    }
-
     setDraftComment(null);
-  }, [draftComment, getAnnotationSnapshot, pushSnapshot]);
+  }, [draftComment]);
 
   const handleAnnotationNeedsComment = useCallback((request: AnnotationCommentPromptRequest) => {
     setDraftComment({
@@ -3746,7 +3771,7 @@ export default function VideoPlayerPage({
             <TruncatedText
               variant="h6"
               component="span"
-              text={item.title}
+              text={item.title || item.name}
               sx={{
                 fontWeight: 600,
                 fontSize: { xs: '1.25rem', md: '1.5rem' },
@@ -3754,6 +3779,19 @@ export default function VideoPlayerPage({
                 color: cv.textPrimary,
               }}
             />
+            {item?.visibility?.toLowerCase() === 'private' ? (
+              <Tooltip title="Private video" placement="bottom">
+                <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5, color: cv.textMuted }}>
+                  <LockOutlinedIcon sx={{ fontSize: 18 }} />
+                </Box>
+              </Tooltip>
+            ) : item?.visibility?.toLowerCase() === 'public' ? (
+              <Tooltip title="Public video" placement="bottom">
+                <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5, color: cv.textMuted }}>
+                  <PublicOutlinedIcon sx={{ fontSize: 18 }} />
+                </Box>
+              </Tooltip>
+            ) : null}
             {headerPermissions.canFavorite ? (
               <Tooltip
                 title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -4425,6 +4463,7 @@ export default function VideoPlayerPage({
                     ref={videoRef}
                     key={videoSrc || 'no-src'}
                     src={mediaElementSrc}
+                    crossOrigin="anonymous"
                     poster={item?.thumbnail}
                     playsInline
                     preload="metadata"
@@ -4606,35 +4645,7 @@ export default function VideoPlayerPage({
                 ) : null}
 
                 {playerShowAudioMeter ? (
-                  <Box
-                    aria-hidden
-                    sx={{
-                      position: 'absolute',
-                      left: 16,
-                      top: 16,
-                      display: 'flex',
-                      alignItems: 'flex-end',
-                      gap: 0.5,
-                      px: 1,
-                      py: 0.75,
-                      borderRadius: '10px',
-                      backgroundColor: 'var(--noah-overlay-scrim)',
-                      border: "1px solid var(--noah-border)",
-                    }}
-                  >
-                    {[0.35, 0.6, 0.9, 0.55, 0.75].map((height, index) => (
-                      <Box
-                        key={index}
-                        sx={{
-                          width: 4,
-                          height: `${height * 28}px`,
-                          borderRadius: '999px',
-                          backgroundColor: cv.textPrimary,
-                          opacity: 0.85,
-                        }}
-                      />
-                    ))}
-                  </Box>
+                  <AudioMeterOverlay videoRef={videoRef} />
                 ) : null}
 
                 {(isGuestMode && guestAssetMeta?.logoUrl) || (isSharedWithUser && internalLogoUrl) ? (
@@ -4755,6 +4766,9 @@ export default function VideoPlayerPage({
                   undefined
                 }
                 mediaTitle={item?.title || item?.name}
+                inPoint={playerInPoint}
+                outPoint={playerOutPoint}
+                rangeEnabled={playerRangeEnabled}
               />
             )}
 
@@ -5014,10 +5028,41 @@ export default function VideoPlayerPage({
         onRotateRight={() =>
           setPlayerRotationSteps((current) => (current + 1) % 4)
         }
-        onSetInPoint={() => setPlayerInPoint(getVideoTimestamp())}
-        onSetOutPoint={() => setPlayerOutPoint(getVideoTimestamp())}
+        onSetInPoint={() => {
+          const time = getVideoTimestamp();
+          setPlayerInPoint(time);
+          setStatusToast({
+            open: true,
+            message: `In point set to ${formatVideoTimestamp(time)}`,
+            variant: 'resolved',
+          });
+        }}
+        onSetOutPoint={() => {
+          const time = getVideoTimestamp();
+          setPlayerOutPoint(time);
+          setStatusToast({
+            open: true,
+            message: `Out point set to ${formatVideoTimestamp(time)}`,
+            variant: 'resolved',
+          });
+        }}
         onReadTimecode={handleReadTimecode}
-        onToggleRange={() => setPlayerRangeEnabled((current) => !current)}
+        onToggleRange={() => {
+          if (!playerRangeEnabled && (playerInPoint == null || playerOutPoint == null)) {
+            setStatusToast({
+              open: true,
+              message: 'Tip: Set In (I) and Out (O) points first to define the loop section.',
+              variant: 'resolved',
+            });
+          } else {
+            setStatusToast({
+              open: true,
+              message: !playerRangeEnabled ? 'Loop range enabled' : 'Loop range disabled',
+              variant: 'resolved',
+            });
+          }
+          setPlayerRangeEnabled((current) => !current);
+        }}
         onToggleAudioMeter={() => setPlayerShowAudioMeter((current) => !current)}
         onToggleActualMediaSize={() => setPlayerActualMediaSize((current) => !current)}
         onPlayerBackgroundChange={setPlayerBackground}

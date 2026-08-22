@@ -14,6 +14,8 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import LinkIcon from '@mui/icons-material/Link';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
 import TruncatedText from '../TruncatedText';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -152,6 +154,32 @@ function TypeBadge({ type, isProject }: { type: MediaType; isProject?: boolean }
         >
           {label}
         </Typography>
+      </Box>
+    </Tooltip>
+  );
+}
+
+function VisibilityBadge({ item }: { item: MediaItem }) {
+  if (item.type === 'folder' || item.isProject) return null;
+  const vis = (item as any)?.visibility?.toLowerCase();
+  if (vis !== 'private' && vis !== 'public') return null;
+  const isPrivate = vis === 'private';
+  
+  return (
+    <Tooltip title={isPrivate ? 'Private' : 'Public'} arrow placement="top">
+      <Box
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 32,
+          height: 32,
+          borderRadius: '8px',
+          ...thumbnailOverlayChipStyles,
+          color: cv.textInverse,
+        }}
+      >
+        {isPrivate ? <LockOutlinedIcon sx={{ fontSize: 16 }} /> : <PublicOutlinedIcon sx={{ fontSize: 16 }} />}
       </Box>
     </Tooltip>
   );
@@ -625,6 +653,7 @@ export default function MediaItemCard({
             isFavorite={isFavorite}
             onToggle={() => onToggleFavorite(item.id, item.isProject ? 'project' : (item.type === 'folder' ? 'folder' : 'asset'))}
           />
+          <VisibilityBadge item={item} />
           <TypeBadge type={item.type} isProject={item.isProject} />
           <ReviewStatusBadge item={item} />
         </Box>
