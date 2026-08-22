@@ -11,9 +11,12 @@ import {
   Menu,
   MenuItem,
   Tooltip,
+  Typography,
+  Divider,
   type SxProps,
   type Theme,
 } from '@mui/material';
+import { parseFileReviewStatus, getFileReviewStatusColor } from '../../constants/fileReviewStatus';
 import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
@@ -93,6 +96,12 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
     user?.role === 'Super Admin' ||
     user?.roleId === ROLE_IDS.SUPER_ADMIN ||
     user?.role === 'super_admin';
+
+  const status = parseFileReviewStatus(
+    (item.customMetadata as { reviewStatus?: unknown } | undefined)?.reviewStatus ??
+      (item as { reviewStatus?: unknown }).reviewStatus,
+  );
+  const statusColor = getFileReviewStatusColor(status);
 
   const closeMenu = () => setMenuAnchor(null);
 
@@ -218,6 +227,40 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           },
         }}
       >
+        {!isFolder && !item.isProject && status !== 'New' && (
+          <Box
+            sx={{
+              px: 2,
+              py: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+            }}
+          >
+            <Box
+              sx={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                backgroundColor: statusColor,
+                boxShadow: status === 'Approved' ? `0 0 6px ${statusColor}` : 'none',
+              }}
+            />
+            <Typography
+              sx={{
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: cv.textSecondary,
+                textTransform: 'uppercase',
+                letterSpacing: '0.03em',
+              }}
+            >
+              Status: {status}
+            </Typography>
+          </Box>
+        )}
+        {!isFolder && !item.isProject && status !== 'New' && <Divider sx={{ my: 0.5, borderColor: 'var(--noah-border)' }} />}
+
         {isFolder ? (
           <MenuItem
             disabled={!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS)}

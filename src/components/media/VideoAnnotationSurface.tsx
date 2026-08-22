@@ -55,6 +55,7 @@ import {
   strokeHitsEraser,
   translateStrokePath,
   findTopStrokeAtPoint,
+  parsePathPoints,
 } from '../../utils/drawStrokeStyle';
 import { useActiveUser } from '../../hooks/useActiveUser';
 import SelectedShapeToolbar from './SelectedShapeToolbar';
@@ -976,7 +977,7 @@ export default function VideoAnnotationSurface({
         return;
       }
 
-      if (annotationCommentPending) return;
+
 
       setSelectedShapeId(null);
       onAnnotationActionStart?.();
@@ -994,7 +995,7 @@ export default function VideoAnnotationSurface({
 
     if (activeTool !== 'draw') return;
 
-    if (annotationCommentPending && drawTool !== 'eraser') return;
+
 
     event.preventDefault();
 
@@ -1460,6 +1461,19 @@ export default function VideoAnnotationSurface({
           activeStroke={selectedShapeStroke}
           onColorChange={handleSelectedShapeColorChange}
           onStrokeChange={handleSelectedShapeStrokeChange}
+          onAddComment={() => {
+            onAnnotationNeedsComment?.({
+              kind: 'shape',
+              id: selectedShape.id,
+              ...getShapeCentroid({
+                x1Percent: selectedShape.x1Percent,
+                y1Percent: selectedShape.y1Percent,
+                x2Percent: selectedShape.x2Percent,
+                y2Percent: selectedShape.y2Percent,
+              }),
+              videoTimestamp: selectedShape.videoTimestamp,
+            });
+          }}
           onDelete={selectedShape.author?.name === activeUser.name ? handleDeleteSelectedShape : undefined}
         />
       ) : null}
@@ -1507,6 +1521,16 @@ export default function VideoAnnotationSurface({
       {annotationsVisible && selectedDrawing && (activeTool === 'draw' || activeTool === 'select' || activeTool === 'pan') ? (
         <SelectedDrawingToolbar
           stroke={selectedDrawing}
+          onAddComment={() => {
+            const anchor = averagePercentPoints(parsePathPoints(selectedDrawing.points));
+            onAnnotationNeedsComment?.({
+              kind: 'drawing',
+              id: selectedDrawing.id,
+              xPercent: anchor.xPercent,
+              yPercent: anchor.yPercent,
+              videoTimestamp: selectedDrawing.videoTimestamp,
+            });
+          }}
           onDelete={selectedDrawing.author?.name === activeUser.name ? handleDeleteSelectedDrawing : undefined}
         />
       ) : null}
