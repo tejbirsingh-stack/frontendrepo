@@ -63,6 +63,25 @@ interface MediaItemActionsMenuProps {
 export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemActionsMenuProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  const triggerDownload = async (url: string, fallbackName: string) => {
+    try {
+      const { getAccessToken } = await import('../../auth/authTokenBridge');
+      const token = getAccessToken();
+      const finalUrl = token ? `${url}${url.includes('?') ? '&' : '?'}token=${token}` : url;
+      
+      const anchor = document.createElement('a');
+      anchor.href = finalUrl;
+      anchor.download = fallbackName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    } catch (err) {
+      console.error('Download error:', err);
+      import('react-hot-toast').then(({ default: toast }) => toast.error('Download failed. Please try again.'));
+    }
+  };
+
   const {
     renameMedia,
     moveMediaToTrash,
@@ -388,7 +407,11 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
                 onClick={(event) => {
                   if (!user?.permissions?.includes('timeline_annotations')) return;
                   consumeMenuPointerEvent(event);
-                  window.open(`/api/media/${encodeURIComponent(item.id)}/download`, '_blank');
+                  closeMenu();
+                  void triggerDownload(
+                    `/api/media/${encodeURIComponent(item.id)}/download`,
+                    `${item.title || item.id}.mp4`
+                  );
                 }}
                 onMouseDown={consumeMenuPointerEvent}
                 sx={{
@@ -413,7 +436,11 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
                 onClick={(event) => {
                   if (!user?.permissions?.includes('timeline_annotations')) return;
                   consumeMenuPointerEvent(event);
-                  window.open(`/api/media/${encodeURIComponent(item.id)}/download?raw=true`, '_blank');
+                  closeMenu();
+                  void triggerDownload(
+                    `/api/media/${encodeURIComponent(item.id)}/download?raw=true`,
+                    `${item.title || item.id}_raw`
+                  );
                 }}
                 onMouseDown={consumeMenuPointerEvent}
                 sx={{
@@ -438,7 +465,11 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             onClick={(event) => {
               if (!user?.permissions?.includes('timeline_annotations')) return;
               consumeMenuPointerEvent(event);
-              window.open(`/api/media/${encodeURIComponent(item.id)}/download`, '_blank');
+              closeMenu();
+              void triggerDownload(
+                `/api/media/${encodeURIComponent(item.id)}/download`,
+                `${item.title || item.id}`
+              );
             }}
             onMouseDown={consumeMenuPointerEvent}
             sx={{

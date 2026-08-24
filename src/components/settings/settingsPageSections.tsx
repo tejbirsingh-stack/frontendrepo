@@ -22,6 +22,7 @@ import { cv } from '../../theme/cssVars';
 import { billingService } from '../../api/billing.service';
 import ChoosePlanScreen from '../onboarding/ChoosePlanScreen';
 import PaymentSuccessModal from './PaymentSuccessModal';
+import CookiePreferencesDialog from './CookiePreferencesDialog';
 import {
   Avatar,
   Box,
@@ -708,6 +709,7 @@ export function PersonalSettingsSection() {
 
 export function PrivacySettingsSection() {
   const { user, refreshUser } = useAuth();
+  const [isCookieDialogOpen, setIsCookieDialogOpen] = useState(false);
   
   const [privacy, setPrivacy] = useState({
     shareLinkActivity: user?.shareLinkActivityEnabled !== false
@@ -757,13 +759,22 @@ export function PrivacySettingsSection() {
           title="Cookie preferences"
           description="Configure data tracking and consent settings under US privacy compliance."
           action={
-            <Button variant="outlined" size="small" sx={outlineButtonSx}>
+            <Button
+              variant="outlined"
+              size="small"
+              sx={outlineButtonSx}
+              onClick={() => setIsCookieDialogOpen(true)}
+            >
               Manage cookies
             </Button>
           }
           showDivider={false}
         />
       </SettingsSectionCard>
+      <CookiePreferencesDialog
+        open={isCookieDialogOpen}
+        onClose={() => setIsCookieDialogOpen(false)}
+      />
     </SettingsFormContainer>
   );
 }

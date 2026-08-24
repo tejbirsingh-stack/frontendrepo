@@ -659,8 +659,9 @@ export default function VideoPlayerPage({
 
   const canShare = isGuestMode ? false : (isAssetAdmin || isAssetEditor);
 
-  const triggerMediaDownload = useCallback((variant: 'original' | 'proxy') => {
+  const triggerMediaDownload = useCallback(async (variant: 'original' | 'proxy') => {
     if (isGuestMode && shareToken) {
+      // Guest: no auth token — use plain anchor (share stream route handles notification separately)
       const a = document.createElement('a');
       a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${shareToken}/stream?download=true`;
       a.download = '';
@@ -670,15 +671,29 @@ export default function VideoPlayerPage({
       return;
     }
     if (!item?.id) return;
-    const a = document.createElement('a');
-    a.href =
+
+    // Authenticated download: append token so the backend optionalAuthenticate middleware
+    // can identify the user and fire the privacy "Media Downloaded" notification.
+    const url =
       variant === 'original'
         ? `/api/media/${encodeURIComponent(item.id)}/download?raw=true`
         : `/api/media/${encodeURIComponent(item.id)}/download`;
-    a.download = '';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+
+    try {
+      const { getAccessToken } = await import('../auth/authTokenBridge');
+      const token = getAccessToken();
+      const finalUrl = token ? `${url}${url.includes('?') ? '&' : '?'}token=${token}` : url;
+      
+      const anchor = document.createElement('a');
+      anchor.href = finalUrl;
+      anchor.download = '';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    } catch (err) {
+      console.error('Download error:', err);
+      import('react-hot-toast').then(({ default: toast }) => toast.error('Download failed. Please try again.'));
+    }
   }, [isGuestMode, shareToken, item?.id]);
 
   const originalDownloadSizeLabel = useMemo(() => {
@@ -4606,9 +4621,7 @@ export default function VideoPlayerPage({
                     </Typography>
                     <Button
                       variant="contained"
-                      component="a"
-                      href={`/api/media/${encodeURIComponent(item.id)}/download`}
-                      download
+                      onClick={() => triggerMediaDownload('original')}
                       startIcon={<FileDownloadOutlinedIcon />}
                       sx={{
                         backgroundColor: '#38BDF8',

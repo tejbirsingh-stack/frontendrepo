@@ -1265,7 +1265,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         toast.error('Invalid move operation: Source and destination are the same.');
         return;
       }
-
       const safeUniqueIds = uniqueIds.filter((id) => {
         const item = mediaItems.find((m) => m.id === id);
         if (item && item.type === 'folder' && ((item.title && item.title.trim().toLowerCase() === 'restore') || (item.name && item.name.trim().toLowerCase() === 'restore'))) {
@@ -1304,6 +1303,30 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       setMediaItems((prev) =>
         prev.map((item) => {
           if (safeUniqueIds.includes(item.id)) {
+            return {
+              ...item,
+              parentFolderId: folderId,
+              location: null,
+            };
+          }
+
+          if (item.type === 'folder' && folderCountDelta.has(item.id)) {
+            return {
+              ...item,
+              itemCount: Math.max(
+                0,
+                (item.itemCount ?? 0) + (folderCountDelta.get(item.id) ?? 0),
+              ),
+            };
+          }
+
+          return item;
+        }),
+      );
+
+      setLibraryItems((prev) =>
+        prev.map((item) => {
+          if (uniqueIds.includes(item.id)) {
             return {
               ...item,
               parentFolderId: folderId,
@@ -1448,9 +1471,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }),
       );
 
+
       setLibraryItems((prev) =>
         prev.map((item) => {
-          if (uniqueIds.includes(item.id)) {
+          if (safeUniqueIds.includes(item.id)) {
             return {
               ...item,
               workspaceId,
@@ -1579,6 +1603,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       });
     },
     [mediaItems, libraryItems, removeMediaFromSidebar, trashedIds],
+
   );
 
   const renameWorkspaceFolder = useCallback(
