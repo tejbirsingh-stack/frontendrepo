@@ -157,16 +157,30 @@ function ToolRow({
         }}
       >
         <Icon sx={{ fontSize: 20, color: tool.disabled ? cv.textMuted : cv.textSecondary }} />
-        <Typography
-          sx={{
-            flex: 1,
-            fontSize: '0.9375rem',
-            fontWeight: 500,
-            color: tool.disabled ? cv.textMuted : cv.textPrimary,
-          }}
-        >
-          {tool.label}
-        </Typography>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <Typography
+            noWrap
+            sx={{
+              fontSize: '0.9375rem',
+              fontWeight: 500,
+              color: tool.disabled ? cv.textMuted : cv.textPrimary,
+              lineHeight: tool.description ? 1.2 : 'inherit',
+            }}
+          >
+            {tool.label}
+          </Typography>
+          {tool.description && (
+            <Typography
+              sx={{
+                fontSize: '0.75rem',
+                color: cv.textMuted,
+                mt: 0.25,
+              }}
+            >
+              {tool.description}
+            </Typography>
+          )}
+        </Box>
         {tool.shortcut ? <Box sx={shortcutBadgeSx}>{tool.shortcut}</Box> : null}
         {tool.hasSubmenu ? (
           <ChevronRightOutlinedIcon

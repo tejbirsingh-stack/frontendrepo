@@ -11,6 +11,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { cv } from '../../theme/cssVars';
+import { billingService } from '../../api/billing.service';
 
 const dialogPaperSx = {
   borderRadius: '20px',
@@ -149,12 +150,12 @@ export default function PaymentSuccessModal({
             variant="contained"
             fullWidth
             startIcon={<DownloadIcon />}
-            onClick={() => {
+            onClick={async () => {
               if (invoiceLink) {
-                window.open(invoiceLink, '_blank', 'noopener,noreferrer');
-              } else if (onManageBilling) {
-                onManageBilling();
+                await billingService.downloadCustomInvoicePdf(invoiceLink);
+                return;
               }
+              await billingService.downloadCustomInvoicePdf(null, undefined, details?.sessionId);
             }}
             sx={{
               background: cv.brandGradient,

@@ -1,12 +1,15 @@
 import { apiClient } from './client';
+import { getAccessToken } from '../auth/authTokenBridge';
+import { env } from '../config/env';
+import toast from 'react-hot-toast';
 
 export const billingService = {
   /**
    * Creates a Stripe Checkout session and returns the checkout URL.
    * @param priceId The Stripe Price ID
    */
-  createCheckoutSession: async (priceId: string, useSavedCard: boolean = true): Promise<{ url?: string; directUpgrade?: boolean; message?: string }> => {
-    return apiClient.post<{ url?: string; directUpgrade?: boolean; message?: string }>('/stripe/checkout', { priceId, useSavedCard });
+  createCheckoutSession: async (priceId: string, useSavedCard: boolean = true, successUrl?: string, cancelUrl?: string): Promise<{ url?: string; directUpgrade?: boolean; message?: string }> => {
+    return apiClient.post<{ url?: string; directUpgrade?: boolean; message?: string }>('/stripe/checkout', { priceId, useSavedCard, successUrl, cancelUrl });
   },
 
   /**
@@ -145,5 +148,53 @@ export const billingService = {
     };
   }> => {
     return apiClient.get<{ success: boolean; invoices: any[]; stats: any }>('/stripe/invoices');
+  },
+
+  /**
+   * Downloads or opens custom generated PDF invoice
+   */
+  downloadCustomInvoicePdf: async (invoicePdfUrl?: string | null, invoiceId?: string, sessionId?: string): Promise<void> => {
+    try {
+      const token = getAccessToken();
+      const baseUrl = (env.apiBaseUrl || '/api').replace(/\/$/, '');
+
+      let path = '/stripe/download-invoice-pdf';
+      if (invoiceId) {
+        path = `/stripe/invoices/${invoiceId}/download-pdf`;
+      } else if (invoicePdfUrl && invoicePdfUrl.includes('/invoices/') && invoicePdfUrl.includes('/download-pdf')) {
+        path = invoicePdfUrl.replace(/^\/api/, '');
+      } else if (sessionId) {
+        path = `/stripe/download-invoice-pdf?sessionId=${encodeURIComponent(sessionId)}`;
+      }
+
+      const fullUrl = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+      const headers: Record<string, string> = { Accept: 'application/pdf' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(fullUrl, {
+        method: 'GET',
+        headers,
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to generate custom invoice PDF (HTTP ${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.setAttribute('download', `Invoice-${invoiceId || 'document'}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 2000);
+    } catch (err: any) {
+      console.error('[BillingService] Custom PDF download error:', err);
+      toast.error(err?.message || 'Failed to download custom invoice PDF');
+    }
   },
 };

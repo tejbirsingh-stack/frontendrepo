@@ -35,6 +35,7 @@ export interface AuthSessionUser {
   avatarUrl?: string;
   accountName?: string;
   accountInitials?: string;
+  shareLinkActivityEnabled?: boolean;
 }
 
 export interface LoginCredentials {

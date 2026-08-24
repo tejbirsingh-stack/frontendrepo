@@ -423,7 +423,7 @@ function SidebarMediaFolderRow({
     Boolean(mediaFolder.isProject) ||
     Boolean(activeWorkspace?.projectFolders?.some((project) => project.id === mediaFolder.id));
   const folderAccent = isProject
-    ? PROJECT_ACCENT_COLOR
+    ? (mediaFolder.folderColor ?? PROJECT_ACCENT_COLOR)
     : (resolveFolderColor(mediaFolder.folderColor) ?? parentAccentColor);
   const openKey = getMediaFolderOpenKey(mediaFolder.id);
   const isOpen = Boolean(openMediaFolders[openKey]);
@@ -446,7 +446,7 @@ function SidebarMediaFolderRow({
     children,
     mediaFolder.title,
     searchQuery,
-  );
+  ).filter(child => child.type === 'folder' && !child.isProject);
 
   const handleClick = () => {
     if (!isOpen) {
@@ -521,76 +521,31 @@ function SidebarMediaFolderRow({
         />
       </ListItemButton>
 
-      <Collapse in={showChildren} timeout="auto" unmountOnExit>
-        <List disablePadding sx={{ pl: 1.5 }}>
-          {visibleChildren.length > 0 ? (
-            visibleChildren.map((child) =>
-              child.type === 'folder' ? (
-                <SidebarMediaFolderRow
-                  key={child.id}
-                  mediaFolder={child}
-                  depth={depth + 1}
-                  parentAccentColor={folderAccent}
-                  categoryChildLabel={categoryChildLabel}
-                  sidebarFolderId={sidebarFolderId}
-                  sidebarFolderLabel={sidebarFolderLabel}
-                  browseMode={browseMode}
-                  mediaItems={mediaItems}
-                  workspaceId={workspaceId}
-                  trashedIds={trashedIds}
-                  searchQuery={searchQuery}
-                  openMediaFolders={openMediaFolders}
-                  onToggleMediaFolder={onToggleMediaFolder}
-                  onSelectMediaFile={onSelectMediaFile}
-                />
-              ) : (
-                <ListItemButton
-                  key={child.id}
-                  onClick={() => onSelectMediaFile(child, selection)}
-                  sx={{
-                    py: 0.35,
-                    pl: 2.5 + depth * 1.5,
-                    pr: 1,
-                    borderRadius: '8px',
-                    mb: 0.1,
-                    color: cv.textMuted,
-                    '&:hover': {
-                      backgroundColor: cv.surfaceHover,
-                      color: cv.textPrimary,
-                    },
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: 24 }}>
-                    {getSidebarFileIcon(child.type)}
-                  </ListItemIcon>
-                  <ListItemText
-                    disableTypography
-                    primary={
-                      <TruncatedText
-                        text={getMediaFileName(child)}
-                        sx={{ fontSize: '0.75rem' }}
-                      />
-                    }
-                    sx={{ minWidth: 0 }}
-                  />
-                </ListItemButton>
-              ),
-            )
-          ) : (
-            <Typography
-              sx={{
-                pl: 3 + depth * 1.5,
-                py: 0.5,
-                fontSize: '0.6875rem',
-                color: cv.textMuted,
-                fontStyle: 'italic',
-              }}
-            >
-              No files
-            </Typography>
-          )}
-        </List>
-      </Collapse>
+      {visibleChildren.length > 0 && (
+        <Collapse in={showChildren} timeout="auto" unmountOnExit>
+          <List disablePadding sx={{ pl: 1.5 }}>
+            {visibleChildren.map((child) => (
+              <SidebarMediaFolderRow
+                key={child.id}
+                mediaFolder={child}
+                depth={depth + 1}
+                parentAccentColor={folderAccent}
+                categoryChildLabel={categoryChildLabel}
+                sidebarFolderId={sidebarFolderId}
+                sidebarFolderLabel={sidebarFolderLabel}
+                browseMode={browseMode}
+                mediaItems={mediaItems}
+                workspaceId={workspaceId}
+                trashedIds={trashedIds}
+                searchQuery={searchQuery}
+                openMediaFolders={openMediaFolders}
+                onToggleMediaFolder={onToggleMediaFolder}
+                onSelectMediaFile={onSelectMediaFile}
+              />
+            ))}
+          </List>
+        </Collapse>
+      )}
     </Box>
   );
 }
@@ -622,24 +577,24 @@ function FolderItem({
   const location = useLocation();
   const isProjectRoot = browseMode === 'projects';
   const folderColor = isProjectRoot
-    ? PROJECT_ACCENT_COLOR
+    ? (folder.color ?? PROJECT_ACCENT_COLOR)
     : resolveFolderColor(folder.color);
   const selectedBackground = isProjectRoot
-    ? projectAccentTint()
+    ? projectAccentTint(folder.color)
     : folderAccentTint(folder.color);
   const isPersonalRoot = folder.id === 'personal';
 
   const projectRoots = useMemo(
     () =>
       isProjectRoot
-        ? getProjectRootItems(folder.id, mediaItems, workspaceId, trashedIds)
+        ? getProjectRootItems(folder.id, mediaItems, workspaceId, trashedIds).filter(item => item.type === 'folder')
         : [],
     [folder.id, isProjectRoot, mediaItems, trashedIds, workspaceId],
   );
 
   const personalRoots = useMemo(
     () =>
-      isPersonalRoot ? getPersonalRootItems(mediaItems, workspaceId, trashedIds) : [],
+      isPersonalRoot ? getPersonalRootItems(mediaItems, workspaceId, trashedIds).filter(item => item.type === 'folder' && !item.isProject) : [],
     [isPersonalRoot, mediaItems, trashedIds, workspaceId],
   );
 
@@ -648,7 +603,7 @@ function FolderItem({
   const customFolderRoots = useMemo(
     () =>
       isCustomFolder
-        ? getMediaLibraryFolderChildren(folder.id, mediaItems, workspaceId, trashedIds)
+        ? getMediaLibraryFolderChildren(folder.id, mediaItems, workspaceId, trashedIds).filter(item => item.type === 'folder' && !item.isProject)
         : [],
     [folder.id, isCustomFolder, mediaItems, trashedIds, workspaceId],
   );
@@ -893,77 +848,25 @@ function FolderItem({
         <Collapse in={showChildren} timeout="auto" unmountOnExit>
           <List disablePadding sx={{ pl: 3.5, pr: 1 }}>
             {isProjectRoot || isPersonalRoot || isCustomFolder ? (
-              (isProjectRoot ? projectRoots : isPersonalRoot ? personalRoots : customFolderRoots).length > 0 ? (
-                (isProjectRoot ? projectRoots : isPersonalRoot ? personalRoots : customFolderRoots).map((item) =>
-                  item.type === 'folder' ? (
-                    <SidebarMediaFolderRow
-                      key={item.id}
-                      mediaFolder={item}
-                      depth={0}
-                      parentAccentColor={folderColor}
-                      categoryChildLabel=""
-                      sidebarFolderId={folder.id}
-                      sidebarFolderLabel={folder.label}
-                      browseMode={browseMode}
-                      mediaItems={mediaItems}
-                      workspaceId={workspaceId}
-                      trashedIds={trashedIds}
-                      searchQuery={searchQuery}
-                      openMediaFolders={openMediaFolders}
-                      onToggleMediaFolder={onToggleMediaFolder}
-                      onSelectMediaFile={onSelectMediaFile}
-                    />
-                  ) : (
-                    <ListItemButton
-                      key={item.id}
-                      onClick={() =>
-                        onSelectMediaFile(item, {
-                          folderId: folder.id,
-                          folderLabel: folder.label,
-                        })
-                      }
-                      sx={{
-                        py: 0.4,
-                        pl: 1.5,
-                        pr: 1,
-                        borderRadius: '8px',
-                        mb: 0.15,
-                        color: cv.textMuted,
-                        '&:hover': {
-                          backgroundColor: cv.surfaceHover,
-                          color: cv.textPrimary,
-                        },
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 24 }}>
-                        {getSidebarFileIcon(item.type)}
-                      </ListItemIcon>
-                      <ListItemText
-                        disableTypography
-                        primary={
-                          <TruncatedText
-                            text={getMediaFileName(item)}
-                            sx={{ fontSize: '0.75rem' }}
-                          />
-                        }
-                        sx={{ minWidth: 0 }}
-                      />
-                    </ListItemButton>
-                  ),
-                )
-              ) : (
-                <Typography
-                  sx={{
-                    pl: 1.5,
-                    py: 0.5,
-                    fontSize: '0.6875rem',
-                    color: cv.textMuted,
-                    fontStyle: 'italic',
-                  }}
-                >
-                  No items
-                </Typography>
-              )
+              (isProjectRoot ? projectRoots : isPersonalRoot ? personalRoots : customFolderRoots).map((item) => (
+                <SidebarMediaFolderRow
+                  key={item.id}
+                  mediaFolder={item}
+                  depth={0}
+                  parentAccentColor={folderColor}
+                  categoryChildLabel=""
+                  sidebarFolderId={folder.id}
+                  sidebarFolderLabel={folder.label}
+                  browseMode={browseMode}
+                  mediaItems={mediaItems}
+                  workspaceId={workspaceId}
+                  trashedIds={trashedIds}
+                  searchQuery={searchQuery}
+                  openMediaFolders={openMediaFolders}
+                  onToggleMediaFolder={onToggleMediaFolder}
+                  onSelectMediaFile={onSelectMediaFile}
+                />
+              ))
             ) : (
               filteredChildren.map((child) => {
                 const childTargetKey = `folder-${folder.id}-${child}`;
@@ -981,7 +884,9 @@ function FolderItem({
                   bucketFilesOnly ? childMedia.filter((item) => item.type !== 'folder') : childMedia,
                   child,
                   searchQuery,
-                );
+                ).filter(item => item.type === 'folder' && !item.isProject);
+                
+                const hasNestedChildren = visibleChildMedia.length > 0;
 
                 return (
                   <Box key={child}>
@@ -1085,56 +990,31 @@ function FolderItem({
                       </IconButton>
                     </ListItemButton>
 
-                    <Collapse in={showChildFiles} timeout="auto" unmountOnExit>
-                      <List disablePadding sx={{ pl: 3.5, pr: 0.5, pb: 0.25 }}>
-                        {visibleChildMedia.length > 0 ? (
-                          visibleChildMedia.map((file) => (
-                            <ListItemButton
+                    {hasNestedChildren && (
+                      <Collapse in={showChildFiles} timeout="auto" unmountOnExit>
+                        <List disablePadding sx={{ pl: 3.5, pr: 0.5, pb: 0.25 }}>
+                          {visibleChildMedia.map((file) => (
+                            <SidebarMediaFolderRow
                               key={file.id}
-                              onClick={() => handleChildFileClick(file, child)}
-                              sx={{
-                                py: 0.4,
-                                pl: 1.5,
-                                pr: 1,
-                                borderRadius: '8px',
-                                mb: 0.15,
-                                color: cv.textMuted,
-                                '&:hover': {
-                                  backgroundColor: cv.surfaceHover,
-                                  color: cv.textPrimary,
-                                },
-                              }}
-                            >
-                              <ListItemIcon sx={{ minWidth: 24 }}>
-                                {getSidebarFileIcon(file.type)}
-                              </ListItemIcon>
-                              <ListItemText
-                                disableTypography
-                                primary={
-                                  <TruncatedText
-                                    text={getMediaFileName(file)}
-                                    sx={{ fontSize: '0.75rem' }}
-                                  />
-                                }
-                                sx={{ minWidth: 0 }}
-                              />
-                            </ListItemButton>
-                          ))
-                        ) : (
-                          <Typography
-                            sx={{
-                              pl: 4.5,
-                              py: 0.5,
-                              fontSize: '0.6875rem',
-                              color: cv.textMuted,
-                              fontStyle: 'italic',
-                            }}
-                          >
-                            No files
-                          </Typography>
-                        )}
-                      </List>
-                    </Collapse>
+                              mediaFolder={file}
+                              depth={1}
+                              parentAccentColor={folderColor}
+                              categoryChildLabel={child}
+                              sidebarFolderId={folder.id}
+                              sidebarFolderLabel={folder.label}
+                              browseMode={browseMode}
+                              mediaItems={mediaItems}
+                              workspaceId={workspaceId}
+                              trashedIds={trashedIds}
+                              searchQuery={searchQuery}
+                              openMediaFolders={openMediaFolders}
+                              onToggleMediaFolder={onToggleMediaFolder}
+                              onSelectMediaFile={onSelectMediaFile}
+                            />
+                          ))}
+                        </List>
+                      </Collapse>
+                    )}
                   </Box>
                 );
               })
@@ -1182,7 +1062,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     createWorkspace,
     mediaItems,
     trashedIds,
-    moveMediaToFolderBulk,
+    moveMediaToDashboardFolder,
     moveMediaToTrashBulk,
     removeFolderAndItemsFromState,
     trashedMediaItems,
@@ -1416,7 +1296,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         toast.error(`Workspace limit (${summary.workspacesTotal}) reached for your current plan. Please upgrade to create more workspaces.`);
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
     setCreateModalOpen(true);
   };
 
@@ -1474,7 +1354,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     event.preventDefault();
     const mediaIds = getMediaDragPayload(event);
     if (mediaIds.length > 0) {
-      moveMediaToFolderBulk(mediaIds, folderId, childLabel);
+      moveMediaToDashboardFolder(mediaIds, folderId);
     }
     setDropTargetKey(null);
     clearDraggingMedia();
@@ -1559,13 +1439,25 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     setFolderActionsTarget(null);
   };
 
+  const isRestoreFolderTarget =
+    folderActionsTarget?.type === 'folder' &&
+    folderActionsTarget?.label?.trim().toLowerCase() === 'restore';
+
   const openRenameFolder = () => {
     closeFolderActionsMenu();
+    if (isRestoreFolderTarget) {
+      toast.error("The 'Restore' folder is protected and cannot be renamed.");
+      return;
+    }
     setRenameFolderOpen(true);
   };
 
   const openDeleteFolder = () => {
     closeFolderActionsMenu();
+    if (isRestoreFolderTarget) {
+      toast.error("The 'Restore' folder is protected and cannot be deleted.");
+      return;
+    }
     const isSuperAdmin =
       user?.role === 'Super Admin' ||
       user?.roleId === ROLE_IDS.SUPER_ADMIN ||
@@ -1584,6 +1476,10 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
 
   const handleConfirmRenameFolder = async (newTitle: string) => {
     if (!folderActionsTarget) return;
+    if (isRestoreFolderTarget) {
+      toast.error("The 'Restore' folder is protected and cannot be renamed.");
+      return;
+    }
 
     if (folderActionsTarget.type === 'folder') {
       await renameWorkspaceFolder(folderActionsTarget.folderId, newTitle);
@@ -1598,6 +1494,10 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
 
   const handleConfirmDeleteFolder = () => {
     if (!folderActionsTarget) return;
+    if (isRestoreFolderTarget) {
+      toast.error("The 'Restore' folder is protected and cannot be deleted.");
+      return;
+    }
 
     if (folderActionsTarget.type === 'folder') {
       deleteWorkspaceFolder(folderActionsTarget.folderId);
@@ -1924,7 +1824,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
                   toast.error('Storage limit reached — Uploads are blocked until you free space or upgrade your plan.');
                   return;
                 }
-              } catch (e) {}
+              } catch (e) { }
               setUploadPanelOpen(true);
             }}
           >
@@ -1940,7 +1840,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
                     setUploadPanelOpen(false);
                     return;
                   }
-                } catch (e) {}
+                } catch (e) { }
                 setUploadPanelOpen((open) => !open);
               }}
             />
@@ -1948,7 +1848,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         </List>
 
         <Collapse in={uploadPanelOpen}>
-          <UploadPanel onUpload={(files) => uploadMediaFiles(files, { 
+          <UploadPanel onUpload={(files) => uploadMediaFiles(files, {
             parentFolderId: sidebarSelection?.browseMode === 'projects' ? null : (sidebarSelection?.folderId ?? null),
             linkedProjectId: sidebarSelection?.browseMode === 'projects' ? (sidebarSelection?.folderId ?? null) : null
           })} />
@@ -2225,42 +2125,42 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
           {folderActionsTarget && favorites.has(folderActionsTarget.folderId) ? 'Remove from favorites' : 'Add to favorites'}
         </MenuItem>
         <MenuItem
-          disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)}
+          disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget}
           onClick={() => {
-            if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
+            if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget) return;
             openRenameFolder();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
-            opacity: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
-            cursor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
+            color: (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget) ? cv.textMuted : cv.textSecondary,
+            opacity: (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget) ? 0.6 : 1,
+            cursor: (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget) ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
+            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget) ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Rename
         </MenuItem>
         <MenuItem
-          disabled={!canDeleteFolder(user)}
+          disabled={!canDeleteFolder(user) || isRestoreFolderTarget}
           onClick={() => {
-            if (!canDeleteFolder(user)) return;
+            if (!canDeleteFolder(user) || isRestoreFolderTarget) return;
             openDeleteFolder();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: !canDeleteFolder(user) ? cv.textMuted : cv.destructive,
-            opacity: !canDeleteFolder(user) ? 0.6 : 1,
-            cursor: !canDeleteFolder(user) ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: !canDeleteFolder(user) ? 'transparent' : cv.destructiveHover },
+            color: (!canDeleteFolder(user) || isRestoreFolderTarget) ? cv.textMuted : cv.destructive,
+            opacity: (!canDeleteFolder(user) || isRestoreFolderTarget) ? 0.6 : 1,
+            cursor: (!canDeleteFolder(user) || isRestoreFolderTarget) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: (!canDeleteFolder(user) || isRestoreFolderTarget) ? 'transparent' : cv.destructiveHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DeleteOutlinedIcon sx={{ fontSize: 18, color: !canDeleteFolder(user) ? cv.textMuted : cv.destructive }} />
+            <DeleteOutlinedIcon sx={{ fontSize: 18, color: (!canDeleteFolder(user) || isRestoreFolderTarget) ? cv.textMuted : cv.destructive }} />
           </ListItemIcon>
           Delete
         </MenuItem>
@@ -2284,8 +2184,8 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         requireNameConfirmation
         description={
           isFolderDeleteTarget
-            ? 'This folder will be removed from the sidebar. Any files inside it will be moved to trash.'
-            : 'This item will be removed from the folder and moved to trash if it is linked to a file.'
+            ? 'All files, folders, and projects inside this folder will also go to Super Admin Delete Management.'
+            : 'This item will be sent to Super Admin Delete Management.'
         }
         onClose={() => {
           setDeleteFolderOpen(false);
@@ -2353,3 +2253,4 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
 }
 
 export { SIDEBAR_WIDTH };
+

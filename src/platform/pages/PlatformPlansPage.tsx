@@ -79,7 +79,8 @@ const emptyForm = {
   ctaLabel: 'Get started',
   isPublic: true,
   isFeatured: false,
-  sortOrder: 0,
+  hasAI: false,
+  sortOrder: '',
   // Visibility flags for dynamic features
   showProjectQuota: true,
   showStorageQuota: true,
@@ -147,7 +148,8 @@ export default function PlatformPlansPage() {
       ctaLabel: plan.ctaLabel || '',
       isPublic: plan.isPublic,
       isFeatured: plan.isFeatured,
-      sortOrder: plan.sortOrder,
+      hasAI: plan.hasAI,
+      sortOrder: String(plan.sortOrder || ''),
       showProjectQuota: plan.showProjectQuota ?? true,
       showStorageQuota: plan.showStorageQuota ?? true,
       showMemberQuota: plan.showMemberQuota ?? true,
@@ -176,6 +178,12 @@ export default function PlatformPlansPage() {
 
   const save = async () => {
     setFormError('');
+
+    if (editingId && (!form.sortOrder || Number(form.sortOrder) <= 0)) {
+      setFormError('Sort order must be a positive number.');
+      return;
+    }
+
     const storageQuotaBytes = String(Math.round(Number(form.storageAmount) * 1024 ** 2));
 
     const body = {
@@ -195,6 +203,7 @@ export default function PlatformPlansPage() {
       ctaLabel: form.ctaLabel,
       isPublic: form.isPublic,
       isFeatured: form.isFeatured,
+      hasAI: form.hasAI,
       sortOrder: Number(form.sortOrder),
     };
 
@@ -458,6 +467,15 @@ export default function PlatformPlansPage() {
               onChange={(e) => setForm((f) => ({ ...f, maxProjects: e.target.value }))}
             />
             <TextField
+              label="Sort order"
+              size="small"
+              type="number"
+              value={form.sortOrder}
+              onChange={(e) => setForm((f) => ({ ...f, sortOrder: e.target.value }))}
+              helperText={editingId ? 'Must be > 0' : 'Leave empty to auto-assign at the end'}
+              inputProps={{ min: editingId ? 1 : 0 }}
+            />
+            <TextField
               label="Description"
               size="small"
               value={form.description}
@@ -651,6 +669,15 @@ export default function PlatformPlansPage() {
                 />
               }
               label="Featured"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={form.hasAI}
+                  onChange={(e) => setForm((f) => ({ ...f, hasAI: e.target.checked }))}
+                />
+              }
+              label="AI"
             />
           </Box>
         </DialogContent>
