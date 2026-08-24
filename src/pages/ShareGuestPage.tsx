@@ -40,6 +40,7 @@ export default function ShareGuestPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [assetMeta, setAssetMeta] = useState<any>(null);
   const [branding, setBranding] = useState<any>(null);
+  const [logoError, setLogoError] = useState(false);
   const [permissions, setPermissions] = useState({ view: true, comment: false, download: false, downloadProxy: false });
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<string>('public');
@@ -198,11 +199,12 @@ export default function ShareGuestPage() {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          {branding?.logoUrl ? (
+          {branding?.logoUrl && !logoError ? (
             <Box
               component="img"
               src={branding.logoUrl}
               alt={branding.accountName || 'Brand Logo'}
+              onError={() => setLogoError(true)}
               sx={{
                 maxHeight: 40,
                 maxWidth: 140,

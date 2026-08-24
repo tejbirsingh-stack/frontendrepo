@@ -14,6 +14,8 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import LinkIcon from '@mui/icons-material/Link';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
 import TruncatedText from '../TruncatedText';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -36,7 +38,7 @@ import {
 import { formatFolderItemCount, getFolderChildCount } from '../../utils/folderItemCount';
 import { useDashboard } from '../../context/DashboardContext';
 import { decodeClientImageToDataUrl } from '../../utils/clientImageDecoder';
-import { parseFileReviewStatus } from '../../constants/fileReviewStatus';
+import { parseFileReviewStatus, getFileReviewStatusColor } from '../../constants/fileReviewStatus';
 
 interface MediaItemCardProps {
   item: MediaItem;
@@ -157,7 +159,33 @@ function TypeBadge({ type, isProject }: { type: MediaType; isProject?: boolean }
   );
 }
 
-/** Approved / Rejected badge shown next to the type pill on media cards. */
+function VisibilityBadge({ item }: { item: MediaItem }) {
+  if (item.type === 'folder' || item.isProject) return null;
+  const vis = (item as any)?.visibility?.toLowerCase();
+  if (vis !== 'private' && vis !== 'public') return null;
+  const isPrivate = vis === 'private';
+  
+  return (
+    <Tooltip title={isPrivate ? 'Private' : 'Public'} arrow placement="top">
+      <Box
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 32,
+          height: 32,
+          borderRadius: '8px',
+          ...thumbnailOverlayChipStyles,
+          color: cv.textInverse,
+        }}
+      >
+        {isPrivate ? <LockOutlinedIcon sx={{ fontSize: 16 }} /> : <PublicOutlinedIcon sx={{ fontSize: 16 }} />}
+      </Box>
+    </Tooltip>
+  );
+}
+
+/** Badge shown next to the type pill on media cards to indicate review progress. */
 function ReviewStatusBadge({ item }: { item: MediaItem }) {
   if (item.type === 'folder' || item.isProject) return null;
 
@@ -166,51 +194,24 @@ function ReviewStatusBadge({ item }: { item: MediaItem }) {
       (item as { reviewStatus?: unknown }).reviewStatus,
   );
 
-  if (status !== 'Approved' && status !== 'Rejected') return null;
+  if (status === 'New') return null;
 
-  const isApproved = status === 'Approved';
+  const color = getFileReviewStatusColor(status);
 
   return (
-    <Tooltip title={status} arrow placement="top">
+    <Tooltip title={`Review status: ${status}`} arrow placement="top">
       <Box
-        aria-label={status}
+        aria-label={`Review status: ${status}`}
         sx={{
-          width: 28,
-          height: 28,
+          width: 8,
+          height: 8,
           borderRadius: '50%',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          backgroundColor: color,
+          boxShadow: status === 'Approved' ? `0 0 6px ${color}` : 'none',
           flexShrink: 0,
-          ...(isApproved
-            ? {
-                backgroundColor: cv.brandTeal,
-                border: `1.5px solid ${cv.brandTeal}`,
-                boxShadow: `0 0 0 1.5px rgba(0,0,0,0.35)`,
-              }
-            : {
-                ...thumbnailOverlayChipStyles,
-              }),
+          ml: 0.5,
         }}
-      >
-        {isApproved ? (
-          <CheckIcon sx={{ fontSize: 16, color: '#fff', strokeWidth: 2 }} />
-        ) : (
-          <Box
-            sx={{
-              width: 18,
-              height: 18,
-              borderRadius: '50%',
-              backgroundColor: cv.destructive,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <CloseIcon sx={{ fontSize: 12, color: '#fff' }} />
-          </Box>
-        )}
-      </Box>
+      />
     </Tooltip>
   );
 }
@@ -629,8 +630,8 @@ export default function MediaItemCard({
             isFavorite={isFavorite}
             onToggle={() => onToggleFavorite(item.id, item.isProject ? 'project' : (item.type === 'folder' ? 'folder' : 'asset'))}
           />
+          <VisibilityBadge item={item} />
           <TypeBadge type={item.type} isProject={item.isProject} />
-          <ReviewStatusBadge item={item} />
         </Box>
 
         <Box

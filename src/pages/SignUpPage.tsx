@@ -24,6 +24,7 @@ import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
 import ChoosePlanScreen from '../components/onboarding/ChoosePlanScreen';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../auth/AuthContext';
 import { persistSession } from '../auth/authStorage';
 import { cv } from '../theme/cssVars';
@@ -433,7 +434,7 @@ export default function SignUpPage() {
         mobileNumber,
         teamSize,
         firstFocus,
-        planId,
+        planId: 'free', // Always provision as free initially, upgrade happens via Stripe
         billingCycle,
         hubspotUtk: hubspotUtkCookie,
       });
@@ -465,6 +466,42 @@ export default function SignUpPage() {
           ownerType: 'WORKSPACE',
           ownerId: targetWorkspaceId,
         });
+      }
+
+      // If they chose a paid plan, redirect them to Stripe Checkout
+      if (planId && planId.toLowerCase() !== 'free') {
+        const { fetchPublicCatalogPlans } = await import('../platform/api/platformApi');
+        const catalog = await fetchPublicCatalogPlans().catch(() => null);
+        const match = catalog?.plans?.find(
+          (p: any) => p.name?.toLowerCase() === planId.toLowerCase() || p.id?.toLowerCase() === planId.toLowerCase()
+        );
+        
+        let activePriceId = null;
+        if (match) {
+          activePriceId = billingCycle === 'annual' ? (match.yearlyPriceId || match.monthlyPriceId) : match.monthlyPriceId;
+        }
+        
+        if (activePriceId) {
+          const { billingService } = await import('../api/billing.service');
+          toast.loading('Redirecting to secure checkout...', { id: 'stripe-signup-checkout' });
+          try {
+            const res: any = await billingService.createCheckoutSession(
+              activePriceId, 
+              false,
+              '/home?payment_success=true',
+              '/onboarding/plan?canceled=true'
+            );
+            if (res?.url) {
+              window.location.href = res.url;
+              return; // Halt navigation to /home, they go to Stripe
+            }
+          } catch (checkoutErr: any) {
+            console.error('Failed to initiate Stripe checkout:', checkoutErr);
+            toast.dismiss('stripe-signup-checkout');
+            toast.error('Could not start checkout. You have been placed on the Free plan.');
+            // Proceed to home
+          }
+        }
       }
 
       navigate('/home', { replace: true });
@@ -617,52 +654,18 @@ export default function SignUpPage() {
     setError('');
     setIsSsoLoading(true);
     try {
-      let response: any = null;
-      try {
-        response = await instance.loginPopup({
-          scopes: ['User.Read', 'profile', 'email', 'openid'],
-        });
-      } catch (popupErr: any) {
-        console.warn('Popup login failed/blocked, falling back to redirect:', popupErr);
-        sessionStorage.setItem('msal_redirecting', 'true');
-        sessionStorage.setItem('msal_auth_mode', 'signup');
-        await instance.loginRedirect({
-          scopes: ['User.Read', 'profile', 'email', 'openid'],
-        });
-        return;
-      }
-
-      if (response && response.account) {
-        const account = response.account;
-        const msEmail = (account.username || (account.idTokenClaims as any)?.email || '').toLowerCase().trim();
-        const msName = account.name || (account.idTokenClaims as any)?.name || '';
-
-        if (msEmail) {
-          try {
-            await checkEmailRequest(msEmail);
-          } catch (checkErr: any) {
-            if (checkErr.response?.status === 409 || checkErr.response?.data?.exists) {
-              setError('Email ID is already registered with this email');
-              return;
-            }
-            setError(checkErr.response?.data?.message || checkErr.message || 'Failed to verify Microsoft email.');
-            return;
-          }
-          setEmail(msEmail);
-        }
-
-        if (msName) {
-          const nameParts = msName.trim().split(' ');
-          setFirstName(nameParts[0] || '');
-          setLastName(nameParts.slice(1).join(' ') || '');
-        }
-
-        setPhase('workspace');
-      }
+      sessionStorage.setItem('msal_redirecting', 'true');
+      sessionStorage.setItem('msal_auth_mode', 'signup');
+      await instance.loginRedirect({
+        scopes: ['User.Read', 'profile', 'email', 'openid'],
+        redirectUri: window.location.origin,
+        prompt: 'select_account',
+      });
     } catch (err: any) {
+      sessionStorage.removeItem('msal_redirecting');
+      sessionStorage.removeItem('msal_auth_mode');
       console.error('Microsoft sign-up error:', err);
       setError(err.response?.data?.message || err.message || 'Microsoft sign-up failed.');
-    } finally {
       setIsSsoLoading(false);
     }
   };
@@ -676,8 +679,9 @@ export default function SignUpPage() {
           sessionStorage.removeItem('msal_auth_mode');
           if (response && response.account) {
             const account = response.account;
-            const msEmail = (account.username || (account.idTokenClaims as any)?.email || '').toLowerCase().trim();
-            const msName = account.name || (account.idTokenClaims as any)?.name || '';
+            const claims = (account.idTokenClaims as any) || {};
+            const msEmail = (account.username || claims.email || claims.preferred_username || '').toLowerCase().trim();
+            const msName = account.name || claims.name || '';
 
             if (msEmail) {
               try {
@@ -693,7 +697,10 @@ export default function SignUpPage() {
               setEmail(msEmail);
             }
 
-            if (msName) {
+            if (claims.given_name || claims.family_name) {
+              setFirstName(claims.given_name || '');
+              setLastName(claims.family_name || '');
+            } else if (msName) {
               const nameParts = msName.trim().split(' ');
               setFirstName(nameParts[0] || '');
               setLastName(nameParts.slice(1).join(' ') || '');

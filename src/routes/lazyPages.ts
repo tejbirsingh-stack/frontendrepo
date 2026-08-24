@@ -25,6 +25,7 @@ export const ProjectPage = lazyPage(() => import('../pages/ProjectPage'));
 export const TagsManagementPage = lazyPage(() => import('../pages/TagsManagementPage'));
 export const UserActivitiesPage = lazyPage(() => import('../pages/UserActivitiesPage'));
 export const TrashPage = lazyPage(() => import('../pages/TrashPage'));
+export const OnboardingPlanPage = lazyPage(() => import('../pages/OnboardingPlanPage'));
 export const SettingsSectionPage = lazyPage(() => import('../pages/settings/SettingsSectionPage'));
 export const VideoPlayerPage = lazyPage(() => import('../pages/VideoPlayerPage'));
 export const NotFoundPage = lazyPage(() => import('../pages/NotFoundPage'));

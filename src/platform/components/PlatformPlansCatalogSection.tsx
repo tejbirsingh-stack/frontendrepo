@@ -4,6 +4,10 @@ import ViewListIcon from '@mui/icons-material/ViewList';
 import {
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
   IconButton,
   Switch,
@@ -36,6 +40,7 @@ import {
   usePlatformTablePagination,
 } from '../hooks/usePlatformTablePagination';
 import { cv } from '../../theme/cssVars';
+import { noahDialogSlotProps } from '../../constants/dialogStyles';
 
 type ViewMode = 'list' | 'grid';
 
@@ -140,6 +145,7 @@ function PlanCard({
         <StatusChip status={active ? 'active' : 'inactive'} />
         {plan.isPublic ? <StatusChip label="Public" /> : <StatusChip label="Private" />}
         {plan.isFeatured ? <StatusChip label="Featured" status="active" /> : null}
+        <StatusChip label={`Order: ${plan.sortOrder}`} />
       </Box>
 
       <Box
@@ -227,6 +233,7 @@ function PlansListView({
           { id: 'monthly', label: 'Monthly' },
           { id: 'public', label: 'Public' },
           { id: 'featured', label: 'Featured' },
+          { id: 'sortOrder', label: 'Sort Order' },
           { id: 'active', label: 'Active', align: 'right' },
           ...(showManageActions ? [{ id: 'actions', label: '', align: 'right' as const }] : []),
         ]}
@@ -243,6 +250,7 @@ function PlansListView({
               <TableCell>{formatMoneyCents(plan.monthlyPriceCents)}</TableCell>
               <TableCell>{plan.isPublic ? 'Yes' : 'No'}</TableCell>
               <TableCell>{plan.isFeatured ? 'Yes' : 'No'}</TableCell>
+              <TableCell>{plan.sortOrder}</TableCell>
               <TableCell align="right">
                 <Switch
                   size="small"
@@ -326,6 +334,8 @@ export function PlatformPlansCatalogSection({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
+  const [confirmToggleModalOpen, setConfirmToggleModalOpen] = useState(false);
+  const [nextToggleState, setNextToggleState] = useState(false);
   const showManageActions = Boolean(onEdit || onDelete);
   const pagination = usePlatformTablePagination([plans.length, viewMode]);
   const paginatedPlans = usePaginatedRows(plans, pagination.page, pagination.rowsPerPage);
@@ -455,7 +465,10 @@ export function PlatformPlansCatalogSection({
               control={
                 <Switch
                   checked={plansEnabled}
-                  onChange={(e) => void togglePlansEnabled(e.target.checked)}
+                  onChange={(e) => {
+                    setNextToggleState(e.target.checked);
+                    setConfirmToggleModalOpen(true);
+                  }}
                   inputProps={{ 'aria-label': 'Show Plans tab on landing page' }}
                 />
               }
@@ -525,6 +538,49 @@ export function PlatformPlansCatalogSection({
           </>
         ) : null}
       </Panel>
+
+      {/* Confirmation Dialog */}
+      <Dialog
+        open={confirmToggleModalOpen}
+        onClose={() => setConfirmToggleModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        slotProps={noahDialogSlotProps()}
+      >
+        <DialogTitle sx={{ fontWeight: 600 }}>
+          {nextToggleState ? 'Activate Plans Tab?' : 'Deactivate Plans Tab?'}
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: cv.textSecondary }}>
+            {nextToggleState
+              ? 'Are you sure you want to activate the plans tab? This will make all public plans visible and available for purchase on the marketing site.'
+              : 'Are you sure you want to deactivate the plans tab? This will hide all pricing information from the public marketing site.'}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 1 }}>
+          <Button
+            onClick={() => setConfirmToggleModalOpen(false)}
+            sx={{ color: cv.textSecondary, textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              setConfirmToggleModalOpen(false);
+              void togglePlansEnabled(nextToggleState);
+            }}
+            variant="contained"
+            sx={{
+              bgcolor: nextToggleState ? cv.success : cv.destructive,
+              color: '#fff',
+              textTransform: 'none',
+              '&:hover': { bgcolor: nextToggleState ? cv.successHover : cv.destructiveHover },
+            }}
+          >
+            {nextToggleState ? 'Activate' : 'Deactivate'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

@@ -507,6 +507,10 @@ function PeopleTab({
   membersTotal?: number;
 }) {
   const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'Super Admin' || user?.roleId === ROLE_IDS.SUPER_ADMIN || (typeof user?.role === 'string' && user.role.toLowerCase().includes('super admin'));
+  const isAdmin = isSuperAdmin || user?.role === 'Admin' || user?.roleId === ROLE_IDS.ADMIN || Boolean(user?.permissions?.includes('manage_users_permissions'));
+  const canManage = isSuperAdmin || isAdmin;
+
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
@@ -554,7 +558,7 @@ function PeopleTab({
   const editUser = users.find((user) => user.id === editUserId);
 
   const handleSaveUser = async (userId: string, email: string, role: UserRole, roleId: string) => {
-    if (!userId) return;
+    if (!userId || !canManage) return;
     try {
       const res = await updateOrganizationUser(userId, { email, roleId });
       toast.success(res?.message || 'User updated successfully');
@@ -570,8 +574,26 @@ function PeopleTab({
   };
 
   const handleBulkAction = async (action: 'active' | 'inactive' | 'delete') => {
-    if (selectedIds.size === 0) return;
-    const userIds = Array.from(selectedIds);
+    if (selectedIds.size === 0 || !canManage) return;
+    if (action === 'delete' && !isSuperAdmin) {
+      toast.error('Only Super Admin can delete users');
+      return;
+    }
+    const userIds = Array.from(selectedIds).filter((id) => {
+      const targetUser = users.find((u) => u.id === id);
+      if (!targetUser) return false;
+      const isTargetSuperAdmin = targetUser.role === 'Super Admin' || targetUser.roleId === ROLE_IDS.SUPER_ADMIN || targetUser.role.toLowerCase().includes('super admin');
+      if (isTargetSuperAdmin || targetUser.isCurrentUser) {
+        return false;
+      }
+      return true;
+    });
+
+    if (userIds.length === 0) {
+      toast.error('Super Admin and your own account cannot be modified or deleted');
+      return;
+    }
+
     try {
       toast.loading(`Marking users as ${action}...`, { id: 'bulk-action' });
       await bulkUpdateOrganizationUsersRequest(userIds, action);
@@ -615,6 +637,15 @@ function PeopleTab({
     },
   ];
 
+  const isRowSelectable = (row: SettingsUserRow) => {
+    if (!canManage) return false;
+    const isTargetSuperAdmin = row.role === 'Super Admin' || row.roleId === ROLE_IDS.SUPER_ADMIN || row.role.toLowerCase().includes('super admin');
+    if (isTargetSuperAdmin || row.isCurrentUser) {
+      return false;
+    }
+    return true;
+  };
+
   return (
     <>
       <SettingsSectionCard
@@ -650,8 +681,8 @@ function PeopleTab({
             setAddOpen(true);
           }}
           addLabel="New user"
-          exportDisabled={user?.role === 'Editor'}
-          addDisabled={user?.role === 'Editor'}
+          exportDisabled={!canManage}
+          addDisabled={!canManage}
         />
         <Collapse in={filterOpen}>
           <Box sx={{ px: 2, pb: 1.5 }}>
@@ -677,7 +708,7 @@ function PeopleTab({
             />
           </Box>
         </Collapse>
-        {selectedIds.size > 0 ? (
+        {canManage && selectedIds.size > 0 ? (
           <Box
             sx={{
               px: 2,
@@ -706,35 +737,40 @@ function PeopleTab({
             <Button onClick={() => handleBulkAction('inactive')} size="small" sx={{ textTransform: 'none', color: cv.textSecondary }}>
               Mark inactive
             </Button>
-            <Button onClick={() => handleBulkAction('delete')} size="small" sx={{ textTransform: 'none', color: cv.destructive }}>
-              Mark delete
-            </Button>
+            {isSuperAdmin && (
+              <Button onClick={() => handleBulkAction('delete')} size="small" sx={{ textTransform: 'none', color: cv.destructive }}>
+                Mark delete
+              </Button>
+            )}
           </Box>
         ) : null}
         <SettingsDataTable
           columns={columns}
           rows={rows}
           getRowId={(row) => row.id}
-          selectable
+          selectable={canManage}
+          isRowSelectable={isRowSelectable}
           selectedRowIds={selectedIds}
-          onSelectionChange={setSelectedIds}
+          onSelectionChange={canManage ? setSelectedIds : undefined}
         />
-        {selectedIds.size > 0 ? (
+        {canManage && selectedIds.size > 0 ? (
           <Typography sx={{ px: 2, py: 1.25, fontSize: '0.75rem', color: cv.textMuted }}>
             {selectedIds.size} user{selectedIds.size === 1 ? '' : 's'} selected.
           </Typography>
         ) : null}
       </SettingsSectionCard>
-      <AddUserDialog
-        open={addOpen || Boolean(editUserId)}
-        onClose={() => {
-          setAddOpen(false);
-          setEditUserId(null);
-        }}
-        onInvite={handleInvite}
-        onSave={handleSaveUser}
-        initialUser={editUser ? { id: editUser.id, email: editUser.email, role: editUser.role } : undefined}
-      />
+      {canManage && (
+        <AddUserDialog
+          open={addOpen || Boolean(editUserId)}
+          onClose={() => {
+            setAddOpen(false);
+            setEditUserId(null);
+          }}
+          onInvite={handleInvite}
+          onSave={handleSaveUser}
+          initialUser={editUser ? { id: editUser.id, email: editUser.email, role: editUser.role } : undefined}
+        />
+      )}
     </>
   );
 }
@@ -794,6 +830,10 @@ function UserGroupsTab({
   setGroups: Dispatch<SetStateAction<UserGroup[]>>;
 }) {
   const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'Super Admin' || user?.roleId === ROLE_IDS.SUPER_ADMIN || (typeof user?.role === 'string' && user.role.toLowerCase().includes('super admin'));
+  const isAdmin = isSuperAdmin || user?.role === 'Admin' || user?.roleId === ROLE_IDS.ADMIN || Boolean(user?.permissions?.includes('manage_users_permissions'));
+  const canManage = isSuperAdmin || isAdmin;
+
   const { formatDate } = useLocalizedDate();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -823,6 +863,7 @@ function UserGroupsTab({
   const editGroup = groups.find((group) => group.id === editGroupId);
 
   const handleSaveGroup = async (name: string, description: string, memberIds: string[]) => {
+    if (!canManage) return;
     setIsLoading(true);
     try {
       if (editGroupId) {
@@ -845,6 +886,11 @@ function UserGroupsTab({
   };
 
   const handleDeleteSelected = async () => {
+    if (!canManage) return;
+    if (!isSuperAdmin) {
+      toast.error('Only Super Admin can delete user groups');
+      return;
+    }
     setIsLoading(true);
     try {
       for (const id of Array.from(selectedIds)) {
@@ -907,12 +953,14 @@ function UserGroupsTab({
       label: '',
       width: '4%',
       render: (row) => (
-        <IconButton size="small" onClick={(e) => {
-          e.stopPropagation();
-          setEditGroupId(row.id);
-        }}>
-          <EditOutlinedIcon fontSize="small" />
-        </IconButton>
+        canManage ? (
+          <IconButton size="small" onClick={(e) => {
+            e.stopPropagation();
+            setEditGroupId(row.id);
+          }}>
+            <EditOutlinedIcon fontSize="small" />
+          </IconButton>
+        ) : null
       ),
     },
   ];
@@ -943,10 +991,10 @@ function UserGroupsTab({
           }}
           onAdd={() => setDialogOpen(true)}
           addLabel="New group"
-          exportDisabled={user?.role === 'Editor'}
-          addDisabled={user?.role === 'Editor'}
+          exportDisabled={!canManage}
+          addDisabled={!canManage}
         />
-        {selectedIds.size > 0 ? (
+        {canManage && selectedIds.size > 0 ? (
           <Box
             sx={{
               px: 2,
@@ -969,40 +1017,44 @@ function UserGroupsTab({
             >
               Edit
             </Button>
-            <Button
-              size="small"
-              onClick={handleDeleteSelected}
-              sx={{ textTransform: 'none', color: cv.destructive }}
-            >
-              Delete
-            </Button>
+            {isSuperAdmin && (
+              <Button
+                size="small"
+                onClick={handleDeleteSelected}
+                sx={{ textTransform: 'none', color: cv.destructive }}
+              >
+                Delete
+              </Button>
+            )}
           </Box>
         ) : null}
         <SettingsDataTable
           columns={columns}
           rows={rows}
           getRowId={(row) => row.id}
-          selectable
+          selectable={canManage}
           selectedRowIds={selectedIds}
-          onSelectionChange={setSelectedIds}
+          onSelectionChange={canManage ? setSelectedIds : undefined}
           emptyMessage="No groups yet. Create one to organize your team."
         />
-        {selectedIds.size > 0 ? (
+        {canManage && selectedIds.size > 0 ? (
           <Typography sx={{ px: 2, py: 1.25, fontSize: '0.75rem', color: cv.textMuted }}>
             {selectedIds.size} group{selectedIds.size === 1 ? '' : 's'} selected.
           </Typography>
         ) : null}
       </SettingsSectionCard>
-      <UserGroupDialog
-        open={dialogOpen || Boolean(editGroupId)}
-        onClose={() => {
-          setDialogOpen(false);
-          setEditGroupId(null);
-        }}
-        onSave={handleSaveGroup}
-        users={users}
-        initialGroup={editGroup}
-      />
+      {canManage && (
+        <UserGroupDialog
+          open={dialogOpen || Boolean(editGroupId)}
+          onClose={() => {
+            setDialogOpen(false);
+            setEditGroupId(null);
+          }}
+          onSave={handleSaveGroup}
+          users={users}
+          initialGroup={editGroup}
+        />
+      )}
     </>
   );
 }

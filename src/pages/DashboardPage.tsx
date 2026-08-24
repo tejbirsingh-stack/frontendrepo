@@ -38,9 +38,11 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import MediaFilterPanel from '../components/dashboard/MediaFilterPanel';
 import MediaItemCard from '../components/dashboard/MediaItemCard';
 import MediaListRow from '../components/dashboard/MediaListRow';
-import MediaSelectionBar, {
-  getDashboardFolderDropTargetKey,
-} from '../components/dashboard/MediaSelectionBar';
+import MediaSelectionBar from '../components/dashboard/MediaSelectionBar';
+
+export function getDashboardFolderDropTargetKey(folderId: string) {
+  return `dashboard-folder:${folderId}`;
+}
 import MoveItemsModal, { type MoveDestination } from '../components/dashboard/MoveItemsModal';
 import NewFolderModal from '../components/dashboard/NewFolderModal';
 import NewProjectModal from '../components/dashboard/NewProjectModal';
@@ -49,7 +51,7 @@ import DashboardKeyboardShortcutsDialog from '../components/dashboard/DashboardK
 import HelpMenuDrawer, { getHelpMenuShortcutLabel } from '../components/media/HelpMenuDrawer';
 import { useAuth } from '../auth/AuthContext';
 import { ROLE_IDS } from '../constants/userRoles';
-import { PERMISSIONS, hasPermission } from '../constants/permissions';
+import { PERMISSIONS, hasPermission, canDeleteFolder } from '../constants/permissions';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
 import { dropdownMenuPaperSx } from '../constants/dropdownMenu';
@@ -1511,19 +1513,30 @@ export default function DashboardPage({
         </MenuItem>
       </Menu>
 
-      <MediaSelectionBar
-        selectedCount={selectedMediaIds.size}
-        totalCount={selectableDisplayedItems.length}
-        onSelectAll={() =>
-          setMediaSelection(selectableDisplayedItems.map((item) => item.id))
-        }
-        onClearSelection={() => {
-          clearMediaSelection();
-          lastSelectedIdRef.current = null;
-        }}
-        onMove={handleBulkMove}
-        onDelete={handleBulkDelete}
-      />
+      {(() => {
+        const selectedHasFolder = mediaItems.some(
+          (item) => selectedMediaIds.has(item.id) && item.type === 'folder',
+        );
+        const isBulkDeleteDisabled = selectedHasFolder
+          ? !canDeleteFolder(user)
+          : !hasPermission(user, PERMISSIONS.MANAGE_TRASH);
+        return (
+          <MediaSelectionBar
+            selectedCount={selectedMediaIds.size}
+            totalCount={selectableDisplayedItems.length}
+            onSelectAll={() =>
+              setMediaSelection(selectableDisplayedItems.map((item) => item.id))
+            }
+            onClearSelection={() => {
+              clearMediaSelection();
+              lastSelectedIdRef.current = null;
+            }}
+            onMove={handleBulkMove}
+            onDelete={handleBulkDelete}
+            isDeleteDisabled={isBulkDeleteDisabled}
+          />
+        );
+      })()}
 
       <MoveItemsModal
         open={bulkMoveOpen}

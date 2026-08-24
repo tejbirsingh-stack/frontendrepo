@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import { PERMISSIONS, hasPermission } from '../../constants/permissions';
+import { PERMISSIONS, hasPermission, canDeleteFolder } from '../../constants/permissions';
 import { cv } from '../../theme/cssVars';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { ROLE_IDS } from '../../constants/userRoles';
+import { apiClient } from '../../api/client';
+import FolderDeleteFlowModal from '../modals/FolderDeleteFlowModal';
+import SuperAdminFolderDeleteFlowModal from '../modals/SuperAdminFolderDeleteFlowModal';
 import {
   Box,
   Collapse,
@@ -46,11 +50,9 @@ import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import HistoryIcon from '@mui/icons-material/History';
 import NoahLogo from '../NoahLogo';
 import { dropdownMenuPaperSx } from '../../constants/dropdownMenu';
-import { apiClient } from '../../api/client';
 import WorkspaceColorDot from './WorkspaceColorDot';
 import WorkspaceColorPicker from './WorkspaceColorPicker';
 import { FOLDER_COLORS } from '../../constants/folderColors';
-import { ROLE_IDS } from '../../constants/userRoles';
 import { resolveFolderColor, folderAccentTint, PROJECT_ACCENT_COLOR, projectAccentTint } from '../../utils/folderColorStyle';
 import AddSidebarItemModal, { type SidebarItemMode } from './AddSidebarItemModal';
 import CreateWorkspaceModal, { type CreateWorkspaceFormData } from './CreateWorkspaceModal';
@@ -1062,6 +1064,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     trashedIds,
     moveMediaToDashboardFolder,
     moveMediaToTrashBulk,
+    removeFolderAndItemsFromState,
     trashedMediaItems,
     addWorkspaceFolder,
     renameWorkspaceFolder,
@@ -1107,6 +1110,8 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
   );
   const [renameFolderOpen, setRenameFolderOpen] = useState(false);
   const [deleteFolderOpen, setDeleteFolderOpen] = useState(false);
+  const [folderDeleteFlowOpen, setFolderDeleteFlowOpen] = useState(false);
+  const [superAdminFolderDeleteFlowOpen, setSuperAdminFolderDeleteFlowOpen] = useState(false);
 
   useEffect(() => {
     if (!canManageDeletions) {
@@ -1291,7 +1296,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         toast.error(`Workspace limit (${summary.workspacesTotal}) reached for your current plan. Please upgrade to create more workspaces.`);
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
     setCreateModalOpen(true);
   };
 
@@ -1434,18 +1439,47 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
     setFolderActionsTarget(null);
   };
 
+  const isRestoreFolderTarget =
+    folderActionsTarget?.type === 'folder' &&
+    folderActionsTarget?.label?.trim().toLowerCase() === 'restore';
+
   const openRenameFolder = () => {
     closeFolderActionsMenu();
+    if (isRestoreFolderTarget) {
+      toast.error("The 'Restore' folder is protected and cannot be renamed.");
+      return;
+    }
     setRenameFolderOpen(true);
   };
 
   const openDeleteFolder = () => {
     closeFolderActionsMenu();
-    setDeleteFolderOpen(true);
+    if (isRestoreFolderTarget) {
+      toast.error("The 'Restore' folder is protected and cannot be deleted.");
+      return;
+    }
+    const isSuperAdmin =
+      user?.role === 'Super Admin' ||
+      user?.roleId === ROLE_IDS.SUPER_ADMIN ||
+      user?.role === 'super_admin';
+
+    if (folderActionsTarget?.type === 'folder') {
+      if (isSuperAdmin) {
+        setSuperAdminFolderDeleteFlowOpen(true);
+      } else {
+        setFolderDeleteFlowOpen(true);
+      }
+    } else {
+      setDeleteFolderOpen(true);
+    }
   };
 
   const handleConfirmRenameFolder = async (newTitle: string) => {
     if (!folderActionsTarget) return;
+    if (isRestoreFolderTarget) {
+      toast.error("The 'Restore' folder is protected and cannot be renamed.");
+      return;
+    }
 
     if (folderActionsTarget.type === 'folder') {
       await renameWorkspaceFolder(folderActionsTarget.folderId, newTitle);
@@ -1460,6 +1494,10 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
 
   const handleConfirmDeleteFolder = () => {
     if (!folderActionsTarget) return;
+    if (isRestoreFolderTarget) {
+      toast.error("The 'Restore' folder is protected and cannot be deleted.");
+      return;
+    }
 
     if (folderActionsTarget.type === 'folder') {
       deleteWorkspaceFolder(folderActionsTarget.folderId);
@@ -1786,7 +1824,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
                   toast.error('Storage limit reached — Uploads are blocked until you free space or upgrade your plan.');
                   return;
                 }
-              } catch (e) {}
+              } catch (e) { }
               setUploadPanelOpen(true);
             }}
           >
@@ -1802,7 +1840,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
                     setUploadPanelOpen(false);
                     return;
                   }
-                } catch (e) {}
+                } catch (e) { }
                 setUploadPanelOpen((open) => !open);
               }}
             />
@@ -1810,7 +1848,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         </List>
 
         <Collapse in={uploadPanelOpen}>
-          <UploadPanel onUpload={(files) => uploadMediaFiles(files, { 
+          <UploadPanel onUpload={(files) => uploadMediaFiles(files, {
             parentFolderId: sidebarSelection?.browseMode === 'projects' ? null : (sidebarSelection?.folderId ?? null),
             linkedProjectId: sidebarSelection?.browseMode === 'projects' ? (sidebarSelection?.folderId ?? null) : null
           })} />
@@ -2087,42 +2125,42 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
           {folderActionsTarget && favorites.has(folderActionsTarget.folderId) ? 'Remove from favorites' : 'Add to favorites'}
         </MenuItem>
         <MenuItem
-          disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)}
+          disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget}
           onClick={() => {
-            if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
+            if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget) return;
             openRenameFolder();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary,
-            opacity: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
-            cursor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.surfaceHover },
+            color: (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget) ? cv.textMuted : cv.textSecondary,
+            opacity: (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget) ? 0.6 : 1,
+            cursor: (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget) ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.textSecondary }} />
+            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) || isRestoreFolderTarget) ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Rename
         </MenuItem>
         <MenuItem
-          disabled={!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)}
+          disabled={!canDeleteFolder(user) || isRestoreFolderTarget}
           onClick={() => {
-            if (!hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS)) return;
+            if (!canDeleteFolder(user) || isRestoreFolderTarget) return;
             openDeleteFolder();
           }}
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.destructive,
-            opacity: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 0.6 : 1,
-            cursor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? 'transparent' : cv.destructiveHover },
+            color: (!canDeleteFolder(user) || isRestoreFolderTarget) ? cv.textMuted : cv.destructive,
+            opacity: (!canDeleteFolder(user) || isRestoreFolderTarget) ? 0.6 : 1,
+            cursor: (!canDeleteFolder(user) || isRestoreFolderTarget) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: (!canDeleteFolder(user) || isRestoreFolderTarget) ? 'transparent' : cv.destructiveHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DeleteOutlinedIcon sx={{ fontSize: 18, color: !hasWorkspacePermission(PERMISSIONS.MANAGE_ROOT_FOLDERS) ? cv.textMuted : cv.destructive }} />
+            <DeleteOutlinedIcon sx={{ fontSize: 18, color: (!canDeleteFolder(user) || isRestoreFolderTarget) ? cv.textMuted : cv.destructive }} />
           </ListItemIcon>
           Delete
         </MenuItem>
@@ -2146,8 +2184,8 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         requireNameConfirmation
         description={
           isFolderDeleteTarget
-            ? 'This folder will be removed from the sidebar. Any files inside it will be moved to trash.'
-            : 'This item will be removed from the folder and moved to trash if it is linked to a file.'
+            ? 'All files, folders, and projects inside this folder will also go to Super Admin Delete Management.'
+            : 'This item will be sent to Super Admin Delete Management.'
         }
         onClose={() => {
           setDeleteFolderOpen(false);
@@ -2155,8 +2193,64 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         }}
         onConfirm={handleConfirmDeleteFolder}
       />
+
+      <FolderDeleteFlowModal
+        open={folderDeleteFlowOpen}
+        folderId={folderActionsTarget?.type === 'folder' ? folderActionsTarget.folderId : null}
+        folderName={folderActionsTarget?.label}
+        onClose={() => {
+          setFolderDeleteFlowOpen(false);
+          clearFolderActionTarget();
+        }}
+        onConfirmDelete={async (targetFolderId, isWholeFolder, selectedFileIds, selectedFolderIds) => {
+          try {
+            await apiClient.post(`/workspaces/folder/delete/${targetFolderId}`, {
+              isWholeFolder,
+              deleteFileIds: selectedFileIds,
+              deleteFolderIds: selectedFolderIds,
+            });
+            removeFolderAndItemsFromState(targetFolderId, selectedFileIds, selectedFolderIds);
+            setOpenFolders((prev) => {
+              const next = { ...prev };
+              delete next[targetFolderId];
+              return next;
+            });
+          } catch (err: any) {
+            console.error('Failed to submit folder delete request from sidebar:', err);
+          }
+        }}
+      />
+
+      <SuperAdminFolderDeleteFlowModal
+        open={superAdminFolderDeleteFlowOpen}
+        folderId={folderActionsTarget?.type === 'folder' ? folderActionsTarget.folderId : null}
+        folderName={folderActionsTarget?.label}
+        onClose={() => {
+          setSuperAdminFolderDeleteFlowOpen(false);
+          clearFolderActionTarget();
+        }}
+        onConfirmPermanentDelete={async (targetFolderId, isWholeFolder, selectedFileIds, selectedFolderIds) => {
+          try {
+            await apiClient.post(`/workspaces/folder/delete/${targetFolderId}`, {
+              isWholeFolder,
+              deleteFileIds: selectedFileIds,
+              deleteFolderIds: selectedFolderIds,
+              isPermanent: true,
+            });
+            removeFolderAndItemsFromState(targetFolderId, selectedFileIds, selectedFolderIds);
+            setOpenFolders((prev) => {
+              const next = { ...prev };
+              delete next[targetFolderId];
+              return next;
+            });
+          } catch (err: any) {
+            console.error('Failed to execute permanent folder delete from sidebar:', err);
+          }
+        }}
+      />
     </Box>
   );
 }
 
 export { SIDEBAR_WIDTH };
+

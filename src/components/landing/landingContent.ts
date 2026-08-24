@@ -64,6 +64,7 @@ export const FALLBACK_PLANS: Array<{
   yearlyPriceCents: number;
   features: string[];
   isFeatured: boolean;
+  hasAI: boolean;
   ctaLabel: string;
 }> = [
   {
@@ -73,6 +74,7 @@ export const FALLBACK_PLANS: Array<{
     monthlyPriceCents: 0,
     yearlyPriceCents: 0,
     isFeatured: false,
+    hasAI: false,
     ctaLabel: 'Continue with Free',
     features: [
       '1 Project & 1 Workspace',
@@ -88,6 +90,7 @@ export const FALLBACK_PLANS: Array<{
     monthlyPriceCents: 1000,
     yearlyPriceCents: 10800,
     isFeatured: false,
+    hasAI: false,
     ctaLabel: 'Get started',
     features: [
       '2 Projects & 2 Workspaces',
@@ -103,6 +106,7 @@ export const FALLBACK_PLANS: Array<{
     monthlyPriceCents: 2500,
     yearlyPriceCents: 27000,
     isFeatured: true,
+    hasAI: false,
     ctaLabel: 'Start with Premium',
     features: [
       'Review & annotate video/audio',
@@ -118,6 +122,7 @@ export const FALLBACK_PLANS: Array<{
     monthlyPriceCents: 5000,
     yearlyPriceCents: 54000,
     isFeatured: false,
+    hasAI: false,
     ctaLabel: 'Contact Sales',
     features: [
       'Dedicated account manager',
