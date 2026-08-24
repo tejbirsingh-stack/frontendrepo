@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, Checkbox, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, Checkbox, IconButton, Popover, Tooltip, Typography } from '@mui/material';
 import { cv } from '../../theme/cssVars';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import StarIcon from '@mui/icons-material/Star';
@@ -14,7 +14,11 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import LinkIcon from '@mui/icons-material/Link';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
+import AiSummaryBlock from '../media/AiSummaryBlock';
 import TruncatedText from '../TruncatedText';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { MediaItem, MediaType } from '../../data/mockMedia';
@@ -36,7 +40,7 @@ import {
 import { formatFolderItemCount, getFolderChildCount } from '../../utils/folderItemCount';
 import { useDashboard } from '../../context/DashboardContext';
 import { decodeClientImageToDataUrl } from '../../utils/clientImageDecoder';
-import { parseFileReviewStatus } from '../../constants/fileReviewStatus';
+import { parseFileReviewStatus, getFileReviewStatusColor } from '../../constants/fileReviewStatus';
 
 interface MediaItemCardProps {
   item: MediaItem;
@@ -127,6 +131,47 @@ function FavoriteButton({
   );
 }
 
+function SearchMatchBadge({ matchType }: { matchType?: string }) {
+  if (matchType !== 'semantic' && matchType !== 'transcript' && matchType !== 'highlight') {
+    return null;
+  }
+  const isSemantic = matchType === 'semantic';
+  const isHighlight = matchType === 'highlight';
+  const label = isSemantic ? 'Related' : isHighlight ? 'AI Tags' : 'Transcript';
+  const ariaLabel = isSemantic
+    ? 'Matched because the spoken content is related'
+    : isHighlight
+      ? 'Matched because AI summary or tags contain this search'
+      : 'Matched because the transcript contains this search';
+
+  return (
+    <Tooltip title={label} arrow placement="top">
+      <Box
+        component="span"
+        aria-label={ariaLabel}
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          px: 0.875,
+          py: 0.25,
+          borderRadius: '999px',
+          minHeight: 22,
+          ...thumbnailOverlayChipStyles,
+          border: `1px solid ${cv.purpleChipBorder}`,
+          backgroundColor: cv.purpleSurface,
+        }}
+      >
+        <Typography
+          variant="caption"
+          sx={{ fontSize: '0.6875rem', fontWeight: 600, color: cv.brandPurpleLight }}
+        >
+          {label}
+        </Typography>
+      </Box>
+    </Tooltip>
+  );
+}
+
 function TypeBadge({ type, isProject }: { type: MediaType; isProject?: boolean }) {
   const config = typeConfig[type];
   const Icon = type === 'folder' && isProject ? WorkOutlineOutlinedIcon : config.icon;
@@ -157,7 +202,33 @@ function TypeBadge({ type, isProject }: { type: MediaType; isProject?: boolean }
   );
 }
 
-/** Approved / Rejected badge shown next to the type pill on media cards. */
+function VisibilityBadge({ item }: { item: MediaItem }) {
+  if (item.type === 'folder' || item.isProject) return null;
+  const vis = (item as any)?.visibility?.toLowerCase();
+  if (vis !== 'private' && vis !== 'public') return null;
+  const isPrivate = vis === 'private';
+  
+  return (
+    <Tooltip title={isPrivate ? 'Private' : 'Public'} arrow placement="top">
+      <Box
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 32,
+          height: 32,
+          borderRadius: '8px',
+          ...thumbnailOverlayChipStyles,
+          color: cv.textInverse,
+        }}
+      >
+        {isPrivate ? <LockOutlinedIcon sx={{ fontSize: 16 }} /> : <PublicOutlinedIcon sx={{ fontSize: 16 }} />}
+      </Box>
+    </Tooltip>
+  );
+}
+
+/** Badge shown next to the type pill on media cards to indicate review progress. */
 function ReviewStatusBadge({ item }: { item: MediaItem }) {
   if (item.type === 'folder' || item.isProject) return null;
 
@@ -166,51 +237,24 @@ function ReviewStatusBadge({ item }: { item: MediaItem }) {
       (item as { reviewStatus?: unknown }).reviewStatus,
   );
 
-  if (status !== 'Approved' && status !== 'Rejected') return null;
+  if (status === 'New') return null;
 
-  const isApproved = status === 'Approved';
+  const color = getFileReviewStatusColor(status);
 
   return (
-    <Tooltip title={status} arrow placement="top">
+    <Tooltip title={`Review status: ${status}`} arrow placement="top">
       <Box
-        aria-label={status}
+        aria-label={`Review status: ${status}`}
         sx={{
-          width: 28,
-          height: 28,
+          width: 8,
+          height: 8,
           borderRadius: '50%',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          backgroundColor: color,
+          boxShadow: status === 'Approved' ? `0 0 6px ${color}` : 'none',
           flexShrink: 0,
-          ...(isApproved
-            ? {
-                backgroundColor: cv.brandTeal,
-                border: `1.5px solid ${cv.brandTeal}`,
-                boxShadow: `0 0 0 1.5px rgba(0,0,0,0.35)`,
-              }
-            : {
-                ...thumbnailOverlayChipStyles,
-              }),
+          ml: 0.5,
         }}
-      >
-        {isApproved ? (
-          <CheckIcon sx={{ fontSize: 16, color: '#fff', strokeWidth: 2 }} />
-        ) : (
-          <Box
-            sx={{
-              width: 18,
-              height: 18,
-              borderRadius: '50%',
-              backgroundColor: cv.destructive,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <CloseIcon sx={{ fontSize: 12, color: '#fff' }} />
-          </Box>
-        )}
-      </Box>
+      />
     </Tooltip>
   );
 }
@@ -256,6 +300,10 @@ function FolderPreview({ item, childCount }: { item: MediaItem; childCount: numb
     isProject: item.isProject,
   });
 
+  if (item.isProject) {
+    console.log(`Project Preview ${item.title}: color=${item.folderColor}, accent=${accentColor}`);
+  }
+
   return (
     <Box
       sx={{
@@ -265,7 +313,7 @@ function FolderPreview({ item, childCount }: { item: MediaItem; childCount: numb
         alignItems: 'center',
         justifyContent: 'center',
         background: item.isProject
-          ? projectAccentBackground()
+          ? projectAccentBackground(item.folderColor)
           : folderAccentBackground(item.folderColor),
         gap: 1,
       }}
@@ -453,6 +501,7 @@ export default function MediaItemCard({
 }: MediaItemCardProps) {
   const navigate = useNavigate();
   const { mediaItems, trashedIds } = useDashboard();
+  const [summaryAnchor, setSummaryAnchor] = useState<HTMLElement | null>(null);
   const config = typeConfig[item.type];
   const isFolder = item.type === 'folder';
   const folderChildCount = isFolder
@@ -466,7 +515,7 @@ export default function MediaItemCard({
     : 0;
   const folderFooterAccent = isFolder
     ? item.isProject
-      ? projectAccentTint()
+      ? projectAccentTint(item.folderColor)
       : folderAccentTint(item.folderColor)
     : config.accent;
   const selectionActive = selectedMediaIds.size > 0;
@@ -485,6 +534,15 @@ export default function MediaItemCard({
   // The frontend `MediaItem` has `videoSrc` mapped to the raw asset if it's not a video? Yes, it's mapped in `apiToFrontendMedia`.
   const documentUrl = item.videoSrc || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : undefined);
   const isClickable = (Boolean(openPath) || (item.type === 'document' && Boolean(documentUrl))) && !selectionActive;
+
+  const fullSummary = item.summary?.trim() || '';
+  const aiTagList = Array.isArray(item.aiTags)
+    ? item.aiTags.filter((t) => typeof t === 'string' && t.trim().length > 0)
+    : [];
+  const showAiSummaryIcon =
+    (item.type === 'video' || item.type === 'audio') &&
+    (Boolean(fullSummary) || aiTagList.length > 0);
+  const summaryPopoverOpen = Boolean(summaryAnchor);
 
   const handleOpen = () => {
     if (!isClickable) return;
@@ -544,6 +602,7 @@ export default function MediaItemCard({
         : cv.border;
 
   return (
+    <>
     <Box
       onClick={isClickable ? handleOpen : undefined}
       onDragOver={handleFolderDragOver}
@@ -561,9 +620,6 @@ export default function MediaItemCard({
         '&:hover .media-select-checkbox': {
           opacity: 1,
         },
-        '&:hover .video-summary-overlay': {
-          opacity: 1,
-        },
         '&:hover': {
           borderColor: isDropTarget ? cv.brandPurple : cv.borderInputHover,
           transform: isDragging || isDropTarget ? 'none' : 'translateY(-2px)',
@@ -574,42 +630,6 @@ export default function MediaItemCard({
     >
       <Box sx={{ position: 'relative', aspectRatio: '16 / 9', overflow: 'hidden' }}>
         <MediaPreview item={item} folderChildCount={folderChildCount} />
-
-        {item.type === 'video' && item.summary?.trim() ? (
-          <Box
-            className="video-summary-overlay"
-            aria-hidden
-            sx={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'flex-end',
-              p: 1.5,
-              pb: 2,
-              pr: item.duration ? 5 : 1.5,
-              background:
-                cv.videoScrimGradient,
-              opacity: 0,
-              transition: 'opacity 0.2s ease',
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.8125rem',
-                lineHeight: 1.45,
-                color: cv.textInverse,
-                display: '-webkit-box',
-                WebkitLineClamp: 4,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-              }}
-            >
-              {item.summary.trim()}
-            </Typography>
-          </Box>
-        ) : null}
 
         <Box
           sx={{
@@ -625,7 +645,39 @@ export default function MediaItemCard({
             isFavorite={isFavorite}
             onToggle={() => onToggleFavorite(item.id, item.isProject ? 'project' : (item.type === 'folder' ? 'folder' : 'asset'))}
           />
+          <VisibilityBadge item={item} />
           <TypeBadge type={item.type} isProject={item.isProject} />
+          <SearchMatchBadge matchType={item.searchMatch?.matchType} />
+          {showAiSummaryIcon ? (
+            <Tooltip title="AI summary" arrow placement="top">
+              <IconButton
+                type="button"
+                size="small"
+                aria-label="AI summary"
+                aria-haspopup="dialog"
+                aria-expanded={summaryPopoverOpen}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const target = event.currentTarget;
+                  setSummaryAnchor((current) => (current ? null : target));
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                sx={{
+                  width: 28,
+                  height: 28,
+                  ...thumbnailOverlayChipStyles,
+                  borderRadius: '8px',
+                  color: cv.textInverse,
+                  '&:hover': {
+                    ...thumbnailOverlayChipHoverStyles,
+                  },
+                }}
+              >
+                <AutoAwesomeOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          ) : null}
           <ReviewStatusBadge item={item} />
         </Box>
 
@@ -745,5 +797,42 @@ export default function MediaItemCard({
         <MediaItemActionsMenu item={item} />
       </Box>
     </Box>
+    <Popover
+      open={summaryPopoverOpen}
+      anchorEl={summaryAnchor}
+      onClose={() => setSummaryAnchor(null)}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+      slotProps={{
+        paper: {
+          sx: {
+            mt: 0.75,
+            p: 1.5,
+            maxWidth: 320,
+            borderRadius: '12px',
+            border: `1px solid ${cv.border}`,
+            background: 'var(--noah-dialog-surface)',
+            boxShadow: cv.dialogShadow,
+          },
+        },
+      }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <Typography
+        component="h3"
+        sx={{
+          mb: 0.75,
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          color: cv.textSecondary,
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+        }}
+      >
+        Summary
+      </Typography>
+      <AiSummaryBlock compact summary={fullSummary} tags={aiTagList} />
+    </Popover>
+    </>
   );
 }

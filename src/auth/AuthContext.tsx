@@ -28,6 +28,7 @@ import {
   readPersistedSessionToken,
   readPersistedSessionUser,
 } from './authStorage';
+import { saveCookieConsent } from '../utils/cookieConsent';
 import { waitForMinimumSkeletonTime } from './authInitTiming';
 import type {
   AuthContextValue,
@@ -63,6 +64,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void refreshBranding();
     }
   }, [refreshBranding]);
+
+  // Sync cookie consent preferences from database to browser cookies on user load
+  useEffect(() => {
+    if (user?.preferences?.cookieConsent) {
+      const dbConsent = user.preferences.cookieConsent as any;
+      saveCookieConsent({
+        functional: Boolean(dbConsent.functional),
+        analytics: Boolean(dbConsent.analytics),
+        marketing: Boolean(dbConsent.marketing),
+      });
+    }
+  }, [user]);
 
   const clearSession = useCallback(() => {
     accessTokenRef.current = null;

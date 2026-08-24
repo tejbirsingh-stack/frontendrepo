@@ -181,6 +181,7 @@ async function uploadResumableChunkedFile(
       linkedProjectId: options?.linkedProjectId,
       visibility: options?.visibility,
     },
+    { timeoutMs: 60_000 },
   );
 
   const { sessionId } = initRes;
@@ -255,6 +256,7 @@ async function uploadResumableChunkedFile(
         technicalSpecs: options?.technicalSpecs,
         visibility: options?.visibility,
       },
+      { timeoutMs: 300_000 },
     );
 
     if (progressCallback) {
@@ -376,10 +378,10 @@ export async function getAssetAccessOverrides(id: string): Promise<{ overrides: 
 /**
  * Update an asset-specific role override (direct access user).
  */
-export async function updateAssetAccessOverride(id: string, userId: string, accessLevel: string): Promise<void> {
+export async function updateAssetAccessOverride(id: string, userId: string, accessLevel: string, sendInviteEmail?: boolean): Promise<void> {
   await apiClient.patch(
     `/media/${encodeURIComponent(id)}/access/${encodeURIComponent(userId)}`,
-    { accessLevel },
+    { accessLevel, sendInviteEmail },
   );
 }
 

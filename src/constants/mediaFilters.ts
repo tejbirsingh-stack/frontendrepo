@@ -42,6 +42,7 @@ export const DATE_RANGE_OPTIONS: { value: DateRangeFilter; label: string }[] = [
 
 export const TAG_OPTIONS = ['important', 'project', 'brand', 'archived'] as const;
 
+/** Fallback only when AI tag catalog has not loaded yet. Prefer GET /api/ai/tags. */
 export const AI_TAG_OPTIONS = ['person', 'outdoor', 'technology'] as const;
 
 export function matchesDateRange(createdAt: string, range: DateRangeFilter): boolean {

@@ -91,7 +91,7 @@ export default function ShapeSubToolbar({
         ...subToolbarIslandResponsiveSx(920, { overlay }),
       }}
     >
-      <ShapeColorPicker activeColor={activeColor} onColorChange={onColorChange} />
+      <ShapeColorPicker activeColor={activeColor} onColorChange={onColorChange} portaled />
 
       <Divider
         orientation="vertical"

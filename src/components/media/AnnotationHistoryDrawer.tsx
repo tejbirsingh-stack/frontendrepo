@@ -24,7 +24,6 @@ import {
   Button,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
@@ -38,7 +37,11 @@ import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import { useActiveUser } from '../../hooks/useActiveUser';
 import type { MediaItem } from '../../data/mockMedia';
 import { MOCK_FRAME_PEOPLE, type FramePerson } from '../../data/mockFramePeople';
+import TranscriptPanel from './TranscriptPanel';
+import AiSummaryBlock from './AiSummaryBlock';
 import type { AnnotationHistoryEntry, AnnotationHistoryType } from '../../types/annotationHistory';
+import { getAiHighlightsRequest } from '../../api/ai.service';
+import { useAiEntitled } from '../../hooks/useAiEntitled';
 import type { CommentReply, VideoComment } from '../../types/videoComments';
 import CommentImageAttachment from './CommentImageAttachment';
 import type { AnnotationAccessGroup, AnnotationVisibility } from '../../types/annotationVisibility';
@@ -63,7 +66,13 @@ import {
 import { dropdownMenuPaperSx } from '../../constants/dropdownMenu';
 
 type DrawerTab = 'history' | 'details' | 'ai';
+type AiSubTab = 'summary' | 'transcript';
 type StatusFilter = 'all' | 'unread' | 'resolved' | 'archive';
+
+const AI_SUB_TABS: { value: AiSubTab; label: string }[] = [
+  { value: 'summary', label: 'Summary' },
+  { value: 'transcript', label: 'Transcript' },
+];
 
 function getCommentIdForEntry(entry: AnnotationHistoryEntry): string | null {
   if (entry.sourceCommentId) return entry.sourceCommentId;
@@ -177,6 +186,10 @@ interface AnnotationHistoryDrawerProps {
   /** Person whose headshot is highlighted on the frame from the AI insights tab. */
   selectedFramePersonId?: string | null;
   onFramePersonSelect?: (person: FramePerson) => void;
+  /** Seek player to a transcript segment (milliseconds). */
+  onTranscriptSeek?: (startMs: number) => void;
+  /** Media element the transcript follows to highlight the line being spoken. */
+  videoRef?: React.RefObject<HTMLVideoElement | null>;
   onClose: () => void;
   onEntryClick?: (entry: AnnotationHistoryEntry) => void;
   onToggleResolved: (entryId: string) => void;
@@ -1047,6 +1060,8 @@ export default function AnnotationHistoryDrawer({
   onDetailsSectionChange,
   selectedFramePersonId,
   onFramePersonSelect,
+  onTranscriptSeek,
+  videoRef,
   onClose,
   onEntryClick,
   onToggleResolved,
@@ -1099,6 +1114,12 @@ export default function AnnotationHistoryDrawer({
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
+  const [aiSubTab, setAiSubTab] = useState<AiSubTab>('summary');
+  const aiEntitled = useAiEntitled();
+  const [highlightSummary, setHighlightSummary] = useState<string | null>(null);
+  const [highlightTags, setHighlightTags] = useState<string[]>([]);
+  const [highlightLoading, setHighlightLoading] = useState(false);
+  const [highlightError, setHighlightError] = useState<string | null>(null);
 
   const commentById = useMemo(
     () => new Map(comments.map((comment) => [comment.id, comment])),
@@ -1177,6 +1198,64 @@ export default function AnnotationHistoryDrawer({
       `${person.name} ${person.detail}`.toLowerCase().includes(normalizedQuery),
     );
   }, [aiQuery]);
+
+  // People detection runs on frames, so audio and documents have no faces to list.
+  const supportsFramePeople = mediaItem?.type === 'video' || mediaItem?.type === 'image';
+
+  useEffect(() => {
+    setAiSubTab('summary');
+  }, [mediaItem?.id]);
+
+  useEffect(() => {
+    if (activeTab !== 'ai' || !aiEntitled || !mediaItem?.id) {
+      return;
+    }
+
+    let cancelled = false;
+    setHighlightLoading(true);
+    setHighlightError(null);
+
+    void getAiHighlightsRequest(mediaItem.id)
+      .then((res) => {
+        if (cancelled) return;
+        const apiSummary = res.summary?.trim() || '';
+        const apiTags = Array.isArray(res.tags)
+          ? res.tags.filter((t) => typeof t === 'string' && t.trim())
+          : [];
+        setHighlightSummary(apiSummary || null);
+        setHighlightTags(apiTags);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHighlightError('Could not load AI summary.');
+        setHighlightSummary(null);
+        setHighlightTags([]);
+      })
+      .finally(() => {
+        if (!cancelled) setHighlightLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, aiEntitled, mediaItem?.id]);
+
+  const insightsSummary = useMemo(() => {
+    if (highlightSummary?.trim()) return highlightSummary.trim();
+    const userSummary =
+      (typeof mediaItem?.customMetadata?.summary === 'string' &&
+        mediaItem.customMetadata.summary.trim()) ||
+      mediaItem?.summary?.trim() ||
+      '';
+    return userSummary || null;
+  }, [highlightSummary, mediaItem?.customMetadata, mediaItem?.summary]);
+
+  const insightsTags = useMemo(() => {
+    if (highlightTags.length > 0) return highlightTags;
+    return Array.isArray(mediaItem?.aiTags)
+      ? mediaItem.aiTags.filter((t) => typeof t === 'string' && t.trim())
+      : [];
+  }, [highlightTags, mediaItem?.aiTags]);
 
   const panelBody = (
     <>
@@ -1274,45 +1353,101 @@ export default function AnnotationHistoryDrawer({
 
       {activeTab === 'ai' && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, px: 1.5, pb: 1.25 }}>
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Search people, objects or moments"
-            value={aiQuery}
-            onChange={(event) => setAiQuery(event.target.value)}
-            aria-label="Search AI insights"
+          <Box
+            role="tablist"
+            aria-label="AI insights sections"
             sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '999px',
-                backgroundColor: cv.surface,
-                fontSize: '0.875rem',
-                color: cv.textPrimary,
-                '& fieldset': { borderColor: cv.border },
-                '&:hover fieldset': { borderColor: cv.annotationGuide },
-                '&.Mui-focused fieldset': { borderColor: cv.purpleFocusBorder },
-              },
-              '& .MuiInputBase-input::placeholder': {
-                color: cv.textMuted,
-                opacity: 1,
-              },
+              display: 'flex',
+              gap: 0.5,
+              p: 0.5,
+              borderRadius: '12px',
+              border: '1px solid var(--noah-border)',
+              backgroundColor: cv.surface,
             }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
-                  </InputAdornment>
-                ),
-              },
-            }}
-          />
+          >
+            {AI_SUB_TABS.map((tab) => {
+              const isActive = aiSubTab === tab.value;
+              return (
+                <Box
+                  key={tab.value}
+                  component="button"
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setAiSubTab(tab.value)}
+                  sx={{
+                    flex: 1,
+                    border: 'none',
+                    borderRadius: '8px',
+                    px: 1,
+                    py: 0.75,
+                    fontSize: '0.75rem',
+                    fontWeight: isActive ? 600 : 500,
+                    lineHeight: 1.2,
+                    cursor: 'pointer',
+                    color: isActive ? cv.textPrimary : cv.textSecondary,
+                    backgroundColor: isActive ? cv.purpleSelectionHover : 'transparent',
+                    boxShadow: isActive ? `inset 0 0 0 1px ${cv.purpleSelectionStrong}` : 'none',
+                    transition: 'background-color 0.15s ease, color 0.15s ease',
+                    '&:hover': {
+                      color: cv.textPrimary,
+                      backgroundColor: isActive
+                        ? cv.purpleSelectionMedium
+                        : cv.glassBackground,
+                    },
+                  }}
+                >
+                  {tab.label}
+                </Box>
+              );
+            })}
+          </Box>
 
-          <FramePeopleHeadshots
-            people={filteredFramePeople}
-            query={aiQuery}
-            selectedPersonId={selectedFramePersonId}
-            onSelectPerson={onFramePersonSelect}
-          />
+          {aiSubTab === 'transcript' ? (
+            <>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder={supportsFramePeople ? 'Search people, objects or moments' : 'Search transcript'}
+                value={aiQuery}
+                onChange={(event) => setAiQuery(event.target.value)}
+                aria-label="Search transcript"
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '999px',
+                    backgroundColor: cv.surface,
+                    fontSize: '0.875rem',
+                    color: cv.textPrimary,
+                    '& fieldset': { borderColor: cv.border },
+                    '&:hover fieldset': { borderColor: cv.annotationGuide },
+                    '&.Mui-focused fieldset': { borderColor: cv.purpleFocusBorder },
+                  },
+                  '& .MuiInputBase-input::placeholder': {
+                    color: cv.textMuted,
+                    opacity: 1,
+                  },
+                }}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
+
+              {supportsFramePeople && (
+                <FramePeopleHeadshots
+                  people={filteredFramePeople}
+                  query={aiQuery}
+                  selectedPersonId={selectedFramePersonId}
+                  onSelectPerson={onFramePersonSelect}
+                />
+              )}
+            </>
+          ) : null}
         </Box>
       )}
 
@@ -1612,19 +1747,41 @@ export default function AnnotationHistoryDrawer({
             ))
           )
         ) : activeTab === 'ai' ? (
-          <Box
-            sx={{
-              py: 1.5,
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 0.75,
-            }}
-          >
-            <AutoAwesomeOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted, flexShrink: 0 }} />
-            <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
-              Other AI insights for this file are not available yet.
-            </Typography>
-          </Box>
+          aiSubTab === 'summary' ? (
+            <Box
+              role="tabpanel"
+              aria-label="Summary"
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.75,
+                py: 1,
+              }}
+            >
+              {aiEntitled ? (
+                <AiSummaryBlock
+                  summary={insightsSummary}
+                  tags={insightsTags}
+                  loading={highlightLoading}
+                  error={highlightError}
+                  emptyMessage="No AI summary yet."
+                />
+              ) : (
+                <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted }}>
+                  AI summary is not available for this organization.
+                </Typography>
+              )}
+            </Box>
+          ) : (
+            <Box role="tabpanel" aria-label="Transcript">
+              <TranscriptPanel
+                assetId={mediaItem?.id}
+                filterQuery={aiQuery}
+                onSeekMs={onTranscriptSeek}
+                videoRef={videoRef}
+              />
+            </Box>
+          )
         ) : mediaItem && onTagsChange ? (
           <MediaDetailsPanel
             mediaItem={mediaItem}

@@ -21,6 +21,7 @@ export interface AuthSessionUser {
     maxProjects?: number;
     storageQuotaBytes?: string | number;
     storageUsedBytes?: string | number;
+    aiEnabled?: boolean;
     features?: any;
     isFreeTrialUsed?: boolean;
     metadata?: Record<string, any>;
@@ -34,6 +35,8 @@ export interface AuthSessionUser {
   avatarUrl?: string;
   accountName?: string;
   accountInitials?: string;
+  shareLinkActivityEnabled?: boolean;
+  preferences?: Record<string, any>;
 }
 
 export interface LoginCredentials {

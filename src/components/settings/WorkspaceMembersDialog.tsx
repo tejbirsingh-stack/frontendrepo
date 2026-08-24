@@ -440,7 +440,6 @@ export default function WorkspaceMembersDialog({
   // Filter direct access members so guests are exclusively listed in guestInvitesList section below
   const directAccessOrgMembers = useMemo(() => {
     return members.filter((member) => {
-      if (member.memberType === 'Guest') return false;
       if (
         member.email &&
         guestInvitesList.some((g) => g.email.toLowerCase() === member.email?.toLowerCase())
@@ -605,8 +604,9 @@ export default function WorkspaceMembersDialog({
     return true;
   };
 
-  const inviteUser = (email: string, name: string | undefined, memberType: WorkspaceMemberType) => {
+  const inviteUser = (email: string, name: string | undefined, memberType: WorkspaceMemberType, userId?: string) => {
     const success = onInvite({
+      userId,
       email,
       name,
       memberType,
@@ -627,9 +627,6 @@ export default function WorkspaceMembersDialog({
 
   const isExternalEmail = (email: string) => resolveMemberType(email) === 'Guest';
 
-  // Check if current query input is an external/guest email
-  const queryIsExternal = EMAIL_PATTERN.test(query.trim()) && isExternalEmail(query.trim().toLowerCase());
-
   const generatePassword = () => {
     const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
     const arr = Array.from(crypto.getRandomValues(new Uint8Array(16)));
@@ -644,7 +641,7 @@ export default function WorkspaceMembersDialog({
     setSecureShareOpen(true);
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     const trimmed = query.trim();
     if (!trimmed) {
       setError('Enter a name, email, or group.');
@@ -667,15 +664,15 @@ export default function WorkspaceMembersDialog({
     );
     if (matchedUser) {
       const memberType = isOrganizationUser(matchedUser) ? 'Member' : 'Guest';
-      if (!isRestricted && memberType === 'Member') {
+      if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
         setError('Organization members already have access to this public workspace.');
         return;
       }
       if (memberType === 'Guest') {
-        openSecureShare(matchedUser.email);
+        inviteUser(matchedUser.email, matchedUser.name, memberType, matchedUser.id);
         return;
       }
-      inviteUser(matchedUser.email, matchedUser.name, memberType);
+      inviteUser(matchedUser.email, matchedUser.name, memberType, matchedUser.id);
       return;
     }
 
@@ -686,11 +683,25 @@ export default function WorkspaceMembersDialog({
 
     const email = trimmed.toLowerCase();
     const memberType = resolveMemberType(email);
-    if (!isRestricted && memberType === 'Member') {
+    if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
       setError('Organization members already have access to this public workspace.');
       return;
     }
     if (memberType === 'Guest') {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const response = await (apiClient as any).get(`/workspaces/validate-guest?email=${encodeURIComponent(email)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = response.data ?? response;
+        if (data?.valid && data?.user) {
+          inviteUser(email, data.user.name, 'Guest', data.user.id);
+          return;
+        }
+      } catch (err) {
+        // Fallback below
+      }
       openSecureShare(email);
       return;
     }
@@ -714,15 +725,15 @@ export default function WorkspaceMembersDialog({
     }
 
     const memberType = isOrganizationUser(option.user) ? 'Member' : 'Guest';
-    if (!isRestricted && memberType === 'Member') {
+    if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
       setError('Organization members already have access to this public workspace.');
       return;
     }
     if (memberType === 'Guest') {
-      openSecureShare(option.user.email);
+      inviteUser(option.user.email, option.user.name, memberType, option.user.id.replace('user-', ''));
       return;
     }
-    inviteUser(option.user.email, option.user.name, memberType);
+    inviteUser(option.user.email, option.user.name, memberType, option.user.id.replace('user-', ''));
   };
 
   const handleInviteInputBlur = () => {
@@ -960,14 +971,12 @@ export default function WorkspaceMembersDialog({
             helperText={
               error
                 ? error
-                : queryIsExternal
-                ? 'External email — click Invite to set sharing permissions.'
                 : 'Type to search people and groups, or enter an email to invite.'
             }
             autoFocus={!showShareLinks}
             slotProps={{
               input: {
-                endAdornment: !queryIsExternal ? (
+                endAdornment: (
                   <InputAdornment position="end" sx={{ ml: 0, height: '100%' }}>
                     <Select
                       value={
@@ -1001,7 +1010,7 @@ export default function WorkspaceMembersDialog({
                       ))}
                     </Select>
                   </InputAdornment>
-                ) : undefined,
+                ),
               },
             }}
           />

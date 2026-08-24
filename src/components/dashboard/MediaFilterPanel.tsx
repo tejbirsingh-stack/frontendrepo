@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -25,6 +25,8 @@ import {
   type MediaTypeFilter,
 } from '../../constants/mediaFilters';
 import { useDashboard } from '../../context/DashboardContext';
+import { useAiEntitled } from '../../hooks/useAiEntitled';
+import { listAiTagsRequest } from '../../api/ai.service';
 import { filterTagChipStyles } from '../../utils/badgeStyles';
 import { getManagedTagChipSx, getTagScopeBadgeSx } from '../../utils/managedTagStyles';
 import {
@@ -160,6 +162,8 @@ export default function MediaFilterPanel({
   onApply,
 }: MediaFilterPanelProps) {
   const { activeWorkspaceId, getAssignableTags, tagScopeColors } = useDashboard();
+  const aiEntitled = useAiEntitled();
+  const [aiTagOptions, setAiTagOptions] = useState<string[]>([]);
   const assignableTags = useMemo(
     () => getAssignableTags(activeWorkspaceId),
     [getAssignableTags, activeWorkspaceId],
@@ -176,6 +180,25 @@ export default function MediaFilterPanel({
   const [showAllAiTags, setShowAllAiTags] = useState(false);
   const [tagsMenuAnchor, setTagsMenuAnchor] = useState<HTMLElement | null>(null);
   const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!aiEntitled) {
+      setAiTagOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void listAiTagsRequest()
+      .then((res) => {
+        if (cancelled) return;
+        setAiTagOptions((res.tags || []).filter(Boolean));
+      })
+      .catch(() => {
+        if (!cancelled) setAiTagOptions([...AI_TAG_OPTIONS]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [aiEntitled]);
 
   const tagsMenuOpen = Boolean(tagsMenuAnchor);
   const hasMoreTags = assignableTags.length > PREVIEW_TAG_COUNT;
@@ -584,9 +607,15 @@ export default function MediaFilterPanel({
           </Popover>
         </FilterField>
 
+        {aiEntitled ? (
         <FilterField label="AI Tags">
+          {aiTagOptions.length === 0 ? (
+            <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary }}>
+              No AI tags yet. They appear after media is transcribed.
+            </Typography>
+          ) : (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-            {(showAllAiTags ? AI_TAG_OPTIONS : AI_TAG_OPTIONS.slice(0, 3)).map((tag) => {
+            {(showAllAiTags ? aiTagOptions : aiTagOptions.slice(0, 3)).map((tag) => {
               const selected = selectedAiTags.has(tag);
               return (
                 <Chip
@@ -613,7 +642,7 @@ export default function MediaFilterPanel({
                 />
               );
             })}
-            {AI_TAG_OPTIONS.length > 3 && (
+            {aiTagOptions.length > 3 && (
               <Chip
                 label={showAllAiTags ? "See less" : "See more"}
                 onClick={() => setShowAllAiTags(!showAllAiTags)}
@@ -635,7 +664,9 @@ export default function MediaFilterPanel({
               />
             )}
           </Box>
+          )}
         </FilterField>
+        ) : null}
       </Box>
 
       {/* Apply button */}

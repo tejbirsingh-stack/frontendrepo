@@ -8,6 +8,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import LiquidBackground from '../LiquidBackground';
 import WaveBackground from '../WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../NoahLogo';
+import NoahMascot from '../NoahMascot';
 import { cv } from '../../theme/cssVars';
 import { fetchPublicCatalogPlans, fetchPublicLanding } from '../../platform/api/platformApi';
 import { useAuth } from '../../auth/AuthContext';
@@ -250,7 +251,8 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
       ? (targetPlan?.yearlyPriceId || targetPlan?.monthlyPriceId) 
       : targetPlan?.monthlyPriceId;
 
-    if (isSettingsFlow || pId !== 'free') {
+    const isFreePlan = (targetPlan?.name || pId).toLowerCase().includes('free');
+    if (isSettingsFlow || !isFreePlan) {
       const isSame = normCurrentPlan === pId || normCurrentPlan === (targetPlan?.name || '').toLowerCase();
       setConfirmPlanModal({
         planId,
@@ -290,6 +292,20 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
     >
       <LiquidBackground />
       <WaveBackground />
+      <NoahMascot
+        pose="walk"
+        preset="authCompanion"
+        side="right"
+        sx={{
+          display: { xs: 'none', md: 'block' },
+          position: 'fixed',
+          right: { md: 24, lg: 48 },
+          bottom: { md: 72 },
+          left: 'auto',
+          width: 300,
+          zIndex: 0,
+        }}
+      />
 
       <Box
         sx={{
