@@ -3651,9 +3651,10 @@ export default function VideoPlayerPage({
   }
 
   const isProcessing =
-    liveAssetStatus === 'processing' ||
-    liveAssetStatus === 'queued' ||
-    liveAssetStatus === 'in_progress';
+    (liveAssetStatus === 'processing' ||
+      liveAssetStatus === 'queued' ||
+      liveAssetStatus === 'in_progress') &&
+    liveProgress !== '100%';
 
   const baseSrc = isGuestMode && shareToken
     ? `/api/share/${shareToken}/stream`
