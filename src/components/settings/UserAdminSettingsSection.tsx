@@ -132,7 +132,7 @@ function AddUserDialog({
 
   const filteredRolesList = useMemo(() => {
     if (user?.roleId === ROLE_IDS.ADMIN) {
-      return rolesList.filter((r) => r.name !== 'Super Admin' && r.name !== 'Admin' && r.name !== 'System Admin');
+      return rolesList.filter((r) => r.name !== 'Super Admin' && r.name !== 'Admin' && r.name !== 'Platform Admin');
     }
     return rolesList.filter((r) => r.name !== 'Super Admin');
   }, [rolesList, user]);
@@ -1075,7 +1075,7 @@ export default function UserAdminSettingsSection() {
           setMembersTotal(summary.membersTotal);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       mounted = false;
     };
@@ -1159,7 +1159,7 @@ export default function UserAdminSettingsSection() {
           };
         });
 
-        // Sort users by role order: Super Admin > System Admin > Admin > Collaborator > Editor > Viewer
+        // Sort users by role order: Super Admin > Platform Admin > Admin > Collaborator > Editor > Viewer
         mappedUsers.sort((a, b) => {
           const priorityA = getRolePriority(a.role);
           const priorityB = getRolePriority(b.role);

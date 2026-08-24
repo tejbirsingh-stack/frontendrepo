@@ -362,7 +362,7 @@ export function mapAuthUserDtoToSessionUser(input: any) {
 
   let permissions = user.permissions || [];
   if (
-    (formattedRole === 'Super Admin' || formattedRole === 'SuperAdmin' || formattedRole === 'System Admin') &&
+    (formattedRole === 'Super Admin' || formattedRole === 'SuperAdmin' || formattedRole === 'Platform Admin') &&
     permissions.length === 0
   ) {
     permissions = Object.values(PERMISSIONS);
