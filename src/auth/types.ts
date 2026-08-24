@@ -21,6 +21,7 @@ export interface AuthSessionUser {
     maxProjects?: number;
     storageQuotaBytes?: string | number;
     storageUsedBytes?: string | number;
+    aiEnabled?: boolean;
     features?: any;
     isFreeTrialUsed?: boolean;
     metadata?: Record<string, any>;

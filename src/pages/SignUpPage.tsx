@@ -23,6 +23,7 @@ import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
+import NoahMascot from '../components/NoahMascot';
 import ChoosePlanScreen from '../components/onboarding/ChoosePlanScreen';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../auth/AuthContext';
@@ -766,6 +767,20 @@ export default function SignUpPage() {
       >
         <LiquidBackground />
         <WaveBackground />
+        <NoahMascot
+          pose="walk"
+          preset="authCompanion"
+          side="right"
+          sx={{
+            display: { xs: 'none', md: 'block' },
+            position: 'fixed',
+            right: { md: 32, lg: 64 },
+            bottom: { md: 80 },
+            left: 'auto',
+            width: 320,
+            zIndex: 0,
+          }}
+        />
 
         <Box
           sx={{
@@ -853,6 +868,7 @@ export default function SignUpPage() {
         justifyContent: 'center',
         p: { xs: 2, sm: 3, md: 4 },
         position: 'relative',
+        overflow: 'visible',
       }}
     >
       <LiquidBackground />
@@ -863,17 +879,39 @@ export default function SignUpPage() {
           position: 'relative',
           zIndex: 1,
           width: '100%',
-          maxWidth: 640,
+          maxWidth: { xs: 640, sm: 1200 },
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          overflow: 'visible',
         }}
       >
         <Box sx={AUTH_LOGO_PARENT_SX}>
           <NoahLogo sx={AUTH_LOGO_SX} showGlow={false} animated={false} />
         </Box>
 
-        <GlassCard glow sx={{ width: '100%', maxWidth: phase === 'usage' || phase === 'upload' ? 560 : 440 }}>
+        <Box
+          sx={{
+            position: 'relative',
+            width: '100%',
+            maxWidth: phase === 'usage' || phase === 'upload' ? 560 : 440,
+            overflow: 'visible',
+          }}
+        >
+          <NoahMascot
+            pose="walk"
+            preset="authCompanion"
+            side="left"
+            sx={{ width: { sm: 360, md: 440 } }}
+          />
+          <GlassCard
+            glow
+            sx={{
+              position: 'relative',
+              zIndex: 1,
+              width: '100%',
+            }}
+          >
           {phase === 'email' ? (
             <Box
               component="form"
@@ -1674,6 +1712,7 @@ export default function SignUpPage() {
             </Box>
           ) : null}
         </GlassCard>
+        </Box>
       </Box>
     </Box>
   );

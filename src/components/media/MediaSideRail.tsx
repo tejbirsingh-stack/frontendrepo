@@ -7,6 +7,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { cv } from '../../theme/cssVars';
 import HelpMenuDrawer, { getHelpMenuShortcutLabel } from './HelpMenuDrawer';
 import ShortcutTooltip from './ShortcutTooltip';
+import NoahMascot from '../NoahMascot';
 import { useResolvedKeyboardShortcuts } from '../../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../../utils/matchKeyboardShortcut';
 
@@ -37,6 +38,8 @@ interface MediaSideRailProps {
   onKeyboardShortcuts: () => void;
   /** Hides the annotation panel button when the viewer has no comment access. */
   showAnnotations?: boolean;
+  /** Hides the AI insights rail button when the org is not entitled. */
+  showAi?: boolean;
 }
 
 export default function MediaSideRail({
@@ -44,6 +47,7 @@ export default function MediaSideRail({
   onPanelSelect,
   onKeyboardShortcuts,
   showAnnotations = true,
+  showAi = true,
 }: MediaSideRailProps) {
   const helpButtonRef = useRef<HTMLButtonElement>(null);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
@@ -72,7 +76,9 @@ export default function MediaSideRail({
       ? [{ panel: 'history' as const, label: 'Annotations', icon: ForumOutlinedIcon }]
       : []),
     { panel: 'details', label: 'Details', icon: InfoOutlinedIcon },
-    { panel: 'ai', label: 'AI insights', icon: AutoAwesomeOutlinedIcon },
+    ...(showAi
+      ? [{ panel: 'ai' as const, label: 'AI insights', icon: AutoAwesomeOutlinedIcon }]
+      : []),
   ];
 
   return (
@@ -89,6 +95,8 @@ export default function MediaSideRail({
         alignItems: 'center',
         gap: 0.75,
         py: 1,
+        position: 'relative',
+        overflow: 'visible',
         borderRadius: '16px',
         border: '1px solid var(--noah-border)',
         background: 'var(--noah-toolbar-surface)',
@@ -117,6 +125,46 @@ export default function MediaSideRail({
 
       <Box sx={{ flex: 1, minHeight: 8 }} />
 
+      <Box
+        aria-hidden
+        sx={{
+          position: 'relative',
+          alignSelf: 'stretch',
+          width: '100%',
+          height: 64,
+          m: 0,
+          p: 0,
+          overflow: 'visible',
+          pointerEvents: 'none',
+        }}
+      >
+        <NoahMascot
+          pose="peek"
+          preset="panelPeek"
+          animated={false}
+          sx={{
+            position: 'absolute',
+            top: 0,
+            right: -32,
+            bottom: 0,
+            left: 'auto',
+            width: 77,
+            height: '120%',
+            m: 0,
+            p: 0,
+            zIndex: 1,
+            animation: 'none',
+            '& img': {
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              objectPosition: 'right center',
+              display: 'block',
+            },
+          }}
+        />
+      </Box>
+
       <ShortcutTooltip label="Help" shortcut={helpShortcut} placement="left">
         <IconButton
           ref={helpButtonRef}
@@ -125,7 +173,7 @@ export default function MediaSideRail({
           aria-haspopup="menu"
           aria-expanded={helpMenuOpen}
           onClick={() => setHelpMenuOpen((open) => !open)}
-          sx={railButtonSx(helpMenuOpen)}
+          sx={{ ...railButtonSx(helpMenuOpen), position: 'relative', zIndex: 2 }}
         >
           <HelpOutlineOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
         </IconButton>

@@ -21,7 +21,7 @@ import GoogleIcon from '@mui/icons-material/Google';
 import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
-import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
+import NoahMascot from '../components/NoahMascot';
 import LoginDemoAccountsBubble from '../components/demo/LoginDemoAccountsBubble';
 import { useAuth } from '../auth/AuthContext';
 import { getPostAuthRedirect } from '../auth/paths';
@@ -200,6 +200,7 @@ export default function LoginPage() {
         justifyContent: 'center',
         p: { xs: 2, sm: 3, md: 4 },
         position: 'relative',
+        overflow: 'visible',
       }}
     >
       <LiquidBackground />
@@ -210,10 +211,11 @@ export default function LoginPage() {
           position: 'relative',
           zIndex: 1,
           width: '100%',
-          maxWidth: 640,
+          maxWidth: { xs: 640, sm: 920 },
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          overflow: 'visible',
         }}
       >
         <Box
@@ -242,7 +244,7 @@ export default function LoginPage() {
               width: '100%',
               maxWidth: '100%',
               height: '100%',
-              maxHeight: 140,
+              maxHeight: 28,
               objectFit: 'contain',
               objectPosition: 'center',
               transform: 'scale(2.2)',
@@ -253,13 +255,23 @@ export default function LoginPage() {
           />
         </Box>
 
-        <GlassCard
-          glow
+        <Box
           sx={{
+            position: 'relative',
             width: '100%',
             maxWidth: 440,
+            overflow: 'visible',
           }}
         >
+          <NoahMascot pose="wave" preset="authCompanion" />
+          <GlassCard
+            glow
+            sx={{
+              position: 'relative',
+              zIndex: 1,
+              width: '100%',
+            }}
+          >
           <Box
             component="form"
             onSubmit={handleSubmit}
@@ -488,6 +500,7 @@ export default function LoginPage() {
             </Typography>
           </Box>
         </GlassCard>
+        </Box>
       </Box>
 
       {/* Demo-only accounts bubble — delete with LoginDemoAccountsBubble.tsx */}

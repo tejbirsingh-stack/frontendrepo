@@ -156,7 +156,7 @@ export default function NoahLogo({
     : (activeBranding?.accountName || user?.accountName || user?.organization?.name);
   const hasCustomLogo = Boolean(customLogoUrl);
 
-  const isAuthView = variant === 'auth' || Boolean(sx);
+  const isAuthView = variant === 'auth';
 
   const logoContent = (
     <Box

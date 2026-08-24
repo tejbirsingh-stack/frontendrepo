@@ -181,6 +181,7 @@ async function uploadResumableChunkedFile(
       linkedProjectId: options?.linkedProjectId,
       visibility: options?.visibility,
     },
+    { timeoutMs: 60_000 },
   );
 
   const { sessionId } = initRes;
@@ -255,6 +256,7 @@ async function uploadResumableChunkedFile(
         technicalSpecs: options?.technicalSpecs,
         visibility: options?.visibility,
       },
+      { timeoutMs: 300_000 },
     );
 
     if (progressCallback) {

@@ -53,6 +53,8 @@ import {
 import toast from 'react-hot-toast';
 import { getUsageSummary } from '../api/usage.service';
 import { type LibraryListParams, getLibraryItems } from '../api/library.service';
+import { mergeLibraryWithAiHits } from '../api/mergeLibraryWithAiHits';
+import { env } from '../config/env';
 
 
 interface DashboardContextValue {
@@ -178,6 +180,7 @@ const DashboardContext = createContext<DashboardContextValue | null>(null);
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const aiEntitled = env.aiEnabled && user?.organization?.aiEnabled !== false;
   const [workspaces, setWorkspaces] = useState<Workspace[]>(initialWorkspaces);
   const [fetchedFavorites, setFetchedFavorites] = useState<MediaItem[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceIdState] = useState(() => {
@@ -225,7 +228,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setNextPageToken(null);
     try {
       const res = await getLibraryItems(listParamsRef.current);
-      setLibraryItems(res.items);
+      const q = (params.q || '').trim();
+      const items =
+        aiEntitled && q.length > 2
+          ? await mergeLibraryWithAiHits(res.items, q)
+          : res.items;
+      setLibraryItems(items);
       setNextPageToken(res.nextPageToken);
     } catch (e: any) {
       setLibraryItems([]);
@@ -234,7 +242,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     } finally {
       setLibraryLoading(false);
     }
-  }, []);
+  }, [aiEntitled]);
 
   const fetchLibraryNextPage = useCallback(async () => {
     if (!listParamsRef.current || !nextPageToken || libraryLoadingMore) return;

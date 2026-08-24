@@ -36,6 +36,7 @@ import AnnotationHistoryDrawer from '../components/media/AnnotationHistoryDrawer
 import AudioWaveformVisualizer from '../components/media/AudioWaveformVisualizer';
 import FramePersonHighlight from '../components/media/FramePersonHighlight';
 import type { FramePerson } from '../data/mockFramePeople';
+import { useAiEntitled } from '../hooks/useAiEntitled';
 import type {
   MediaDetailsSection,
   MediaTechnicalDetails,
@@ -505,6 +506,9 @@ export default function VideoPlayerPage({
             id: asset.id,
             title: asset.name,
             summary: asset.customMetadata?.summary || (asset.metadata as any)?.customProperties?.summary || undefined,
+            aiTags: Array.isArray((asset as any).aiTags)
+              ? (asset as any).aiTags.filter((t: unknown) => typeof t === 'string')
+              : undefined,
             type: (asset.type.split('/')[0] as MediaType) || 'document',
             workspaceId: 'default',
             createdAt: asset.uploadDate || new Date().toISOString(),
@@ -983,12 +987,22 @@ export default function VideoPlayerPage({
   const [shareTeamMembers, setShareTeamMembers] = useState<WorkspaceTeamMember[]>([]);
   const [availableGroups, setAvailableGroups] = useState<SettingsUserGroup[]>([]);
   const [drawerTab, setDrawerTab] = useState<MediaRailPanel>('history');
+  const aiEntitled = useAiEntitled() && !isGuestMode;
   const [detailsSection, setDetailsSection] = useState<MediaDetailsSection>('file');
   const [selectedFramePerson, setSelectedFramePerson] = useState<FramePerson | null>(null);
 
   const handleFramePersonSelect = useCallback((person: FramePerson) => {
     setSelectedFramePerson((current) => (current?.id === person.id ? null : person));
   }, []);
+
+  // People detection runs on frames, so audio and documents have no faces to highlight.
+  const supportsFramePeople = item?.type === 'video' || item?.type === 'image';
+
+  useEffect(() => {
+    if (!aiEntitled && drawerTab === 'ai') {
+      setDrawerTab(annotationsAllowed ? 'history' : 'details');
+    }
+  }, [aiEntitled, annotationsAllowed, drawerTab]);
 
   useEffect(() => {
     if (!historyOpen || drawerTab !== 'ai') {
@@ -2148,7 +2162,7 @@ export default function VideoPlayerPage({
   }, [item, mediaId]);
 
   useEffect(() => {
-    if (!item || item.type !== 'video') return;
+    if (!item || (item.type !== 'video' && item.type !== 'audio')) return;
 
     const video = videoRef.current;
     if (!video) return;
@@ -2610,6 +2624,16 @@ export default function VideoPlayerPage({
       });
     }
   }, [mediaId]);
+
+  // Transcript clicks keep the current play state, unlike handleSeekToTimestamp which
+  // pauses so an annotation can be inspected on a still frame.
+  const handleTranscriptSeek = useCallback((startMs: number) => {
+    const element = videoRef.current;
+    if (!element) return;
+    const wasPlaying = !element.paused && !element.ended;
+    element.currentTime = Math.max(0, startMs / 1000);
+    if (wasPlaying) void element.play().catch(() => { });
+  }, []);
 
   const handleTagsChange = useCallback(
     async (tags: string[]) => {
@@ -3627,9 +3651,10 @@ export default function VideoPlayerPage({
   }
 
   const isProcessing =
-    liveAssetStatus === 'processing' ||
-    liveAssetStatus === 'queued' ||
-    liveAssetStatus === 'in_progress';
+    (liveAssetStatus === 'processing' ||
+      liveAssetStatus === 'queued' ||
+      liveAssetStatus === 'in_progress') &&
+    liveProgress !== '100%';
 
   const baseSrc = isGuestMode && shareToken
     ? `/api/share/${shareToken}/stream`
@@ -4782,7 +4807,7 @@ export default function VideoPlayerPage({
                   </>
                 )}
 
-                {selectedFramePerson ? (
+                {selectedFramePerson && supportsFramePeople ? (
                   <FramePersonHighlight person={selectedFramePerson} />
                 ) : null}
               </Box>
@@ -5003,7 +5028,11 @@ export default function VideoPlayerPage({
 
         <AnnotationHistoryDrawer
           open={historyOpen}
-          availableTabs={annotationsAllowed ? undefined : ['details']}
+          availableTabs={
+            annotationsAllowed
+              ? (aiEntitled ? undefined : ['history', 'details'])
+              : ['details']
+          }
           activeHistoryEntryId={activeHistoryEntryId}
           entries={history}
           comments={comments}
@@ -5017,6 +5046,8 @@ export default function VideoPlayerPage({
           onDetailsSectionChange={setDetailsSection}
           selectedFramePersonId={selectedFramePerson?.id ?? null}
           onFramePersonSelect={handleFramePersonSelect}
+          onTranscriptSeek={handleTranscriptSeek}
+          videoRef={videoRef}
           onClose={() => setHistoryOpen(false)}
           onEntryClick={(entry) => {
             handleSeekToTimestamp(entry.videoTimestamp, entry.id);
@@ -5048,6 +5079,7 @@ export default function VideoPlayerPage({
           onPanelSelect={handleRailPanelSelect}
           onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
           showAnnotations={annotationsAllowed}
+          showAi={aiEntitled}
         />
       </Box>
 

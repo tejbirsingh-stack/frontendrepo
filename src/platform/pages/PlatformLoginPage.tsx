@@ -4,6 +4,7 @@ import { Box, Button, TextField, Typography } from '@mui/material';
 import GlassCard from '../../components/GlassCard';
 import LiquidBackground from '../../components/LiquidBackground';
 import WaveBackground from '../../components/WaveBackground';
+import NoahMascot from '../../components/NoahMascot';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../../components/NoahLogo';
 import { cv } from '../../theme/cssVars';
 import { usePlatformAuth } from '../auth/PlatformAuthContext';
@@ -39,15 +40,18 @@ export default function PlatformLoginPage() {
         justifyContent: 'center',
         p: 2,
         position: 'relative',
+        overflow: 'visible',
       }}
     >
       <LiquidBackground />
       <WaveBackground />
-      <Box sx={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <Box sx={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: { xs: 640, sm: 920 }, display: 'flex', flexDirection: 'column', alignItems: 'center', overflow: 'visible' }}>
         <Box sx={AUTH_LOGO_PARENT_SX}>
           <NoahLogo sx={AUTH_LOGO_SX} showGlow={false} animated={false} disableCustomBranding />
         </Box>
-        <GlassCard glow sx={{ width: '100%', maxWidth: 420 }}>
+        <Box sx={{ position: 'relative', width: '100%', maxWidth: 420, overflow: 'visible' }}>
+          <NoahMascot pose="wave" preset="authCompanion" />
+          <GlassCard glow sx={{ position: 'relative', zIndex: 1, width: '100%' }}>
           <Box component="form" onSubmit={(e) => void onSubmit(e)} sx={{ p: 4 }}>
             <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
               Platform Admin
@@ -95,6 +99,7 @@ export default function PlatformLoginPage() {
             </Button>
           </Box>
         </GlassCard>
+        </Box>
       </Box>
     </Box>
   );
