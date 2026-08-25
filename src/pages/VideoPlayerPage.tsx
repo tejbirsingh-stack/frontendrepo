@@ -617,7 +617,13 @@ export default function VideoPlayerPage({
     return collaborators.find((c) => c.isCurrentUser || (c.email && user?.email && c.email.toLowerCase() === user.email.toLowerCase()));
   }, [collaborators, user?.email]);
 
+  const isGlobalMediaAsset = useMemo(() => {
+    if (!item) return false;
+    return Boolean((item as any).globalMedia || item.customMetadata?.platformDefaultContentId || item.customMetadata?.seededFromPlatform);
+  }, [item]);
+
   const isAssetAdmin = useMemo(() => {
+    if (isGlobalMediaAsset) return false;
     if (isGuestMode) return false;
     if (effectivePermissions && effectivePermissions.length > 0) {
       return effectivePermissions.includes('upload_media') || effectivePermissions.includes('manage_folders');
@@ -627,18 +633,20 @@ export default function VideoPlayerPage({
     if (isSharedWithUser) return false;
     if (user?.role === 'Super Admin' || user?.role === 'Admin') return true;
     return false;
-  }, [isGuestMode, currentUserCollab, isSharedWithUser, user, item?.uploadedByUserId, item?.uploadedBy?.id, effectivePermissions]);
+  }, [isGlobalMediaAsset, isGuestMode, currentUserCollab, isSharedWithUser, user, item?.uploadedByUserId, item?.uploadedBy?.id, effectivePermissions]);
 
   const isAssetEditor = useMemo(() => {
+    if (isGlobalMediaAsset) return false;
     if (isGuestMode) return false;
     if (effectivePermissions && effectivePermissions.length > 0) {
       return effectivePermissions.includes('timeline_annotations') || effectivePermissions.includes('manage_folders');
     }
     if (isAssetAdmin) return true;
     return currentUserCollab?.role === 'Editor';
-  }, [isGuestMode, isAssetAdmin, currentUserCollab, effectivePermissions]);
+  }, [isGlobalMediaAsset, isGuestMode, isAssetAdmin, currentUserCollab, effectivePermissions]);
 
   const isViewer = useMemo(() => {
+    if (isGlobalMediaAsset) return true;
     if (isGuestMode) {
       return !guestPermissions?.comment;
     }
@@ -651,13 +659,13 @@ export default function VideoPlayerPage({
     if (rawRole === 'admin' || rawRole === 'super admin' || rawRole === 'editor') return false;
     if (user?.permissions?.length && !user.permissions.includes('timeline_annotations')) return true;
     return true;
-  }, [isGuestMode, guestPermissions?.comment, currentUserCollab, isAssetAdmin, isAssetEditor, user, effectivePermissions]);
+  }, [isGlobalMediaAsset, isGuestMode, guestPermissions?.comment, currentUserCollab, isAssetAdmin, isAssetEditor, user, effectivePermissions]);
 
   const canDownloadOriginal = isGuestMode
     ? Boolean(guestPermissions?.download)
     : (isAssetAdmin || isAssetEditor || !isViewer);
 
-  const canShare = isGuestMode ? false : (isAssetAdmin || isAssetEditor);
+  const canShare = isGlobalMediaAsset ? false : (isGuestMode ? false : (isAssetAdmin || isAssetEditor));
 
   const triggerMediaDownload = useCallback(async (variant: 'original' | 'proxy') => {
     if (isGuestMode && shareToken) {
@@ -990,7 +998,7 @@ export default function VideoPlayerPage({
   const [draftComment, setDraftComment] = useState<DraftVideoComment | null>(null);
   const [activeHistoryEntryId, setActiveHistoryEntryId] = useState<string | null>(null);
   const [history, setHistory] = useState<AnnotationHistoryEntry[]>([]);
-  const annotationsAllowed = !isGuestMode || Boolean(guestPermissions?.comment);
+  const annotationsAllowed = !isGlobalMediaAsset && (!isGuestMode || Boolean(guestPermissions?.comment));
   const [historyOpen, setHistoryOpen] = useState(() => {
     if (typeof window === 'undefined' || !annotationsAllowed) return false;
     return window.matchMedia(`(min-width:${theme.breakpoints.values.lg}px)`).matches;
