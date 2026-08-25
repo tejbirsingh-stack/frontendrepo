@@ -3,6 +3,10 @@ import { Link as RouterLink, useParams } from 'react-router-dom';
 import {
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Tab,
   Tabs,
@@ -12,6 +16,7 @@ import {
   TableBody,
   TableCell,
   TableRow,
+  Switch,
 } from '@mui/material';
 import {
   fetchOrganization,
@@ -38,6 +43,7 @@ import {
   usePlatformTablePagination,
 } from '../hooks/usePlatformTablePagination';
 import { cv } from '../../theme/cssVars';
+import toast from 'react-hot-toast';
 
 const tabSx = {
   minHeight: 42,
@@ -72,6 +78,24 @@ export default function PlatformOrganizationDetailPage() {
   const [saving, setSaving] = useState(false);
   const [maxUsers, setMaxUsers] = useState('');
   const [storageQuota, setStorageQuota] = useState('');
+  const [renameTarget, setRenameTarget] = useState<{ wsId: string; name: string } | null>(null);
+  const [renameName, setRenameName] = useState('');
+  const [renaming, setRenaming] = useState(false);
+
+  const handleRename = async () => {
+    if (!renameTarget || !renameName.trim()) return;
+    setRenaming(true);
+    try {
+      await patchPlatformWorkspace(orgId, renameTarget.wsId, { name: renameName.trim() });
+      toast.success('Workspace renamed successfully');
+      setRenameTarget(null);
+      await reload();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Rename failed');
+    } finally {
+      setRenaming(false);
+    }
+  };
 
   const reload = () =>
     fetchOrganization(orgId)
@@ -90,16 +114,25 @@ export default function PlatformOrganizationDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
-  const save = async (body: Record<string, unknown>) => {
+  const save = async (body: Record<string, unknown>, customSuccessMessage?: string) => {
     setSaving(true);
     setError('');
     try {
-      const res = await patchOrganization(orgId, body);
-      setOrg(res.organization);
-      setMaxUsers(String(res.organization.maxUsers ?? ''));
-      setStorageQuota(String(res.organization.storageQuotaBytes ?? ''));
+      await patchOrganization(orgId, body);
+      // Re-fetch the full org (with workspaces, users, settings) so nothing is lost
+      await reload();
+      
+      let msg = customSuccessMessage || 'Organization updated successfully';
+      if (body.settings) msg = 'Share settings updated successfully';
+      else if (body.status) msg = `Organization ${String(body.status)}`;
+      else if (body.maxUsers || body.storageQuotaBytes) msg = 'Quotas updated successfully';
+      else if (body.currentPlanId !== undefined) msg = 'Plan updated successfully';
+      
+      toast.success(msg);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Save failed');
+      const errMsg = err instanceof Error ? err.message : 'Save failed';
+      setError(errMsg);
+      toast.error(errMsg);
     } finally {
       setSaving(false);
     }
@@ -341,14 +374,12 @@ export default function PlatformOrganizationDetailPage() {
                         <TableCell align="right">
                           <Button
                             size="small"
-                            sx={{ textTransform: 'none' }}
+                            variant="outlined"
+                            sx={{ textTransform: 'none', fontSize: '0.75rem' }}
                             disabled={saving}
                             onClick={() => {
-                              const next = window.prompt('Workspace name', String(ws.name));
-                              if (!next || next.trim() === String(ws.name)) return;
-                              void patchPlatformWorkspace(orgId, String(ws.id), {
-                                name: next.trim(),
-                              }).then(reload);
+                              setRenameTarget({ wsId: String(ws.id), name: String(ws.name) });
+                              setRenameName(String(ws.name));
                             }}
                           >
                             Edit
@@ -449,34 +480,93 @@ export default function PlatformOrganizationDetailPage() {
               }}
             >
               {[
-                ['Require password', settings.requirePasswordDefault],
-                ['Allow comments', settings.allowCommentsDefault],
-                ['Download original', settings.allowDownloadOriginalDefault],
-                ['Download proxy', settings.allowDownloadProxyDefault],
-                ['Company watermark', settings.showCompanyWatermarkDefault],
-                ['Default expiry (days)', settings.defaultExpiryDays],
-              ].map(([label, value]) => (
-                <Box
-                  key={String(label)}
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 1.5,
-                    border: `1px solid ${cv.border}`,
-                    background: cv.surfaceMuted,
-                  }}
-                >
-                  <Typography sx={{ fontSize: '0.7rem', color: cv.textMuted }}>
-                    {String(label)}
-                  </Typography>
-                  <Typography sx={{ fontWeight: 600, mt: 0.5 }}>
-                    {typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value ?? '—')}
-                  </Typography>
-                </Box>
-              ))}
+                { label: 'Require password', key: 'requirePasswordDefault', type: 'boolean' },
+                { label: 'Allow comments', key: 'allowCommentsDefault', type: 'boolean' },
+                { label: 'Download original', key: 'allowDownloadOriginalDefault', type: 'boolean' },
+                { label: 'Download proxy', key: 'allowDownloadProxyDefault', type: 'boolean' },
+                { label: 'Company watermark', key: 'showCompanyWatermarkDefault', type: 'boolean' },
+                { label: 'Default expiry (days)', key: 'defaultExpiryDays', type: 'number' },
+              ].map(({ label, key, type }) => {
+                const val = (settings as Record<string, any>)[key];
+                return (
+                  <Box
+                    key={key}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 1.5,
+                      border: `1px solid ${cv.border}`,
+                      background: cv.surfaceMuted,
+                      display: 'flex',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 1,
+                    }}
+                  >
+                    <Typography sx={{ fontSize: '0.85rem', color: cv.textPrimary, fontWeight: 500 }}>
+                      {label}
+                    </Typography>
+                    {type === 'boolean' ? (
+                      <Switch
+                        checked={Boolean(val)}
+                        disabled={saving}
+                        onChange={(e) => void save({ settings: { [key]: e.target.checked } })}
+                      />
+                    ) : (
+                      <TextField
+                        select
+                        size="small"
+                        disabled={saving}
+                        value={val ?? 30}
+                        onChange={(e) => {
+                          const num = Number(e.target.value);
+                          if (!isNaN(num) && num !== val) {
+                            void save({ settings: { [key]: num } });
+                          }
+                        }}
+                        sx={{ minWidth: 120 }}
+                      >
+                        <MenuItem value={7}>7 days</MenuItem>
+                        <MenuItem value={14}>14 days</MenuItem>
+                        <MenuItem value={30}>30 days</MenuItem>
+                        <MenuItem value={90}>90 days</MenuItem>
+                      </TextField>
+                    )}
+                  </Box>
+                );
+              })}
             </Box>
           )}
         </Panel>
       ) : null}
+
+      {/* Workspace rename dialog */}
+      <Dialog open={Boolean(renameTarget)} onClose={() => setRenameTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Rename Workspace</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Workspace name"
+            value={renameName}
+            onChange={(e) => setRenameName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleRename(); }}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRenameTarget(null)} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={renaming || !renameName.trim() || renameName.trim() === renameTarget?.name}
+            onClick={() => void handleRename()}
+            sx={{ textTransform: 'none' }}
+          >
+            {renaming ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
