@@ -96,6 +96,7 @@ interface DashboardContextValue {
   ) => Promise<void>;
   trashedMediaItems: MediaItem[];
   trashedAtById: Record<string, string>;
+  fetchTrashItems: () => Promise<void>;
   restoreFromTrashBulk: (mediaIds: string[]) => void;
   purgeExpiredTrash: () => void;
   selectedMediaIds: Set<string>;
@@ -860,9 +861,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const trashedMediaItems = useMemo(
     () =>
       mediaItems.filter(
-        (item) => item.workspaceId === activeWorkspaceId && item.status === 'trash',
+        (item) => item.status === 'trash',
       ),
-    [mediaItems, activeWorkspaceId],
+    [mediaItems],
   );
 
   useEffect(() => {
@@ -1567,6 +1568,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         removeMediaFromSidebar(media);
 
         apiClient.post(`/media/${mediaId}/trash`, { reason })
+          .then(() => { void fetchTrashItems(); })
           .catch((err) => console.error(`Failed to move media ${mediaId} to trash:`, err));
       });
 
@@ -1576,10 +1578,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         return next;
       });
 
-      setMediaItems((prev) =>
-        prev.map((item) => {
+      setMediaItems((prev) => {
+        const nextMedia = prev.map((item) => {
           if (safeUniqueIds.includes(item.id)) {
-            return { ...item, status: 'trash' as const };
+            return { ...item, status: 'trash' as const, deletedAt: new Date().toISOString() };
           }
 
           if (item.type === 'folder' && folderCountDelta.has(item.id)) {
@@ -1593,7 +1595,50 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           }
 
           return item;
-        }),
+        });
+
+        safeUniqueIds.forEach((id) => {
+          if (!nextMedia.some((m) => m.id === id)) {
+            const libItem = libraryItems.find((m) => m.id === id);
+            if (libItem) {
+              nextMedia.push({
+                ...libItem,
+                status: 'trash' as const,
+                deletedAt: new Date().toISOString(),
+              });
+            }
+          }
+        });
+
+        return nextMedia;
+      });
+
+      setLibraryItems((prev) =>
+        prev
+          .map((item) => {
+            if (safeUniqueIds.includes(item.id)) {
+              return { ...item, status: 'trash' as const };
+            }
+            if (item.type === 'folder' && folderCountDelta.has(item.id)) {
+              return {
+                ...item,
+                itemCount: Math.max(
+                  0,
+                  (item.itemCount ?? 0) + (folderCountDelta.get(item.id) ?? 0),
+                ),
+              };
+            }
+            return item;
+          })
+          .filter((item) => !safeUniqueIds.includes(item.id) && item.status !== 'trash')
+      );
+
+      setSharedMediaItems((prev) =>
+        prev.filter((item) => !safeUniqueIds.includes(item.id) && item.status !== 'trash')
+      );
+
+      setFetchedFavorites((prev) =>
+        prev.filter((item) => !safeUniqueIds.includes(item.id) && item.status !== 'trash')
       );
 
       setSelectedMediaIds((prev) => {
@@ -2810,6 +2855,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       removeFolderAndItemsFromState,
       trashedMediaItems,
       trashedAtById,
+      fetchTrashItems,
       restoreFromTrashBulk,
       purgeExpiredTrash,
       selectedMediaIds,
@@ -2901,6 +2947,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       moveMediaToTrashBulk,
       trashedMediaItems,
       trashedAtById,
+      fetchTrashItems,
       restoreFromTrashBulk,
       purgeExpiredTrash,
       selectedMediaIds,
