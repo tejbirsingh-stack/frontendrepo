@@ -585,12 +585,12 @@ export default function DashboardPage({
   const hasNonDefaultSort = sortBy !== 'date' || sortDirection !== 'desc';
 
   const librarySourceItems = useMemo(() => {
-    if (isFavoritesView) return favoriteMediaItems;
-    if (isDuplicatesView) return libraryItems;
-    if (isSharedView) return libraryItems;
+    if (isFavoritesView) return favoriteMediaItems.filter((item) => !trashedIds.has(item.id) && item.status !== 'trash');
+    if (isDuplicatesView) return libraryItems.filter((item) => !trashedIds.has(item.id) && item.status !== 'trash');
+    if (isSharedView) return libraryItems.filter((item) => !trashedIds.has(item.id) && item.status !== 'trash');
     if (isProjectsView) {
       return mediaItems.filter(
-        (item) => item.workspaceId === activeWorkspaceId && item.isProject && !trashedIds.has(item.id)
+        (item) => item.workspaceId === activeWorkspaceId && item.isProject && !trashedIds.has(item.id) && item.status !== 'trash'
       );
     }
 
@@ -600,7 +600,8 @@ export default function DashboardPage({
           (item) =>
             (item.linkedProjectIds || []).includes(folderMedia.id) &&
             item.type === 'folder' &&
-            !trashedIds.has(item.id),
+            !trashedIds.has(item.id) &&
+            item.status !== 'trash',
         );
         const projectFolderIds = new Set(projectFolders.map((f) => f.id));
 
@@ -608,6 +609,7 @@ export default function DashboardPage({
           (item) =>
             (item.linkedProjectIds || []).includes(folderMedia.id) &&
             !trashedIds.has(item.id) &&
+            item.status !== 'trash' &&
             (!item.parentFolderId || !projectFolderIds.has(item.parentFolderId)),
         );
         const seenIds = new Set(projectMedia.map((i) => i.id));
@@ -615,6 +617,7 @@ export default function DashboardPage({
           (item) =>
             !seenIds.has(item.id) &&
             !trashedIds.has(item.id) &&
+            item.status !== 'trash' &&
             (!item.parentFolderId || !projectFolderIds.has(item.parentFolderId)),
         );
         return [...projectMedia, ...extraFromLibrary];
@@ -622,23 +625,28 @@ export default function DashboardPage({
       const folderMediaLocal = mediaItems.filter(
         (item) =>
           item.parentFolderId === folderMedia.id &&
-          !trashedIds.has(item.id),
+          !trashedIds.has(item.id) &&
+          item.status !== 'trash',
       );
       const seenIds = new Set(folderMediaLocal.map((i) => i.id));
         const extraFromLibrary = libraryItems.filter(
-          (item) => !seenIds.has(item.id) && !trashedIds.has(item.id) && item.parentFolderId === folderMedia.id,
+          (item) => !seenIds.has(item.id) && !trashedIds.has(item.id) && item.status !== 'trash' && item.parentFolderId === folderMedia.id,
         );
       return [...folderMediaLocal, ...extraFromLibrary];
     }
 
     const workspaceItemsLocal = mediaItems.filter(
       (item) =>
-        item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id),
+        item.workspaceId === activeWorkspaceId && !trashedIds.has(item.id) && item.status !== 'trash',
     );
     
     const seenLocalIds = new Set(workspaceItemsLocal.map(i => i.id));
     const extraLibItems = libraryItems.filter(
-      (item) => !seenLocalIds.has(item.id) && !trashedIds.has(item.id) && item.workspaceId === activeWorkspaceId
+      (item) =>
+        !seenLocalIds.has(item.id) &&
+        !trashedIds.has(item.id) &&
+        item.status !== 'trash' &&
+        (!item.workspaceId || item.workspaceId === activeWorkspaceId || (item as any).globalMedia)
     );
     const combinedWorkspaceItems = [...workspaceItemsLocal, ...extraLibItems];
 
@@ -912,8 +920,8 @@ export default function DashboardPage({
     setBulkMoveOpen(true);
   };
 
-  const confirmBulkDelete = () => {
-    moveMediaToTrashBulk([...selectedMediaIds]);
+  const confirmBulkDelete = (reason?: string) => {
+    moveMediaToTrashBulk([...selectedMediaIds], reason);
     setBulkTrashOpen(false);
     lastSelectedIdRef.current = null;
   };

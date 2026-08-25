@@ -565,6 +565,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
         onConfirm={(reason) => {
           moveMediaToTrash(item.id, reason);
           setDeleteOpen(false);
+          if (window.location.pathname.startsWith('/media/')) {
+            navigate('/home');
+          }
         }}
       />
 
