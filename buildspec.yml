@@ -24,7 +24,7 @@ phases:
 
   post_build:
     commands:
-      - echo "Pushing image to ECR..."
+      - echo "Pushing image to ECR.."
       - docker push "$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
       - docker push "$ECR_REGISTRY/$ECR_REPO:latest"
       - echo "Deploying to all $ASG_TAG_NAME instances via SSM..."
