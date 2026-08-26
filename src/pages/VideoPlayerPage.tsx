@@ -50,6 +50,7 @@ import {
 } from '../components/media/LabeledToolbarButton';
 import ClearAnnotationsModal from '../components/media/ClearAnnotationsModal';
 import WorkspaceControlsIsland from '../components/media/WorkspaceControlsIsland';
+import NoahWalkingMascot from '../components/NoahWalkingMascot';
 import MediaSideRail, { type MediaRailPanel } from '../components/media/MediaSideRail';
 import PlayerToolsDrawer from '../components/media/PlayerToolsDrawer';
 import PeopleCollaboratorsPopover from '../components/media/PeopleCollaboratorsPopover';
@@ -4889,6 +4890,20 @@ export default function VideoPlayerPage({
                     position: 'relative',
                   }}
                 >
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      left: 0,
+                      bottom: -24,
+                      zIndex: 2,
+                      lineHeight: 0,
+                      backgroundColor: 'transparent',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <NoahWalkingMascot size={56} />
+                  </Box>
+
                   {showClearIsland && !isViewer ? (
                     <Box
                       sx={{
@@ -4916,7 +4931,7 @@ export default function VideoPlayerPage({
                         display: 'flex',
                         justifyContent: 'center',
                         pl: showClearIsland ? '88px' : 2,
-                        pr: '148px',
+                        pr: '200px',
                       }}
                     >
                       <AnnotationToolbar
@@ -4957,26 +4972,27 @@ export default function VideoPlayerPage({
                     </Box>
                   )}
 
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      right: 16,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      zIndex: 2,
-                    }}
-                  >
-                    <WorkspaceControlsIsland
-                      zoomLabel={workspaceZoomLabel}
-                      canZoomOut={canWorkspaceZoomOut}
-                      canZoomIn={canWorkspaceZoomIn}
-                      canResetZoom={canWorkspaceZoomReset}
-                      onZoomOut={handleWorkspaceZoomOut}
-                      onZoomIn={handleWorkspaceZoomIn}
-                      onZoomReset={handleWorkspaceZoomReset}
-                      hideZoomControls={item?.type === 'audio'}
-                    />
-                  </Box>
+                  {item?.type !== 'audio' ? (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        right: 16,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        zIndex: 2,
+                      }}
+                    >
+                      <WorkspaceControlsIsland
+                        zoomLabel={workspaceZoomLabel}
+                        canZoomOut={canWorkspaceZoomOut}
+                        canZoomIn={canWorkspaceZoomIn}
+                        canResetZoom={canWorkspaceZoomReset}
+                        onZoomOut={handleWorkspaceZoomOut}
+                        onZoomIn={handleWorkspaceZoomIn}
+                        onZoomReset={handleWorkspaceZoomReset}
+                      />
+                    </Box>
+                  ) : null}
                 </Box>
               ) : (
                 <Box sx={mobileIslandScrollSx}>
