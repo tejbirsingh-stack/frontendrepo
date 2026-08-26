@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,8 +10,19 @@ import {
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import { cv } from '../../theme/cssVars';
+import { billingService } from '../../api/billing.service';
+
+const dialogPaperSx = {
+  borderRadius: '20px',
+  border: `1px solid ${cv.border}`,
+  background: cv.dialogSurface,
+  backgroundImage: 'none',
+  backdropFilter: 'blur(40px) saturate(180%)',
+  boxShadow: cv.dialogShadow,
+  maxWidth: 440,
+};
+
 export interface CheckoutDetails {
   planName: string;
   billingCycle: 'annual' | 'monthly';
@@ -35,7 +45,7 @@ export default function PaymentSuccessModal({
   onClose,
   details,
   onManageBilling,
-}: PaymentSuccessModalProps) {
+}: Readonly<PaymentSuccessModalProps>) {
   if (!details) return null;
 
   const formattedAmount = (details.amountPaidCents / 100).toLocaleString('en-US', {
@@ -49,63 +59,56 @@ export default function PaymentSuccessModal({
     <Dialog
       open={open}
       onClose={onClose}
-      maxWidth="xs"
       fullWidth
+      aria-labelledby="payment-success-title"
+      aria-describedby="payment-success-description"
       slotProps={{
+        paper: { sx: dialogPaperSx },
         backdrop: {
-          sx: {
-            backgroundColor: 'rgba(0, 0, 0, 0.65)',
-            backdropFilter: 'blur(8px)',
-          },
-        },
-      }}
-      PaperProps={{
-        style: { backgroundColor: '#13111e', backgroundImage: 'none' },
-        sx: {
-          backgroundColor: '#13111e !important',
-          backgroundImage: 'none !important',
-          border: '1px solid rgba(34, 197, 94, 0.4)',
-          borderRadius: '24px',
-          boxShadow: '0 24px 64px rgba(0, 0, 0, 0.9), 0 0 40px rgba(34, 197, 94, 0.3)',
-          p: 1,
-          color: '#ffffff',
+          sx: { backgroundColor: cv.backdropScrim, backdropFilter: 'blur(4px)' },
         },
       }}
     >
-      <DialogContent sx={{ textAlign: 'center', py: 4, px: 3 }}>
-        {/* Animated Check Icon */}
+      <DialogContent sx={{ textAlign: 'center', py: 3, px: 3 }}>
         <Box
           sx={{
-            width: 72,
-            height: 72,
+            width: 64,
+            height: 64,
             borderRadius: '50%',
-            background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.4))',
-            border: '2px solid #22c55e',
+            backgroundColor: cv.successSurface,
+            border: `1px solid ${cv.success}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             mx: 'auto',
             mb: 2.5,
-            boxShadow: '0 0 24px rgba(34, 197, 94, 0.4)',
+            color: cv.success,
           }}
         >
-          <CheckCircleOutlinedIcon sx={{ fontSize: 44, color: '#22c55e' }} />
+          <CheckCircleOutlinedIcon sx={{ fontSize: 36 }} />
         </Box>
 
-        <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, color: '#ffffff' }}>
+        <Typography
+          id="payment-success-title"
+          variant="h5"
+          sx={{ fontWeight: 700, mb: 1, color: cv.textPrimary, letterSpacing: '-0.02em' }}
+        >
           Payment Successful!
         </Typography>
-        <Typography variant="body2" sx={{ color: cv.textMuted, mb: 3 }}>
+        <Typography
+          id="payment-success-description"
+          variant="body2"
+          sx={{ color: cv.textSecondary, lineHeight: 1.55, mb: 3 }}
+        >
           Thank you for upgrading your organization plan. Your subscription is now active.
         </Typography>
 
-        {/* Receipt Details Box */}
         <Box
           sx={{
-            background: 'rgba(255, 255, 255, 0.03)',
-            borderRadius: '16px',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            p: 2.5,
+            backgroundColor: cv.surface,
+            borderRadius: '12px',
+            border: `1px solid ${cv.border}`,
+            p: 2,
             mb: 3,
             textAlign: 'left',
           }}
@@ -115,7 +118,7 @@ export default function PaymentSuccessModal({
               <Typography variant="body2" sx={{ color: cv.textMuted }}>
                 Plan
               </Typography>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#ffffff' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: cv.textPrimary }}>
                 {details.planName} Tier
               </Typography>
             </Box>
@@ -124,47 +127,47 @@ export default function PaymentSuccessModal({
               <Typography variant="body2" sx={{ color: cv.textMuted }}>
                 Billing Cycle
               </Typography>
-              <Typography variant="body2" sx={{ color: '#ffffff', textTransform: 'capitalize' }}>
+              <Typography variant="body2" sx={{ color: cv.textPrimary, textTransform: 'capitalize' }}>
                 {details.billingCycle}
               </Typography>
             </Box>
 
-            <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.08)', my: 0.5 }} />
+            <Divider sx={{ borderColor: cv.dividerSubtle, my: 0.5 }} />
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Typography variant="body2" sx={{ color: cv.textMuted, fontWeight: 500 }}>
                 Amount Paid
               </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 700, color: '#22c55e' }}>
+              <Typography variant="h6" sx={{ fontWeight: 700, color: cv.successText }}>
                 {formattedAmount}
               </Typography>
             </Box>
           </Stack>
         </Box>
 
-        {/* Action Buttons */}
         <Stack spacing={1.5}>
           <Button
             variant="contained"
             fullWidth
             startIcon={<DownloadIcon />}
-            onClick={() => {
+            onClick={async () => {
               if (invoiceLink) {
-                window.open(invoiceLink, '_blank', 'noopener,noreferrer');
-              } else if (onManageBilling) {
-                onManageBilling();
+                await billingService.downloadCustomInvoicePdf(invoiceLink);
+                return;
               }
+              await billingService.downloadCustomInvoicePdf(null, undefined, details?.sessionId);
             }}
             sx={{
-              background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-              color: '#ffffff',
+              background: cv.brandGradient,
+              color: cv.textOnCta,
               fontWeight: 600,
-              py: 1.2,
-              borderRadius: '12px',
+              py: 1.25,
+              borderRadius: '10px',
               textTransform: 'none',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+              boxShadow: cv.brandShadowSoft,
               '&:hover': {
-                background: 'linear-gradient(135deg, #4f46e5, #4338ca)',
+                background: cv.brandGradientHover,
+                boxShadow: cv.brandShadowStrong,
               },
             }}
           >
@@ -178,15 +181,16 @@ export default function PaymentSuccessModal({
               startIcon={<OpenInNewIcon />}
               onClick={onManageBilling}
               sx={{
-                borderColor: 'rgba(255, 255, 255, 0.15)',
-                color: cv.textPrimary,
+                borderColor: cv.border,
+                color: cv.textSecondary,
                 fontWeight: 500,
                 py: 1.1,
-                borderRadius: '12px',
+                borderRadius: '10px',
                 textTransform: 'none',
                 '&:hover': {
-                  borderColor: 'rgba(255, 255, 255, 0.3)',
-                  background: 'rgba(255, 255, 255, 0.04)',
+                  borderColor: cv.borderFocus,
+                  backgroundColor: cv.surfaceHover,
+                  color: cv.textPrimary,
                 },
               }}
             >
@@ -203,7 +207,8 @@ export default function PaymentSuccessModal({
               fontWeight: 500,
               pt: 1,
               textTransform: 'none',
-              '&:hover': { color: '#ffffff' },
+              borderRadius: '10px',
+              '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceHover },
             }}
           >
             Close

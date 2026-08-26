@@ -16,6 +16,7 @@ import {
   mapAuthUserDtoToSessionUser,
   signUpRequest,
 } from '../api/auth.service';
+import { getBrandingSettingsApi } from '../api/organizations.service';
 import {
   clearAuthTokenBridge,
   registerAuthTokenBridge,
@@ -27,6 +28,7 @@ import {
   readPersistedSessionToken,
   readPersistedSessionUser,
 } from './authStorage';
+import { saveCookieConsent } from '../utils/cookieConsent';
 import { waitForMinimumSkeletonTime } from './authInitTiming';
 import type {
   AuthContextValue,
@@ -41,18 +43,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthSessionUser | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [orgBranding, setOrgBranding] = useState<any>(null);
   const accessTokenRef = useRef<string | null>(null);
+
+  const refreshBranding = useCallback(async () => {
+    try {
+      const data = await getBrandingSettingsApi();
+      const bData = data?.branding || data?.data || data;
+      if (bData) setOrgBranding(bData);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const setSession = useCallback((nextToken: string | null, nextUser: AuthSessionUser | null) => {
     accessTokenRef.current = nextToken;
     setAccessToken(nextToken);
     setUser(nextUser);
-  }, []);
+    if (nextToken && nextUser) {
+      void refreshBranding();
+    }
+  }, [refreshBranding]);
+
+  // Sync cookie consent preferences from database to browser cookies on user load
+  useEffect(() => {
+    if (user?.preferences?.cookieConsent) {
+      const dbConsent = user.preferences.cookieConsent as any;
+      saveCookieConsent({
+        functional: Boolean(dbConsent.functional),
+        analytics: Boolean(dbConsent.analytics),
+        marketing: Boolean(dbConsent.marketing),
+      });
+    }
+  }, [user]);
 
   const clearSession = useCallback(() => {
     accessTokenRef.current = null;
     setAccessToken(null);
     setUser(null);
+    setOrgBranding(null);
     clearPersistedSession();
   }, []);
 
@@ -106,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const sessionUser = mapAuthUserDtoToSessionUser(currentUser);
           setUser(sessionUser);
           persistSession(persistedToken, sessionUser);
+          void refreshBranding();
         }
       } catch (error: any) {
         if (!cancelled && (error?.status === 404 || error?.status === 401 || error?.code === 'UNAUTHORIZED' || error?.code === 'NOT_FOUND' || !persistedUser)) {
@@ -227,6 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accessToken,
       isAuthenticated: Boolean(accessToken && user),
       isInitializing,
+      orgBranding,
       login,
       signup,
       logout,
@@ -235,8 +266,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginMicrosoft,
       setSession,
       refreshUser,
+      refreshBranding,
     }),
-    [accessToken, isInitializing, login, logout, signup, user, loginGoogle, loginMicrosoft, clearSession, setSession, refreshUser],
+    [accessToken, isInitializing, login, logout, signup, user, loginGoogle, loginMicrosoft, clearSession, setSession, refreshUser, orgBranding, refreshBranding],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -440,7 +440,6 @@ export default function WorkspaceMembersDialog({
   // Filter direct access members so guests are exclusively listed in guestInvitesList section below
   const directAccessOrgMembers = useMemo(() => {
     return members.filter((member) => {
-      if (member.memberType === 'Guest') return false;
       if (
         member.email &&
         guestInvitesList.some((g) => g.email.toLowerCase() === member.email?.toLowerCase())
@@ -538,13 +537,14 @@ export default function WorkspaceMembersDialog({
 
   const allInviteUsers = useMemo(() => {
     const seen = new Set<string>();
-    return [...organizationUsers, ...guestUsers].filter((user) => {
+    const usersSource = isRestricted ? [...organizationUsers, ...guestUsers] : guestUsers;
+    return usersSource.filter((user) => {
       const key = user.email.toLowerCase();
       if (seen.has(key) || memberEmails.has(key)) return false;
       seen.add(key);
       return true;
     });
-  }, [organizationUsers, guestUsers, memberEmails]);
+  }, [organizationUsers, guestUsers, memberEmails, isRestricted]);
 
   const typeaheadOptions = useMemo((): InviteTypeaheadOption[] => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -559,7 +559,7 @@ export default function WorkspaceMembersDialog({
       .slice(0, 5)
       .map((user) => ({ kind: 'user' as const, id: `user-${user.id}`, user }));
 
-    const groupOptions = suggestedGroups
+    const groupOptions = (isRestricted ? suggestedGroups : [])
       .filter((group) => !memberGroupIds.has(group.id))
       .filter(
         (group) =>
@@ -570,7 +570,7 @@ export default function WorkspaceMembersDialog({
       .map((group) => ({ kind: 'group' as const, id: `group-${group.id}`, group }));
 
     return [...userOptions, ...groupOptions];
-  }, [query, allInviteUsers, suggestedGroups, memberGroupIds]);
+  }, [query, allInviteUsers, suggestedGroups, memberGroupIds, isRestricted]);
 
   const showTypeahead = typeaheadOpen && query.trim().length > 0 && typeaheadOptions.length > 0;
 
@@ -604,8 +604,9 @@ export default function WorkspaceMembersDialog({
     return true;
   };
 
-  const inviteUser = (email: string, name: string | undefined, memberType: WorkspaceMemberType) => {
+  const inviteUser = (email: string, name: string | undefined, memberType: WorkspaceMemberType, userId?: string) => {
     const success = onInvite({
+      userId,
       email,
       name,
       memberType,
@@ -626,9 +627,6 @@ export default function WorkspaceMembersDialog({
 
   const isExternalEmail = (email: string) => resolveMemberType(email) === 'Guest';
 
-  // Check if current query input is an external/guest email
-  const queryIsExternal = EMAIL_PATTERN.test(query.trim()) && isExternalEmail(query.trim().toLowerCase());
-
   const generatePassword = () => {
     const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
     const arr = Array.from(crypto.getRandomValues(new Uint8Array(16)));
@@ -643,14 +641,14 @@ export default function WorkspaceMembersDialog({
     setSecureShareOpen(true);
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     const trimmed = query.trim();
     if (!trimmed) {
       setError('Enter a name, email, or group.');
       return;
     }
 
-    const matchedGroup = suggestedGroups.find(
+    const matchedGroup = (isRestricted ? suggestedGroups : []).find(
       (group) =>
         !memberGroupIds.has(group.id) && group.name.toLowerCase() === trimmed.toLowerCase(),
     );
@@ -666,11 +664,15 @@ export default function WorkspaceMembersDialog({
     );
     if (matchedUser) {
       const memberType = isOrganizationUser(matchedUser) ? 'Member' : 'Guest';
-      if (memberType === 'Guest') {
-        openSecureShare(matchedUser.email);
+      if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
+        setError('Organization members already have access to this public workspace.');
         return;
       }
-      inviteUser(matchedUser.email, matchedUser.name, memberType);
+      if (memberType === 'Guest') {
+        inviteUser(matchedUser.email, matchedUser.name, memberType, matchedUser.id);
+        return;
+      }
+      inviteUser(matchedUser.email, matchedUser.name, memberType, matchedUser.id);
       return;
     }
 
@@ -681,7 +683,25 @@ export default function WorkspaceMembersDialog({
 
     const email = trimmed.toLowerCase();
     const memberType = resolveMemberType(email);
+    if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
+      setError('Organization members already have access to this public workspace.');
+      return;
+    }
     if (memberType === 'Guest') {
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const response = await (apiClient as any).get(`/workspaces/validate-guest?email=${encodeURIComponent(email)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = response.data ?? response;
+        if (data?.valid && data?.user) {
+          inviteUser(email, data.user.name, 'Guest', data.user.id);
+          return;
+        }
+      } catch (err) {
+        // Fallback below
+      }
       openSecureShare(email);
       return;
     }
@@ -705,11 +725,15 @@ export default function WorkspaceMembersDialog({
     }
 
     const memberType = isOrganizationUser(option.user) ? 'Member' : 'Guest';
-    if (memberType === 'Guest') {
-      openSecureShare(option.user.email);
+    if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
+      setError('Organization members already have access to this public workspace.');
       return;
     }
-    inviteUser(option.user.email, option.user.name, memberType);
+    if (memberType === 'Guest') {
+      inviteUser(option.user.email, option.user.name, memberType, option.user.id.replace('user-', ''));
+      return;
+    }
+    inviteUser(option.user.email, option.user.name, memberType, option.user.id.replace('user-', ''));
   };
 
   const handleInviteInputBlur = () => {
@@ -947,14 +971,12 @@ export default function WorkspaceMembersDialog({
             helperText={
               error
                 ? error
-                : queryIsExternal
-                ? 'External email — click Invite to set sharing permissions.'
                 : 'Type to search people and groups, or enter an email to invite.'
             }
             autoFocus={!showShareLinks}
             slotProps={{
               input: {
-                endAdornment: !queryIsExternal ? (
+                endAdornment: (
                   <InputAdornment position="end" sx={{ ml: 0, height: '100%' }}>
                     <Select
                       value={
@@ -988,7 +1010,7 @@ export default function WorkspaceMembersDialog({
                       ))}
                     </Select>
                   </InputAdornment>
-                ) : undefined,
+                ),
               },
             }}
           />
@@ -1156,35 +1178,6 @@ export default function WorkspaceMembersDialog({
 
   const directAccessSection = (
     <>
-      {!isProject ? (
-        <Box
-          sx={{
-            p: 1.5,
-            borderRadius: '12px',
-            border: `1px solid ${cv.border}`,
-            backgroundColor: cv.surfaceSubtle,
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 1.5,
-          }}
-        >
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
-              Make Restricted
-            </Typography>
-            <Typography sx={{ mt: 0.35, fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.5 }}>
-              Only people directly invited to the workspace can access, plus admins.
-            </Typography>
-          </Box>
-          <Switch
-            checked={isRestricted}
-            onChange={(event) => onRestrictedChange(event.target.checked)}
-            slotProps={{ input: { 'aria-label': 'Make workspace restricted' } }}
-          />
-        </Box>
-      ) : null}
-
       <Box
         sx={{
           flex: 1,

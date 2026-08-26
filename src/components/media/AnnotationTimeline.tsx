@@ -99,6 +99,9 @@ interface AnnotationTimelineProps {
   onScrubEnd?: () => void;
   fallbackDuration?: number;
   onAnnotationClick?: (id: string, type: TimelineAnnotationType) => void;
+  inPoint?: number | null;
+  outPoint?: number | null;
+  rangeEnabled?: boolean;
 }
 
 function getTickStep(duration: number, zoom: number): number {
@@ -179,6 +182,9 @@ export default function AnnotationTimeline({
   onScrubEnd,
   fallbackDuration,
   onAnnotationClick,
+  inPoint,
+  outPoint,
+  rangeEnabled,
 }: AnnotationTimelineProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const horizontalScrollRef = useRef<HTMLDivElement>(null);
@@ -892,6 +898,23 @@ export default function AnnotationTimeline({
                   cv.bluePurpleGradient,
               }}
             >
+              {(inPoint != null || outPoint != null) && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    inset: '0 auto 0 0',
+                    left: inPoint != null ? `${timeToPercent(inPoint, safeDuration)}%` : '0%',
+                    right: outPoint != null ? `${100 - timeToPercent(outPoint, safeDuration)}%` : '0%',
+                    width: 'auto',
+                    backgroundColor: rangeEnabled ? 'rgba(255, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.1)',
+                    borderLeft: inPoint != null ? `2px solid ${rangeEnabled ? '#fff' : 'rgba(255,255,255,0.4)'}` : 'none',
+                    borderRight: outPoint != null ? `2px solid ${rangeEnabled ? '#fff' : 'rgba(255,255,255,0.4)'}` : 'none',
+                    pointerEvents: 'none',
+                    zIndex: 4,
+                  }}
+                />
+              )}
+
               <Box
                 sx={{
                   position: 'absolute',
@@ -899,6 +922,7 @@ export default function AnnotationTimeline({
                   width: `${playheadPercent}%`,
                   background: `linear-gradient(90deg, ${cv.brandBlue}55 0%, ${cv.brandPurple}55 100%)`,
                   pointerEvents: 'none',
+                  zIndex: 3,
                 }}
               />
             </Box>

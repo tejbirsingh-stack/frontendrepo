@@ -3,6 +3,10 @@ import { Link as RouterLink, useParams } from 'react-router-dom';
 import {
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Tab,
   Tabs,
@@ -11,8 +15,8 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
+  Switch,
 } from '@mui/material';
 import {
   fetchOrganization,
@@ -27,11 +31,19 @@ import {
   MetricBar,
   PageHeader,
   Panel,
+  PlatformTableHead,
+  PlatformTablePagination,
   StatusChip,
   formatBytes,
   formatPercent,
 } from '../components/PlatformUi';
+import { platformTableSx } from '../components/platformTableStyles';
+import {
+  usePaginatedRows,
+  usePlatformTablePagination,
+} from '../hooks/usePlatformTablePagination';
 import { cv } from '../../theme/cssVars';
+import toast from 'react-hot-toast';
 
 const tabSx = {
   minHeight: 42,
@@ -66,6 +78,24 @@ export default function PlatformOrganizationDetailPage() {
   const [saving, setSaving] = useState(false);
   const [maxUsers, setMaxUsers] = useState('');
   const [storageQuota, setStorageQuota] = useState('');
+  const [renameTarget, setRenameTarget] = useState<{ wsId: string; name: string } | null>(null);
+  const [renameName, setRenameName] = useState('');
+  const [renaming, setRenaming] = useState(false);
+
+  const handleRename = async () => {
+    if (!renameTarget || !renameName.trim()) return;
+    setRenaming(true);
+    try {
+      await patchPlatformWorkspace(orgId, renameTarget.wsId, { name: renameName.trim() });
+      toast.success('Workspace renamed successfully');
+      setRenameTarget(null);
+      await reload();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Rename failed');
+    } finally {
+      setRenaming(false);
+    }
+  };
 
   const reload = () =>
     fetchOrganization(orgId)
@@ -84,16 +114,25 @@ export default function PlatformOrganizationDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
-  const save = async (body: Record<string, unknown>) => {
+  const save = async (body: Record<string, unknown>, customSuccessMessage?: string) => {
     setSaving(true);
     setError('');
     try {
-      const res = await patchOrganization(orgId, body);
-      setOrg(res.organization);
-      setMaxUsers(String(res.organization.maxUsers ?? ''));
-      setStorageQuota(String(res.organization.storageQuotaBytes ?? ''));
+      await patchOrganization(orgId, body);
+      // Re-fetch the full org (with workspaces, users, settings) so nothing is lost
+      await reload();
+      
+      let msg = customSuccessMessage || 'Organization updated successfully';
+      if (body.settings) msg = 'Share settings updated successfully';
+      else if (body.status) msg = `Organization ${String(body.status)}`;
+      else if (body.maxUsers || body.storageQuotaBytes) msg = 'Quotas updated successfully';
+      else if (body.currentPlanId !== undefined) msg = 'Plan updated successfully';
+      
+      toast.success(msg);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Save failed');
+      const errMsg = err instanceof Error ? err.message : 'Save failed';
+      setError(errMsg);
+      toast.error(errMsg);
     } finally {
       setSaving(false);
     }
@@ -104,6 +143,18 @@ export default function PlatformOrganizationDetailPage() {
     [org],
   );
   const users = useMemo(() => (org?.users as Array<Record<string, unknown>>) || [], [org]);
+  const usersPagination = usePlatformTablePagination([orgId, tab === 1]);
+  const workspacesPagination = usePlatformTablePagination([orgId, tab === 2]);
+  const paginatedUsers = usePaginatedRows(
+    users,
+    usersPagination.page,
+    usersPagination.rowsPerPage,
+  );
+  const paginatedWorkspaces = usePaginatedRows(
+    workspaces,
+    workspacesPagination.page,
+    workspacesPagination.rowsPerPage,
+  );
   const settings = (org?.settings as Record<string, unknown> | null) || null;
   const count = (org?._count as { users?: number; workspaces?: number; assets?: number }) || {};
   const plan = org?.currentPlan as { name?: string } | null;
@@ -218,59 +269,68 @@ export default function PlatformOrganizationDetailPage() {
           {users.length === 0 ? (
             <EmptyState message="No users in this organization" />
           ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>User</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>MFA</TableCell>
-                  <TableCell>Last login</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {users.map((u) => {
-                  const role = u.roleRelation as { name?: string } | undefined;
-                  return (
-                    <TableRow key={String(u.id)} hover>
-                      <TableCell>
-                        <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                          {String(u.name || '—')}
-                        </Typography>
-                        <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
-                          {String(u.email)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{role?.name || '—'}</TableCell>
-                      <TableCell>
-                        <StatusChip status={String(u.status)} />
-                      </TableCell>
-                      <TableCell>{u.mfaEnabled ? 'On' : 'Off'}</TableCell>
-                      <TableCell>
-                        {u.lastLoginAt
-                          ? new Date(String(u.lastLoginAt)).toLocaleString()
-                          : '—'}
-                      </TableCell>
-                      <TableCell align="right">
-                        <Button
-                          size="small"
-                          sx={{ textTransform: 'none' }}
-                          disabled={saving}
-                          onClick={() =>
-                            void patchPlatformUser(String(u.id), {
-                              status: u.status === 'active' ? 'suspended' : 'active',
-                            }).then(reload)
-                          }
-                        >
-                          {u.status === 'active' ? 'Suspend' : 'Activate'}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <>
+              <Table size="small" sx={platformTableSx}>
+                <PlatformTableHead
+                  columns={[
+                    { id: 'user', label: 'User' },
+                    { id: 'role', label: 'Role' },
+                    { id: 'status', label: 'Status' },
+                    { id: 'mfa', label: 'MFA' },
+                    { id: 'lastLogin', label: 'Last login' },
+                    { id: 'actions', label: '', align: 'right' },
+                  ]}
+                />
+                <TableBody>
+                  {paginatedUsers.map((u) => {
+                    const role = u.roleRelation as { name?: string } | undefined;
+                    return (
+                      <TableRow key={String(u.id)} hover>
+                        <TableCell>
+                          <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                            {String(u.name || '—')}
+                          </Typography>
+                          <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                            {String(u.email)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>{role?.name || '—'}</TableCell>
+                        <TableCell>
+                          <StatusChip status={String(u.status)} />
+                        </TableCell>
+                        <TableCell>{u.mfaEnabled ? 'On' : 'Off'}</TableCell>
+                        <TableCell>
+                          {u.lastLoginAt
+                            ? new Date(String(u.lastLoginAt)).toLocaleString()
+                            : '—'}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button
+                            size="small"
+                            sx={{ textTransform: 'none' }}
+                            disabled={saving}
+                            onClick={() =>
+                              void patchPlatformUser(String(u.id), {
+                                status: u.status === 'active' ? 'suspended' : 'active',
+                              }).then(reload)
+                            }
+                          >
+                            {u.status === 'active' ? 'Suspend' : 'Activate'}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              <PlatformTablePagination
+                count={users.length}
+                page={usersPagination.page}
+                rowsPerPage={usersPagination.rowsPerPage}
+                onPageChange={usersPagination.onPageChange}
+                onRowsPerPageChange={usersPagination.onRowsPerPageChange}
+              />
+            </>
           )}
         </Panel>
       ) : null}
@@ -280,57 +340,64 @@ export default function PlatformOrganizationDetailPage() {
           {workspaces.length === 0 ? (
             <EmptyState message="No workspaces yet" />
           ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Workspace</TableCell>
-                  <TableCell>Members</TableCell>
-                  <TableCell>Folders</TableCell>
-                  <TableCell>Projects</TableCell>
-                  <TableCell align="right">Rename</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {workspaces.map((ws) => {
-                  const wsCount = ws._count as
-                    | { folders?: number; projects?: number; users?: number }
-                    | undefined;
-                  return (
-                    <TableRow key={String(ws.id)} hover>
-                      <TableCell>
-                        <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
-                          {String(ws.name)}
-                        </Typography>
-                        {ws.description ? (
-                          <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
-                            {String(ws.description)}
+            <>
+              <Table size="small" sx={platformTableSx}>
+                <PlatformTableHead
+                  columns={[
+                    { id: 'workspace', label: 'Workspace' },
+                    { id: 'members', label: 'Members' },
+                    { id: 'folders', label: 'Folders' },
+                    { id: 'projects', label: 'Projects' },
+                    { id: 'rename', label: 'Rename', align: 'right' },
+                  ]}
+                />
+                <TableBody>
+                  {paginatedWorkspaces.map((ws) => {
+                    const wsCount = ws._count as
+                      | { folders?: number; projects?: number; users?: number }
+                      | undefined;
+                    return (
+                      <TableRow key={String(ws.id)} hover>
+                        <TableCell>
+                          <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>
+                            {String(ws.name)}
                           </Typography>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>{wsCount?.users ?? 0}</TableCell>
-                      <TableCell>{wsCount?.folders ?? 0}</TableCell>
-                      <TableCell>{wsCount?.projects ?? 0}</TableCell>
-                      <TableCell align="right">
-                        <Button
-                          size="small"
-                          sx={{ textTransform: 'none' }}
-                          disabled={saving}
-                          onClick={() => {
-                            const next = window.prompt('Workspace name', String(ws.name));
-                            if (!next || next.trim() === String(ws.name)) return;
-                            void patchPlatformWorkspace(orgId, String(ws.id), {
-                              name: next.trim(),
-                            }).then(reload);
-                          }}
-                        >
-                          Edit
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                          {ws.description ? (
+                            <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                              {String(ws.description)}
+                            </Typography>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>{wsCount?.users ?? 0}</TableCell>
+                        <TableCell>{wsCount?.folders ?? 0}</TableCell>
+                        <TableCell>{wsCount?.projects ?? 0}</TableCell>
+                        <TableCell align="right">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            sx={{ textTransform: 'none', fontSize: '0.75rem' }}
+                            disabled={saving}
+                            onClick={() => {
+                              setRenameTarget({ wsId: String(ws.id), name: String(ws.name) });
+                              setRenameName(String(ws.name));
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              <PlatformTablePagination
+                count={workspaces.length}
+                page={workspacesPagination.page}
+                rowsPerPage={workspacesPagination.rowsPerPage}
+                onPageChange={workspacesPagination.onPageChange}
+                onRowsPerPageChange={workspacesPagination.onRowsPerPageChange}
+              />
+            </>
           )}
         </Panel>
       ) : null}
@@ -413,34 +480,93 @@ export default function PlatformOrganizationDetailPage() {
               }}
             >
               {[
-                ['Require password', settings.requirePasswordDefault],
-                ['Allow comments', settings.allowCommentsDefault],
-                ['Download original', settings.allowDownloadOriginalDefault],
-                ['Download proxy', settings.allowDownloadProxyDefault],
-                ['Company watermark', settings.showCompanyWatermarkDefault],
-                ['Default expiry (days)', settings.defaultExpiryDays],
-              ].map(([label, value]) => (
-                <Box
-                  key={String(label)}
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 1.5,
-                    border: `1px solid ${cv.border}`,
-                    background: cv.surfaceMuted,
-                  }}
-                >
-                  <Typography sx={{ fontSize: '0.7rem', color: cv.textMuted }}>
-                    {String(label)}
-                  </Typography>
-                  <Typography sx={{ fontWeight: 600, mt: 0.5 }}>
-                    {typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value ?? '—')}
-                  </Typography>
-                </Box>
-              ))}
+                { label: 'Require password', key: 'requirePasswordDefault', type: 'boolean' },
+                { label: 'Allow comments', key: 'allowCommentsDefault', type: 'boolean' },
+                { label: 'Download original', key: 'allowDownloadOriginalDefault', type: 'boolean' },
+                { label: 'Download proxy', key: 'allowDownloadProxyDefault', type: 'boolean' },
+                { label: 'Company watermark', key: 'showCompanyWatermarkDefault', type: 'boolean' },
+                { label: 'Default expiry (days)', key: 'defaultExpiryDays', type: 'number' },
+              ].map(({ label, key, type }) => {
+                const val = (settings as Record<string, any>)[key];
+                return (
+                  <Box
+                    key={key}
+                    sx={{
+                      p: 1.5,
+                      borderRadius: 1.5,
+                      border: `1px solid ${cv.border}`,
+                      background: cv.surfaceMuted,
+                      display: 'flex',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 1,
+                    }}
+                  >
+                    <Typography sx={{ fontSize: '0.85rem', color: cv.textPrimary, fontWeight: 500 }}>
+                      {label}
+                    </Typography>
+                    {type === 'boolean' ? (
+                      <Switch
+                        checked={Boolean(val)}
+                        disabled={saving}
+                        onChange={(e) => void save({ settings: { [key]: e.target.checked } })}
+                      />
+                    ) : (
+                      <TextField
+                        select
+                        size="small"
+                        disabled={saving}
+                        value={val ?? 30}
+                        onChange={(e) => {
+                          const num = Number(e.target.value);
+                          if (!isNaN(num) && num !== val) {
+                            void save({ settings: { [key]: num } });
+                          }
+                        }}
+                        sx={{ minWidth: 120 }}
+                      >
+                        <MenuItem value={7}>7 days</MenuItem>
+                        <MenuItem value={14}>14 days</MenuItem>
+                        <MenuItem value={30}>30 days</MenuItem>
+                        <MenuItem value={90}>90 days</MenuItem>
+                      </TextField>
+                    )}
+                  </Box>
+                );
+              })}
             </Box>
           )}
         </Panel>
       ) : null}
+
+      {/* Workspace rename dialog */}
+      <Dialog open={Boolean(renameTarget)} onClose={() => setRenameTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Rename Workspace</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Workspace name"
+            value={renameName}
+            onChange={(e) => setRenameName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleRename(); }}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRenameTarget(null)} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={renaming || !renameName.trim() || renameName.trim() === renameTarget?.name}
+            onClick={() => void handleRename()}
+            sx={{ textTransform: 'none' }}
+          >
+            {renaming ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

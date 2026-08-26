@@ -7,10 +7,12 @@ import {
   type SxProps,
   type Theme,
 } from '@mui/material';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import { useDashboard } from '../../context/DashboardContext';
 import { getModKeyLabel } from '../../constants/dashboardShortcuts';
 import { useResolvedKeyboardShortcuts } from '../../hooks/useResolvedKeyboardShortcuts';
+import { useAiEntitled } from '../../hooks/useAiEntitled';
 import { searchFieldInputSx } from '../../utils/searchFieldStyles';
 
 interface GlobalSearchFieldProps {
@@ -35,6 +37,7 @@ export default function GlobalSearchField({
   sx,
 }: GlobalSearchFieldProps) {
   const { globalSearchQuery, setGlobalSearchQuery } = useDashboard();
+  const aiEntitled = useAiEntitled();
   const [inputValue, setInputValue] = useState(globalSearchQuery);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -42,8 +45,8 @@ export default function GlobalSearchField({
   };
 
   useEffect(() => {
-    // If the input is between 1 and 3 characters, do not search yet
-    if (inputValue.length > 0 && inputValue.length <= 3) {
+    // If the input is 1–2 characters, wait until the 3-character floor
+    if (inputValue.length > 0 && inputValue.length <= 2) {
       return;
     }
 
@@ -64,7 +67,10 @@ export default function GlobalSearchField({
   const primaryShortcut = getShortcut('dashboard-focus-search') ?? '/';
   const modShortcut = getShortcut('dashboard-focus-search-mod') ?? `${getModKeyLabel()} S`;
   const resolvedPlaceholder =
-    placeholder ?? formatFocusSearchPlaceholder(primaryShortcut);
+    placeholder ??
+    (aiEntitled
+      ? 'Search titles and spoken content'
+      : formatFocusSearchPlaceholder(primaryShortcut));
 
   return (
     <TextField
@@ -82,28 +88,51 @@ export default function GlobalSearchField({
               <SearchIcon sx={{ fontSize: 20, color: cv.textMuted }} />
             </InputAdornment>
           ),
-          endAdornment: showShortcutHint ? (
-            <InputAdornment position="end">
-              <Box
-                component="kbd"
-                sx={{
-                  display: { xs: 'none', sm: 'inline-flex' },
-                  alignItems: 'center',
-                  px: 0.75,
-                  py: 0.25,
-                  borderRadius: '6px',
-                  border: '1px solid var(--noah-border)',
-                  color: cv.textMuted,
-                  fontSize: '0.6875rem',
-                  fontFamily: 'inherit',
-                  lineHeight: 1.2,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {modShortcut}
-              </Box>
-            </InputAdornment>
-          ) : undefined,
+          endAdornment:
+            showShortcutHint || aiEntitled ? (
+              <InputAdornment position="end" sx={{ gap: 0.75 }}>
+                {showShortcutHint ? (
+                  <Box
+                    component="kbd"
+                    sx={{
+                      display: { xs: 'none', sm: 'inline-flex' },
+                      alignItems: 'center',
+                      px: 0.75,
+                      py: 0.25,
+                      borderRadius: '6px',
+                      border: '1px solid var(--noah-border)',
+                      color: cv.textMuted,
+                      fontSize: '0.6875rem',
+                      fontFamily: 'inherit',
+                      lineHeight: 1.2,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {modShortcut}
+                  </Box>
+                ) : null}
+                {aiEntitled ? (
+                  <Box
+                    aria-hidden
+                    title="AI search available"
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 24,
+                      height: 24,
+                      borderRadius: '8px',
+                      flexShrink: 0,
+                      color: cv.textPrimary,
+                      backgroundColor: cv.purpleSelectionHover,
+                      boxShadow: `inset 0 0 0 1px ${cv.purpleSelectionStrong}`,
+                    }}
+                  >
+                    <AutoAwesomeOutlinedIcon sx={{ fontSize: 14 }} />
+                  </Box>
+                ) : null}
+              </InputAdornment>
+            ) : undefined,
           sx: {
             borderRadius: '999px',
             fontSize: '0.875rem',

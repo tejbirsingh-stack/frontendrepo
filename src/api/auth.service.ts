@@ -156,7 +156,7 @@ export const updateOrganizationUser = async (userId: string, data: { email?: str
   return response.data?.user || response.data;
 };
 
-export const resetPasswordRequest = async (data: { token: string; password?: string; newPassword?: string; name?: string }) => {
+export const resetPasswordRequest = async (data: { token: string; password?: string; confirmPassword?: string; newPassword?: string; name?: string }) => {
   const response = await axios.post(
     `${API_BASE_URL}/auth/reset-password`,
     data
@@ -164,11 +164,18 @@ export const resetPasswordRequest = async (data: { token: string; password?: str
   return response.data;
 };
 
-
 export const forgotPasswordRequest = async (email: string) => {
   const response = await axios.post(
     `${API_BASE_URL}/auth/forgot-password`,
     { email }
+  );
+  return response.data;
+};
+
+export const validateResetTokenRequest = async (token: string) => {
+  const response = await axios.get(
+    `${API_BASE_URL}/auth/validate-reset-token`,
+    { params: { token } }
   );
   return response.data;
 };
@@ -355,7 +362,7 @@ export function mapAuthUserDtoToSessionUser(input: any) {
 
   let permissions = user.permissions || [];
   if (
-    (formattedRole === 'Super Admin' || formattedRole === 'SuperAdmin' || formattedRole === 'System Admin') &&
+    (formattedRole === 'Super Admin' || formattedRole === 'SuperAdmin' || formattedRole === 'Platform Admin') &&
     permissions.length === 0
   ) {
     permissions = Object.values(PERMISSIONS);
@@ -378,6 +385,8 @@ export function mapAuthUserDtoToSessionUser(input: any) {
     avatarUrl: user.avatarUrl,
     accountName: user.accountName || (user.organization && user.organization.name) || `${name}'s Account`,
     accountInitials: user.accountInitials || getNameInitials((user.organization && user.organization.name) || name),
+    shareLinkActivityEnabled: user.shareLinkActivityEnabled ?? true,
+    preferences: user.preferences || {},
   };
 }
 
@@ -429,6 +438,8 @@ export function extractUserFromTokenOrResponse(response: LoginResponseDto): Auth
       avatarUrl: decoded.avatarUrl,
       accountName: decoded.organization?.name || decoded.accountName || `${name}'s Account`,
       accountInitials: getNameInitials(decoded.organization?.name || name),
+      shareLinkActivityEnabled: decoded.shareLinkActivityEnabled ?? true,
+      preferences: decoded.preferences || {},
     };
   } catch (err) {
     console.error('Failed to decode JWT token payload:', err);

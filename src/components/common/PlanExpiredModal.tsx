@@ -35,7 +35,7 @@ export default function PlanExpiredModal() {
   const isSuperAdmin =
     rawRole.includes('super admin') ||
     rawRole.includes('superadmin') ||
-    rawRole.includes('system admin') ||
+    rawRole.includes('Platform Admin') ||
     rawRole.includes('admin');
 
   const handleUpgradePlan = async (

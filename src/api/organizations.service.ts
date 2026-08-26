@@ -62,3 +62,49 @@ export async function uploadCompanyLogoRequest(file: File, orgId?: string): Prom
 
   return await response.json();
 }
+
+export async function getBrandingSettingsApi(): Promise<any> {
+  return await apiRequest('/api/organizations/branding', {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+export async function updateBrandingSettingsApi(data: {
+  accountName?: string;
+  accentColor?: string;
+  reelBackgroundColor?: string;
+  reelTitleColor?: string;
+}): Promise<any> {
+  return await apiRequest('/api/organizations/branding', {
+    method: 'PUT',
+    body: data,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+export async function uploadBrandingHeaderRequest(file: File): Promise<any> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const token = getAccessToken();
+  const base = (env.apiBaseUrl || '/api').replace(/\/$/, '');
+  const response = await fetch(`${base}/organizations/branding/upload-header`, {
+    method: 'POST',
+    body: formData,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || errorBody.error || 'Failed to upload header image');
+  }
+
+  return await response.json();
+}

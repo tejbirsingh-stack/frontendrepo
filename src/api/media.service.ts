@@ -24,6 +24,7 @@ export interface MediaAssetResponseDto {
   uploadedByUserId?: string;
   folderId?: string | null;
   folderName?: string | null;
+  workspaceId?: string;
 }
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB chunks for Backblaze B2 / AWS S3 multipart upload
@@ -180,6 +181,7 @@ async function uploadResumableChunkedFile(
       linkedProjectId: options?.linkedProjectId,
       visibility: options?.visibility,
     },
+    { timeoutMs: 60_000 },
   );
 
   const { sessionId } = initRes;
@@ -254,6 +256,7 @@ async function uploadResumableChunkedFile(
         technicalSpecs: options?.technicalSpecs,
         visibility: options?.visibility,
       },
+      { timeoutMs: 300_000 },
     );
 
     if (progressCallback) {
@@ -329,9 +332,11 @@ export async function deleteMediaFileRequest(filenameOrId: string): Promise<void
 /**
  * Fetch a single media asset by ID (with metadata).
  */
-export async function getMediaAssetByIdRequest(id: string): Promise<MediaAssetResponseDto> {
+export async function getMediaAssetByIdRequest(id: string, projectId?: string): Promise<MediaAssetResponseDto> {
+  const params = new URLSearchParams({ meta: 'true' });
+  if (projectId) params.set('projectId', projectId);
   const res = await apiClient.get<{ success: boolean; asset: MediaAssetResponseDto }>(
-    `/media/${encodeURIComponent(id)}?meta=true`,
+    `/media/${encodeURIComponent(id)}?${params.toString()}`,
   );
   return res.asset;
 }
@@ -373,10 +378,10 @@ export async function getAssetAccessOverrides(id: string): Promise<{ overrides: 
 /**
  * Update an asset-specific role override (direct access user).
  */
-export async function updateAssetAccessOverride(id: string, userId: string, accessLevel: string): Promise<void> {
+export async function updateAssetAccessOverride(id: string, userId: string, accessLevel: string, sendInviteEmail?: boolean): Promise<void> {
   await apiClient.patch(
     `/media/${encodeURIComponent(id)}/access/${encodeURIComponent(userId)}`,
-    { accessLevel },
+    { accessLevel, sendInviteEmail },
   );
 }
 

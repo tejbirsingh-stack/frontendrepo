@@ -27,6 +27,7 @@ export default function TrashPage() {
   const {
     trashedMediaItems,
     trashedAtById,
+    fetchTrashItems,
     restoreFromTrashBulk,
     purgeExpiredTrash,
     activeWorkspaceId,
@@ -36,8 +37,9 @@ export default function TrashPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    fetchTrashItems();
     purgeExpiredTrash();
-  }, [purgeExpiredTrash]);
+  }, [fetchTrashItems, purgeExpiredTrash, activeWorkspaceId]);
 
   useEffect(() => {
     setSelectedIds(new Set());

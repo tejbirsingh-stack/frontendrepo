@@ -396,6 +396,12 @@ export default function MediaDetailsPanel({
             value={mediaItem.summary?.trim() || (mediaItem.customMetadata as any)?.summary || (technicalDetails as any)?.summary}
             multiline
           />
+          {Array.isArray(mediaItem.aiTags) && mediaItem.aiTags.length > 0 ? (
+            <DetailRow
+              label="AI Tags:"
+              value={mediaItem.aiTags.join(', ')}
+            />
+          ) : null}
         </DetailsSection>
       )}
 

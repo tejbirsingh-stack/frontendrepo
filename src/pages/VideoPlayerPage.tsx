@@ -5,9 +5,10 @@ import { cv } from '../theme/cssVars';
 import { Alert, Box, Button, Chip, CircularProgress, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
 import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
 import StarBorderOutlinedIcon from '@mui/icons-material/StarBorderOutlined';
 import StarIcon from '@mui/icons-material/Star';
-import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
@@ -18,7 +19,7 @@ import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
 import GlassCard from '../components/GlassCard';
@@ -33,6 +34,9 @@ import {
 import { DEFAULT_DRAW_COLOR } from '../constants/drawColors';
 import AnnotationHistoryDrawer from '../components/media/AnnotationHistoryDrawer';
 import AudioWaveformVisualizer from '../components/media/AudioWaveformVisualizer';
+import FramePersonHighlight from '../components/media/FramePersonHighlight';
+import type { FramePerson } from '../data/mockFramePeople';
+import { useAiEntitled } from '../hooks/useAiEntitled';
 import type {
   MediaDetailsSection,
   MediaTechnicalDetails,
@@ -46,6 +50,7 @@ import {
 } from '../components/media/LabeledToolbarButton';
 import ClearAnnotationsModal from '../components/media/ClearAnnotationsModal';
 import WorkspaceControlsIsland from '../components/media/WorkspaceControlsIsland';
+import MediaSideRail, { type MediaRailPanel } from '../components/media/MediaSideRail';
 import PlayerToolsDrawer from '../components/media/PlayerToolsDrawer';
 import PeopleCollaboratorsPopover from '../components/media/PeopleCollaboratorsPopover';
 import WorkspaceMembersDialog from '../components/settings/WorkspaceMembersDialog';
@@ -136,6 +141,7 @@ import {
   getStampHistoryEntryId,
 } from '../utils/annotationOverlayVisibility';
 import { shapeSummary } from '../components/media/ShapeGraphic';
+import AudioMeterOverlay from '../components/media/AudioMeterOverlay';
 import { getStampSummary } from '../constants/stamps';
 import type { AnnotationCommentPromptRequest } from '../utils/annotationCommentPrompt';
 import { hasAnnotationContent } from '../utils/annotationSnapshot';
@@ -150,7 +156,7 @@ import {
   parseFileReviewStatus,
   type FileReviewStatus,
 } from '../constants/fileReviewStatus';
-import { formatVideoTimestamp, parseMediaDurationLabel } from '../utils/formatVideoTimestamp';
+import { formatVideoTimestamp, formatVideoTimecode, parseMediaDurationLabel } from '../utils/formatVideoTimestamp';
 import {
   extractPlaybackQualityMetadata,
   extractVideoStreamMetadata,
@@ -264,6 +270,14 @@ const mediaTypeHeaderIcons = {
 export interface VideoPlayerPageProps {
   isGuestMode?: boolean;
   shareToken?: string;
+  guestBranding?: {
+    accountName?: string;
+    logoUrl?: string | null;
+    headerImageUrl?: string | null;
+    accentColor?: string;
+    reelBackgroundColor?: string;
+    reelTitleColor?: string;
+  };
   guestPermissions?: {
     view: boolean;
     comment: boolean;
@@ -285,6 +299,7 @@ export interface VideoPlayerPageProps {
 export default function VideoPlayerPage({
   isGuestMode = false,
   shareToken,
+  guestBranding,
   guestPermissions = { view: true, comment: true, download: true, downloadProxy: true },
   guestAssetMeta,
   guestExpiresAt,
@@ -298,7 +313,9 @@ export default function VideoPlayerPage({
     user = null;
   }
 
-  const { mediaId } = useParams<{ mediaId: string }>();
+  const { mediaId, projectId: pathProjectId } = useParams<{ mediaId: string; projectId?: string }>();
+  const [searchParams] = useSearchParams();
+  const projectId = pathProjectId || searchParams.get('projectId') || undefined;
   const activeUser = useActiveUser();
   const navigate = useNavigate();
   const theme = useTheme();
@@ -392,6 +409,7 @@ export default function VideoPlayerPage({
         sizeBytes: (contextItem as any).sizeBytes || (fetchedItem as any).sizeBytes,
         proxySizeBytes: fetchedItem.proxySizeBytes ?? contextItem.proxySizeBytes,
         hasProxy: fetchedItem.hasProxy ?? contextItem.hasProxy,
+        visibility: (fetchedItem as any).visibility || (contextItem as any).visibility,
       }
       : contextItem || fetchedItem;
   }, [isGuestMode, guestItem, contextItem, fetchedItem]);
@@ -465,10 +483,13 @@ export default function VideoPlayerPage({
   const { broadcastMessage } = useMediaWebSocket(wsTargetMediaId, handleWebSocketMessage);
 
 
+  const [effectivePermissions, setEffectivePermissions] = useState<string[] | null>(null);
+
   useEffect(() => {
     if (mediaId) {
       setIsFetching(true);
-      getMediaAssetByIdRequest(mediaId)
+      console.log('[MediaViewer] Fetching asset with projectId:', projectId);
+      getMediaAssetByIdRequest(mediaId, projectId)
         .then((asset) => {
           const techSpecs = (asset.metadata as any)?.technicalSpecs || asset.customMetadata?.technicalSpecs || {};
           setVideoTechnicalDetails(techSpecs);
@@ -485,6 +506,9 @@ export default function VideoPlayerPage({
             id: asset.id,
             title: asset.name,
             summary: asset.customMetadata?.summary || (asset.metadata as any)?.customProperties?.summary || undefined,
+            aiTags: Array.isArray((asset as any).aiTags)
+              ? (asset as any).aiTags.filter((t: unknown) => typeof t === 'string')
+              : undefined,
             type: (asset.type.split('/')[0] as MediaType) || 'document',
             workspaceId: 'default',
             createdAt: asset.uploadDate || new Date().toISOString(),
@@ -493,15 +517,22 @@ export default function VideoPlayerPage({
             hasProxy: Boolean((asset as any).hasProxy ?? (asset.customMetadata as any)?.hasProxy),
             storageProvider: 'b2',
             uploadedBy: (asset as any).uploadedBy?.name || user?.name || (user?.email ? user.email.split('@')[0] : 'Uploader'),
-            uploadedByUserId: (asset as any).uploadedBy?.id || undefined,
+            uploadedByUserId: (asset as any).uploadedBy?.id || (asset as any).uploadedByUserId || undefined,
             tags: tagList,
             location: null,
             thumbnail: asset.thumbnail || undefined,
             videoSrc: asset.url,
             compressionStatus: asset.compressionStatus || 'completed',
             customMetadata: asset.customMetadata,
+            visibility: (asset as any).visibility,
             duration: (techSpecs.duration as string) || (asset.customMetadata?.duration as string) || undefined,
           });
+          // Store effective permissions from backend
+          const perms = (asset as any).effectivePermissions;
+          console.log('[MediaViewer] effectivePermissions from API:', perms);
+          if (perms) {
+            setEffectivePermissions(perms);
+          }
         })
         .catch((err) => {
           console.error(err);
@@ -513,7 +544,7 @@ export default function VideoPlayerPage({
     } else {
       setIsFetching(false);
     }
-  }, [mediaId]);
+  }, [mediaId, projectId]);
   const [activeTool, setActiveTool] = useState<AnnotationTool>('select');
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const [selectedStampId, setSelectedStampId] = useState<string | null>(null);
@@ -586,39 +617,59 @@ export default function VideoPlayerPage({
     return collaborators.find((c) => c.isCurrentUser || (c.email && user?.email && c.email.toLowerCase() === user.email.toLowerCase()));
   }, [collaborators, user?.email]);
 
+  const isGlobalMediaAsset = useMemo(() => {
+    if (!item) return false;
+    return Boolean((item as any).globalMedia || item.customMetadata?.platformDefaultContentId || item.customMetadata?.seededFromPlatform);
+  }, [item]);
+
   const isAssetAdmin = useMemo(() => {
+    if (isGlobalMediaAsset) return false;
     if (isGuestMode) return false;
+    if (effectivePermissions && effectivePermissions.length > 0) {
+      return effectivePermissions.includes('upload_media') || effectivePermissions.includes('manage_folders');
+    }
     if (currentUserCollab?.role === 'Admin') return true;
     if (item?.uploadedByUserId === user?.id || item?.uploadedBy?.id === user?.id) return true;
+    if (isSharedWithUser) return false;
     if (user?.role === 'Super Admin' || user?.role === 'Admin') return true;
     return false;
-  }, [isGuestMode, currentUserCollab, user, item?.uploadedByUserId, item?.uploadedBy?.id]);
+  }, [isGlobalMediaAsset, isGuestMode, currentUserCollab, isSharedWithUser, user, item?.uploadedByUserId, item?.uploadedBy?.id, effectivePermissions]);
 
   const isAssetEditor = useMemo(() => {
+    if (isGlobalMediaAsset) return false;
     if (isGuestMode) return false;
+    if (effectivePermissions && effectivePermissions.length > 0) {
+      return effectivePermissions.includes('timeline_annotations') || effectivePermissions.includes('manage_folders');
+    }
     if (isAssetAdmin) return true;
     return currentUserCollab?.role === 'Editor';
-  }, [isGuestMode, isAssetAdmin, currentUserCollab]);
+  }, [isGlobalMediaAsset, isGuestMode, isAssetAdmin, currentUserCollab, effectivePermissions]);
 
   const isViewer = useMemo(() => {
+    if (isGlobalMediaAsset) return true;
     if (isGuestMode) {
       return !guestPermissions?.comment;
     }
     if (isAssetAdmin || isAssetEditor) return false;
+    if (effectivePermissions && effectivePermissions.length > 0) {
+      return !effectivePermissions.includes('timeline_annotations');
+    }
     if (currentUserCollab?.role === 'Viewer') return true;
     const rawRole = (user?.role || user?.roleRelation?.name || '').trim().toLowerCase();
     if (rawRole === 'admin' || rawRole === 'super admin' || rawRole === 'editor') return false;
+    if (user?.permissions?.length && !user.permissions.includes('timeline_annotations')) return true;
     return true;
-  }, [isGuestMode, guestPermissions?.comment, currentUserCollab, isAssetAdmin, isAssetEditor, user]);
+  }, [isGlobalMediaAsset, isGuestMode, guestPermissions?.comment, currentUserCollab, isAssetAdmin, isAssetEditor, user, effectivePermissions]);
 
   const canDownloadOriginal = isGuestMode
     ? Boolean(guestPermissions?.download)
     : (isAssetAdmin || isAssetEditor || !isViewer);
 
-  const canShare = isGuestMode ? false : (isAssetAdmin || isAssetEditor);
+  const canShare = isGlobalMediaAsset ? false : (isGuestMode ? false : (isAssetAdmin || isAssetEditor));
 
-  const triggerMediaDownload = useCallback((variant: 'original' | 'proxy') => {
+  const triggerMediaDownload = useCallback(async (variant: 'original' | 'proxy') => {
     if (isGuestMode && shareToken) {
+      // Guest: no auth token — use plain anchor (share stream route handles notification separately)
       const a = document.createElement('a');
       a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${shareToken}/stream?download=true`;
       a.download = '';
@@ -628,15 +679,29 @@ export default function VideoPlayerPage({
       return;
     }
     if (!item?.id) return;
-    const a = document.createElement('a');
-    a.href =
+
+    // Authenticated download: append token so the backend optionalAuthenticate middleware
+    // can identify the user and fire the privacy "Media Downloaded" notification.
+    const url =
       variant === 'original'
         ? `/api/media/${encodeURIComponent(item.id)}/download?raw=true`
         : `/api/media/${encodeURIComponent(item.id)}/download`;
-    a.download = '';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+
+    try {
+      const { getAccessToken } = await import('../auth/authTokenBridge');
+      const token = getAccessToken();
+      const finalUrl = token ? `${url}${url.includes('?') ? '&' : '?'}token=${token}` : url;
+      
+      const anchor = document.createElement('a');
+      anchor.href = finalUrl;
+      anchor.download = '';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    } catch (err) {
+      console.error('Download error:', err);
+      import('react-hot-toast').then(({ default: toast }) => toast.error('Download failed. Please try again.'));
+    }
   }, [isGuestMode, shareToken, item?.id]);
 
   const originalDownloadSizeLabel = useMemo(() => {
@@ -835,6 +900,16 @@ export default function VideoPlayerPage({
               videoTimestamp: vTime,
               parentId: anyC.parentId || null
             });
+            
+            // Sync frontend status if it was New
+            if (fileReviewStatus === 'New' || !fileReviewStatus) {
+              setFileReviewStatus('In-Progress');
+              setFetchedItem((prev) => 
+                prev && prev.id === mediaId 
+                  ? { ...prev, customMetadata: { ...(prev.customMetadata || {}), reviewStatus: 'In-Progress' } } 
+                  : prev
+              );
+            }
           }
           broadcastMessage({ type: 'NEW_ANNOTATION', payload: c as any });
           // Generate client-side in-app notifications if text is present
@@ -923,8 +998,9 @@ export default function VideoPlayerPage({
   const [draftComment, setDraftComment] = useState<DraftVideoComment | null>(null);
   const [activeHistoryEntryId, setActiveHistoryEntryId] = useState<string | null>(null);
   const [history, setHistory] = useState<AnnotationHistoryEntry[]>([]);
+  const annotationsAllowed = !isGlobalMediaAsset && (!isGuestMode || Boolean(guestPermissions?.comment));
   const [historyOpen, setHistoryOpen] = useState(() => {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === 'undefined' || !annotationsAllowed) return false;
     return window.matchMedia(`(min-width:${theme.breakpoints.values.lg}px)`).matches;
   });
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -933,8 +1009,38 @@ export default function VideoPlayerPage({
   const [focusLinkNameCounter, setFocusLinkNameCounter] = useState(0);
   const [shareTeamMembers, setShareTeamMembers] = useState<WorkspaceTeamMember[]>([]);
   const [availableGroups, setAvailableGroups] = useState<SettingsUserGroup[]>([]);
-  const [drawerTab, setDrawerTab] = useState<'history' | 'details'>('history');
+  const [drawerTab, setDrawerTab] = useState<MediaRailPanel>('history');
+  const aiEntitled = useAiEntitled() && !isGuestMode;
   const [detailsSection, setDetailsSection] = useState<MediaDetailsSection>('file');
+  const [selectedFramePerson, setSelectedFramePerson] = useState<FramePerson | null>(null);
+
+  const handleFramePersonSelect = useCallback((person: FramePerson) => {
+    setSelectedFramePerson((current) => (current?.id === person.id ? null : person));
+  }, []);
+
+  // People detection runs on frames, so audio and documents have no faces to highlight.
+  const supportsFramePeople = item?.type === 'video' || item?.type === 'image';
+
+  useEffect(() => {
+    if (!aiEntitled && drawerTab === 'ai') {
+      setDrawerTab(annotationsAllowed ? 'history' : 'details');
+    }
+  }, [aiEntitled, annotationsAllowed, drawerTab]);
+
+  useEffect(() => {
+    if (!historyOpen || drawerTab !== 'ai') {
+      setSelectedFramePerson(null);
+    }
+  }, [drawerTab, historyOpen]);
+
+  const handleRailPanelSelect = (panel: MediaRailPanel) => {
+    if (historyOpen && drawerTab === panel) {
+      setHistoryOpen(false);
+      return;
+    }
+    setDrawerTab(panel);
+    setHistoryOpen(true);
+  };
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
 
   const [annotationGroups, setAnnotationGroups] = useState<AnnotationAccessGroup[]>([]);
@@ -1411,12 +1517,18 @@ export default function VideoPlayerPage({
 
   const handleReadTimecode = useCallback(() => {
     const time = getVideoTimestamp();
+    const fpsValue = (item as any)?.fps || (item as any)?.metadata?.fps || 24;
+    const fps = typeof fpsValue === 'string' ? parseFloat(fpsValue) : fpsValue;
+    const formatted = formatVideoTimecode(time, fps);
+    
+    navigator.clipboard.writeText(formatted).catch(() => {});
+    
     setStatusToast({
       open: true,
-      message: `Timecode ${formatVideoTimestamp(time)}`,
+      message: `Timecode ${formatted} copied to clipboard`,
       variant: 'resolved',
     });
-  }, [getVideoTimestamp]);
+  }, [getVideoTimestamp, item]);
 
   const resolvedOverlayEntryIds = useMemo(
     () => buildResolvedOverlayEntryIds(history),
@@ -1457,15 +1569,46 @@ export default function VideoPlayerPage({
       onToggleFlop: () => setPlayerFlipVertical((current) => !current),
       onRotateLeft: () => setPlayerRotationSteps((current) => (current + 3) % 4),
       onRotateRight: () => setPlayerRotationSteps((current) => (current + 1) % 4),
-      onSetInPoint: () => setPlayerInPoint(getVideoTimestamp()),
-      onSetOutPoint: () => setPlayerOutPoint(getVideoTimestamp()),
+      onSetInPoint: () => {
+        const time = getVideoTimestamp();
+        setPlayerInPoint(time);
+        setStatusToast({
+          open: true,
+          message: `In point set to ${formatVideoTimestamp(time)}`,
+          variant: 'resolved',
+        });
+      },
+      onSetOutPoint: () => {
+        const time = getVideoTimestamp();
+        setPlayerOutPoint(time);
+        setStatusToast({
+          open: true,
+          message: `Out point set to ${formatVideoTimestamp(time)}`,
+          variant: 'resolved',
+        });
+      },
       onReadTimecode: handleReadTimecode,
-      onToggleRange: () => setPlayerRangeEnabled((current) => !current),
+      onToggleRange: () => {
+        if (!playerRangeEnabled && (playerInPoint == null || playerOutPoint == null)) {
+          setStatusToast({
+            open: true,
+            message: 'Tip: Set In (I) and Out (O) points first to define the loop section.',
+            variant: 'resolved',
+          });
+        } else {
+          setStatusToast({
+            open: true,
+            message: !playerRangeEnabled ? 'Loop range enabled' : 'Loop range disabled',
+            variant: 'resolved',
+          });
+        }
+        setPlayerRangeEnabled((current) => !current);
+      },
       onToggleAudioMeter: () => setPlayerShowAudioMeter((current) => !current),
       onToggleActualMediaSize: () => setPlayerActualMediaSize((current) => !current),
       onPlayerBackgroundChange: setPlayerBackground,
     }),
-    [getVideoTimestamp, handleReadTimecode],
+    [getVideoTimestamp, handleReadTimecode, playerInPoint, playerOutPoint, playerRangeEnabled],
   );
 
   useEffect(() => {
@@ -1777,13 +1920,13 @@ export default function VideoPlayerPage({
           } as any);
         }
 
-        // Also add any user IDs from overrides if missing
+        // Also add any user IDs from overrides if missing (e.g. cross-org guests)
         overrides.forEach((ov: any) => {
           if (ov.userId && !baseUsers.some((u) => u.id === ov.userId)) {
             baseUsers.push({
               id: ov.userId,
-              name: 'User',
-              email: '',
+              name: ov.user?.name || 'User',
+              email: ov.user?.email || '',
               role: 'Viewer',
               status: 'active',
             } as any);
@@ -2042,7 +2185,7 @@ export default function VideoPlayerPage({
   }, [item, mediaId]);
 
   useEffect(() => {
-    if (!item || item.type !== 'video') return;
+    if (!item || (item.type !== 'video' && item.type !== 'audio')) return;
 
     const video = videoRef.current;
     if (!video) return;
@@ -2189,25 +2332,8 @@ export default function VideoPlayerPage({
 
   const handleCancelDraft = useCallback(() => {
     if (!draftComment) return;
-
-    if (draftComment.linkedDrawingId) {
-      pushSnapshot(getAnnotationSnapshot());
-      const drawingEntryId = getDrawingHistoryEntryId(draftComment.linkedDrawingId);
-      setDrawings((prev) =>
-        prev.filter((stroke) => stroke.id !== draftComment.linkedDrawingId),
-      );
-      setHistory((current) => current.filter((entry) => entry.id !== drawingEntryId));
-    }
-
-    if (draftComment.linkedShapeId) {
-      pushSnapshot(getAnnotationSnapshot());
-      const shapeEntryId = getShapeHistoryEntryId(draftComment.linkedShapeId);
-      setShapes((prev) => prev.filter((shape) => shape.id !== draftComment.linkedShapeId));
-      setHistory((current) => current.filter((entry) => entry.id !== shapeEntryId));
-    }
-
     setDraftComment(null);
-  }, [draftComment, getAnnotationSnapshot, pushSnapshot]);
+  }, [draftComment]);
 
   const handleAnnotationNeedsComment = useCallback((request: AnnotationCommentPromptRequest) => {
     setDraftComment({
@@ -2521,6 +2647,16 @@ export default function VideoPlayerPage({
       });
     }
   }, [mediaId]);
+
+  // Transcript clicks keep the current play state, unlike handleSeekToTimestamp which
+  // pauses so an annotation can be inspected on a still frame.
+  const handleTranscriptSeek = useCallback((startMs: number) => {
+    const element = videoRef.current;
+    if (!element) return;
+    const wasPlaying = !element.paused && !element.ended;
+    element.currentTime = Math.max(0, startMs / 1000);
+    if (wasPlaying) void element.play().catch(() => { });
+  }, []);
 
   const handleTagsChange = useCallback(
     async (tags: string[]) => {
@@ -3036,7 +3172,7 @@ export default function VideoPlayerPage({
 
         // Call backend
         if (mediaId) {
-          updateAssetAccessOverride(mediaId, existingMember.id, payload.access).catch(err => {
+          updateAssetAccessOverride(mediaId, existingMember.id, payload.access, payload.sendInviteEmail).catch(err => {
             console.error("Failed to add override", err);
           });
         }
@@ -3044,6 +3180,34 @@ export default function VideoPlayerPage({
         setStatusToast({
           open: true,
           message: `Invite sent to ${existingMember.name}`,
+          variant: 'resolved',
+        });
+        return true;
+      } else if (payload.userId) {
+        // It's a cross-org user or known user who wasn't in shareTeamMembers yet!
+        const newUserId = payload.userId;
+        const newGroupMember = {
+          id: newUserId,
+          name: payload.name || email,
+          initials: (payload.name || email).substring(0, 2).toUpperCase(),
+          access: payload.access,
+          memberType: payload.memberType,
+          email: payload.email,
+          isCurrentUser: false,
+          hasOverride: true
+        };
+        setShareTeamMembers(current => [...current, newGroupMember]);
+        setCollaborators(current => [...current, { ...newGroupMember, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' }]);
+        
+        if (mediaId) {
+          updateAssetAccessOverride(mediaId, newUserId, payload.access, payload.sendInviteEmail).catch(err => {
+            console.error("Failed to add override for cross-org user", err);
+          });
+        }
+
+        setStatusToast({
+          open: true,
+          message: `Invite sent to ${payload.name || email}`,
           variant: 'resolved',
         });
         return true;
@@ -3510,9 +3674,10 @@ export default function VideoPlayerPage({
   }
 
   const isProcessing =
-    liveAssetStatus === 'processing' ||
-    liveAssetStatus === 'queued' ||
-    liveAssetStatus === 'in_progress';
+    (liveAssetStatus === 'processing' ||
+      liveAssetStatus === 'queued' ||
+      liveAssetStatus === 'in_progress') &&
+    liveProgress !== '100%';
 
   const baseSrc = isGuestMode && shareToken
     ? `/api/share/${shareToken}/stream`
@@ -3581,7 +3746,10 @@ export default function VideoPlayerPage({
           maxHeight: DASHBOARD_TOP_BAR_HEIGHT,
           boxSizing: 'border-box',
           borderBottom: DASHBOARD_TOP_BAR_BORDER,
-          background: 'var(--noah-header-background)',
+          backgroundColor: 'rgba(15, 17, 26, 0.85)',
+          backgroundImage: guestBranding?.headerImageUrl ? `url(${guestBranding.headerImageUrl})` : undefined,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
           backdropFilter: 'blur(20px) saturate(180%)',
           WebkitBackdropFilter: 'blur(20px) saturate(180%)',
         }}
@@ -3596,36 +3764,83 @@ export default function VideoPlayerPage({
             zIndex: 1,
           }}
         >
-          <Tooltip title="Back to dashboard" arrow placement="bottom">
-            <IconButton
-              aria-label="Back to dashboard"
-              onClick={() => {
-                if (window.history.length > 1) {
-                  navigate(-1);
-                } else {
-                  navigate('/home');
-                }
-              }}
-              sx={{
-                flexShrink: 0,
-                color: cv.textSecondary,
-                border: "1px solid var(--noah-border)",
-                '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceHover },
-              }}
-            >
-              <ArrowBackOutlinedIcon />
-            </IconButton>
-          </Tooltip>
-          <NoahLogo
-            to="/home"
-            boxWidth={{ xs: HEADER_LOGO_BOX_WIDTH_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_WIDTH_DESKTOP }}
-            height={{ xs: HEADER_LOGO_BOX_HEIGHT_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_HEIGHT_DESKTOP }}
-            objectFit="cover"
-            animated={false}
-            showGlow={false}
-            align="left"
-            sx={{ mb: 0, flexShrink: 0 }}
-          />
+          {isGuestMode ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexShrink: 0 }}>
+              {guestBranding?.logoUrl ? (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: 38,
+                    width: 38,
+                    borderRadius: '10px',
+                    overflow: 'hidden',
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.25)',
+                    p: '2px',
+                  }}
+                >
+                  <Box
+                    component="img"
+                    src={guestBranding.logoUrl}
+                    alt={guestBranding?.accountName || 'Brand Logo'}
+                    sx={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
+                  />
+                </Box>
+              ) : (
+                <Box
+                  sx={{
+                    fontWeight: 800,
+                    fontSize: '1.25rem',
+                    background: guestBranding?.accentColor || 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                  }}
+                >
+                  {guestBranding?.accountName || 'NOAH'}
+                </Box>
+              )}
+              {guestBranding?.accountName && (
+                <Typography sx={{ fontSize: '0.975rem', fontWeight: 700, color: '#f8fafc' }}>
+                  {guestBranding.accountName}
+                </Typography>
+              )}
+            </Box>
+          ) : (
+            <>
+              <Tooltip title="Back to dashboard" arrow placement="bottom">
+                <IconButton
+                  aria-label="Back to dashboard"
+                  onClick={() => {
+                    if (window.history.length > 1) {
+                      navigate(-1);
+                    } else {
+                      navigate('/home');
+                    }
+                  }}
+                  sx={{
+                    flexShrink: 0,
+                    color: cv.textSecondary,
+                    border: "1px solid var(--noah-border)",
+                    '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceHover },
+                  }}
+                >
+                  <ArrowBackOutlinedIcon />
+                </IconButton>
+              </Tooltip>
+              <NoahLogo
+                to="/home"
+                boxWidth={{ xs: HEADER_LOGO_BOX_WIDTH_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_WIDTH_DESKTOP }}
+                height={{ xs: HEADER_LOGO_BOX_HEIGHT_MOBILE, [SIDEBAR_DESKTOP_BREAKPOINT]: HEADER_LOGO_BOX_HEIGHT_DESKTOP }}
+                objectFit="cover"
+                animated={false}
+                showGlow={false}
+                align="left"
+                sx={{ mb: 0, flexShrink: 0 }}
+              />
+            </>
+          )}
           <Box
             sx={{
               display: 'flex',
@@ -3642,7 +3857,7 @@ export default function VideoPlayerPage({
             <TruncatedText
               variant="h6"
               component="span"
-              text={item.title}
+              text={item.title || item.name}
               sx={{
                 fontWeight: 600,
                 fontSize: { xs: '1.25rem', md: '1.5rem' },
@@ -3650,6 +3865,19 @@ export default function VideoPlayerPage({
                 color: cv.textPrimary,
               }}
             />
+            {item?.visibility?.toLowerCase() === 'private' ? (
+              <Tooltip title="Private video" placement="bottom">
+                <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5, color: cv.textMuted }}>
+                  <LockOutlinedIcon sx={{ fontSize: 18 }} />
+                </Box>
+              </Tooltip>
+            ) : item?.visibility?.toLowerCase() === 'public' ? (
+              <Tooltip title="Public video" placement="bottom">
+                <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5, color: cv.textMuted }}>
+                  <PublicOutlinedIcon sx={{ fontSize: 18 }} />
+                </Box>
+              </Tooltip>
+            ) : null}
             {headerPermissions.canFavorite ? (
               <Tooltip
                 title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -4147,34 +4375,6 @@ export default function VideoPlayerPage({
             );
           })()}
 
-          {(!isGuestMode || guestPermissions?.comment) && !historyOpen ? (
-            <Tooltip title="Show annotation history" arrow placement="bottom">
-              <IconButton
-                type="button"
-                aria-label="Show annotation history"
-                onClick={() => setHistoryOpen(true)}
-                sx={{
-                  position: 'absolute',
-                  right: { xs: 16, sm: 24 },
-                  top: '100%',
-                  mt: 1.25,
-                  zIndex: 3,
-                  width: 44,
-                  height: 44,
-                  color: cv.textPrimary,
-                  border: '1px solid var(--noah-border)',
-                  backgroundColor: 'var(--noah-popover-surface-deep)',
-                  boxShadow: cv.popoverShadow,
-                  '&:hover': {
-                    color: cv.textPrimary,
-                    backgroundColor: cv.surfaceHover,
-                  },
-                }}
-              >
-                <ForumOutlinedIcon sx={{ fontSize: 22 }} />
-              </IconButton>
-            </Tooltip>
-          ) : null}
         </Box>
       </Box>
 
@@ -4188,6 +4388,7 @@ export default function VideoPlayerPage({
           suggestedGroups={availableGroups}
           resourceType="project"
           visibility={shareInviteVisibility}
+          isRestricted={shareInviteVisibility === 'private'}
           shareLinks={shareLinks}
           activeShareLinkId={activeShareLinkId}
           focusLinkNameCounter={focusLinkNameCounter}
@@ -4225,13 +4426,24 @@ export default function VideoPlayerPage({
           flex: 1,
           minHeight: 0,
           display: 'flex',
-          flexDirection: { xs: 'column', lg: 'row' },
+          flexDirection: 'row',
           alignItems: 'stretch',
-          gap: { xs: 1.5, lg: 2 },
+          gap: { xs: 1.5, md: 2 },
           px: { xs: 2, md: 3 },
           py: { xs: 1.5, md: 2 },
         }}
       >
+        <Box
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: { xs: 'column', lg: 'row' },
+            alignItems: 'stretch',
+            gap: { xs: 1.5, lg: 2 },
+          }}
+        >
         <GlassCard
           glow
           sx={{
@@ -4338,6 +4550,7 @@ export default function VideoPlayerPage({
                     ref={videoRef}
                     key={videoSrc || 'no-src'}
                     src={mediaElementSrc}
+                    crossOrigin="anonymous"
                     poster={item?.thumbnail}
                     playsInline
                     preload="metadata"
@@ -4416,9 +4629,7 @@ export default function VideoPlayerPage({
                     </Typography>
                     <Button
                       variant="contained"
-                      component="a"
-                      href={`/api/media/${encodeURIComponent(item.id)}/download`}
-                      download
+                      onClick={() => triggerMediaDownload('original')}
                       startIcon={<FileDownloadOutlinedIcon />}
                       sx={{
                         backgroundColor: '#38BDF8',
@@ -4519,35 +4730,7 @@ export default function VideoPlayerPage({
                 ) : null}
 
                 {playerShowAudioMeter ? (
-                  <Box
-                    aria-hidden
-                    sx={{
-                      position: 'absolute',
-                      left: 16,
-                      top: 16,
-                      display: 'flex',
-                      alignItems: 'flex-end',
-                      gap: 0.5,
-                      px: 1,
-                      py: 0.75,
-                      borderRadius: '10px',
-                      backgroundColor: 'var(--noah-overlay-scrim)',
-                      border: "1px solid var(--noah-border)",
-                    }}
-                  >
-                    {[0.35, 0.6, 0.9, 0.55, 0.75].map((height, index) => (
-                      <Box
-                        key={index}
-                        sx={{
-                          width: 4,
-                          height: `${height * 28}px`,
-                          borderRadius: '999px',
-                          backgroundColor: cv.textPrimary,
-                          opacity: 0.85,
-                        }}
-                      />
-                    ))}
-                  </Box>
+                  <AudioMeterOverlay videoRef={videoRef} />
                 ) : null}
 
                 {(isGuestMode && guestAssetMeta?.logoUrl) || (isSharedWithUser && internalLogoUrl) ? (
@@ -4644,6 +4827,10 @@ export default function VideoPlayerPage({
                 />
                   </>
                 )}
+
+                {selectedFramePerson && supportsFramePeople ? (
+                  <FramePersonHighlight person={selectedFramePerson} />
+                ) : null}
               </Box>
             </Box>
 
@@ -4664,6 +4851,9 @@ export default function VideoPlayerPage({
                   undefined
                 }
                 mediaTitle={item?.title || item?.name}
+                inPoint={playerInPoint}
+                outPoint={playerOutPoint}
+                rangeEnabled={playerRangeEnabled}
               />
             )}
 
@@ -4785,7 +4975,6 @@ export default function VideoPlayerPage({
                       onZoomOut={handleWorkspaceZoomOut}
                       onZoomIn={handleWorkspaceZoomIn}
                       onZoomReset={handleWorkspaceZoomReset}
-                      onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
                       hideZoomControls={item?.type === 'audio'}
                     />
                   </Box>
@@ -4839,9 +5028,8 @@ export default function VideoPlayerPage({
                       onZoomOut={handleWorkspaceZoomOut}
                       onZoomIn={handleWorkspaceZoomIn}
                       onZoomReset={handleWorkspaceZoomReset}
-                      onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
                       hideZoomControls={item?.type === 'audio'}
-                      insertBeforeHelp={
+                      trailingContent={
                         showClearIsland && !isViewer ? (
                           <AnnotationUndoIsland
                             compact
@@ -4859,9 +5047,13 @@ export default function VideoPlayerPage({
           </Box>
         </GlassCard>
 
-        {(!isGuestMode || guestPermissions?.comment) && (
-          <AnnotationHistoryDrawer
-            open={historyOpen}
+        <AnnotationHistoryDrawer
+          open={historyOpen}
+          availableTabs={
+            annotationsAllowed
+              ? (aiEntitled ? undefined : ['history', 'details'])
+              : ['details']
+          }
           activeHistoryEntryId={activeHistoryEntryId}
           entries={history}
           comments={comments}
@@ -4873,6 +5065,10 @@ export default function VideoPlayerPage({
           onTabChange={setDrawerTab}
           detailsSection={detailsSection}
           onDetailsSectionChange={setDetailsSection}
+          selectedFramePersonId={selectedFramePerson?.id ?? null}
+          onFramePersonSelect={handleFramePersonSelect}
+          onTranscriptSeek={handleTranscriptSeek}
+          videoRef={videoRef}
           onClose={() => setHistoryOpen(false)}
           onEntryClick={(entry) => {
             handleSeekToTimestamp(entry.videoTimestamp, entry.id);
@@ -4897,7 +5093,15 @@ export default function VideoPlayerPage({
           onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
           onAddCollaborator={handleAddCollaboratorForGroup}
         />
-        )}
+        </Box>
+
+        <MediaSideRail
+          activePanel={historyOpen ? drawerTab : null}
+          onPanelSelect={handleRailPanelSelect}
+          onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
+          showAnnotations={annotationsAllowed}
+          showAi={aiEntitled}
+        />
       </Box>
 
       <PlayerToolsDrawer
@@ -4916,10 +5120,41 @@ export default function VideoPlayerPage({
         onRotateRight={() =>
           setPlayerRotationSteps((current) => (current + 1) % 4)
         }
-        onSetInPoint={() => setPlayerInPoint(getVideoTimestamp())}
-        onSetOutPoint={() => setPlayerOutPoint(getVideoTimestamp())}
+        onSetInPoint={() => {
+          const time = getVideoTimestamp();
+          setPlayerInPoint(time);
+          setStatusToast({
+            open: true,
+            message: `In point set to ${formatVideoTimestamp(time)}`,
+            variant: 'resolved',
+          });
+        }}
+        onSetOutPoint={() => {
+          const time = getVideoTimestamp();
+          setPlayerOutPoint(time);
+          setStatusToast({
+            open: true,
+            message: `Out point set to ${formatVideoTimestamp(time)}`,
+            variant: 'resolved',
+          });
+        }}
         onReadTimecode={handleReadTimecode}
-        onToggleRange={() => setPlayerRangeEnabled((current) => !current)}
+        onToggleRange={() => {
+          if (!playerRangeEnabled && (playerInPoint == null || playerOutPoint == null)) {
+            setStatusToast({
+              open: true,
+              message: 'Tip: Set In (I) and Out (O) points first to define the loop section.',
+              variant: 'resolved',
+            });
+          } else {
+            setStatusToast({
+              open: true,
+              message: !playerRangeEnabled ? 'Loop range enabled' : 'Loop range disabled',
+              variant: 'resolved',
+            });
+          }
+          setPlayerRangeEnabled((current) => !current);
+        }}
         onToggleAudioMeter={() => setPlayerShowAudioMeter((current) => !current)}
         onToggleActualMediaSize={() => setPlayerActualMediaSize((current) => !current)}
         onPlayerBackgroundChange={setPlayerBackground}

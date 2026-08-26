@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cv } from '../../theme/cssVars';
+import toast from 'react-hot-toast';
 import {
   Box,
   Button,
@@ -26,10 +27,6 @@ interface TrashConfirmModalProps {
   requireNameConfirmation?: boolean;
   onClose: () => void;
   onConfirm: (reason: string) => void;
-}
-
-function blockClipboardInsertion(event: React.ClipboardEvent | React.DragEvent) {
-  event.preventDefault();
 }
 
 const dialogPaperSx = {
@@ -79,6 +76,7 @@ export default function TrashConfirmModal({
     const currentReason = reason.trim();
     setConfirmationText('');
     setReason('');
+    onClose();
     onConfirm(currentReason);
   };
 
@@ -124,7 +122,7 @@ export default function TrashConfirmModal({
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography
               variant="body2"
-              sx={{ fontWeight: 600, color: cv.textPrimary, mb: isMultiItem ? 1 : 0.5 }}
+              sx={{ fontWeight: 600, color: cv.textPrimary, mb: isMultiItem ? 1 : 0.5, userSelect: 'text' }}
             >
               {itemTitle}
             </Typography>
@@ -143,6 +141,7 @@ export default function TrashConfirmModal({
                     color: cv.textPrimary,
                     fontWeight: 500,
                     py: 0.25,
+                    userSelect: 'text',
                   },
                 }}
               >
@@ -171,7 +170,29 @@ export default function TrashConfirmModal({
               sx={{ mt: 2.5, mb: 1, fontSize: '0.875rem', color: cv.textSecondary }}
             >
               Type{' '}
-              <Box component="span" sx={{ fontWeight: 600, color: cv.textPrimary }}>
+              <Box
+                component="span"
+                onClick={() => {
+                  navigator.clipboard.writeText(phraseToConfirm);
+                  toast.success('Copied confirmation text');
+                }}
+                sx={{
+                  fontWeight: 600,
+                  color: cv.textPrimary,
+                  userSelect: 'all',
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  px: 0.5,
+                  py: 0.25,
+                  backgroundColor: cv.surfaceHover,
+                  border: `1px dashed ${cv.border}`,
+                  '&:hover': {
+                    borderColor: cv.borderFocus,
+                    backgroundColor: cv.surfaceActive,
+                  },
+                }}
+                title="Click to copy confirmation text"
+              >
                 {phraseToConfirm}
               </Box>{' '}
               to confirm.
@@ -186,12 +207,6 @@ export default function TrashConfirmModal({
               aria-labelledby="trash-confirm-name-label"
               aria-describedby="trash-confirm-desc"
               size="small"
-              slotProps={{
-                htmlInput: {
-                  onPaste: blockClipboardInsertion,
-                  onDrop: blockClipboardInsertion,
-                },
-              }}
               sx={{
                 '& .MuiInputBase-root': {
                   borderRadius: '10px',

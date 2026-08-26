@@ -49,7 +49,7 @@ export default function SettingsSectionPage() {
     return <Navigate to="/home" replace />;
   }
 
-  if (['admin/projects', 'admin/fields', 'share/settings'].includes(sectionKey) && !hasManageRootFolders) {
+  if (['admin/projects', 'share/settings'].includes(sectionKey) && !hasManageRootFolders) {
     return <Navigate to="/home" replace />;
   }
 
@@ -82,8 +82,6 @@ export default function SettingsSectionPage() {
       return <ProjectsAdminSettingsSection />;
     case 'admin/workspaces':
       return <WorkspacesAdminSettingsSection />;
-    case 'admin/fields':
-      return <FieldsAdminSettingsSection />;
     case 'admin/security':
       return <SecurityAdminSettingsSection />;
     case 'admin/keyboard-shortcuts':

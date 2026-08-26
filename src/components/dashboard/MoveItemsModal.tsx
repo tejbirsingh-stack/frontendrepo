@@ -59,15 +59,20 @@ export function FolderTreeNode({
           px: 1,
           py: 0.5,
           mb: 0.5,
-          cursor: 'pointer',
-          backgroundColor: selected ? cv.purpleSelectionSoft : 'transparent',
-          color: cv.textPrimary,
+          cursor: folder.disabled ? 'not-allowed' : 'pointer',
+          backgroundColor: selected && !folder.disabled ? cv.purpleSelectionSoft : 'transparent',
+          color: folder.disabled ? cv.textMuted : cv.textPrimary,
           pl: level * 2 + 1,
           '&:hover': {
-            backgroundColor: selected ? cv.purpleSelectionHover : cv.surfaceHover,
+            backgroundColor: selected && !folder.disabled ? cv.purpleSelectionHover : (folder.disabled ? 'transparent' : cv.surfaceHover),
           },
         }}
-        onClick={() => onSelect(folder.id)}
+        onClick={() => {
+          if (!folder.disabled) onSelect(folder.id);
+          if (hasChildren) {
+            setExpanded(!expanded);
+          }
+        }}
       >
         <Box
           component="span"
@@ -97,8 +102,8 @@ export function FolderTreeNode({
             <ChevronRightIcon sx={{ fontSize: 16, color: cv.textMuted }} />
           )}
         </Box>
-        <FolderOutlinedIcon sx={{ fontSize: 18, color, flexShrink: 0 }} />
-        <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: selected ? 600 : 500 }}>
+        <FolderOutlinedIcon sx={{ fontSize: 18, color: folder.disabled ? cv.textMuted : color, flexShrink: 0 }} />
+        <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: selected && !folder.disabled ? 600 : 500 }}>
           {folder.title}
         </Typography>
       </Box>
@@ -265,10 +270,11 @@ export default function MoveItemsModal({
   const { rootFolders, foldersByParent } = useMemo(() => {
     const activeFolders = fetchedFolders.filter(f => !trashedIds.has(f.id));
 
-    // Exclude the folder being moved AND all its descendants
     const excludedIds = new Set<string>();
-    if (excludeItemId) {
-      excludedIds.add(excludeItemId);
+    if (excludeItemId) excludedIds.add(excludeItemId);
+    if (sourceItemIds) sourceItemIds.forEach(id => excludedIds.add(id));
+    
+    if (excludedIds.size > 0) {
       let changed = true;
       while (changed) {
         changed = false;
@@ -281,13 +287,12 @@ export default function MoveItemsModal({
       }
     }
 
-    const validFolders = activeFolders.filter(f => !excludedIds.has(f.id));
-
-    const mappedFolders = validFolders.map(folder => ({
+    const mappedFolders = activeFolders.map(folder => ({
       id: folder.id,
       title: folder.name,
       folderColor: folder.color,
       parentFolderId: folder.parentId || null,
+      disabled: excludedIds.has(folder.id),
     })).sort((a, b) => a.title.localeCompare(b.title));
 
     const byParent: Record<string, any[]> = {};

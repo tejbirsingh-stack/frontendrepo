@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { cv } from '../../theme/cssVars';
 import { Box, Divider, IconButton, Tooltip } from '@mui/material';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
+import ChatBubbleOutlineOutlinedIcon from '@mui/icons-material/ChatBubbleOutlineOutlined';
 import ShapeColorPicker from './ShapeColorPicker';
 import ShapeThicknessPicker from './ShapeThicknessPicker';
 import type { StrokeThickness } from './StrokeThicknessControl';
@@ -14,6 +15,7 @@ interface SelectedShapeToolbarProps {
   activeStroke: StrokeThickness;
   onColorChange: (color: AnnotationColor) => void;
   onStrokeChange: (stroke: StrokeThickness) => void;
+  onAddComment?: () => void;
   onDelete?: () => void;
 }
 
@@ -27,6 +29,7 @@ export default function SelectedShapeToolbar({
   activeStroke,
   onColorChange,
   onStrokeChange,
+  onAddComment,
   onDelete,
 }: SelectedShapeToolbarProps) {
   const [openDrawer, setOpenDrawer] = useState<ShapeToolbarDrawer>(null);
@@ -125,6 +128,34 @@ export default function SelectedShapeToolbar({
           open={openDrawer === 'thickness'}
           onOpenChange={(open) => setOpenDrawer(open ? 'thickness' : null)}
         />
+
+        {onAddComment && (
+          <>
+            <Divider
+              orientation="vertical"
+              flexItem
+              sx={{ mx: 0.25, borderColor: cv.whiteBorderSoft }}
+            />
+            <Tooltip title="Add comment" placement="top">
+              <IconButton
+                aria-label="Add comment"
+                onClick={onAddComment}
+                sx={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: '10px',
+                  color: cv.textSecondary,
+                  '&:hover': {
+                    color: cv.textPrimary,
+                    backgroundColor: cv.surfaceHover,
+                  },
+                }}
+              >
+                <ChatBubbleOutlineOutlinedIcon sx={{ fontSize: 22 }} />
+              </IconButton>
+            </Tooltip>
+          </>
+        )}
 
         {onDelete && (
           <>
