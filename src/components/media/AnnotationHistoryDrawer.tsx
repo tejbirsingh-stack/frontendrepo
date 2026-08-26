@@ -1224,6 +1224,9 @@ export default function AnnotationHistoryDrawer({
           : [];
         setHighlightSummary(apiSummary || null);
         setHighlightTags(apiTags);
+        if (res.status === 'failed' || res.error) {
+          setHighlightError(res.error || 'AI summary failed.');
+        }
       })
       .catch(() => {
         if (cancelled) return;

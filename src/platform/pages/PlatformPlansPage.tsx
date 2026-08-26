@@ -80,6 +80,8 @@ const emptyForm = {
   isPublic: true,
   isFeatured: false,
   hasAI: false,
+  isFree: false,
+  trialDays: '14',
   sortOrder: '',
   // Visibility flags for dynamic features
   showProjectQuota: true,
@@ -109,6 +111,7 @@ export default function PlatformPlansPage() {
   const [editingFeature, setEditingFeature] = useState<PlanFeature | null>(null);
   const [featureToDelete, setFeatureToDelete] = useState<PlanFeature | null>(null);
   const [deleteFeatureDialogOpen, setDeleteFeatureDialogOpen] = useState(false);
+  const [allPlans, setAllPlans] = useState<PlatformPlan[]>([]);
 
   // Load the feature catalog from DB on mount
   useEffect(() => {
@@ -149,6 +152,8 @@ export default function PlatformPlansPage() {
       isPublic: plan.isPublic,
       isFeatured: plan.isFeatured,
       hasAI: plan.hasAI,
+      isFree: plan.isFree || false,
+      trialDays: String(plan.trialDays ?? '14'),
       sortOrder: String(plan.sortOrder || ''),
       showProjectQuota: plan.showProjectQuota ?? true,
       showStorageQuota: plan.showStorageQuota ?? true,
@@ -184,6 +189,11 @@ export default function PlatformPlansPage() {
       return;
     }
 
+    if (form.isFree && (!form.trialDays || Number(form.trialDays) <= 0)) {
+      setFormError('Trial Days must be a positive number greater than zero.');
+      return;
+    }
+
     const storageQuotaBytes = String(Math.round(Number(form.storageAmount) * 1024 ** 2));
 
     const body = {
@@ -204,6 +214,8 @@ export default function PlatformPlansPage() {
       isPublic: form.isPublic,
       isFeatured: form.isFeatured,
       hasAI: form.hasAI,
+      isFree: form.isFree,
+      trialDays: form.isFree ? Number(form.trialDays) : undefined,
       sortOrder: Number(form.sortOrder),
     };
 
@@ -274,6 +286,7 @@ export default function PlatformPlansPage() {
             setPlanToDelete(plan);
             setDeleteDialogOpen(true);
           }}
+          onPlansChange={setAllPlans}
         />
       )}
 
@@ -424,18 +437,60 @@ export default function PlatformPlansPage() {
               onChange={(e) => setForm((f) => ({ ...f, ctaLabel: e.target.value }))}
               placeholder="e.g. Get started"
             />
+            
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={form.isFree}
+                  onChange={(e) => {
+                     const isFree = e.target.checked;
+                     if (isFree) {
+                       const existingFree = allPlans.find(p => p.isFree && p.id !== form.id);
+                       if (existingFree) {
+                         toast.error('A free plan already exists. Only one free plan is allowed.');
+                         return;
+                       }
+                     }
+                     setForm((f) => ({ 
+                       ...f, 
+                       isFree, 
+                       monthlyPriceDollars: isFree ? '0' : f.monthlyPriceDollars,
+                       yearlyPriceDollars: isFree ? '0' : f.yearlyPriceDollars,
+                     }));
+                  }}
+                />
+              }
+              label="Is Free/Trial Plan?"
+              sx={{ gridColumn: '1 / -1' }}
+            />
+
+            {form.isFree && (
+              <TextField
+                label="Trial Days"
+                size="small"
+                type="number"
+                value={form.trialDays}
+                onChange={(e) => setForm((f) => ({ ...f, trialDays: e.target.value }))}
+                helperText="Days until expiration"
+                inputProps={{ min: 1 }}
+                sx={{ gridColumn: '1 / -1' }}
+              />
+            )}
+
             <TextField
               label="Monthly price (USD)"
               size="small"
               type="number"
-              value={form.monthlyPriceDollars}
+              disabled={form.isFree}
+              value={form.isFree ? '0' : form.monthlyPriceDollars}
               onChange={(e) => setForm((f) => ({ ...f, monthlyPriceDollars: e.target.value }))}
             />
             <TextField
               label="Yearly price (USD)"
               size="small"
               type="number"
-              value={form.yearlyPriceDollars}
+              disabled={form.isFree}
+              value={form.isFree ? '0' : form.yearlyPriceDollars}
               onChange={(e) => setForm((f) => ({ ...f, yearlyPriceDollars: e.target.value }))}
             />
             <TextField

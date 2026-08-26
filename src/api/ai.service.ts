@@ -64,6 +64,7 @@ export interface AiHighlightsResponseDto {
   status: string;
   summary: string | null;
   tags: string[];
+  error?: string | null;
 }
 
 export async function getAiHighlightsRequest(assetId: string): Promise<AiHighlightsResponseDto> {

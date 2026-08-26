@@ -76,6 +76,7 @@ export default function TrashConfirmModal({
     const currentReason = reason.trim();
     setConfirmationText('');
     setReason('');
+    onClose();
     onConfirm(currentReason);
   };
 

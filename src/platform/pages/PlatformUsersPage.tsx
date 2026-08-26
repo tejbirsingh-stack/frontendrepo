@@ -22,6 +22,7 @@ import {
   invitePlatformUser,
   patchPlatformUser,
 } from '../api/platformApi';
+import toast from 'react-hot-toast';
 import {
   ActiveFilterChips,
   EmptyState,
@@ -48,6 +49,7 @@ import {
   text,
 } from '../utils/platformListHelpers';
 import { noahDialogSlotProps } from '../../constants/dialogStyles';
+import { selectInDialogMenuProps } from '../../constants/dropdownMenu';
 import { cv } from '../../theme/cssVars';
 
 const emptyInvite = {
@@ -92,7 +94,8 @@ const MFA_OPTIONS: ReadonlyArray<FilterOption> = [
 ];
 
 const LOGIN_OPTIONS: ReadonlyArray<FilterOption> = [
-  { value: '', label: 'Any login' },
+  { value: '', label: 'Any login status' },
+  { value: 'has_login', label: 'Has logged in' },
   { value: 'never', label: 'Never logged in' },
 ];
 
@@ -181,10 +184,10 @@ export default function PlatformUsersPage() {
           })),
         ),
       )
-      .catch(() => setOrgOptions([]));
+      .catch((err) => { console.error('[PlatformUsers] fetchOrganizations failed:', err); setOrgOptions([]); });
     fetchPlatformRoles()
-      .then((res) => setRoles(res.roles || []))
-      .catch(() => setRoles([]));
+      .then((res) => { console.log('[PlatformUsers] roles response:', res); setRoles(res.roles || []); })
+      .catch((err) => { console.error('[PlatformUsers] fetchPlatformRoles failed:', err); setRoles([]); });
   }, []);
 
   useEffect(() => {
@@ -300,11 +303,15 @@ export default function PlatformUsersPage() {
   const setUserStatus = async (userId: string, nextStatus: string) => {
     setBusyId(userId);
     setError('');
+    const loadingToastId = toast.loading(`${nextStatus === 'active' ? 'Activating' : 'Suspending'} user...`);
     try {
       await patchPlatformUser(userId, { status: nextStatus });
+      toast.success(`User ${nextStatus === 'active' ? 'activated' : 'suspended'} successfully`, { id: loadingToastId });
       setRefreshToken((t) => t + 1);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Update failed');
+      const msg = err instanceof Error ? err.message : 'Update failed';
+      setError(msg);
+      toast.error(msg, { id: loadingToastId });
     } finally {
       setBusyId('');
     }
@@ -330,6 +337,7 @@ export default function PlatformUsersPage() {
       return;
     }
     setSaving(true);
+    const loadingToastId = toast.loading('Sending invitation...');
     try {
       const body: Record<string, unknown> = {
         email: invite.email.trim(),
@@ -338,10 +346,13 @@ export default function PlatformUsersPage() {
       };
       if (invite.name.trim()) body.name = invite.name.trim();
       await invitePlatformUser(body);
+      toast.success('User invited successfully', { id: loadingToastId });
       closeModal();
       setRefreshToken((t) => t + 1);
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Invite failed');
+      const msg = err instanceof Error ? err.message : 'Invite failed';
+      setFormError(msg);
+      toast.error(msg, { id: loadingToastId });
       setSaving(false);
     }
   };
@@ -597,7 +608,7 @@ export default function PlatformUsersPage() {
         fullWidth
         maxWidth="sm"
         aria-labelledby="invite-user-dialog-title"
-        slotProps={noahDialogSlotProps({ overflow: 'hidden' })}
+        slotProps={noahDialogSlotProps()}
       >
         <DialogTitle id="invite-user-dialog-title" sx={{ fontWeight: 600, color: cv.textPrimary }}>
           Invite user
@@ -630,10 +641,8 @@ export default function PlatformUsersPage() {
               required
               value={invite.orgId}
               onChange={(e) => setInvite((f) => ({ ...f, orgId: e.target.value }))}
+              SelectProps={{ MenuProps: selectInDialogMenuProps }}
             >
-              <MenuItem value="" disabled>
-                Select organization
-              </MenuItem>
               {orgOptions.map((org) => (
                 <MenuItem key={org.id} value={org.id}>
                   {org.name}
@@ -647,10 +656,8 @@ export default function PlatformUsersPage() {
               required
               value={invite.roleId}
               onChange={(e) => setInvite((f) => ({ ...f, roleId: e.target.value }))}
+              SelectProps={{ MenuProps: selectInDialogMenuProps }}
             >
-              <MenuItem value="" disabled>
-                Select role
-              </MenuItem>
               {roles.map((role) => (
                 <MenuItem key={role.id} value={role.id}>
                   {role.name}

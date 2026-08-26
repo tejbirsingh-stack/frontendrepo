@@ -444,7 +444,12 @@ function BillingOverviewTab() {
             <Box>
               <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>Next charge</Typography>
               <Typography sx={{ mt: 0.25, fontSize: '0.9375rem', fontWeight: 600, color: cv.textPrimary }}>
-                {activeSubItem.expiryDateFormatted} · {activeSubItem.total}
+                {activeSubItem.cancelAtPeriodEnd 
+                  ? 'None (Canceled)' 
+                  : scheduledDowngrade
+                    ? `None (Downgrading to ${scheduledDowngrade.planName})`
+                    : `${activeSubItem.expiryDateFormatted} · ${activeSubItem.total}`
+                }
               </Typography>
             </Box>
             <Box>

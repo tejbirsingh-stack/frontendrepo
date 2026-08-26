@@ -345,17 +345,15 @@ export default function PlatformOrganizationsPage() {
         .then((res) => {
           const list = res.plans || [];
           setPlans(list);
-          const freePlan = list.find(
-            (p) => p.id === 'free' || p.name?.toLowerCase() === 'free' || p.monthlyPriceCents === 0,
-          );
-          setForm({ ...emptyForm, planId: freePlan?.id || list[0]?.id || '' });
+          const activePlans = list.filter((p) => p.isActive);
+          const freePlan = activePlans.find((p) => p.isFree);
+          setForm({ ...emptyForm, planId: freePlan?.id || activePlans[0]?.id || '' });
         })
         .catch(() => undefined);
     } else {
-      const freePlan = plans.find(
-        (p) => p.id === 'free' || p.name?.toLowerCase() === 'free' || p.monthlyPriceCents === 0,
-      );
-      setForm({ ...emptyForm, planId: freePlan?.id || plans[0]?.id || '' });
+      const activePlans = plans.filter((p) => p.isActive);
+      const freePlan = activePlans.find((p) => p.isFree);
+      setForm({ ...emptyForm, planId: freePlan?.id || activePlans[0]?.id || '' });
     }
     setFormError('');
     setModalOpen(true);
@@ -746,7 +744,7 @@ export default function PlatformOrganizationsPage() {
                 },
               }}
             >
-              {plans.map((plan) => {
+              {plans.filter(p => p.isActive).map((plan) => {
                 const cents = plan.monthlyPriceCents ?? 0;
                 const label = cents > 0 ? `${plan.name} — $${(cents / 100).toFixed(0)}/mo` : `${plan.name} ($0)`;
                 return (

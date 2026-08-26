@@ -1,5 +1,6 @@
 import { platformRequest } from './platformClient';
-import type { PlatformAdmin } from '../auth/platformStorage';
+import { readPlatformToken, type PlatformAdmin } from '../auth/platformStorage';
+import { env } from '../../config/env';
 
 export type PlanFeature = {
   id: string;
@@ -316,6 +317,7 @@ export type PlatformDefaultContentItem = {
   createdAt?: string;
   updatedAt?: string;
   previewUrl?: string | null;
+  globalMedia?: boolean;
 };
 
 export async function fetchDefaultContent() {
@@ -326,11 +328,211 @@ export async function fetchDefaultContent() {
   }>('/platform/default-content');
 }
 
-export async function uploadDefaultContent(formData: FormData) {
-  return platformRequest<{ success: boolean; item: PlatformDefaultContentItem }>(
-    '/platform/default-content',
-    { method: 'POST', body: formData },
+export async function uploadDefaultContent(
+  formData: FormData,
+  onProgress?: (progressPercent: number, loadedBytes: number, totalBytes: number) => void,
+) {
+  const token = readPlatformToken();
+  const baseUrl = (env.apiBaseUrl || '/api').replace(/\/$/, '');
+  const url = `${baseUrl}/platform/default-content`;
+
+  return new Promise<{ success: boolean; item: PlatformDefaultContentItem }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Accept', 'application/json');
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent, e.loaded, e.total);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      let data: any = {};
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch (e) {}
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        reject(new Error(data?.message || 'Upload failed'));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during upload'));
+    };
+
+    xhr.send(formData);
+  });
+}
+
+export async function uploadSingleChunk(
+  sessionId: string,
+  partNumber: number,
+  chunkBlob: Blob,
+  presignedUrl: string | null,
+  token: string | null,
+  baseUrl: string,
+  onProgress?: (loaded: number) => void,
+): Promise<string> {
+  if (presignedUrl) {
+    try {
+      const etag = await new Promise<string>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', presignedUrl);
+        if (xhr.upload && onProgress) {
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) onProgress(e.loaded);
+          };
+        }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const rawEtag = xhr.getResponseHeader('ETag') || `"${partNumber}"`;
+            resolve(rawEtag.replace(/"/g, ''));
+          } else {
+            reject(new Error(`Direct B2 PUT failed status ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Direct B2 network error'));
+        xhr.send(chunkBlob);
+      });
+      return etag;
+    } catch (e) {
+      console.warn(`[ChunkUpload] Direct B2 PUT failed for part ${partNumber}, using backend fallback:`, e);
+    }
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const chunkApiUrl = `${baseUrl}/media/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&partNumber=${partNumber}`;
+    xhr.open('PUT', chunkApiUrl);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(e.loaded);
+      };
+    }
+
+    xhr.onload = () => {
+      let data: any = {};
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch (err) {}
+      if (xhr.status >= 200 && xhr.status < 300 && data.etag) {
+        resolve(String(data.etag).replace(/"/g, ''));
+      } else {
+        reject(new Error(data.message || `Chunk upload failed status ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Backend chunk upload network error'));
+    xhr.send(chunkBlob);
+  });
+}
+
+export async function uploadGlobalMediaChunked(
+  file: File,
+  title?: string,
+  onProgress?: (loadedBytes: number, totalBytes: number) => void,
+) {
+  const token = readPlatformToken();
+  const baseUrl = (env.apiBaseUrl || '/api').replace(/\/$/, '');
+  const displayTitle = title?.trim() || file.name.replace(/\.[^/.]+$/, '');
+
+  // 1. Initiate resumable upload session with isGlobalMedia = true
+  const initRes = await platformRequest<{ sessionId: string; uploadId: string; key: string }>(
+    '/media/upload/init',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type || 'application/octet-stream',
+        title: displayTitle,
+        isGlobalMedia: true,
+        visibility: 'public',
+      }),
+    },
   );
+
+  const { sessionId } = initRes;
+  const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+  const totalParts = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+  const parts: { PartNumber: number; ETag: string }[] = [];
+  const partLoadedBytes = new Array(totalParts + 1).fill(0);
+
+  const reportProgress = () => {
+    if (!onProgress) return;
+    const totalLoadedBytes = partLoadedBytes.reduce((a, b) => a + b, 0);
+    onProgress(Math.min(totalLoadedBytes, file.size), file.size);
+  };
+
+  const uploadTasks = Array.from({ length: totalParts }, (_, i) => i + 1);
+  const CONCURRENCY = 3;
+
+  const runWorker = async () => {
+    while (uploadTasks.length > 0) {
+      const partNumber = uploadTasks.shift()!;
+      const start = (partNumber - 1) * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunkBlob = file.slice(start, end);
+
+      let presignedUrl: string | null = null;
+      try {
+        const urlRes = await platformRequest<{ success: boolean; partNumber: number; presignedUrl: string }>(
+          `/media/upload/chunk-url?sessionId=${encodeURIComponent(sessionId)}&partNumber=${partNumber}`,
+        );
+        presignedUrl = urlRes.presignedUrl;
+      } catch (err) {
+        console.warn(`[ChunkUpload] Could not get presigned URL for part ${partNumber}`, err);
+      }
+
+      const etag = await uploadSingleChunk(
+        sessionId,
+        partNumber,
+        chunkBlob,
+        presignedUrl,
+        token,
+        baseUrl,
+        (chunkLoaded) => {
+          partLoadedBytes[partNumber] = chunkLoaded;
+          reportProgress();
+        },
+      );
+
+      partLoadedBytes[partNumber] = chunkBlob.size;
+      parts.push({ PartNumber: partNumber, ETag: etag });
+      reportProgress();
+    }
+  };
+
+  const workers = Array.from({ length: Math.min(CONCURRENCY, totalParts) }, () => runWorker());
+  await Promise.all(workers);
+  parts.sort((a, b) => a.PartNumber - b.PartNumber);
+
+  // 3. Complete resumable upload session
+  const completeRes = await platformRequest<{ success: boolean; asset: any }>(
+    '/media/upload/complete',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionId,
+        parts,
+        isGlobalMedia: true,
+      }),
+    },
+  );
+
+  return completeRes;
 }
 
 export async function updateDefaultContent(id: string, body: Record<string, unknown>) {
