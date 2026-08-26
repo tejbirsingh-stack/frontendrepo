@@ -79,6 +79,13 @@ export async function createOrganization(body: Record<string, unknown>) {
   });
 }
 
+export async function inviteOrganization(body: { email: string }) {
+  return platformRequest<{ success: boolean; message: string }>('/platform/organizations/invite', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function fetchOrganization(orgId: string) {
   return platformRequest<{ success: boolean; organization: Record<string, unknown> }>(
     `/platform/organizations/${orgId}`,
