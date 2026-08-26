@@ -18,6 +18,7 @@ import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
+import PlatformMediaInfoChip from './PlatformMediaInfoChip';
 import AiSummaryBlock from '../media/AiSummaryBlock';
 import TruncatedText from '../TruncatedText';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -112,6 +113,7 @@ function FavoriteButton({
         sx={{
           width: 32,
           height: 32,
+          borderRadius: '8px',
           ...thumbnailOverlayChipStyles,
           color: isFavorite ? cv.warning : cv.textInverse,
           transition: 'all 0.2s ease',
@@ -183,17 +185,23 @@ function TypeBadge({ type, isProject }: { type: MediaType; isProject?: boolean }
         sx={{
           display: 'inline-flex',
           alignItems: 'center',
+          justifyContent: 'center',
           gap: 0.5,
-          px: 0.875,
-          py: 0.25,
-          borderRadius: '999px',
+          height: 32,
+          px: 1,
+          borderRadius: '8px',
           ...thumbnailOverlayChipStyles,
         }}
       >
-        <Icon sx={{ fontSize: 12, color: cv.textInverse }} />
+        <Icon sx={{ fontSize: 16, color: cv.textInverse }} />
         <Typography
           variant="caption"
-          sx={{ fontSize: '0.6875rem', fontWeight: 500, color: cv.textInverse }}
+          sx={{
+            fontSize: '0.6875rem',
+            fontWeight: 500,
+            color: cv.textInverse,
+            lineHeight: 1,
+          }}
         >
           {label}
         </Typography>
@@ -794,6 +802,7 @@ export default function MediaItemCard({
           sx={{ flex: 1, minWidth: 0, fontWeight: 500, fontSize: '0.875rem', textAlign: 'left' }}
         />
         <ShareStatusBadge item={item} />
+        <PlatformMediaInfoChip item={item} />
         <MediaItemActionsMenu item={item} />
       </Box>
     </Box>

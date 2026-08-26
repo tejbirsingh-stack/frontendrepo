@@ -11,6 +11,7 @@ import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
+import PlatformMediaInfoChip from './PlatformMediaInfoChip';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { MediaItem, MediaType } from '../../data/mockMedia';
 import { getMediaViewerPath } from '../../utils/mediaNavigation';
@@ -307,6 +308,7 @@ export default function MediaListRow({
         </IconButton>
       </Tooltip>
 
+      <PlatformMediaInfoChip item={item} />
       <MediaItemActionsMenu item={item} />
     </Box>
   );

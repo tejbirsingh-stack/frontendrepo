@@ -1981,7 +1981,7 @@ export default function Sidebar({ variant = 'persistent', onClose, drawerOpen = 
         sx={{
           flexShrink: 0,
           pt: 1,
-          pb: 2,
+          pb: 1,
           borderTop: "1px solid var(--noah-border)",
           background: cv.sidebarScrim,
         }}

@@ -646,7 +646,7 @@ export default function DashboardPage({
         !seenLocalIds.has(item.id) &&
         !trashedIds.has(item.id) &&
         item.status !== 'trash' &&
-        (!item.workspaceId || item.workspaceId === activeWorkspaceId || (item as any).globalMedia)
+        (!item.workspaceId || item.workspaceId === activeWorkspaceId || item.globalMedia)
     );
     const combinedWorkspaceItems = [...workspaceItemsLocal, ...extraLibItems];
 
