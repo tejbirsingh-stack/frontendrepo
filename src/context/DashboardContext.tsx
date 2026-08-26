@@ -163,6 +163,8 @@ interface DashboardContextValue {
   setDropTargetKey: (key: string | null) => void;
   globalSearchQuery: string;
   setGlobalSearchQuery: (query: string) => void;
+  aiSearchEnabled: boolean;
+  setAiSearchEnabled: (enabled: boolean) => void;
   sidebarSelection: SidebarSelection | null;
   setSidebarSelection: (selection: SidebarSelection) => void;
   clearSidebarSelection: () => void;
@@ -181,7 +183,6 @@ const DashboardContext = createContext<DashboardContextValue | null>(null);
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const aiEntitled = env.aiEnabled && user?.organization?.aiEnabled !== false;
   const [workspaces, setWorkspaces] = useState<Workspace[]>(initialWorkspaces);
   const [fetchedFavorites, setFetchedFavorites] = useState<MediaItem[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceIdState] = useState(() => {
@@ -215,6 +216,24 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [draggingMediaIds, setDraggingMediaIdsState] = useState<Set<string>>(new Set());
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [aiSearchEnabled, setAiSearchEnabledState] = useState(() => {
+    try {
+      const stored = localStorage.getItem('noah-ai-search-enabled');
+      if (stored === 'false') return false;
+      if (stored === 'true') return true;
+    } catch {
+      /* ignore */
+    }
+    return true;
+  });
+  const setAiSearchEnabled = useCallback((enabled: boolean) => {
+    setAiSearchEnabledState(enabled);
+    try {
+      localStorage.setItem('noah-ai-search-enabled', String(enabled));
+    } catch {
+      /* ignore */
+    }
+  }, []);
   const [sidebarSelection, setSidebarSelectionState] = useState<SidebarSelection | null>(null);
 
   const [libraryItems, setLibraryItems] = useState<MediaItem[]>([]);
@@ -231,7 +250,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const res = await getLibraryItems(listParamsRef.current);
       const q = (params.q || '').trim();
       const items =
-        aiEntitled && q.length > 2
+        env.aiEnabled && aiSearchEnabled && q.length > 2
           ? await mergeLibraryWithAiHits(res.items, q)
           : res.items;
       setLibraryItems(items);
@@ -243,7 +262,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     } finally {
       setLibraryLoading(false);
     }
-  }, [aiEntitled]);
+  }, [aiSearchEnabled]);
 
   const fetchLibraryNextPage = useCallback(async () => {
     if (!listParamsRef.current || !nextPageToken || libraryLoadingMore) return;
@@ -460,6 +479,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             projectLocations: a.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
             compressionStatus: a.transcodingStatus || 'completed',
             visibility: a.visibility,
+            globalMedia: Boolean(a.globalMedia),
             customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
             status: a.status === 'duplicate' ? 'duplicate' : 'active',
           };
@@ -626,6 +646,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             projectLocations: a.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
             compressionStatus: a.transcodingStatus || 'completed',
             visibility: a.visibility,
+            globalMedia: Boolean(a.globalMedia),
             customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
             status: a.status === 'duplicate' ? 'duplicate' : 'active',
           };
@@ -729,6 +750,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             location: null,
             compressionStatus: a.transcodingStatus || 'completed',
             visibility: a.visibility,
+            globalMedia: Boolean(a.globalMedia),
             customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
             status: a.status === 'duplicate' ? 'duplicate' : 'active',
           };
@@ -906,6 +928,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                 projectLocations: a.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
                 compressionStatus: a.transcodingStatus || 'completed',
             visibility: a.visibility,
+                globalMedia: Boolean(a.globalMedia),
                 customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
                 status: a.status === 'duplicate' ? 'duplicate' : 'active',
               });
@@ -995,6 +1018,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
               projectLocations: [],
               compressionStatus: a.transcodingStatus || 'completed',
             visibility: a.visibility,
+              globalMedia: Boolean(a.globalMedia),
               customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
               status: 'active',
             };
@@ -2903,6 +2927,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       setDropTargetKey,
       globalSearchQuery,
       setGlobalSearchQuery,
+      aiSearchEnabled,
+      setAiSearchEnabled,
       sidebarSelection,
       setSidebarSelection,
       clearSidebarSelection,
@@ -2992,6 +3018,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       clearDraggingMedia,
       dropTargetKey,
       globalSearchQuery,
+      aiSearchEnabled,
+      setAiSearchEnabled,
       sidebarSelection,
       setSidebarSelection,
       clearSidebarSelection,

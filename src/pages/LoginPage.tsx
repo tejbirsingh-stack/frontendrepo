@@ -211,7 +211,7 @@ export default function LoginPage() {
           position: 'relative',
           zIndex: 1,
           width: '100%',
-          maxWidth: { xs: 640, sm: 920 },
+          maxWidth: 640,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -219,59 +219,61 @@ export default function LoginPage() {
         }}
       >
         <Box
-          component={RouterLink}
-          to="/"
-          aria-label="Back to NOAH Cloud home"
           className="login-auth-logo-wrapper"
           sx={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            gap: { xs: 0.5, sm: 1 },
             width: '100%',
-            maxWidth: { xs: 300, sm: 380 },
-            height: { xs: 100, sm: 140 },
-            mb: 3,
-            textDecoration: 'none',
-            cursor: 'pointer',
+            maxWidth: { xs: 360, sm: 460 },
+            position: 'relative',
+            zIndex: 2,
           }}
         >
           <Box
-            component="img"
-            src="/noah-logo.png"
-            alt="NOAH CLOUD"
-            className="login-auth-logo"
+            component={RouterLink}
+            to="/"
+            aria-label="Back to NOAH Cloud home"
             sx={{
-              width: '100%',
-              maxWidth: '100%',
-              height: '100%',
-              maxHeight: 28,
-              objectFit: 'contain',
-              objectPosition: 'center',
-              transform: 'scale(2.2)',
-              transformOrigin: 'center center',
-              mixBlendMode: 'lighten',
-              filter: 'drop-shadow(0 4px 24px rgba(168, 85, 247, 0.7))',
-            }}
-          />
-        </Box>
-
-        <Box
-          sx={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: 440,
-            overflow: 'visible',
-          }}
-        >
-          <NoahMascot pose="wave" preset="authCompanion" />
-          <GlassCard
-            glow
-            sx={{
-              position: 'relative',
-              zIndex: 1,
-              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: '1 1 auto',
+              minWidth: 0,
+              height: { xs: 56, sm: 72 },
+              textDecoration: 'none',
+              cursor: 'pointer',
             }}
           >
+            <Box
+              component="img"
+              src="/noah-logo.png"
+              alt="NOAH CLOUD"
+              className="login-auth-logo"
+              sx={{
+                width: '100%',
+                maxWidth: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                objectPosition: 'center',
+                mixBlendMode: 'lighten',
+                filter: 'drop-shadow(0 4px 24px rgba(168, 85, 247, 0.7))',
+              }}
+            />
+          </Box>
+          <NoahMascot pose="wave" preset="authBrand" />
+        </Box>
+
+        <GlassCard
+          glow
+          sx={{
+            position: 'relative',
+            zIndex: 1,
+            width: '100%',
+            maxWidth: 440,
+          }}
+        >
           <Box
             component="form"
             onSubmit={handleSubmit}
@@ -500,7 +502,6 @@ export default function LoginPage() {
             </Typography>
           </Box>
         </GlassCard>
-        </Box>
       </Box>
 
       {/* Demo-only accounts bubble — delete with LoginDemoAccountsBubble.tsx */}

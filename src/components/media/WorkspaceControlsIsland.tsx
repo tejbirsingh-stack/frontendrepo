@@ -151,7 +151,12 @@ export default function WorkspaceControlsIsland({
     <Box
       role="toolbar"
       aria-label="Workspace controls"
-      sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, lg: 1 } }}
+      sx={{
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: { xs: 0.5, lg: 1 },
+        position: 'relative',
+      }}
     >
       {!hideZoomControls && (
         <Box
