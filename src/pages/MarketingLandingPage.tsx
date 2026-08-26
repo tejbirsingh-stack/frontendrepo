@@ -299,6 +299,8 @@ export default function MarketingLandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [heroTitle, setHeroTitle] = useState(FALLBACK_HERO.title);
   const [heroSubtitle, setHeroSubtitle] = useState(FALLBACK_HERO.subtitle);
+  const [ctaLabel, setCtaLabel] = useState('Start free trial');
+  const [ctaHref, setCtaHref] = useState('');
   const [plansEnabled, setPlansEnabled] = useState(true);
   const [plans, setPlans] = useState<LandingPlan[]>(FALLBACK_PLANS);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('annual');
@@ -316,6 +318,8 @@ export default function MarketingLandingPage() {
         const page = res.page || {};
         setHeroTitle(asString(page.heroTitle || page.heroHeadline, FALLBACK_HERO.title));
         setHeroSubtitle(asString(page.heroSubtitle || page.heroSubheadline, FALLBACK_HERO.subtitle));
+        setCtaLabel(asString(page.ctaLabel || page.heroCtaLabel, 'Start free trial'));
+        setCtaHref(asString(page.ctaHref || page.heroCtaUrl, ''));
         if (typeof page.plansEnabled === 'boolean') setPlansEnabled(page.plansEnabled);
       })
       .catch(() => {
@@ -630,9 +634,15 @@ export default function MarketingLandingPage() {
               {heroSubtitle}
             </Typography>
             <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center', gap: 1.5, flexWrap: 'wrap', ...heroAnim(320) }}>
-              <Button onClick={openTrial} sx={primaryButtonSx({ px: 3.5 })}>
-                Start free trial
-              </Button>
+              {ctaHref ? (
+                <Button component={RouterLink} to={ctaHref} sx={primaryButtonSx({ px: 3.5 })}>
+                  {ctaLabel}
+                </Button>
+              ) : (
+                <Button onClick={openTrial} sx={primaryButtonSx({ px: 3.5 })}>
+                  {ctaLabel}
+                </Button>
+              )}
               <Button onClick={openDemo} sx={ghostButtonSx({ px: 3.5 })}>
                 Book a demo
               </Button>
