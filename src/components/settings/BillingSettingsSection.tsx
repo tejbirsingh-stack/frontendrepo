@@ -15,7 +15,9 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TablePagination,
   Tabs,
+  TextField,
   Typography,
 } from '@mui/material';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
@@ -27,6 +29,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import SettingsAdminToolbar from './SettingsAdminToolbar';
 import SettingsDataTable, { type SettingsTableColumn } from './SettingsDataTable';
 import TruncatedText from '../TruncatedText';
+import PaymentSuccessModal from './PaymentSuccessModal';
 import { useAuth } from '../../auth/AuthContext';
 import { getDynamicPlanDetails } from '../../utils/planHelper';
 import {
@@ -195,6 +198,36 @@ function BillingOverviewTab() {
   const [deleteCardTarget, setDeleteCardTarget] = useState<any | null>(null);
   const [deletingCard, setDeletingCard] = useState(false);
 
+  const [billingAddress, setBillingAddress] = useState<any>({
+    companyName: user?.organization?.name || '',
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: 'US',
+  });
+  const [invoiceConfig, setInvoiceConfig] = useState<any>({
+    companyName: user?.organization?.name || '',
+    taxId: '',
+    invoiceEmail: user?.email || '',
+    billingContact: user?.name || '',
+  });
+  const [editAddressModalOpen, setEditAddressModalOpen] = useState(false);
+  const [editInvoiceModalOpen, setEditInvoiceModalOpen] = useState(false);
+
+  const fetchBillingDetails = async () => {
+    try {
+      const res = await billingService.getBillingDetails();
+      if (res?.success) {
+        if (res.billingAddress) setBillingAddress(res.billingAddress);
+        if (res.invoiceConfig) setInvoiceConfig(res.invoiceConfig);
+      }
+    } catch (err) {
+      console.error('Failed to fetch billing details', err);
+    }
+  };
+
   const fetchPaymentMethods = async () => {
     try {
       setLoadingCards(true);
@@ -236,12 +269,18 @@ function BillingOverviewTab() {
     }
   };
 
+  const [scheduledDowngrade, setScheduledDowngrade] = useState<any | null>(null);
+  const [successModalDetails, setSuccessModalDetails] = useState<any>(null);
+
   const fetchSubscriptions = async () => {
     try {
       setLoadingSubs(true);
       const res = await billingService.getSubscriptions();
-      if (res?.success && Array.isArray(res.subscriptions)) {
-        setSubscriptions(res.subscriptions);
+      if (res?.success) {
+        if (Array.isArray(res.subscriptions)) {
+          setSubscriptions(res.subscriptions);
+        }
+        setScheduledDowngrade(res.scheduledDowngrade || null);
       }
     } catch (err) {
       console.error('Failed to fetch subscriptions', err);
@@ -250,9 +289,22 @@ function BillingOverviewTab() {
     }
   };
 
+  const handleCancelScheduledDowngrade = async () => {
+    try {
+      toast.loading('Canceling scheduled downgrade...', { id: 'cancel-downgrade' });
+      await billingService.cancelScheduledDowngrade();
+      toast.success('Scheduled downgrade canceled! You will remain on your current plan.', { id: 'cancel-downgrade' });
+      await fetchSubscriptions();
+      await refreshUser();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to cancel scheduled downgrade', { id: 'cancel-downgrade' });
+    }
+  };
+
   useEffect(() => {
     fetchSubscriptions();
     fetchPaymentMethods();
+    fetchBillingDetails();
   }, []);
 
   useEffect(() => {
@@ -267,6 +319,9 @@ function BillingOverviewTab() {
           await refreshUser();
           await fetchSubscriptions();
           toast.success(res?.message || 'Subscription successfully updated!', { id: 'stripe-sync' });
+          if (res?.checkoutDetails) {
+            setSuccessModalDetails(res.checkoutDetails);
+          }
         })
         .catch((err) => {
           console.error('[Stripe Sync Error]', err);
@@ -389,7 +444,12 @@ function BillingOverviewTab() {
             <Box>
               <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>Next charge</Typography>
               <Typography sx={{ mt: 0.25, fontSize: '0.9375rem', fontWeight: 600, color: cv.textPrimary }}>
-                {activeSubItem.expiryDateFormatted} · {activeSubItem.total}
+                {activeSubItem.cancelAtPeriodEnd 
+                  ? 'None (Canceled)' 
+                  : scheduledDowngrade
+                    ? `None (Downgrading to ${scheduledDowngrade.planName})`
+                    : `${activeSubItem.expiryDateFormatted} · ${activeSubItem.total}`
+                }
               </Typography>
             </Box>
             <Box>
@@ -444,6 +504,65 @@ function BillingOverviewTab() {
             Manage plan
           </Button>
         </Box>
+
+        {scheduledDowngrade && (
+          <Box
+            sx={{
+              width: '100%',
+              mt: 2,
+              pt: 2,
+              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 2,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Box
+                sx={{
+                  px: 1.5,
+                  py: 0.5,
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(234, 179, 8, 0.12)',
+                  border: '1px solid rgba(234, 179, 8, 0.3)',
+                  color: '#eab308',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.04em',
+                }}
+              >
+                UPCOMING PLAN
+              </Box>
+              <Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary, fontWeight: 500 }}>
+                <strong>{scheduledDowngrade.planName}</strong> · Effective{' '}
+                {new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(
+                  new Date(scheduledDowngrade.effectiveDate || Date.now()),
+                )}{' '}
+                (at end of billing cycle)
+              </Typography>
+            </Box>
+            <Button
+              variant="outlined"
+              size="small"
+              sx={{
+                borderColor: 'rgba(234, 179, 8, 0.4)',
+                color: '#eab308',
+                textTransform: 'none',
+                borderRadius: '8px',
+                px: 2,
+                '&:hover': {
+                  borderColor: '#eab308',
+                  backgroundColor: 'rgba(234, 179, 8, 0.1)',
+                },
+              }}
+              onClick={handleCancelScheduledDowngrade}
+            >
+              Cancel scheduled downgrade
+            </Button>
+          </Box>
+        )}
       </Box>
 
       {/* Confirmation Modal for Subscription Cancellation */}
@@ -533,6 +652,14 @@ function BillingOverviewTab() {
           </Stack>
         </DialogContent>
       </Dialog>
+
+      {/* Payment Success Confirmation & Invoice Download Modal */}
+      <PaymentSuccessModal
+        open={Boolean(successModalDetails)}
+        onClose={() => setSuccessModalDetails(null)}
+        details={successModalDetails}
+        onManageBilling={handlePortal}
+      />
 
       <Box
         sx={{
@@ -720,21 +847,41 @@ function BillingOverviewTab() {
                 Billing address
               </Typography>
               <Box sx={{ flex: 1 }} />
-              <Button variant="outlined" size="small" sx={outlineButtonSx}>
+              <Button
+                variant="outlined"
+                size="small"
+                sx={outlineButtonSx}
+                onClick={() => setEditAddressModalOpen(true)}
+              >
                 Edit
               </Button>
             </Box>
             <Box sx={{ px: 2, py: 2 }}>
-              <Typography
-                sx={{
-                  fontSize: '0.875rem',
-                  color: cv.textSecondary,
-                  lineHeight: 1.6,
-                  whiteSpace: 'pre-line',
-                }}
-              >
-                {formatBillingAddress(billing.billingAddress)}
-              </Typography>
+              {billingAddress?.line1 ? (
+                <Typography
+                  sx={{
+                    fontSize: '0.875rem',
+                    color: cv.textSecondary,
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-line',
+                  }}
+                >
+                  {billingAddress.companyName && (
+                    <span style={{ fontWeight: 600, color: cv.textPrimary }}>
+                      {billingAddress.companyName}
+                      <br />
+                    </span>
+                  )}
+                  {billingAddress.line1}
+                  {billingAddress.line2 ? `\n${billingAddress.line2}` : ''}
+                  {`\n${billingAddress.city}${billingAddress.state ? `, ${billingAddress.state}` : ''} ${billingAddress.postalCode}`}
+                  {`\n${billingAddress.country}`}
+                </Typography>
+              ) : (
+                <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted }}>
+                  No billing address configured yet. Click edit to add your address.
+                </Typography>
+              )}
               <Typography sx={{ mt: 1.25, fontSize: '0.75rem', color: cv.textMuted }}>
                 Used for invoices and US state sales tax calculation.
               </Typography>
@@ -748,7 +895,12 @@ function BillingOverviewTab() {
                 Invoice configuration
               </Typography>
               <Box sx={{ flex: 1 }} />
-              <Button variant="outlined" size="small" sx={outlineButtonSx}>
+              <Button
+                variant="outlined"
+                size="small"
+                sx={outlineButtonSx}
+                onClick={() => setEditInvoiceModalOpen(true)}
+              >
                 Edit
               </Button>
             </Box>
@@ -761,10 +913,10 @@ function BillingOverviewTab() {
                 gap: 2,
               }}
             >
-              <DetailField label="Company name" value={companyName} />
-              <DetailField label="Tax ID" value={taxId} />
-              <DetailField label="Invoice email" value={paymentConfig.invoiceEmail} />
-              <DetailField label="Billing contact" value={billing.billingContact.email} />
+              <DetailField label="Company name" value={invoiceConfig.companyName || 'Not set'} />
+              <DetailField label="Tax ID" value={invoiceConfig.taxId || 'Not set'} />
+              <DetailField label="Invoice email" value={invoiceConfig.invoiceEmail || 'Not set'} />
+              <DetailField label="Billing contact" value={invoiceConfig.billingContact || 'Not set'} />
             </Box>
           </Box>
         </Box>
@@ -777,6 +929,20 @@ function BillingOverviewTab() {
           fetchPaymentMethods();
           refreshUser();
         }}
+      />
+
+      <EditBillingAddressModal
+        open={editAddressModalOpen}
+        onClose={() => setEditAddressModalOpen(false)}
+        initialAddress={billingAddress}
+        onSuccess={(updated) => setBillingAddress(updated)}
+      />
+
+      <EditInvoiceConfigModal
+        open={editInvoiceModalOpen}
+        onClose={() => setEditInvoiceModalOpen(false)}
+        initialConfig={invoiceConfig}
+        onSuccess={(updated) => setInvoiceConfig(updated)}
       />
 
       <Dialog
@@ -872,22 +1038,59 @@ function BillingOverviewTab() {
 
 function BillingInvoicesTab() {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    totalInvoices: 0,
+    lastPaymentDate: '—',
+    lifetimeSpend: '$0.00',
+  });
+  const [loading, setLoading] = useState(true);
 
-  const invoiceRows = useMemo(() => {
+  useEffect(() => {
+    let isMounted = true;
+    billingService
+      .getInvoices()
+      .then((res) => {
+        if (isMounted && res?.success) {
+          setInvoices(res.invoices || []);
+          if (res.stats) {
+            setStats(res.stats);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load invoices', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filteredInvoices = useMemo(() => {
+    const list = invoices;
     const query = search.trim().toLowerCase();
-    if (!query) return MOCK_BILLING_INVOICES;
-    return MOCK_BILLING_INVOICES.filter((row) =>
+    if (!query) return list;
+    return list.filter((row) =>
       [row.invoiceNumber, row.description, row.date, row.amount, row.status].some((value) =>
-        value.toLowerCase().includes(query),
+        (value || '').toLowerCase().includes(query),
       ),
     );
+  }, [invoices, search]);
+
+  useEffect(() => {
+    setPage(0);
   }, [search]);
 
-  const lastPaidInvoice = MOCK_BILLING_INVOICES[0];
-  const paidTotal = MOCK_BILLING_INVOICES.filter((row) => row.status === 'Paid' && row.amount !== '$0.00')
-    .reduce((sum, row) => sum + parseFloat(row.amount.replace(/[$,]/g, '')), 0);
+  const paginatedRows = useMemo(() => {
+    return filteredInvoices.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  }, [filteredInvoices, page, rowsPerPage]);
 
-  const invoiceColumns: SettingsTableColumn<BillingInvoiceRow>[] = [
+  const invoiceColumns: SettingsTableColumn<any>[] = [
     { id: 'date', label: 'Date', width: '14%', render: (row) => tableText(row.date) },
     {
       id: 'reference',
@@ -908,27 +1111,56 @@ function BillingInvoicesTab() {
       label: '',
       width: '12%',
       align: 'right',
-      render: () => (
-        <Button
-          size="small"
-          endIcon={<OpenInNewOutlinedIcon sx={{ fontSize: 16 }} />}
-          sx={{ color: cv.textSecondary, textTransform: 'none' }}
-        >
-          View
-        </Button>
-      ),
+      render: (row) => {
+        const link = row.invoicePdf || row.invoiceUrl;
+        return (
+          <Button
+            size="small"
+            disabled={!link}
+            onClick={() => {
+              billingService.downloadCustomInvoicePdf(link, row.id);
+            }}
+            endIcon={<OpenInNewOutlinedIcon sx={{ fontSize: 16 }} />}
+            sx={{ color: cv.textSecondary, textTransform: 'none', '&:hover': { color: '#ffffff' } }}
+          >
+            View
+          </Button>
+        );
+      },
     },
   ];
+
+  const handleExportCSV = () => {
+    if (filteredInvoices.length === 0) return;
+
+    const headers = ['Date', 'Reference', 'Description', 'Status', 'Amount', 'Invoice PDF URL'];
+    const csvRows = filteredInvoices.map((inv) => [
+      `"${inv.date || ''}"`,
+      `"${inv.invoiceNumber || ''}"`,
+      `"${(inv.description || '').replace(/"/g, '""')}"`,
+      `"${inv.status || ''}"`,
+      `"${inv.amount || ''}"`,
+      `"${inv.invoicePdf || inv.invoiceUrl || ''}"`,
+    ]);
+
+    const csvContent = [headers.join(','), ...csvRows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `invoices_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-        <StatTile label="Total invoices" value={String(MOCK_BILLING_INVOICES.length)} />
-        <StatTile label="Last payment" value={lastPaidInvoice?.date ?? '—'} />
-        <StatTile
-          label="Lifetime spend"
-          value={paidTotal > 0 ? `$${paidTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '$0.00'}
-        />
+        <StatTile label="Total invoices" value={String(stats.totalInvoices || invoices.length)} />
+        <StatTile label="Last payment" value={stats.lastPaymentDate} />
+        <StatTile label="Lifetime spend" value={stats.lifetimeSpend} />
       </Box>
 
       <Box sx={panelSx}>
@@ -937,17 +1169,457 @@ function BillingInvoicesTab() {
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="Search by date, reference, or amount…"
-            onExport={() => undefined}
+            onExport={handleExportCSV}
+            exportDisabled={filteredInvoices.length === 0}
           />
         </Box>
-        <SettingsDataTable
-          columns={invoiceColumns}
-          rows={invoiceRows}
-          getRowId={(row) => row.id}
-          emptyMessage="No invoices match your search."
-        />
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+            <CircularProgress size={28} sx={{ color: '#a855f7' }} />
+          </Box>
+        ) : (
+          <>
+            <SettingsDataTable
+              columns={invoiceColumns}
+              rows={paginatedRows}
+              getRowId={(row) => row.id}
+              emptyMessage="No invoices match your search."
+            />
+            {filteredInvoices.length > 5 && (
+              <TablePagination
+                component="div"
+                count={filteredInvoices.length}
+                page={page}
+                onPageChange={(_, newPage) => setPage(newPage)}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={(e) => {
+                  setRowsPerPage(parseInt(e.target.value, 10));
+                  setPage(0);
+                }}
+                rowsPerPageOptions={[5, 10, 25]}
+                sx={{
+                  color: cv.textSecondary,
+                  borderTop: `1px solid ${cv.border}`,
+                  '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+                    fontSize: '0.8125rem',
+                    color: cv.textSecondary,
+                  },
+                  '.MuiTablePagination-select': {
+                    color: cv.textPrimary,
+                  },
+                  '.MuiIconButton-root': {
+                    color: cv.textSecondary,
+                    '&.Mui-disabled': { color: cv.textMuted },
+                  },
+                }}
+              />
+            )}
+          </>
+        )}
       </Box>
     </Box>
+  );
+}
+
+interface EditBillingAddressModalProps {
+  open: boolean;
+  onClose: () => void;
+  initialAddress: any;
+  onSuccess: (updated: any) => void;
+}
+
+function EditBillingAddressModal({ open, onClose, initialAddress, onSuccess }: EditBillingAddressModalProps) {
+  const [form, setForm] = useState({
+    companyName: initialAddress?.companyName || '',
+    line1: initialAddress?.line1 || '',
+    line2: initialAddress?.line2 || '',
+    city: initialAddress?.city || '',
+    state: initialAddress?.state || '',
+    postalCode: initialAddress?.postalCode || '',
+    country: initialAddress?.country || 'US',
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (initialAddress) {
+      setForm({
+        companyName: initialAddress.companyName || '',
+        line1: initialAddress.line1 || '',
+        line2: initialAddress.line2 || '',
+        city: initialAddress.city || '',
+        state: initialAddress.state || '',
+        postalCode: initialAddress.postalCode || '',
+        country: initialAddress.country || 'US',
+      });
+    }
+  }, [initialAddress, open]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.line1 || !form.city || !form.state || !form.postalCode) {
+      toast.error('Please fill in required address fields (Street, City, State, ZIP)');
+      return;
+    }
+    try {
+      setSaving(true);
+      toast.loading('Saving billing address...', { id: 'save-address' });
+      const res = await billingService.updateBillingAddress(form);
+      toast.success('Billing address updated!', { id: 'save-address' });
+      onSuccess(res.billingAddress || form);
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update billing address', { id: 'save-address' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputSx = {
+    '& .MuiInputBase-root': {
+      color: '#ffffff',
+      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      borderRadius: '10px',
+      fontSize: '0.875rem',
+      '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.12)' },
+      '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.25)' },
+      '&.Mui-focused fieldset': { borderColor: '#a855f7' },
+    },
+    '& .MuiInputLabel-root': {
+      color: 'rgba(255, 255, 255, 0.6)',
+      fontSize: '0.875rem',
+      '&.Mui-focused': { color: '#a855f7' },
+    },
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={() => !saving && onClose()}
+      PaperProps={{
+        sx: {
+          backgroundColor: '#13111e',
+          backgroundImage: 'none',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          borderRadius: '16px',
+          maxWidth: 520,
+          width: '100%',
+          p: 1,
+          backdropFilter: 'blur(20px)',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+        },
+      }}
+    >
+      <DialogContent sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+          <Box
+            sx={{
+              width: 42,
+              height: 42,
+              borderRadius: '12px',
+              background: 'rgba(168, 85, 247, 0.12)',
+              border: '1px solid rgba(168, 85, 247, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#a855f7',
+            }}
+          >
+            <LocationOnOutlinedIcon fontSize="small" />
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: '1.25rem', fontWeight: 600, color: '#ffffff' }}>
+              Edit Billing Address
+            </Typography>
+            <Typography sx={{ fontSize: '0.8125rem', color: 'rgba(255, 255, 255, 0.6)' }}>
+              Used for official invoices and tax calculation.
+            </Typography>
+          </Box>
+        </Box>
+
+        <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextField
+            label="Company / Recipient Name"
+            fullWidth
+            size="small"
+            value={form.companyName}
+            onChange={(e) => setForm({ ...form, companyName: e.target.value })}
+            sx={inputSx}
+          />
+          <TextField
+            label="Address Line 1 *"
+            fullWidth
+            size="small"
+            required
+            placeholder="1200 Fayette Street"
+            value={form.line1}
+            onChange={(e) => setForm({ ...form, line1: e.target.value })}
+            sx={inputSx}
+          />
+          <TextField
+            label="Address Line 2"
+            fullWidth
+            size="small"
+            placeholder="Suite 400"
+            value={form.line2}
+            onChange={(e) => setForm({ ...form, line2: e.target.value })}
+            sx={inputSx}
+          />
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <TextField
+              label="City *"
+              required
+              size="small"
+              placeholder="Baltimore"
+              value={form.city}
+              onChange={(e) => setForm({ ...form, city: e.target.value })}
+              sx={inputSx}
+            />
+            <TextField
+              label="State / Region *"
+              required
+              size="small"
+              placeholder="MD"
+              value={form.state}
+              onChange={(e) => setForm({ ...form, state: e.target.value })}
+              sx={inputSx}
+            />
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <TextField
+              label="ZIP / Postal Code *"
+              required
+              size="small"
+              placeholder="21201"
+              value={form.postalCode}
+              onChange={(e) => setForm({ ...form, postalCode: e.target.value })}
+              sx={inputSx}
+            />
+            <TextField
+              label="Country *"
+              required
+              size="small"
+              placeholder="United States"
+              value={form.country}
+              onChange={(e) => setForm({ ...form, country: e.target.value })}
+              sx={inputSx}
+            />
+          </Box>
+
+          <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mt: 1 }}>
+            <Button
+              variant="outlined"
+              onClick={onClose}
+              disabled={saving}
+              sx={{
+                borderRadius: '10px',
+                borderColor: cv.border,
+                color: cv.textPrimary,
+                textTransform: 'none',
+                px: 2.5,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={saving}
+              sx={{
+                borderRadius: '10px',
+                background: cv.brandGradient,
+                color: '#ffffff',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+              }}
+            >
+              {saving ? <CircularProgress size={20} color="inherit" /> : 'Save Address'}
+            </Button>
+          </Stack>
+        </Box>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface EditInvoiceConfigModalProps {
+  open: boolean;
+  onClose: () => void;
+  initialConfig: any;
+  onSuccess: (updated: any) => void;
+}
+
+function EditInvoiceConfigModal({ open, onClose, initialConfig, onSuccess }: EditInvoiceConfigModalProps) {
+  const [form, setForm] = useState({
+    companyName: initialConfig?.companyName || '',
+    taxId: initialConfig?.taxId || '',
+    invoiceEmail: initialConfig?.invoiceEmail || '',
+    billingContact: initialConfig?.billingContact || '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (initialConfig) {
+      setForm({
+        companyName: initialConfig.companyName || '',
+        taxId: initialConfig.taxId || '',
+        invoiceEmail: initialConfig.invoiceEmail || '',
+        billingContact: initialConfig.billingContact || '',
+      });
+    }
+  }, [initialConfig, open]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSaving(true);
+      toast.loading('Saving invoice configuration...', { id: 'save-invoice-config' });
+      const res = await billingService.updateInvoiceConfig(form);
+      toast.success('Invoice configuration updated!', { id: 'save-invoice-config' });
+      onSuccess(res.invoiceConfig || form);
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update invoice configuration', { id: 'save-invoice-config' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputSx = {
+    '& .MuiInputBase-root': {
+      color: '#ffffff',
+      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+      borderRadius: '10px',
+      fontSize: '0.875rem',
+      '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.12)' },
+      '&:hover fieldset': { borderColor: 'rgba(255, 255, 255, 0.25)' },
+      '&.Mui-focused fieldset': { borderColor: '#a855f7' },
+    },
+    '& .MuiInputLabel-root': {
+      color: 'rgba(255, 255, 255, 0.6)',
+      fontSize: '0.875rem',
+      '&.Mui-focused': { color: '#a855f7' },
+    },
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={() => !saving && onClose()}
+      PaperProps={{
+        sx: {
+          backgroundColor: '#13111e',
+          backgroundImage: 'none',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          borderRadius: '16px',
+          maxWidth: 500,
+          width: '100%',
+          p: 1,
+          backdropFilter: 'blur(20px)',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+        },
+      }}
+    >
+      <DialogContent sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+          <Box
+            sx={{
+              width: 42,
+              height: 42,
+              borderRadius: '12px',
+              background: 'rgba(168, 85, 247, 0.12)',
+              border: '1px solid rgba(168, 85, 247, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#a855f7',
+            }}
+          >
+            <ReceiptLongOutlinedIcon fontSize="small" />
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: '1.25rem', fontWeight: 600, color: '#ffffff' }}>
+              Edit Invoice Configuration
+            </Typography>
+            <Typography sx={{ fontSize: '0.8125rem', color: 'rgba(255, 255, 255, 0.6)' }}>
+              Configure billing emails and company details for invoices.
+            </Typography>
+          </Box>
+        </Box>
+
+        <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextField
+            label="Company Name"
+            fullWidth
+            size="small"
+            placeholder="MTX B2B"
+            value={form.companyName}
+            onChange={(e) => setForm({ ...form, companyName: e.target.value })}
+            sx={inputSx}
+          />
+          <TextField
+            label="Tax ID"
+            fullWidth
+            size="small"
+            placeholder="US-EIN-12-3456789"
+            value={form.taxId}
+            onChange={(e) => setForm({ ...form, taxId: e.target.value })}
+            sx={inputSx}
+          />
+          <TextField
+            label="Invoice Email"
+            fullWidth
+            size="small"
+            type="email"
+            placeholder="billing@yourcompany.com"
+            value={form.invoiceEmail}
+            onChange={(e) => setForm({ ...form, invoiceEmail: e.target.value })}
+            sx={inputSx}
+          />
+          <TextField
+            label="Billing Contact"
+            fullWidth
+            size="small"
+            placeholder="John Doe (contact name)"
+            value={form.billingContact}
+            onChange={(e) => setForm({ ...form, billingContact: e.target.value })}
+            sx={inputSx}
+          />
+
+          <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mt: 1 }}>
+            <Button
+              variant="outlined"
+              onClick={onClose}
+              disabled={saving}
+              sx={{
+                borderRadius: '10px',
+                borderColor: cv.border,
+                color: cv.textPrimary,
+                textTransform: 'none',
+                px: 2.5,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={saving}
+              sx={{
+                borderRadius: '10px',
+                background: cv.brandGradient,
+                color: '#ffffff',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+              }}
+            >
+              {saving ? <CircularProgress size={20} color="inherit" /> : 'Save Details'}
+            </Button>
+          </Stack>
+        </Box>
+      </DialogContent>
+    </Dialog>
   );
 }
 

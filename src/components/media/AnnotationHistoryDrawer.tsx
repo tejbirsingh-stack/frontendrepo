@@ -36,7 +36,12 @@ import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import { useActiveUser } from '../../hooks/useActiveUser';
 import type { MediaItem } from '../../data/mockMedia';
+import { MOCK_FRAME_PEOPLE, type FramePerson } from '../../data/mockFramePeople';
+import TranscriptPanel from './TranscriptPanel';
+import AiSummaryBlock from './AiSummaryBlock';
 import type { AnnotationHistoryEntry, AnnotationHistoryType } from '../../types/annotationHistory';
+import { getAiHighlightsRequest } from '../../api/ai.service';
+import { useAiEntitled } from '../../hooks/useAiEntitled';
 import type { CommentReply, VideoComment } from '../../types/videoComments';
 import CommentImageAttachment from './CommentImageAttachment';
 import type { AnnotationAccessGroup, AnnotationVisibility } from '../../types/annotationVisibility';
@@ -60,8 +65,14 @@ import {
 } from '../../constants/mediaFilters';
 import { dropdownMenuPaperSx } from '../../constants/dropdownMenu';
 
-type DrawerTab = 'history' | 'details';
+type DrawerTab = 'history' | 'details' | 'ai';
+type AiSubTab = 'summary' | 'transcript';
 type StatusFilter = 'all' | 'unread' | 'resolved' | 'archive';
+
+const AI_SUB_TABS: { value: AiSubTab; label: string }[] = [
+  { value: 'summary', label: 'Summary' },
+  { value: 'transcript', label: 'Transcript' },
+];
 
 function getCommentIdForEntry(entry: AnnotationHistoryEntry): string | null {
   if (entry.sourceCommentId) return entry.sourceCommentId;
@@ -168,8 +179,17 @@ interface AnnotationHistoryDrawerProps {
   onTagsChange?: (tags: string[]) => void;
   activeTab?: DrawerTab;
   onTabChange?: (tab: DrawerTab) => void;
+  /** Restricts which sections are selectable, e.g. guests without comment access. */
+  availableTabs?: DrawerTab[];
   detailsSection?: MediaDetailsSection;
   onDetailsSectionChange?: (section: MediaDetailsSection) => void;
+  /** Person whose headshot is highlighted on the frame from the AI insights tab. */
+  selectedFramePersonId?: string | null;
+  onFramePersonSelect?: (person: FramePerson) => void;
+  /** Seek player to a transcript segment (milliseconds). */
+  onTranscriptSeek?: (startMs: number) => void;
+  /** Media element the transcript follows to highlight the line being spoken. */
+  videoRef?: React.RefObject<HTMLVideoElement | null>;
   onClose: () => void;
   onEntryClick?: (entry: AnnotationHistoryEntry) => void;
   onToggleResolved: (entryId: string) => void;
@@ -195,10 +215,16 @@ interface AnnotationHistoryDrawerProps {
   activeHistoryEntryId?: string | null;
 }
 
-const DRAWER_TABS: { value: DrawerTab; label: string }[] = [
+const DRAWER_TABS: { value: Exclude<DrawerTab, 'ai'>; label: string }[] = [
   { value: 'history', label: 'Annotation History' },
   { value: 'details', label: 'Details' },
 ];
+
+const DRAWER_TAB_PANEL_LABELS: Record<DrawerTab, string> = {
+  history: 'Annotation history',
+  details: 'Media details',
+  ai: 'AI insights',
+};
 
 const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -214,6 +240,9 @@ const TYPE_FILTER_OPTIONS: { value: 'all' | AnnotationHistoryType; label: string
   { value: 'shape', label: 'Shapes' },
   { value: 'stamp', label: 'Stamps' },
 ];
+
+const AI_FRAME_PEOPLE_PREVIEW_COUNT = 8;
+const AI_FRAME_HEADSHOT_SIZE = 34;
 
 const drawerSurface = 'var(--noah-drawer-surface)';
 
@@ -885,6 +914,136 @@ function HistoryEntryRow({
   );
 }
 
+function FramePeopleHeadshots({
+  people,
+  query,
+  selectedPersonId,
+  onSelectPerson,
+}: Readonly<{
+  people: FramePerson[];
+  query: string;
+  selectedPersonId?: string | null;
+  onSelectPerson?: (person: FramePerson) => void;
+}>) {
+  const [showAll, setShowAll] = useState(false);
+  const hiddenCount = Math.max(people.length - AI_FRAME_PEOPLE_PREVIEW_COUNT, 0);
+  const visiblePeople =
+    showAll || hiddenCount === 0 ? people : people.slice(0, AI_FRAME_PEOPLE_PREVIEW_COUNT);
+
+  return (
+    <Box
+      sx={{
+        p: 1,
+        borderRadius: '12px',
+        border: `1px dashed ${cv.borderStrong}`,
+        backgroundColor: cv.surface,
+      }}
+    >
+      {people.length === 0 ? (
+        <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted, textAlign: 'center' }}>
+          No people match "{query.trim()}".
+        </Typography>
+      ) : (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box
+            component="ul"
+            aria-label="People detected in this frame"
+            sx={{
+              listStyle: 'none',
+              m: 0,
+              // Keeps the selected headshot's focus ring from being clipped by the scroller
+              p: 0.5,
+              flex: 1,
+              minWidth: 0,
+              display: 'flex',
+              flexWrap: 'nowrap',
+              gap: 1,
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              overscrollBehavior: 'contain',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            {visiblePeople.map((person) => {
+              const isSelected = person.id === selectedPersonId;
+
+              return (
+                <Box component="li" key={person.id} sx={{ display: 'flex', flexShrink: 0 }}>
+                  <Tooltip
+                    title={`${
+                      isSelected ? 'Hide' : 'Show'
+                    } ${person.name} on the frame · ${person.detail}`}
+                    arrow
+                    placement="top"
+                  >
+                    <Avatar
+                      component="button"
+                      type="button"
+                      aria-pressed={isSelected}
+                      aria-label={`${person.name}, ${person.detail}`}
+                      onClick={() => onSelectPerson?.(person)}
+                      sx={{
+                        width: AI_FRAME_HEADSHOT_SIZE,
+                        height: AI_FRAME_HEADSHOT_SIZE,
+                        p: 0,
+                        fontSize: '0.625rem',
+                        fontWeight: 600,
+                        color: cv.textPrimary,
+                        background: cv.brandGradient,
+                        border: 'none',
+                        cursor: onSelectPerson ? 'pointer' : 'default',
+                        outline: isSelected ? `2px solid ${cv.purpleLight}` : 'none',
+                        outlineOffset: '2px',
+                        transition: 'transform 0.15s ease',
+                        '&:hover': { transform: onSelectPerson ? 'scale(1.08)' : 'none' },
+                        '&:focus-visible': {
+                          outline: `2px solid ${cv.purpleFocusBorder}`,
+                          outlineOffset: '2px',
+                        },
+                      }}
+                    >
+                      {person.initials}
+                    </Avatar>
+                  </Tooltip>
+                </Box>
+              );
+            })}
+          </Box>
+
+          {hiddenCount > 0 && !showAll ? (
+            <Tooltip title={`Show ${hiddenCount} more`} arrow placement="top">
+              <Box
+                component="button"
+                type="button"
+                aria-label={`Show ${hiddenCount} more people in this frame`}
+                onClick={() => setShowAll(true)}
+                sx={{
+                  flexShrink: 0,
+                  width: AI_FRAME_HEADSHOT_SIZE,
+                  height: AI_FRAME_HEADSHOT_SIZE,
+                  borderRadius: '50%',
+                  border: `1px solid ${cv.borderStrong}`,
+                  backgroundColor: cv.glassBackground,
+                  color: cv.textSecondary,
+                  fontSize: '0.625rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  '&:hover': {
+                    color: cv.textPrimary,
+                    backgroundColor: cv.surfaceHover,
+                  },
+                }}
+              >
+                +{hiddenCount}
+              </Box>
+            </Tooltip>
+          ) : null}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 export default function AnnotationHistoryDrawer({
   open,
   activeHistoryEntryId,
@@ -896,8 +1055,13 @@ export default function AnnotationHistoryDrawer({
   onTagsChange,
   activeTab: controlledTab,
   onTabChange,
+  availableTabs,
   detailsSection,
   onDetailsSectionChange,
+  selectedFramePersonId,
+  onFramePersonSelect,
+  onTranscriptSeek,
+  videoRef,
   onClose,
   onEntryClick,
   onToggleResolved,
@@ -921,7 +1085,17 @@ export default function AnnotationHistoryDrawer({
   const activeUser = useActiveUser();
   const isDesktopPanel = useMediaQuery(theme.breakpoints.up(SIDEBAR_DESKTOP_BREAKPOINT));
   const [internalTab, setInternalTab] = useState<DrawerTab>('history');
-  const activeTab = controlledTab ?? internalTab;
+  const visibleTabs = DRAWER_TABS.filter(
+    (tab) => !availableTabs || availableTabs.includes(tab.value),
+  );
+  const requestedTab = controlledTab ?? internalTab;
+  const activeTab: DrawerTab =
+    requestedTab === 'ai'
+      ? 'ai'
+      : visibleTabs.some((tab) => tab.value === requestedTab)
+        ? requestedTab
+        : visibleTabs[0]?.value ?? 'details';
+
   
   const isTimeBasedMedia = mediaItem?.type === 'video' || mediaItem?.type === 'audio';
 
@@ -933,12 +1107,19 @@ export default function AnnotationHistoryDrawer({
     }
   };
   const [query, setQuery] = useState('');
+  const [aiQuery, setAiQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | AnnotationHistoryType>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
+  const [aiSubTab, setAiSubTab] = useState<AiSubTab>('summary');
+  const aiEntitled = useAiEntitled();
+  const [highlightSummary, setHighlightSummary] = useState<string | null>(null);
+  const [highlightTags, setHighlightTags] = useState<string[]>([]);
+  const [highlightLoading, setHighlightLoading] = useState(false);
+  const [highlightError, setHighlightError] = useState<string | null>(null);
 
   const commentById = useMemo(
     () => new Map(comments.map((comment) => [comment.id, comment])),
@@ -1009,6 +1190,76 @@ export default function AnnotationHistoryDrawer({
       });
   }, [commentById, customEndDate, customStartDate, dateRangeFilter, entries, query, statusFilter, typeFilter, activeUser.name]);
 
+  const filteredFramePeople = useMemo(() => {
+    const normalizedQuery = aiQuery.trim().toLowerCase();
+    if (!normalizedQuery) return MOCK_FRAME_PEOPLE;
+
+    return MOCK_FRAME_PEOPLE.filter((person) =>
+      `${person.name} ${person.detail}`.toLowerCase().includes(normalizedQuery),
+    );
+  }, [aiQuery]);
+
+  // People detection runs on frames, so audio and documents have no faces to list.
+  const supportsFramePeople = mediaItem?.type === 'video' || mediaItem?.type === 'image';
+
+  useEffect(() => {
+    setAiSubTab('summary');
+  }, [mediaItem?.id]);
+
+  useEffect(() => {
+    if (activeTab !== 'ai' || !aiEntitled || !mediaItem?.id) {
+      return;
+    }
+
+    let cancelled = false;
+    setHighlightLoading(true);
+    setHighlightError(null);
+
+    void getAiHighlightsRequest(mediaItem.id)
+      .then((res) => {
+        if (cancelled) return;
+        const apiSummary = res.summary?.trim() || '';
+        const apiTags = Array.isArray(res.tags)
+          ? res.tags.filter((t) => typeof t === 'string' && t.trim())
+          : [];
+        setHighlightSummary(apiSummary || null);
+        setHighlightTags(apiTags);
+        if (res.status === 'failed' || res.error) {
+          setHighlightError(res.error || 'AI summary failed.');
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHighlightError('Could not load AI summary.');
+        setHighlightSummary(null);
+        setHighlightTags([]);
+      })
+      .finally(() => {
+        if (!cancelled) setHighlightLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, aiEntitled, mediaItem?.id]);
+
+  const insightsSummary = useMemo(() => {
+    if (highlightSummary?.trim()) return highlightSummary.trim();
+    const userSummary =
+      (typeof mediaItem?.customMetadata?.summary === 'string' &&
+        mediaItem.customMetadata.summary.trim()) ||
+      mediaItem?.summary?.trim() ||
+      '';
+    return userSummary || null;
+  }, [highlightSummary, mediaItem?.customMetadata, mediaItem?.summary]);
+
+  const insightsTags = useMemo(() => {
+    if (highlightTags.length > 0) return highlightTags;
+    return Array.isArray(mediaItem?.aiTags)
+      ? mediaItem.aiTags.filter((t) => typeof t === 'string' && t.trim())
+      : [];
+  }, [highlightTags, mediaItem?.aiTags]);
+
   const panelBody = (
     <>
       <Box
@@ -1021,30 +1272,112 @@ export default function AnnotationHistoryDrawer({
           pb: 1,
         }}
       >
-        <Box
-          role="tablist"
-          aria-label="Annotation panel sections"
-          sx={{
-            display: 'flex',
-            flex: 1,
-            gap: 0.5,
-            p: 0.5,
-            borderRadius: '12px',
-            border: "1px solid var(--noah-border)",
-            backgroundColor: cv.surface,
-          }}
-        >
-          {DRAWER_TABS.map((tab) => {
-            const isActive = activeTab === tab.value;
+        {activeTab === 'ai' ? (
+          <Typography
+            component="h2"
+            sx={{
+              flex: 1,
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              color: cv.textPrimary,
+              lineHeight: 1.3,
+            }}
+          >
+            AI insights
+          </Typography>
+        ) : (
+          <Box
+            role="tablist"
+            aria-label="Annotation panel sections"
+            sx={{
+              display: 'flex',
+              flex: 1,
+              gap: 0.5,
+              p: 0.5,
+              borderRadius: '12px',
+              border: "1px solid var(--noah-border)",
+              backgroundColor: cv.surface,
+            }}
+          >
+            {visibleTabs.map((tab) => {
+              const isActive = activeTab === tab.value;
 
-            return (
-              <Tooltip key={tab.value} title={tab.label} arrow placement="top">
+              return (
+                <Tooltip key={tab.value} title={tab.label} arrow placement="top">
+                  <Box
+                    component="button"
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => handleTabChange(tab.value)}
+                    sx={{
+                      flex: 1,
+                      border: 'none',
+                      borderRadius: '8px',
+                      px: 1,
+                      py: 0.75,
+                      fontSize: '0.75rem',
+                      fontWeight: isActive ? 600 : 500,
+                      lineHeight: 1.2,
+                      cursor: 'pointer',
+                      color: isActive ? cv.textPrimary : cv.textSecondary,
+                      backgroundColor: isActive ? cv.purpleSelectionHover : 'transparent',
+                      boxShadow: isActive ? `inset 0 0 0 1px ${cv.purpleSelectionStrong}` : 'none',
+                      transition: 'background-color 0.15s ease, color 0.15s ease',
+                      '&:hover': {
+                        color: cv.textPrimary,
+                        backgroundColor: isActive
+                          ? cv.purpleSelectionMedium
+                          : cv.glassBackground,
+                      },
+                    }}
+                  >
+                    {tab.label}
+                  </Box>
+                </Tooltip>
+              );
+            })}
+          </Box>
+        )}
+
+        {isDesktopPanel ? null : (
+          <Tooltip title="Close panel" arrow placement="top">
+            <IconButton
+              type="button"
+              aria-label="Close panel"
+              onClick={onClose}
+              sx={{ color: cv.textSecondary }}
+            >
+              <CloseOutlinedIcon sx={{ fontSize: 20 }} />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
+
+      {activeTab === 'ai' && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, px: 1.5, pb: 1.25 }}>
+          <Box
+            role="tablist"
+            aria-label="AI insights sections"
+            sx={{
+              display: 'flex',
+              gap: 0.5,
+              p: 0.5,
+              borderRadius: '12px',
+              border: '1px solid var(--noah-border)',
+              backgroundColor: cv.surface,
+            }}
+          >
+            {AI_SUB_TABS.map((tab) => {
+              const isActive = aiSubTab === tab.value;
+              return (
                 <Box
+                  key={tab.value}
                   component="button"
                   type="button"
                   role="tab"
                   aria-selected={isActive}
-                  onClick={() => handleTabChange(tab.value)}
+                  onClick={() => setAiSubTab(tab.value)}
                   sx={{
                     flex: 1,
                     border: 'none',
@@ -1069,17 +1402,57 @@ export default function AnnotationHistoryDrawer({
                 >
                   {tab.label}
                 </Box>
-              </Tooltip>
-            );
-          })}
-        </Box>
+              );
+            })}
+          </Box>
 
-        <Tooltip title="Close panel" arrow placement="top">
-          <IconButton type="button" aria-label="Close panel" onClick={onClose} sx={{ color: cv.textSecondary }}>
-            <CloseOutlinedIcon sx={{ fontSize: 20 }} />
-          </IconButton>
-        </Tooltip>
-      </Box>
+          {aiSubTab === 'transcript' ? (
+            <>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder={supportsFramePeople ? 'Search people, objects or moments' : 'Search transcript'}
+                value={aiQuery}
+                onChange={(event) => setAiQuery(event.target.value)}
+                aria-label="Search transcript"
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '999px',
+                    backgroundColor: cv.surface,
+                    fontSize: '0.875rem',
+                    color: cv.textPrimary,
+                    '& fieldset': { borderColor: cv.border },
+                    '&:hover fieldset': { borderColor: cv.annotationGuide },
+                    '&.Mui-focused fieldset': { borderColor: cv.purpleFocusBorder },
+                  },
+                  '& .MuiInputBase-input::placeholder': {
+                    color: cv.textMuted,
+                    opacity: 1,
+                  },
+                }}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
+
+              {supportsFramePeople && (
+                <FramePeopleHeadshots
+                  people={filteredFramePeople}
+                  query={aiQuery}
+                  selectedPersonId={selectedFramePersonId}
+                  onSelectPerson={onFramePersonSelect}
+                />
+              )}
+            </>
+          ) : null}
+        </Box>
+      )}
 
       {activeTab === 'history' && (
         <Box
@@ -1324,7 +1697,7 @@ export default function AnnotationHistoryDrawer({
 
       <Box
         role="tabpanel"
-        aria-label={activeTab === 'history' ? 'Annotation history' : 'Media details'}
+        aria-label={DRAWER_TAB_PANEL_LABELS[activeTab]}
         sx={{
           flex: 1,
           overflowY: 'auto',
@@ -1375,6 +1748,42 @@ export default function AnnotationHistoryDrawer({
                 )}
               </Box>
             ))
+          )
+        ) : activeTab === 'ai' ? (
+          aiSubTab === 'summary' ? (
+            <Box
+              role="tabpanel"
+              aria-label="Summary"
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.75,
+                py: 1,
+              }}
+            >
+              {aiEntitled ? (
+                <AiSummaryBlock
+                  summary={insightsSummary}
+                  tags={insightsTags}
+                  loading={highlightLoading}
+                  error={highlightError}
+                  emptyMessage="No AI summary yet."
+                />
+              ) : (
+                <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted }}>
+                  AI summary is not available for this organization.
+                </Typography>
+              )}
+            </Box>
+          ) : (
+            <Box role="tabpanel" aria-label="Transcript">
+              <TranscriptPanel
+                assetId={mediaItem?.id}
+                filterQuery={aiQuery}
+                onSeekMs={onTranscriptSeek}
+                videoRef={videoRef}
+              />
+            </Box>
           )
         ) : mediaItem && onTagsChange ? (
           <MediaDetailsPanel
@@ -1447,7 +1856,7 @@ export default function AnnotationHistoryDrawer({
   return (
     <Box
       component="aside"
-      aria-label="Annotation history"
+      aria-label="Media panel"
       sx={{
         width: 380,
         maxWidth: '100%',
@@ -1462,10 +1871,39 @@ export default function AnnotationHistoryDrawer({
         WebkitBackdropFilter: 'blur(24px) saturate(160%)',
         boxShadow:
           cv.popoverShadow,
-        overflow: 'hidden',
+        position: 'relative',
       }}
     >
-      {panelShell}
+      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1, borderRadius: '16px', overflow: 'hidden' }}>
+        {panelShell}
+      </Box>
+
+      <Tooltip title="Close panel" arrow placement="left">
+        <IconButton
+          type="button"
+          aria-label="Close panel"
+          onClick={onClose}
+          sx={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            transform: 'translate(50%, -50%)',
+            zIndex: 2,
+            width: 28,
+            height: 28,
+            color: cv.textSecondary,
+            border: '1px solid var(--noah-border)',
+            background: 'var(--noah-popover-surface-deep)',
+            boxShadow: cv.popoverShadow,
+            '&:hover': {
+              color: cv.textPrimary,
+              backgroundColor: cv.surfaceHover,
+            },
+          }}
+        >
+          <CloseOutlinedIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+      </Tooltip>
     </Box>
   );
 }

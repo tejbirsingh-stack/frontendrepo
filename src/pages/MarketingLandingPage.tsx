@@ -19,7 +19,9 @@ import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import VideoLibraryRoundedIcon from '@mui/icons-material/VideoLibraryRounded';
 import RateReviewRoundedIcon from '@mui/icons-material/RateReviewRounded';
 import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import NoahLogo from '../components/NoahLogo';
+import NoahMascot from '../components/NoahMascot';
 import WaveBackground from '../components/WaveBackground';
 import LandingCtaDialogs from '../components/landing/LandingCtaDialogs';
 import {
@@ -34,18 +36,19 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { useForcedDarkTheme } from '../context/ThemePreferenceContext';
 import { fetchPublicCatalogPlans, fetchPublicLanding, type PlatformPlan } from '../platform/api/platformApi';
+import { formatBytes } from '../platform/components/PlatformUi';
 import { cv } from '../theme/cssVars';
 
 type CtaModal = 'demo' | 'trial' | null;
 type BillingCycle = 'annual' | 'monthly';
 type LandingPlan = Pick<
   PlatformPlan,
-  'id' | 'name' | 'monthlyPriceCents' | 'isFeatured'
+  'id' | 'name' | 'monthlyPriceCents' | 'isFeatured' | 'hasAI' | 'maxUsers' | 'maxWorkspaces' | 'maxProjects' | 'storageQuotaBytes' | 'showProjectQuota' | 'showStorageQuota' | 'showMemberQuota'
 > & {
   description?: string | null;
   yearlyPriceCents?: number;
   annualPriceCents?: number;
-  features: string[];
+  features: (string | { name: string })[];
   ctaLabel?: string | null;
 };
 
@@ -321,7 +324,10 @@ export default function MarketingLandingPage() {
 
     fetchPublicCatalogPlans()
       .then((res) => {
-        if (res.plans?.length) setPlans(res.plans);
+        if (res.plans?.length) {
+          const sortedPlans = [...res.plans].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+          setPlans(sortedPlans);
+        }
       })
       .catch(() => {
         /* plans section hides if empty */
@@ -364,6 +370,10 @@ export default function MarketingLandingPage() {
     }
     return `$${Math.round(monthly)}`;
   };
+
+  const activeNavLinks = NAV_LINKS.filter(
+    (item) => plansEnabled || item.href !== '#plans'
+  );
 
   const handlePlanCta = (plan: LandingPlan) => {
     const name = (plan.name || '').toLowerCase();
@@ -444,9 +454,9 @@ export default function MarketingLandingPage() {
         >
           <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
             <NoahLogo
-              width={{ xs: 200, sm: 248, md: 292 }}
-              height={{ xs: 56, sm: 64, md: 72 }}
-              boxWidth={{ xs: 200, sm: 248, md: 292 }}
+              width={{ xs: 200, sm: 200, md: 292 }}
+              height={{ xs: 56, sm: 56, md: 72 }}
+              boxWidth={{ xs: 200, sm: 200, md: 292 }}
               objectFit="cover"
               animated={false}
               showGlow={false}
@@ -455,10 +465,14 @@ export default function MarketingLandingPage() {
               sx={{
                 mb: 0,
                 overflow: 'hidden',
+                maxWidth: { xs: 200, sm: 200, md: 'none' },
                 '& img': {
                   mixBlendMode: 'lighten',
                   objectPosition: 'center',
                   transform: 'scale(1)',
+                  maxWidth: { xs: '200px', sm: '200px', md: 'none' },
+                  width: { xs: '100%', sm: '100%', md: 'auto' },
+                  height: 'auto',
                 },
                 'html[data-theme="light"] & img': { mixBlendMode: 'normal' },
               }}
@@ -469,7 +483,7 @@ export default function MarketingLandingPage() {
             aria-label="Page sections"
             sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.5 }}
           >
-            {NAV_LINKS.map((item) => (
+            {activeNavLinks.map((item) => (
               <Button
                 key={item.href}
                 href={item.href}
@@ -527,7 +541,7 @@ export default function MarketingLandingPage() {
           </IconButton>
         </Box>
         <Box component="nav" aria-label="Mobile" sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          {NAV_LINKS.map((item) => (
+          {activeNavLinks.map((item) => (
             <Button key={item.href} href={item.href} onClick={closeMenu} sx={{ justifyContent: 'flex-start', minHeight: 44, color: cv.textPrimary }}>
               {item.label}
             </Button>
@@ -557,11 +571,14 @@ export default function MarketingLandingPage() {
           sx={{
             ...sectionPad,
             pt: { xs: 8, md: 12 },
+            position: 'relative',
+            overflow: 'hidden',
             background:
               'radial-gradient(ellipse 80% 50% at 50% -10%, rgba(142,68,173,0.22), transparent 55%), radial-gradient(ellipse 40% 40% at 90% 10%, rgba(210,140,255,0.12), transparent 50%)',
           }}
         >
-          <Box sx={{ maxWidth: MAX, mx: 'auto', textAlign: 'center' }}>
+          <NoahMascot pose="gesture" preset="hero" />
+          <Box sx={{ position: 'relative', zIndex: 1, maxWidth: MAX, mx: 'auto', textAlign: 'center' }}>
             <Box
               component="div"
               sx={{
@@ -814,7 +831,28 @@ export default function MarketingLandingPage() {
                         ...cardHoverSx,
                       }}
                     >
-                      <Typography sx={{ fontWeight: 700, fontSize: '1.125rem' }}>{plan.name}</Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.25 }}>
+                        <Typography sx={{ fontWeight: 700, fontSize: '1.125rem' }}>{plan.name}</Typography>
+                        {plan.hasAI && (
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 0.5,
+                              px: 0.85,
+                              py: 0.25,
+                              borderRadius: '999px',
+                              background: `linear-gradient(135deg, ${cv.brandOrchid} 0%, #6366f1 100%)`,
+                              color: '#fff',
+                            }}
+                          >
+                            <AutoAwesomeIcon sx={{ fontSize: 14 }} />
+                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em' }}>
+                              AI
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
                       <Typography sx={{ color: cv.textMuted, fontSize: '0.8125rem', mt: 0.5, minHeight: 40 }}>
                         {plan.description}
                       </Typography>
@@ -827,12 +865,38 @@ export default function MarketingLandingPage() {
                         ) : null}
                       </Typography>
                       <Box component="ul" sx={{ m: 0, mt: 2, pl: 0, listStyle: 'none', flex: 1 }}>
-                        {(Array.isArray(plan.features) ? plan.features : []).slice(0, 6).map((feature) => (
-                          <Box key={feature} sx={{ display: 'flex', gap: 1, mb: 0.85, alignItems: 'flex-start' }}>
-                            <CheckRoundedIcon sx={{ fontSize: 16, color: cv.brandOrchid, mt: '2px' }} aria-hidden />
-                            <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.4 }}>{feature}</Typography>
-                          </Box>
-                        ))}
+                        {(() => {
+                          const dynamicPoints: string[] = [];
+                          if (plan.showProjectQuota && plan.maxProjects !== undefined && plan.maxWorkspaces !== undefined) {
+                            dynamicPoints.push(`${plan.maxProjects} Project${plan.maxProjects !== 1 ? 's' : ''} & ${plan.maxWorkspaces} Workspace${plan.maxWorkspaces !== 1 ? 's' : ''}`);
+                          }
+                          if (plan.showStorageQuota && plan.storageQuotaBytes !== undefined) {
+                            dynamicPoints.push(`${formatBytes(plan.storageQuotaBytes)} Storage`);
+                          }
+                          if (plan.showMemberQuota && plan.maxUsers !== undefined) {
+                            dynamicPoints.push(`${plan.maxUsers} Member${plan.maxUsers !== 1 ? 's' : ''}`);
+                          }
+
+                          const cleanCustomFeatures = (plan.features || [])
+                            .map((feat) => typeof feat === 'string' ? feat : feat.name)
+                            .filter((featStr) => {
+                              if (!featStr) return false;
+                              const low = featStr.toLowerCase();
+                              if (low.includes('storage')) return false;
+                              if (low.includes('workspace') || low.includes('project')) return false;
+                              if (low.includes('member') || low.includes('user')) return false;
+                              return true;
+                            });
+
+                          const allFeatures = [...dynamicPoints, ...cleanCustomFeatures].slice(0, 6);
+
+                          return allFeatures.map((label) => (
+                            <Box key={label} sx={{ display: 'flex', gap: 1, mb: 0.85, alignItems: 'flex-start' }}>
+                              <CheckRoundedIcon sx={{ fontSize: 16, color: cv.brandOrchid, mt: '2px' }} aria-hidden />
+                              <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.4 }}>{label}</Typography>
+                            </Box>
+                          ));
+                        })()}
                       </Box>
                       <Button
                         onClick={() => handlePlanCta(plan)}
@@ -910,9 +974,9 @@ export default function MarketingLandingPage() {
         >
           <Box>
             <NoahLogo
-              width={{ xs: 200, sm: 248, md: 292 }}
-              height={{ xs: 56, sm: 64, md: 72 }}
-              boxWidth={{ xs: 200, sm: 248, md: 292 }}
+              width={{ xs: 200, sm: 200, md: 292 }}
+              height={{ xs: 56, sm: 56, md: 72 }}
+              boxWidth={{ xs: 200, sm: 200, md: 292 }}
               objectFit="cover"
               animated={false}
               showGlow={false}
@@ -920,10 +984,14 @@ export default function MarketingLandingPage() {
               sx={{
                 mb: 1.5,
                 overflow: 'hidden',
+                maxWidth: { xs: 200, sm: 200, md: 'none' },
                 '& img': {
                   mixBlendMode: 'lighten',
                   objectPosition: 'center',
                   transform: 'scale(1)',
+                  maxWidth: { xs: '200px', sm: '200px', md: 'none' },
+                  width: { xs: '100%', sm: '100%', md: 'auto' },
+                  height: 'auto',
                 },
                 'html[data-theme="light"] & img': { mixBlendMode: 'normal' },
               }}
@@ -934,7 +1002,7 @@ export default function MarketingLandingPage() {
           </Box>
           <Box>
             <Typography sx={{ fontWeight: 700, mb: 1.25 }}>Product</Typography>
-            {NAV_LINKS.map((item) => (
+            {activeNavLinks.map((item) => (
               <Link key={item.href} href={item.href} underline="none" sx={{ display: 'block', color: cv.textSecondary, py: 0.6, transition: `color 0.22s ${EASE}`, '&:hover': { color: cv.brandOrchid } }}>
                 {item.label}
               </Link>

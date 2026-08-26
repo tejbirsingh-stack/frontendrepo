@@ -21,6 +21,7 @@ export interface AuthSessionUser {
     maxProjects?: number;
     storageQuotaBytes?: string | number;
     storageUsedBytes?: string | number;
+    aiEnabled?: boolean;
     features?: any;
     isFreeTrialUsed?: boolean;
     metadata?: Record<string, any>;
@@ -34,6 +35,8 @@ export interface AuthSessionUser {
   avatarUrl?: string;
   accountName?: string;
   accountInitials?: string;
+  shareLinkActivityEnabled?: boolean;
+  preferences?: Record<string, any>;
 }
 
 export interface LoginCredentials {
@@ -55,6 +58,7 @@ export interface AuthContextValue {
   accessToken: string | null;
   isAuthenticated: boolean;
   isInitializing: boolean;
+  orgBranding?: any;
   login: (credentials: LoginCredentials) => Promise<void>;
   signup: (credentials: SignUpCredentials) => Promise<void>;
   logout: () => Promise<void>;
@@ -63,4 +67,5 @@ export interface AuthContextValue {
   loginMicrosoft: (idToken: string, rememberMe?: boolean, options?: { mode?: 'login' | 'signup'; isSignUp?: boolean }) => Promise<void>;
   setSession: (token: string | null, user: AuthSessionUser | null) => void;
   refreshUser: () => Promise<void>;
+  refreshBranding?: () => Promise<void>;
 }

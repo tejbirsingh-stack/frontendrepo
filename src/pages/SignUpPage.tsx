@@ -23,7 +23,9 @@ import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
 import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
+import NoahMascot from '../components/NoahMascot';
 import ChoosePlanScreen from '../components/onboarding/ChoosePlanScreen';
+import { toast } from 'react-hot-toast';
 import { useAuth } from '../auth/AuthContext';
 import { persistSession } from '../auth/authStorage';
 import { cv } from '../theme/cssVars';
@@ -37,6 +39,7 @@ import {
   fetchCurrentUserRequest,
   mapAuthUserDtoToSessionUser,
 } from '../api/auth.service';
+import { fetchGlobalSecuritySettings } from '../platform/api/platformApi';
 import { useUploadManager } from '../context/UploadManagerContext';
 
 type SignupPhase = 'email' | 'verify' | 'workspace' | 'usage' | 'upload' | 'done' | 'plans';
@@ -254,6 +257,20 @@ export default function SignUpPage() {
   const [error, setError] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [isSsoLoading, setIsSsoLoading] = useState(false);
+
+  const [ssoConfigured, setSsoConfigured] = useState<boolean>(true);
+  const [ssoProvider, setSsoProvider] = useState<string>('google, microsoft');
+
+  useEffect(() => {
+    fetchGlobalSecuritySettings()
+      .then((res) => {
+        if (res?.settings) {
+          setSsoConfigured(Boolean(res.settings.ssoConfigured));
+          setSsoProvider(res.settings.ssoProvider || 'google, microsoft');
+        }
+      })
+      .catch((err) => console.error('Failed to fetch security settings for signup:', err));
+  }, []);
   const { enqueueFiles } = useUploadManager();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -418,7 +435,7 @@ export default function SignUpPage() {
         mobileNumber,
         teamSize,
         firstFocus,
-        planId,
+        planId: 'free', // Always provision as free initially, upgrade happens via Stripe
         billingCycle,
         hubspotUtk: hubspotUtkCookie,
       });
@@ -450,6 +467,42 @@ export default function SignUpPage() {
           ownerType: 'WORKSPACE',
           ownerId: targetWorkspaceId,
         });
+      }
+
+      // If they chose a paid plan, redirect them to Stripe Checkout
+      if (planId && planId.toLowerCase() !== 'free') {
+        const { fetchPublicCatalogPlans } = await import('../platform/api/platformApi');
+        const catalog = await fetchPublicCatalogPlans().catch(() => null);
+        const match = catalog?.plans?.find(
+          (p: any) => p.name?.toLowerCase() === planId.toLowerCase() || p.id?.toLowerCase() === planId.toLowerCase()
+        );
+        
+        let activePriceId = null;
+        if (match) {
+          activePriceId = billingCycle === 'annual' ? (match.yearlyPriceId || match.monthlyPriceId) : match.monthlyPriceId;
+        }
+        
+        if (activePriceId) {
+          const { billingService } = await import('../api/billing.service');
+          toast.loading('Redirecting to secure checkout...', { id: 'stripe-signup-checkout' });
+          try {
+            const res: any = await billingService.createCheckoutSession(
+              activePriceId, 
+              false,
+              '/home?payment_success=true',
+              '/onboarding/plan?canceled=true'
+            );
+            if (res?.url) {
+              window.location.href = res.url;
+              return; // Halt navigation to /home, they go to Stripe
+            }
+          } catch (checkoutErr: any) {
+            console.error('Failed to initiate Stripe checkout:', checkoutErr);
+            toast.dismiss('stripe-signup-checkout');
+            toast.error('Could not start checkout. You have been placed on the Free plan.');
+            // Proceed to home
+          }
+        }
       }
 
       navigate('/home', { replace: true });
@@ -602,52 +655,18 @@ export default function SignUpPage() {
     setError('');
     setIsSsoLoading(true);
     try {
-      let response: any = null;
-      try {
-        response = await instance.loginPopup({
-          scopes: ['User.Read', 'profile', 'email', 'openid'],
-        });
-      } catch (popupErr: any) {
-        console.warn('Popup login failed/blocked, falling back to redirect:', popupErr);
-        sessionStorage.setItem('msal_redirecting', 'true');
-        sessionStorage.setItem('msal_auth_mode', 'signup');
-        await instance.loginRedirect({
-          scopes: ['User.Read', 'profile', 'email', 'openid'],
-        });
-        return;
-      }
-
-      if (response && response.account) {
-        const account = response.account;
-        const msEmail = (account.username || (account.idTokenClaims as any)?.email || '').toLowerCase().trim();
-        const msName = account.name || (account.idTokenClaims as any)?.name || '';
-
-        if (msEmail) {
-          try {
-            await checkEmailRequest(msEmail);
-          } catch (checkErr: any) {
-            if (checkErr.response?.status === 409 || checkErr.response?.data?.exists) {
-              setError('Email ID is already registered with this email');
-              return;
-            }
-            setError(checkErr.response?.data?.message || checkErr.message || 'Failed to verify Microsoft email.');
-            return;
-          }
-          setEmail(msEmail);
-        }
-
-        if (msName) {
-          const nameParts = msName.trim().split(' ');
-          setFirstName(nameParts[0] || '');
-          setLastName(nameParts.slice(1).join(' ') || '');
-        }
-
-        setPhase('workspace');
-      }
+      sessionStorage.setItem('msal_redirecting', 'true');
+      sessionStorage.setItem('msal_auth_mode', 'signup');
+      await instance.loginRedirect({
+        scopes: ['User.Read', 'profile', 'email', 'openid'],
+        redirectUri: window.location.origin,
+        prompt: 'select_account',
+      });
     } catch (err: any) {
+      sessionStorage.removeItem('msal_redirecting');
+      sessionStorage.removeItem('msal_auth_mode');
       console.error('Microsoft sign-up error:', err);
       setError(err.response?.data?.message || err.message || 'Microsoft sign-up failed.');
-    } finally {
       setIsSsoLoading(false);
     }
   };
@@ -661,8 +680,9 @@ export default function SignUpPage() {
           sessionStorage.removeItem('msal_auth_mode');
           if (response && response.account) {
             const account = response.account;
-            const msEmail = (account.username || (account.idTokenClaims as any)?.email || '').toLowerCase().trim();
-            const msName = account.name || (account.idTokenClaims as any)?.name || '';
+            const claims = (account.idTokenClaims as any) || {};
+            const msEmail = (account.username || claims.email || claims.preferred_username || '').toLowerCase().trim();
+            const msName = account.name || claims.name || '';
 
             if (msEmail) {
               try {
@@ -678,7 +698,10 @@ export default function SignUpPage() {
               setEmail(msEmail);
             }
 
-            if (msName) {
+            if (claims.given_name || claims.family_name) {
+              setFirstName(claims.given_name || '');
+              setLastName(claims.family_name || '');
+            } else if (msName) {
               const nameParts = msName.trim().split(' ');
               setFirstName(nameParts[0] || '');
               setLastName(nameParts.slice(1).join(' ') || '');
@@ -744,6 +767,20 @@ export default function SignUpPage() {
       >
         <LiquidBackground />
         <WaveBackground />
+        <NoahMascot
+          pose="walk"
+          preset="authCompanion"
+          side="right"
+          sx={{
+            display: { xs: 'none', md: 'block' },
+            position: 'fixed',
+            right: { md: 32, lg: 64 },
+            bottom: { md: 80 },
+            left: 'auto',
+            width: 320,
+            zIndex: 0,
+          }}
+        />
 
         <Box
           sx={{
@@ -831,6 +868,7 @@ export default function SignUpPage() {
         justifyContent: 'center',
         p: { xs: 2, sm: 3, md: 4 },
         position: 'relative',
+        overflow: 'visible',
       }}
     >
       <LiquidBackground />
@@ -841,17 +879,39 @@ export default function SignUpPage() {
           position: 'relative',
           zIndex: 1,
           width: '100%',
-          maxWidth: 640,
+          maxWidth: { xs: 640, sm: 1200 },
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          overflow: 'visible',
         }}
       >
         <Box sx={AUTH_LOGO_PARENT_SX}>
           <NoahLogo sx={AUTH_LOGO_SX} showGlow={false} animated={false} />
         </Box>
 
-        <GlassCard glow sx={{ width: '100%', maxWidth: phase === 'usage' || phase === 'upload' ? 560 : 440 }}>
+        <Box
+          sx={{
+            position: 'relative',
+            width: '100%',
+            maxWidth: phase === 'usage' || phase === 'upload' ? 560 : 440,
+            overflow: 'visible',
+          }}
+        >
+          <NoahMascot
+            pose="walk"
+            preset="authCompanion"
+            side="left"
+            sx={{ width: { sm: 360, md: 440 } }}
+          />
+          <GlassCard
+            glow
+            sx={{
+              position: 'relative',
+              zIndex: 1,
+              width: '100%',
+            }}
+          >
           {phase === 'email' ? (
             <Box
               component="form"
@@ -1053,60 +1113,68 @@ export default function SignUpPage() {
                     : 'Continue with email'}
               </Button>
 
-              <Divider
-                sx={{
-                  my: 2,
-                  '&::before, &::after': { borderColor: cv.border },
-                  color: cv.textMuted,
-                  fontSize: '0.8125rem',
-                }}
-              >
-                or
-              </Divider>
+              {ssoConfigured ? (
+                <>
+                  <Divider
+                    sx={{
+                      my: 2,
+                      '&::before, &::after': { borderColor: cv.border },
+                      color: cv.textMuted,
+                      fontSize: '0.8125rem',
+                    }}
+                  >
+                    or
+                  </Divider>
 
-              <Box sx={{ display: 'flex', gap: 2, width: '100%', mb: 2 }}>
-                <Button
-                  type="button"
-                  fullWidth
-                  variant="outlined"
-                  disabled={isChecking || isSsoLoading}
-                  onClick={() => void handleGoogleSignup()}
-                  startIcon={<GoogleIcon />}
-                  sx={{
-                    py: 1.5,
-                    borderColor: cv.border,
-                    color: cv.textPrimary,
-                    backgroundColor: cv.footerTint,
-                    '&:hover': {
-                      borderColor: cv.borderStrong,
-                      backgroundColor: cv.surfaceHover,
-                    },
-                  }}
-                >
-                  Google
-                </Button>
+                  <Box sx={{ display: 'flex', gap: 2, width: '100%', mb: 2 }}>
+                    {ssoProvider.toLowerCase().includes('google') && (
+                      <Button
+                        type="button"
+                        fullWidth
+                        variant="outlined"
+                        disabled={isChecking || isSsoLoading}
+                        onClick={() => void handleGoogleSignup()}
+                        startIcon={<GoogleIcon />}
+                        sx={{
+                          py: 1.5,
+                          borderColor: cv.border,
+                          color: cv.textPrimary,
+                          backgroundColor: cv.footerTint,
+                          '&:hover': {
+                            borderColor: cv.borderStrong,
+                            backgroundColor: cv.surfaceHover,
+                          },
+                        }}
+                      >
+                        Google
+                      </Button>
+                    )}
 
-                <Button
-                  type="button"
-                  fullWidth
-                  variant="outlined"
-                  disabled={isChecking || isSsoLoading}
-                  onClick={() => void handleMicrosoftSignup()}
-                  startIcon={<MicrosoftIcon />}
-                  sx={{
-                    py: 1.5,
-                    borderColor: cv.border,
-                    color: cv.textPrimary,
-                    backgroundColor: cv.footerTint,
-                    '&:hover': {
-                      borderColor: cv.borderStrong,
-                      backgroundColor: cv.surfaceHover,
-                    },
-                  }}
-                >
-                  Microsoft
-                </Button>
-              </Box>
+                    {ssoProvider.toLowerCase().includes('microsoft') && (
+                      <Button
+                        type="button"
+                        fullWidth
+                        variant="outlined"
+                        disabled={isChecking || isSsoLoading}
+                        onClick={() => void handleMicrosoftSignup()}
+                        startIcon={<MicrosoftIcon />}
+                        sx={{
+                          py: 1.5,
+                          borderColor: cv.border,
+                          color: cv.textPrimary,
+                          backgroundColor: cv.footerTint,
+                          '&:hover': {
+                            borderColor: cv.borderStrong,
+                            backgroundColor: cv.surfaceHover,
+                          },
+                        }}
+                      >
+                        Microsoft
+                      </Button>
+                    )}
+                  </Box>
+                </>
+              ) : null}
 
               <Typography
                 variant="body2"
@@ -1644,6 +1712,7 @@ export default function SignUpPage() {
             </Box>
           ) : null}
         </GlassCard>
+        </Box>
       </Box>
     </Box>
   );

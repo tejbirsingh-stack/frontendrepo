@@ -25,7 +25,8 @@ export const env = {
   // Empty URL → relative /api so Vite can proxy to the local backend
   apiBaseUrl: normalizeApiBaseUrl(configuredApiUrl) || '/api',
   appOrigin: readEnv('VITE_APP_ORIGIN', typeof window !== 'undefined' ? window.location.origin : ''),
-  apiTimeoutMs: readPositiveInt(readEnv('VITE_API_TIMEOUT_MS'), 30_000),
+  apiTimeoutMs: readPositiveInt(readEnv('VITE_API_TIMEOUT_MS'), 120_000),
   // Empty means proxy to local backend, not mock auth
   isApiConfigured: true,
+  aiEnabled: readEnv('VITE_AI_ENABLED', 'true') !== 'false',
 } as const;

@@ -14,6 +14,7 @@ import {
   ProjectPage,
   MarketingLandingPage,
   LoginPage,
+  ForgotPasswordPage,
   NotFoundPage,
   SignUpPage,
   SettingsSectionPage,
@@ -27,6 +28,7 @@ import {
   DeletionRequestsPage,
   ShareGuestPage,
   PlatformApp,
+  OnboardingPlanPage,
 } from './routes/lazyPages';
 
 import { UploadManagerProvider } from './context/UploadManagerContext';
@@ -49,6 +51,14 @@ function App() {
             }
           />
           <Route
+            path="/forgot-password"
+            element={
+              <GuestRoute>
+                <ForgotPasswordPage />
+              </GuestRoute>
+            }
+          />
+          <Route
             path="/mfaAuth"
             element={
               <GuestRoute>
@@ -65,6 +75,16 @@ function App() {
             }
           />
           <Route path="/platform/*" element={<PlatformApp />} />
+          <Route
+            path="/onboarding/plan"
+            element={
+              <ProtectedRoute>
+                <RouteErrorBoundary>
+                  <OnboardingPlanPage />
+                </RouteErrorBoundary>
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/reset-password"
             element={<ResetPasswordPage />}
@@ -90,6 +110,7 @@ function App() {
             <Route path="projects" element={<DashboardPage libraryView="projects" />} />
             <Route path="folder/:folderId" element={<FolderPage />} />
             <Route path="project/:projectId" element={<ProjectPage />} />
+            <Route path="project/:projectId/folder/:folderId" element={<FolderPage />} />
             <Route path="tags" element={<TagsManagementPage />} />
             <Route path="user-activities" element={<UserActivitiesPage />} />
             <Route path="trash" element={<TrashPage />} />
@@ -101,6 +122,18 @@ function App() {
           </Route>
           <Route
             path="/media/:mediaId"
+            element={
+              <ProtectedRoute>
+                <RouteErrorBoundary>
+                  <MediaViewerLayout />
+                </RouteErrorBoundary>
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<VideoPlayerPage />} />
+          </Route>
+          <Route
+            path="/home/project/:projectId/media/:mediaId"
             element={
               <ProtectedRoute>
                 <RouteErrorBoundary>

@@ -25,6 +25,7 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
+import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import FolderCopyOutlinedIcon from '@mui/icons-material/FolderCopyOutlined';
 import NoahLogo from '../../components/NoahLogo';
@@ -102,6 +103,12 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Operations',
     items: [
+      {
+        to: '/platform/security',
+        label: 'Security',
+        icon: <SecurityOutlinedIcon sx={iconSx} />,
+        hint: 'SSO, session timeout, and content security',
+      },
       {
         to: '/platform/activity',
         label: 'Activity',
@@ -208,6 +215,7 @@ export default function PlatformLayout() {
             showGlow={false}
             align="left"
             ariaLabel="NOAH Platform Console"
+            disableCustomBranding
             sx={{ mb: 0, width: '100%', maxWidth: '100%' }}
           />
         </Box>

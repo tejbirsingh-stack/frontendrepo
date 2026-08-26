@@ -188,10 +188,24 @@ export default function Header({
         <NoahLogo
           to="/home"
           width={HEADER_LOGO_WIDTH}
+          fitContainer
           align="left"
           animated={false}
           showGlow={false}
-          sx={{ mb: 0, px: 0, flexShrink: 0 }}
+          sx={{
+            mb: 0,
+            px: 0,
+            flexShrink: 0,
+            maxWidth: { xs: 200, sm: 200, md: 240 },
+            maxHeight: 40,
+            '& img': {
+              maxWidth: { xs: '200px', sm: '200px', md: '240px' },
+              maxHeight: 40,
+              width: 'auto',
+              height: 'auto',
+              objectFit: 'contain',
+            },
+          }}
         />
       ) : (
         <GlobalSearchField inputRef={searchInputRef} sx={{ maxWidth: 560 }} />

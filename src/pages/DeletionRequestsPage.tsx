@@ -26,6 +26,7 @@ import { ROLE_IDS } from '../constants/userRoles';
 import { cv } from '../theme/cssVars';
 import { PROJECT_ACCENT_COLOR } from '../utils/folderColorStyle';
 import SuperAdminDeleteFlowModal from '../components/modals/SuperAdminDeleteFlowModal';
+import SuperAdminFolderDeleteFlowModal from '../components/modals/SuperAdminFolderDeleteFlowModal';
 
 type MediaKind = 'folder' | 'project' | 'video' | 'image' | 'audio' | 'document' | 'file';
 
@@ -302,10 +303,12 @@ export default function DeletionRequestsPage() {
     }
   };
 
-  const handleRestore = (id: string, isProject?: boolean) =>
+  const handleRestore = (id: string, isProject?: boolean, item?: PendingDeletion) =>
     runAction(id, async () => {
       if (isProject) {
         await apiClient.post(`/workspaces/project/restore/${id}`);
+      } else if (item?.isFolderRequest || item?.type === 'folder') {
+        await apiClient.post(`/workspaces/folder/restore/${id}`);
       } else {
         try {
           await apiClient.post(`/media/${id}/restore`);
@@ -329,10 +332,20 @@ export default function DeletionRequestsPage() {
     name: string;
   } | null>(null);
 
+  const [superAdminFolderModalOpen, setSuperAdminFolderModalOpen] = useState(false);
+  const [selectedFolderForSuperAdminDelete, setSelectedFolderForSuperAdminDelete] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+
   const handlePermanentDelete = (item: PendingDeletion) => {
-    if (item.isProject) {
+    const kind = resolveMediaKind(item);
+    if (item.isProject || kind === 'project') {
       setSelectedProjectForSuperAdminDelete({ id: item.id, name: item.title });
       setSuperAdminModalOpen(true);
+    } else if (kind === 'folder' || item.type === 'folder') {
+      setSelectedFolderForSuperAdminDelete({ id: item.id, name: item.title });
+      setSuperAdminFolderModalOpen(true);
     } else {
       runAction(item.id, async () => {
         try {
@@ -353,6 +366,22 @@ export default function DeletionRequestsPage() {
     await runAction(projectId, async () => {
       await apiClient.post(`/workspaces/project/delete/${projectId}`, {
         isWholeProject,
+        deleteFileIds: selectedFileIds,
+        deleteFolderIds: selectedFolderIds,
+        isPermanent: true,
+      });
+    });
+  };
+
+  const handleConfirmSuperAdminFolderPermanentDelete = async (
+    folderId: string,
+    isWholeFolder: boolean,
+    selectedFileIds: string[],
+    selectedFolderIds: string[]
+  ) => {
+    await runAction(folderId, async () => {
+      await apiClient.post(`/workspaces/folder/delete/${folderId}`, {
+        isWholeFolder,
         deleteFileIds: selectedFileIds,
         deleteFolderIds: selectedFolderIds,
         isPermanent: true,
@@ -404,7 +433,7 @@ export default function DeletionRequestsPage() {
     return (
       <Box
         key={item.id}
-        onClick={() => !item.isProject && navigate(`/media/${item.id}`)}
+        onClick={() => !item.isProject && !item.isFolderRequest && kind !== 'folder' && navigate(`/media/${item.id}`)}
         sx={{
           display: 'flex',
           alignItems: { xs: 'flex-start', md: 'center' },
@@ -414,7 +443,7 @@ export default function DeletionRequestsPage() {
           borderRadius: '12px',
           backgroundColor: cv.surface,
           border: `1px solid ${cv.border}`,
-          cursor: item.isProject ? 'default' : 'pointer',
+          cursor: (item.isProject || item.isFolderRequest || kind === 'folder') ? 'default' : 'pointer',
           transition: 'background-color 0.15s ease',
           '&:hover': { backgroundColor: cv.surfaceHover },
         }}
@@ -459,8 +488,8 @@ export default function DeletionRequestsPage() {
               {adminName ? <MetaPill label={`Admin: ${adminName}`} tone="purple" /> : null}
             </Box>
 
-            {/* Project Expansion List (Toggle button & vertical list of files and folders) */}
-            {item.isProject && deletedFilesList.length > 0 && (
+            {/* Folder/Project Expansion List (Toggle button & vertical list of files and folders) */}
+            {(item.isProject || item.isFolderRequest || kind === 'folder') && deletedFilesList.length > 0 && (
               <Box
                 sx={{
                   mt: 1,
@@ -585,7 +614,7 @@ export default function DeletionRequestsPage() {
               variant="outlined"
               startIcon={<RestoreOutlinedIcon />}
               disabled={isBusy}
-              onClick={() => void handleRestore(item.id, item.isProject)}
+              onClick={() => void handleRestore(item.id, item.isProject, item)}
               sx={{
                 textTransform: 'none',
                 borderRadius: '10px',
@@ -774,6 +803,17 @@ export default function DeletionRequestsPage() {
           setSelectedProjectForSuperAdminDelete(null);
         }}
         onConfirmPermanentDelete={handleConfirmSuperAdminPermanentDelete}
+      />
+
+      <SuperAdminFolderDeleteFlowModal
+        open={superAdminFolderModalOpen}
+        folderId={selectedFolderForSuperAdminDelete?.id || null}
+        folderName={selectedFolderForSuperAdminDelete?.name || 'Folder'}
+        onClose={() => {
+          setSuperAdminFolderModalOpen(false);
+          setSelectedFolderForSuperAdminDelete(null);
+        }}
+        onConfirmPermanentDelete={handleConfirmSuperAdminFolderPermanentDelete}
       />
     </Box>
   );

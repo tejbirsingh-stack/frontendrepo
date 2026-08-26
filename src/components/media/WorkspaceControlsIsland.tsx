@@ -1,11 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { cv } from '../../theme/cssVars';
 import { Box, Divider, IconButton, Typography } from '@mui/material';
 import AddOutlinedIcon from '@mui/icons-material/AddOutlined';
-import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import RemoveOutlinedIcon from '@mui/icons-material/RemoveOutlined';
-import HelpMenuDrawer, { getHelpMenuShortcutLabel } from './HelpMenuDrawer';
 import LabeledToolbarButton from './LabeledToolbarButton';
 import ShortcutTooltip from './ShortcutTooltip';
 import {
@@ -58,10 +56,9 @@ interface WorkspaceControlsIslandProps {
   onZoomOut: () => void;
   onZoomIn: () => void;
   onZoomReset?: () => void;
-  onKeyboardShortcuts: () => void;
   compact?: boolean;
-  /** Rendered after zoom controls and before Help in compact (mobile) layout. */
-  insertBeforeHelp?: ReactNode;
+  /** Rendered after the zoom controls in the compact (mobile) layout. */
+  trailingContent?: ReactNode;
   hideZoomControls?: boolean;
 }
 
@@ -73,27 +70,17 @@ export default function WorkspaceControlsIsland({
   onZoomOut,
   onZoomIn,
   onZoomReset,
-  onKeyboardShortcuts,
   compact = false,
-  insertBeforeHelp,
+  trailingContent,
   hideZoomControls = false,
 }: WorkspaceControlsIslandProps) {
-  const helpButtonRef = useRef<HTMLButtonElement>(null);
-  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const { getShortcut } = useResolvedKeyboardShortcuts();
 
-  const helpShortcut = getShortcut('media-open-help') ?? getHelpMenuShortcutLabel();
   const zoomInShortcut = getShortcut('workspace-zoom-in') ?? workspaceZoomShortcuts.in;
   const zoomOutShortcut = getShortcut('workspace-zoom-out') ?? workspaceZoomShortcuts.out;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (matchesKeyboardShortcut(event, helpShortcut)) {
-        event.preventDefault();
-        setHelpMenuOpen((open) => !open);
-        return;
-      }
-
       if (shouldBlockAnnotationShortcuts(event.target)) return;
 
       if (matchesKeyboardShortcut(event, zoomInShortcut) && canZoomIn) {
@@ -107,7 +94,7 @@ export default function WorkspaceControlsIsland({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canZoomIn, canZoomOut, helpShortcut, onZoomIn, onZoomOut, zoomInShortcut, zoomOutShortcut]);
+  }, [canZoomIn, canZoomOut, onZoomIn, onZoomOut, zoomInShortcut, zoomOutShortcut]);
 
   if (compact) {
     return (
@@ -155,24 +142,7 @@ export default function WorkspaceControlsIsland({
             ) : null}
           </>
         )}
-        {insertBeforeHelp}
-        <LabeledToolbarButton
-          label="Help"
-          active={helpMenuOpen}
-          onClick={() => setHelpMenuOpen((open) => !open)}
-          ariaLabel="Help"
-          ariaHaspopup="menu"
-          ariaExpanded={helpMenuOpen}
-          buttonRef={helpButtonRef}
-        >
-          <HelpOutlineOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
-        </LabeledToolbarButton>
-        <HelpMenuDrawer
-          open={helpMenuOpen}
-          anchorEl={helpButtonRef.current}
-          onClose={() => setHelpMenuOpen(false)}
-          onKeyboardShortcuts={onKeyboardShortcuts}
-        />
+        {trailingContent}
       </>
     );
   }
@@ -262,38 +232,6 @@ export default function WorkspaceControlsIsland({
           ) : null}
         </Box>
       )}
-
-      <ShortcutTooltip label="Help" shortcut={getHelpMenuShortcutLabel()}>
-        <IconButton
-          ref={helpButtonRef}
-          type="button"
-          aria-label="Help"
-          aria-haspopup="menu"
-          aria-expanded={helpMenuOpen}
-          onClick={() => setHelpMenuOpen((open) => !open)}
-          sx={{
-            ...surfaceSx,
-            width: CONTROL_SIZE,
-            height: CONTROL_SIZE,
-            borderRadius: '50%',
-            color: helpMenuOpen ? cv.textPrimary : cv.textSecondary,
-            backgroundColor: helpMenuOpen ? cv.surfaceHover : undefined,
-            '&:hover': {
-              backgroundColor: cv.surfaceHover,
-              color: cv.textPrimary,
-            },
-          }}
-        >
-          <HelpOutlineOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
-        </IconButton>
-      </ShortcutTooltip>
-
-      <HelpMenuDrawer
-        open={helpMenuOpen}
-        anchorEl={helpButtonRef.current}
-        onClose={() => setHelpMenuOpen(false)}
-        onKeyboardShortcuts={onKeyboardShortcuts}
-      />
     </Box>
   );
 }

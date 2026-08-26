@@ -21,10 +21,11 @@ import GoogleIcon from '@mui/icons-material/Google';
 import GlassCard from '../components/GlassCard';
 import LiquidBackground from '../components/LiquidBackground';
 import WaveBackground from '../components/WaveBackground';
-import NoahLogo, { AUTH_LOGO_PARENT_SX, AUTH_LOGO_SX } from '../components/NoahLogo';
+import NoahMascot from '../components/NoahMascot';
 import LoginDemoAccountsBubble from '../components/demo/LoginDemoAccountsBubble';
 import { useAuth } from '../auth/AuthContext';
 import { getPostAuthRedirect } from '../auth/paths';
+import { fetchGlobalSecuritySettings } from '../platform/api/platformApi';
 
 function redirectFromState(state: unknown): string {
   if (typeof state === 'object' && state !== null && 'from' in state) {
@@ -43,6 +44,20 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+
+  const [ssoConfigured, setSsoConfigured] = useState<boolean>(true);
+  const [ssoProvider, setSsoProvider] = useState<string>('google, microsoft');
+
+  useEffect(() => {
+    fetchGlobalSecuritySettings()
+      .then((res) => {
+        if (res?.settings) {
+          setSsoConfigured(Boolean(res.settings.ssoConfigured));
+          setSsoProvider(res.settings.ssoProvider || 'google, microsoft');
+        }
+      })
+      .catch((err) => console.error('Failed to fetch security settings for login:', err));
+  }, []);
 
   useEffect(() => {
     const state = location.state as { email?: string } | null;
@@ -159,29 +174,17 @@ export default function LoginPage() {
 
   const handleMicrosoftLogin = async () => {
     setError('');
-    const redirectPath = redirectFromState(location.state);
-
     try {
-      let response: any = null;
-      try {
-        response = await instance.loginPopup({
-          scopes: ['User.Read', 'profile', 'email', 'openid'],
-        });
-      } catch (popupErr: any) {
-        console.warn('MSAL Popup failed/blocked, falling back to redirect:', popupErr);
-        sessionStorage.setItem('msal_redirecting', 'true');
-        sessionStorage.setItem('msal_auth_mode', 'login');
-        await instance.loginRedirect({
-          scopes: ['User.Read', 'profile', 'email', 'openid'],
-        });
-        return;
-      }
-
-      if (response && response.idToken) {
-        await loginMicrosoft(response.idToken, rememberMe, { mode: 'login', isSignUp: false });
-        navigate(redirectPath);
-      }
+      sessionStorage.setItem('msal_redirecting', 'true');
+      sessionStorage.setItem('msal_auth_mode', 'login');
+      await instance.loginRedirect({
+        scopes: ['User.Read', 'profile', 'email', 'openid'],
+        redirectUri: window.location.origin,
+        prompt: 'select_account',
+      });
     } catch (err: any) {
+      sessionStorage.removeItem('msal_redirecting');
+      sessionStorage.removeItem('msal_auth_mode');
       console.error(err);
       setError(err.response?.data?.message || err.message || 'Microsoft Login Failed.');
     }
@@ -197,6 +200,7 @@ export default function LoginPage() {
         justifyContent: 'center',
         p: { xs: 2, sm: 3, md: 4 },
         position: 'relative',
+        overflow: 'visible',
       }}
     >
       <LiquidBackground />
@@ -207,23 +211,67 @@ export default function LoginPage() {
           position: 'relative',
           zIndex: 1,
           width: '100%',
-          maxWidth: 640,
+          maxWidth: { xs: 640, sm: 920 },
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          overflow: 'visible',
         }}
       >
-        <Box sx={AUTH_LOGO_PARENT_SX}>
-          <NoahLogo to="/" ariaLabel="Back to NOAH Cloud home" sx={AUTH_LOGO_SX} showGlow={false} animated={false} />
-        </Box>
-
-        <GlassCard
-          glow
+        <Box
+          component={RouterLink}
+          to="/"
+          aria-label="Back to NOAH Cloud home"
+          className="login-auth-logo-wrapper"
           sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             width: '100%',
-            maxWidth: 440,
+            maxWidth: { xs: 300, sm: 380 },
+            height: { xs: 100, sm: 140 },
+            mb: 3,
+            textDecoration: 'none',
+            cursor: 'pointer',
           }}
         >
+          <Box
+            component="img"
+            src="/noah-logo.png"
+            alt="NOAH CLOUD"
+            className="login-auth-logo"
+            sx={{
+              width: '100%',
+              maxWidth: '100%',
+              height: '100%',
+              maxHeight: 28,
+              objectFit: 'contain',
+              objectPosition: 'center',
+              transform: 'scale(2.2)',
+              transformOrigin: 'center center',
+              mixBlendMode: 'lighten',
+              filter: 'drop-shadow(0 4px 24px rgba(168, 85, 247, 0.7))',
+            }}
+          />
+        </Box>
+
+        <Box
+          sx={{
+            position: 'relative',
+            width: '100%',
+            maxWidth: 440,
+            overflow: 'visible',
+          }}
+        >
+          <NoahMascot pose="wave" preset="authCompanion" />
+          <GlassCard
+            glow
+            sx={{
+              position: 'relative',
+              zIndex: 1,
+              width: '100%',
+            }}
+          >
           <Box
             component="form"
             onSubmit={handleSubmit}
@@ -318,7 +366,8 @@ export default function LoginPage() {
                 }
               />
               <Link
-                href="#"
+                component={RouterLink}
+                to="/forgot-password"
                 underline="hover"
                 sx={{
                   color: cv.textSecondary,
@@ -354,56 +403,64 @@ export default function LoginPage() {
               Sign in
             </Button>
 
-            <Divider
-              sx={{
-                my: 2,
-                '&::before, &::after': { borderColor: cv.border },
-                color: cv.textMuted,
-                fontSize: '0.8125rem',
-              }}
-            >
-              or
-            </Divider>
+            {ssoConfigured ? (
+              <>
+                <Divider
+                  sx={{
+                    my: 2,
+                    '&::before, &::after': { borderColor: cv.border },
+                    color: cv.textMuted,
+                    fontSize: '0.8125rem',
+                  }}
+                >
+                  or
+                </Divider>
 
-            <Box sx={{ display: 'flex', gap: 2, width: '100%' }}>
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={handleGoogleLogin}
-                startIcon={<GoogleIcon />}
-                sx={{
-                  py: 1.5,
-                  borderColor: cv.border,
-                  color: cv.textPrimary,
-                  backgroundColor: 'var(--noah-footer-tint)',
-                  '&:hover': {
-                    borderColor: cv.borderStrong,
-                    backgroundColor: cv.surfaceHover,
-                  },
-                }}
-              >
-                Google
-              </Button>
+                <Box sx={{ display: 'flex', gap: 2, width: '100%' }}>
+                  {ssoProvider.toLowerCase().includes('google') && (
+                    <Button
+                      fullWidth
+                      variant="outlined"
+                      onClick={handleGoogleLogin}
+                      startIcon={<GoogleIcon />}
+                      sx={{
+                        py: 1.5,
+                        borderColor: cv.border,
+                        color: cv.textPrimary,
+                        backgroundColor: 'var(--noah-footer-tint)',
+                        '&:hover': {
+                          borderColor: cv.borderStrong,
+                          backgroundColor: cv.surfaceHover,
+                        },
+                      }}
+                    >
+                      Google
+                    </Button>
+                  )}
 
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={handleMicrosoftLogin}
-                startIcon={<MicrosoftIcon />}
-                sx={{
-                  py: 1.5,
-                  borderColor: cv.border,
-                  color: cv.textPrimary,
-                  backgroundColor: 'var(--noah-footer-tint)',
-                  '&:hover': {
-                    borderColor: cv.borderStrong,
-                    backgroundColor: cv.surfaceHover,
-                  },
-                }}
-              >
-                Microsoft
-              </Button>
-            </Box>
+                  {ssoProvider.toLowerCase().includes('microsoft') && (
+                    <Button
+                      fullWidth
+                      variant="outlined"
+                      onClick={handleMicrosoftLogin}
+                      startIcon={<MicrosoftIcon />}
+                      sx={{
+                        py: 1.5,
+                        borderColor: cv.border,
+                        color: cv.textPrimary,
+                        backgroundColor: 'var(--noah-footer-tint)',
+                        '&:hover': {
+                          borderColor: cv.borderStrong,
+                          backgroundColor: cv.surfaceHover,
+                        },
+                      }}
+                    >
+                      Microsoft
+                    </Button>
+                  )}
+                </Box>
+              </>
+            ) : null}
 
             <Typography
               variant="body2"
@@ -443,6 +500,7 @@ export default function LoginPage() {
             </Typography>
           </Box>
         </GlassCard>
+        </Box>
       </Box>
 
       {/* Demo-only accounts bubble — delete with LoginDemoAccountsBubble.tsx */}

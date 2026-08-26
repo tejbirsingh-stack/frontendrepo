@@ -7,6 +7,8 @@ import GraphicEqOutlinedIcon from '@mui/icons-material/GraphicEqOutlined';
 import LoopOutlinedIcon from '@mui/icons-material/LoopOutlined';
 import RotateLeftOutlinedIcon from '@mui/icons-material/RotateLeftOutlined';
 import RotateRightOutlinedIcon from '@mui/icons-material/RotateRightOutlined';
+import KeyboardArrowLeftOutlinedIcon from '@mui/icons-material/KeyboardArrowLeftOutlined';
+import KeyboardArrowRightOutlinedIcon from '@mui/icons-material/KeyboardArrowRightOutlined';
 import SwapVertOutlinedIcon from '@mui/icons-material/SwapVertOutlined';
 import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined';
 import UnfoldMoreDoubleOutlinedIcon from '@mui/icons-material/UnfoldMoreDoubleOutlined';
@@ -21,23 +23,19 @@ export interface PlayerToolDefinition {
   hasSubmenu?: boolean;
   disabled?: boolean;
   pinnable?: boolean;
+  description?: string;
 }
 
 export const PLAYER_TOOL_SECTIONS: PlayerToolDefinition[][] = [
   [{ id: 'audio-meter', label: 'Audio meter', icon: GraphicEqOutlinedIcon, shortcut: 'M' }],
   [
+    { id: 'set-in-point', label: 'Set in point', icon: KeyboardArrowRightOutlinedIcon, shortcut: 'I' },
+    { id: 'set-out-point', label: 'Set out point', icon: KeyboardArrowLeftOutlinedIcon, shortcut: 'O' },
     { id: 'read-timecode', label: 'Read timecode from file', icon: TimerOutlinedIcon, shortcut: 'G' },
-    { id: 'toggle-range', label: 'Toggle range', icon: UnfoldMoreDoubleOutlinedIcon, shortcut: 'R' },
+    { id: 'toggle-range', label: 'Toggle range', icon: UnfoldMoreDoubleOutlinedIcon, shortcut: 'R', description: 'Requires In (I) and Out (O) points' },
     { id: 'loop', label: 'Loop', icon: LoopOutlinedIcon, shortcut: 'L' },
   ],
   [
-    {
-      id: 'compare',
-      label: 'Compare',
-      icon: CompareOutlinedIcon,
-      shortcut: 'K',
-      disabled: true,
-    },
     { id: 'flip', label: 'Flip', icon: FlipOutlinedIcon, shortcut: 'X' },
     { id: 'flop', label: 'Flop', icon: SwapVertOutlinedIcon, shortcut: 'Y' },
     { id: 'rotate-left', label: 'Rotate left', icon: RotateLeftOutlinedIcon, shortcut: '[' },

@@ -4,14 +4,14 @@ import DashboardPage from './DashboardPage';
 import { useDashboard } from '../context/DashboardContext';
 
 export default function FolderPage() {
-  const { folderId } = useParams<{ folderId: string }>();
+  const { folderId, projectId } = useParams<{ folderId: string; projectId?: string }>();
   const { mediaItems, activeWorkspaceId, fetchFolderData } = useDashboard();
 
   useEffect(() => {
     if (folderId) {
-      fetchFolderData(folderId);
+      fetchFolderData(folderId, projectId);
     }
-  }, [folderId, fetchFolderData]);
+  }, [folderId, projectId, fetchFolderData]);
 
   const folder = mediaItems.find(
     (item) =>

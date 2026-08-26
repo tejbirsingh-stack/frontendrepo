@@ -29,7 +29,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
       { id: 'usage', label: 'Usage', path: 'accounts/usage' },
       { id: 'plan', label: 'Plan', path: 'accounts/plan' },
       { id: 'billing', label: 'Billing', path: 'accounts/billing' },
-      { id: 'branding', label: 'Branding (WIP)', path: 'accounts/branding' },
+      { id: 'branding', label: 'Branding', path: 'accounts/branding' },
     ],
   },
   {
@@ -39,7 +39,6 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
       { id: 'user', label: 'User', path: 'admin/user' },
       { id: 'projects', label: 'Projects', path: 'admin/projects' },
       { id: 'workspaces', label: 'Workspaces', path: 'admin/workspaces' },
-      { id: 'fields', label: 'Fields (WIP)', path: 'admin/fields' },
       { id: 'security', label: 'Security', path: 'admin/security' },
       { id: 'keyboard-shortcuts', label: 'Keyboard Shortcuts', path: 'admin/keyboard-shortcuts' },
     ],
