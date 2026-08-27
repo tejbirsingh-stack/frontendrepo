@@ -393,19 +393,14 @@ function DemoForm({ onClose }: { onClose: () => void }) {
         />
         <TextField
           id={teamId}
-          select
           label="Team size"
+          type="number"
           value={teamSize}
           onChange={(e) => setTeamSize(e.target.value)}
+          placeholder="1"
+          slotProps={{ htmlInput: { min: 1, max: 100000, step: 1 } }}
           sx={fieldSx}
-        >
-          <MenuItem value="">Select size</MenuItem>
-          {TEAM_SIZE_OPTIONS.map((option) => (
-            <MenuItem key={option} value={option}>
-              {option}
-            </MenuItem>
-          ))}
-        </TextField>
+        />
       </Box>
       <TextField
         id={messageId}
