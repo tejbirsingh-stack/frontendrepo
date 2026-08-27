@@ -658,7 +658,7 @@ export default function PlatformUsersPage() {
               onChange={(e) => setInvite((f) => ({ ...f, roleId: e.target.value }))}
               slotProps={textFieldSelectInDialogSlotProps}
             >
-              {roles.map((role) => (
+              {roles.filter(role => role.name !== 'Super Admin').map((role) => (
                 <MenuItem key={role.id} value={role.id}>
                   {role.name}
                 </MenuItem>
