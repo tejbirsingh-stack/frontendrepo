@@ -21,7 +21,8 @@ import MediaItemActionsMenu from './MediaItemActionsMenu';
 import PlatformMediaInfoChip from './PlatformMediaInfoChip';
 import AiSummaryBlock from '../media/AiSummaryBlock';
 import TruncatedText from '../TruncatedText';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import CircularProgress from '@mui/material/CircularProgress';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { MediaItem, MediaType } from '../../data/mockMedia';
 import { getMediaViewerPath } from '../../utils/mediaNavigation';
 import { getMediaDragPayload, hasMediaDragPayload, setMediaDragPayload } from '../../utils/mediaDrag';
@@ -360,6 +361,7 @@ function VideoPreview({ item }: { item: MediaItem }) {
 
 function ImagePreview({ item }: { item: MediaItem }) {
   const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const [clientDecodedUrl, setClientDecodedUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -421,14 +423,39 @@ function ImagePreview({ item }: { item: MediaItem }) {
   }
 
   return (
-    <Box
-      component="img"
-      src={displaySrc}
-      alt={item.title}
-      loading="lazy"
-      onError={() => setImageError(true)}
-      sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-    />
+    <>
+      {!imageLoaded && !imageError && (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: `linear-gradient(160deg, ${cv.greenAccentSurface} 0%, ${cv.surfaceSubtle} 100%)`,
+            zIndex: 1,
+          }}
+        >
+          <CircularProgress size={24} sx={{ color: cv.textMuted }} />
+        </Box>
+      )}
+      <Box
+        component="img"
+        src={displaySrc}
+        alt={item.title}
+        loading="lazy"
+        onLoad={() => setImageLoaded(true)}
+        onError={() => setImageError(true)}
+        sx={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+          opacity: imageLoaded ? 1 : 0,
+          transition: 'opacity 0.2s ease',
+        }}
+      />
+    </>
   );
 }
 

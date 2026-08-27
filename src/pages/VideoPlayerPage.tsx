@@ -525,7 +525,7 @@ export default function VideoPlayerPage({
             location: null,
             thumbnail: asset.thumbnail || undefined,
             videoSrc: asset.url,
-            compressionStatus: asset.compressionStatus || 'completed',
+            compressionStatus: asset.compressionStatus || asset.status || 'completed',
             customMetadata: asset.customMetadata,
             globalMedia: Boolean((asset as any).globalMedia),
             visibility: (asset as any).visibility,
