@@ -579,3 +579,35 @@ export async function updateGlobalSecuritySettings(body: Partial<GlobalSecurityS
     },
   );
 }
+
+export type DashboardNotificationSettings = {
+  isEnabled: boolean;
+  title: string;
+  body: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  updatedAt?: string;
+};
+
+export async function fetchDashboardNotification() {
+  return platformRequest<{ success: boolean; notification: DashboardNotificationSettings }>(
+    '/platform/dashboard-notification',
+  );
+}
+
+export async function fetchPublicDashboardNotification() {
+  return platformRequest<{ success: boolean; notification: DashboardNotificationSettings }>(
+    '/platform/dashboard-notification',
+    { skipAuth: true },
+  );
+}
+
+export async function updateDashboardNotification(body: Partial<DashboardNotificationSettings>) {
+  return platformRequest<{ success: boolean; message: string; notification: DashboardNotificationSettings }>(
+    '/platform/dashboard-notification',
+    {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    },
+  );
+}

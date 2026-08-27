@@ -46,6 +46,7 @@ export function getDashboardFolderDropTargetKey(folderId: string) {
 import MoveItemsModal, { type MoveDestination } from '../components/dashboard/MoveItemsModal';
 import NewFolderModal from '../components/dashboard/NewFolderModal';
 import NewProjectModal from '../components/dashboard/NewProjectModal';
+import DashboardNotificationPopup from '../components/dashboard/DashboardNotificationPopup';
 import TrashConfirmModal from '../components/dashboard/TrashConfirmModal';
 import DashboardKeyboardShortcutsDialog from '../components/dashboard/DashboardKeyboardShortcutsDialog';
 import HelpMenuDrawer, { getHelpMenuShortcutLabel } from '../components/media/HelpMenuDrawer';
@@ -1007,8 +1008,10 @@ export default function DashboardPage({
     : bulkTrashItemNames[0] ?? '1 item';
 
   return (
-    <Box
-      ref={contentRef}
+    <Fragment>
+      <DashboardNotificationPopup />
+      <Box
+        ref={contentRef}
       component="main"
       sx={{
         flex: 1,
@@ -1068,25 +1071,25 @@ export default function DashboardPage({
                         textDecoration: 'none',
                         '&:hover': { color: cv.textPrimary },
                       }}
-                    >
-                      {crumb.title}
-                    </Box>
-                  )}
-                </Fragment>
-              );
-            })}
-          </Box>
-        ) : null}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 2,
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                      >
+                        {crumb.title}
+                      </Box>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </Box>
+          ) : null}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 2,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
             {folderAccent ? (
               <Box
                 aria-hidden
@@ -1968,6 +1971,7 @@ export default function DashboardPage({
           }));
         }}
       />
-    </Box>
+      </Box>
+    </Fragment>
   );
 }

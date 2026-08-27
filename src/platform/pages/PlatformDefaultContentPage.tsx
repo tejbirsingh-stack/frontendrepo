@@ -33,6 +33,9 @@ import {
   updateDefaultContent,
   uploadDefaultContent,
   uploadGlobalMediaChunked,
+  fetchDashboardNotification,
+  updateDashboardNotification,
+  type DashboardNotificationSettings,
 } from '../api/platformApi';
 import {
   EmptyState,
@@ -161,6 +164,15 @@ export default function PlatformDefaultContentPage() {
   const [isMinimized, setIsMinimized] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
 
+  const [notification, setNotification] = useState<DashboardNotificationSettings>({
+    isEnabled: false,
+    title: '',
+    body: '',
+    ctaLabel: '',
+    ctaUrl: '',
+  });
+  const [savingNotification, setSavingNotification] = useState(false);
+
   const totalFiles = uploadQueue.length;
   const isAllComplete = totalFiles > 0 && completedCount === totalFiles;
   const hasFailed = uploadQueue.some((item) => item.status === 'failed');
@@ -174,8 +186,14 @@ export default function PlatformDefaultContentPage() {
   const loadItems = async () => {
     try {
       setLoading(true);
-      const res = await fetchDefaultContent();
+      const [res, notifRes] = await Promise.all([
+        fetchDefaultContent(),
+        fetchDashboardNotification().catch(() => null),
+      ]);
       setItems(res?.items || []);
+      if (notifRes?.notification) {
+        setNotification(notifRes.notification);
+      }
     } catch (err) {
       console.warn('Failed to load platform default content:', err);
       setItems([]);
@@ -315,6 +333,20 @@ export default function PlatformDefaultContentPage() {
     }
   };
 
+  const handleSaveNotification = async () => {
+    setSavingNotification(true);
+    try {
+      const res = await updateDashboardNotification(notification);
+      if (res.notification) {
+        setNotification(res.notification);
+      }
+    } catch (err) {
+      console.error('Failed to save dashboard notification:', err);
+    } finally {
+      setSavingNotification(false);
+    }
+  };
+
   return (
     <Box>
       <PageHeader
@@ -434,6 +466,79 @@ export default function PlatformDefaultContentPage() {
             />
           </>
         )}
+      </Panel>
+
+      <Panel
+        title="Dashboard Notification Popup"
+        subtitle="Configure a welcome popup shown to all users when they log into the dashboard"
+        sx={{ mt: 3 }}
+      >
+        <Box sx={{ display: 'grid', gap: 3, maxWidth: 600 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Switch
+              checked={notification.isEnabled}
+              onChange={(e) => setNotification({ ...notification, isEnabled: e.target.checked })}
+              color="primary"
+            />
+            <Typography sx={{ fontWeight: 500 }}>
+              Enable dashboard notification popup
+            </Typography>
+          </Box>
+
+          <TextField
+            label="Popup Title"
+            size="small"
+            fullWidth
+            value={notification.title}
+            onChange={(e) => setNotification({ ...notification, title: e.target.value })}
+            placeholder="e.g., Welcome to the New NOAH Cloud!"
+            disabled={!notification.isEnabled}
+          />
+
+          <TextField
+            label="Message Body"
+            size="small"
+            fullWidth
+            multiline
+            rows={4}
+            value={notification.body}
+            onChange={(e) => setNotification({ ...notification, body: e.target.value })}
+            placeholder="Enter the main message content here..."
+            disabled={!notification.isEnabled}
+          />
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <TextField
+              label="CTA Button Label (Optional)"
+              size="small"
+              fullWidth
+              value={notification.ctaLabel}
+              onChange={(e) => setNotification({ ...notification, ctaLabel: e.target.value })}
+              placeholder="e.g., Learn More"
+              disabled={!notification.isEnabled}
+            />
+            <TextField
+              label="CTA URL (Optional)"
+              size="small"
+              fullWidth
+              value={notification.ctaUrl}
+              onChange={(e) => setNotification({ ...notification, ctaUrl: e.target.value })}
+              placeholder="https://..."
+              disabled={!notification.isEnabled}
+            />
+          </Box>
+
+          <Box sx={{ pt: 1, borderTop: `1px solid ${cv.border}` }}>
+            <Button
+              variant="contained"
+              onClick={handleSaveNotification}
+              disabled={savingNotification}
+              sx={{ textTransform: 'none' }}
+            >
+              {savingNotification ? 'Saving...' : 'Save Notification Settings'}
+            </Button>
+          </Box>
+        </Box>
       </Panel>
 
       <Dialog
