@@ -449,6 +449,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           linkedProjectIds: f.sources?.map((s: any) => s.projectId) || [],
           projectLocations: f.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
           isProject: Boolean(f.isProject || f.type === 'PROJECT' || f.type === 'project'),
+          itemCount: typeof f.itemCount === 'number' ? f.itemCount : 0,
         }));
 
         const assetMediaItems: MediaItem[] = (media || []).map((a: any) => {

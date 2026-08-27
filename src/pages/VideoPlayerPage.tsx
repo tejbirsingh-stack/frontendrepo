@@ -412,6 +412,7 @@ export default function VideoPlayerPage({
         proxySizeBytes: fetchedItem.proxySizeBytes ?? contextItem.proxySizeBytes,
         hasProxy: fetchedItem.hasProxy ?? contextItem.hasProxy,
         visibility: (fetchedItem as any).visibility || (contextItem as any).visibility,
+        globalMedia: fetchedItem.globalMedia ?? contextItem.globalMedia,
       }
       : contextItem || fetchedItem;
   }, [isGuestMode, guestItem, contextItem, fetchedItem]);
@@ -529,6 +530,7 @@ export default function VideoPlayerPage({
             globalMedia: Boolean((asset as any).globalMedia),
             visibility: (asset as any).visibility,
             duration: (techSpecs.duration as string) || (asset.customMetadata?.duration as string) || undefined,
+            globalMedia: Boolean((asset as any).globalMedia || (asset as any).global_media),
           });
           // Store effective permissions from backend
           const perms = (asset as any).effectivePermissions;
@@ -5062,61 +5064,65 @@ export default function VideoPlayerPage({
           </Box>
         </GlassCard>
 
-        <AnnotationHistoryDrawer
-          open={historyOpen}
-          availableTabs={
-            annotationsAllowed
-              ? (aiEntitled ? undefined : ['history', 'details'])
-              : ['details']
-          }
-          activeHistoryEntryId={activeHistoryEntryId}
-          entries={history}
-          comments={comments}
-          mediaItem={item}
-          technicalDetails={videoTechnicalDetails}
-          tags={item.tags ?? []}
-          onTagsChange={handleTagsChange}
-          activeTab={drawerTab}
-          onTabChange={setDrawerTab}
-          detailsSection={detailsSection}
-          onDetailsSectionChange={setDetailsSection}
-          selectedFramePersonId={selectedFramePerson?.id ?? null}
-          onFramePersonSelect={handleFramePersonSelect}
-          onTranscriptSeek={handleTranscriptSeek}
-          videoRef={videoRef}
-          onClose={() => setHistoryOpen(false)}
-          onEntryClick={(entry) => {
-            handleSeekToTimestamp(entry.videoTimestamp, entry.id);
-            if (['comment', 'drawing', 'shape', 'stamp'].includes(entry.type)) {
-              handleAnnotationClick(entry.id, entry.type as any);
+        {!isGlobalMediaAsset && (
+          <AnnotationHistoryDrawer
+            open={historyOpen}
+            availableTabs={
+              annotationsAllowed
+                ? (aiEntitled ? undefined : ['history', 'details'])
+                : ['details']
             }
-          }}
-          onToggleResolved={handleToggleResolved}
-          onTogglePinned={handleTogglePinned}
-          onMarkUnread={handleMarkUnread}
-          onMarkRead={handleMarkRead}
-          onCopyLink={handleCopyLink}
-          onDeleteEntry={handleDeleteEntry}
-          onHardDeleteEntry={handleHardDeleteEntry}
-          onRestoreEntry={handleRestoreEntry}
-          onEditComment={handleEditComment}
-          annotationGroups={annotationGroups}
-          collaborators={allCollaboratorsForMentions}
-          onVisibilityChange={handleEntryVisibilityChange}
-          onCreateAnnotationGroup={handleCreateAnnotationGroup}
-          onDeleteAnnotationGroup={handleDeleteAnnotationGroup}
-          onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
-          onAddCollaborator={handleAddCollaboratorForGroup}
-        />
+            activeHistoryEntryId={activeHistoryEntryId}
+            entries={history}
+            comments={comments}
+            mediaItem={item}
+            technicalDetails={videoTechnicalDetails}
+            tags={item.tags ?? []}
+            onTagsChange={handleTagsChange}
+            activeTab={drawerTab}
+            onTabChange={setDrawerTab}
+            detailsSection={detailsSection}
+            onDetailsSectionChange={setDetailsSection}
+            selectedFramePersonId={selectedFramePerson?.id ?? null}
+            onFramePersonSelect={handleFramePersonSelect}
+            onTranscriptSeek={handleTranscriptSeek}
+            videoRef={videoRef}
+            onClose={() => setHistoryOpen(false)}
+            onEntryClick={(entry) => {
+              handleSeekToTimestamp(entry.videoTimestamp, entry.id);
+              if (['comment', 'drawing', 'shape', 'stamp'].includes(entry.type)) {
+                handleAnnotationClick(entry.id, entry.type as any);
+              }
+            }}
+            onToggleResolved={handleToggleResolved}
+            onTogglePinned={handleTogglePinned}
+            onMarkUnread={handleMarkUnread}
+            onMarkRead={handleMarkRead}
+            onCopyLink={handleCopyLink}
+            onDeleteEntry={handleDeleteEntry}
+            onHardDeleteEntry={handleHardDeleteEntry}
+            onRestoreEntry={handleRestoreEntry}
+            onEditComment={handleEditComment}
+            annotationGroups={annotationGroups}
+            collaborators={allCollaboratorsForMentions}
+            onVisibilityChange={handleEntryVisibilityChange}
+            onCreateAnnotationGroup={handleCreateAnnotationGroup}
+            onDeleteAnnotationGroup={handleDeleteAnnotationGroup}
+            onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
+            onAddCollaborator={handleAddCollaboratorForGroup}
+          />
+        )}
         </Box>
 
-        <MediaSideRail
-          activePanel={historyOpen ? drawerTab : null}
-          onPanelSelect={handleRailPanelSelect}
-          onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
-          showAnnotations={annotationsAllowed}
-          showAi={aiEntitled}
-        />
+        {!isGlobalMediaAsset && (
+          <MediaSideRail
+            activePanel={historyOpen ? drawerTab : null}
+            onPanelSelect={handleRailPanelSelect}
+            onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
+            showAnnotations={annotationsAllowed}
+            showAi={aiEntitled}
+          />
+        )}
       </Box>
 
       <PlayerToolsDrawer
