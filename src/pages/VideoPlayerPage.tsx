@@ -50,6 +50,7 @@ import {
 } from '../components/media/LabeledToolbarButton';
 import ClearAnnotationsModal from '../components/media/ClearAnnotationsModal';
 import WorkspaceControlsIsland from '../components/media/WorkspaceControlsIsland';
+import NoahWalkingMascot from '../components/NoahWalkingMascot';
 import MediaSideRail, { type MediaRailPanel } from '../components/media/MediaSideRail';
 import PlayerToolsDrawer from '../components/media/PlayerToolsDrawer';
 import PeopleCollaboratorsPopover from '../components/media/PeopleCollaboratorsPopover';
@@ -149,6 +150,7 @@ import { buildTimelineItems } from '../utils/buildTimelineItems';
 import { createDefaultAnnotationEndTime } from '../utils/annotationTimeRange';
 import type { TimelineAnnotationType } from '../types/annotationTimeline';
 import { formatFileSize } from '../utils/formatFileSize';
+import { isPlatformMediaAsset } from '../utils/platformMedia';
 import {
   DEFAULT_FILE_REVIEW_STATUS,
   FILE_REVIEW_STATUSES,
@@ -410,6 +412,7 @@ export default function VideoPlayerPage({
         proxySizeBytes: fetchedItem.proxySizeBytes ?? contextItem.proxySizeBytes,
         hasProxy: fetchedItem.hasProxy ?? contextItem.hasProxy,
         visibility: (fetchedItem as any).visibility || (contextItem as any).visibility,
+        globalMedia: fetchedItem.globalMedia ?? contextItem.globalMedia,
       }
       : contextItem || fetchedItem;
   }, [isGuestMode, guestItem, contextItem, fetchedItem]);
@@ -522,10 +525,12 @@ export default function VideoPlayerPage({
             location: null,
             thumbnail: asset.thumbnail || undefined,
             videoSrc: asset.url,
-            compressionStatus: asset.compressionStatus || 'completed',
+            compressionStatus: asset.compressionStatus || asset.status || 'completed',
             customMetadata: asset.customMetadata,
+            globalMedia: Boolean((asset as any).globalMedia),
             visibility: (asset as any).visibility,
             duration: (techSpecs.duration as string) || (asset.customMetadata?.duration as string) || undefined,
+            globalMedia: Boolean((asset as any).globalMedia || (asset as any).global_media),
           });
           // Store effective permissions from backend
           const perms = (asset as any).effectivePermissions;
@@ -617,10 +622,7 @@ export default function VideoPlayerPage({
     return collaborators.find((c) => c.isCurrentUser || (c.email && user?.email && c.email.toLowerCase() === user.email.toLowerCase()));
   }, [collaborators, user?.email]);
 
-  const isGlobalMediaAsset = useMemo(() => {
-    if (!item) return false;
-    return Boolean((item as any).globalMedia || item.customMetadata?.platformDefaultContentId || item.customMetadata?.seededFromPlatform);
-  }, [item]);
+  const isGlobalMediaAsset = useMemo(() => isPlatformMediaAsset(item), [item]);
 
   const isAssetAdmin = useMemo(() => {
     if (isGlobalMediaAsset) return false;
@@ -4890,6 +4892,20 @@ export default function VideoPlayerPage({
                     position: 'relative',
                   }}
                 >
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      left: 0,
+                      bottom: -24,
+                      zIndex: 2,
+                      lineHeight: 0,
+                      backgroundColor: 'transparent',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <NoahWalkingMascot size={56} />
+                  </Box>
+
                   {showClearIsland && !isViewer ? (
                     <Box
                       sx={{
@@ -4917,7 +4933,7 @@ export default function VideoPlayerPage({
                         display: 'flex',
                         justifyContent: 'center',
                         pl: showClearIsland ? '88px' : 2,
-                        pr: '148px',
+                        pr: '200px',
                       }}
                     >
                       <AnnotationToolbar
@@ -4958,26 +4974,27 @@ export default function VideoPlayerPage({
                     </Box>
                   )}
 
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      right: 16,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      zIndex: 2,
-                    }}
-                  >
-                    <WorkspaceControlsIsland
-                      zoomLabel={workspaceZoomLabel}
-                      canZoomOut={canWorkspaceZoomOut}
-                      canZoomIn={canWorkspaceZoomIn}
-                      canResetZoom={canWorkspaceZoomReset}
-                      onZoomOut={handleWorkspaceZoomOut}
-                      onZoomIn={handleWorkspaceZoomIn}
-                      onZoomReset={handleWorkspaceZoomReset}
-                      hideZoomControls={item?.type === 'audio'}
-                    />
-                  </Box>
+                  {item?.type !== 'audio' ? (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        right: 16,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        zIndex: 2,
+                      }}
+                    >
+                      <WorkspaceControlsIsland
+                        zoomLabel={workspaceZoomLabel}
+                        canZoomOut={canWorkspaceZoomOut}
+                        canZoomIn={canWorkspaceZoomIn}
+                        canResetZoom={canWorkspaceZoomReset}
+                        onZoomOut={handleWorkspaceZoomOut}
+                        onZoomIn={handleWorkspaceZoomIn}
+                        onZoomReset={handleWorkspaceZoomReset}
+                      />
+                    </Box>
+                  ) : null}
                 </Box>
               ) : (
                 <Box sx={mobileIslandScrollSx}>
@@ -5047,61 +5064,65 @@ export default function VideoPlayerPage({
           </Box>
         </GlassCard>
 
-        <AnnotationHistoryDrawer
-          open={historyOpen}
-          availableTabs={
-            annotationsAllowed
-              ? (aiEntitled ? undefined : ['history', 'details'])
-              : ['details']
-          }
-          activeHistoryEntryId={activeHistoryEntryId}
-          entries={history}
-          comments={comments}
-          mediaItem={item}
-          technicalDetails={videoTechnicalDetails}
-          tags={item.tags ?? []}
-          onTagsChange={handleTagsChange}
-          activeTab={drawerTab}
-          onTabChange={setDrawerTab}
-          detailsSection={detailsSection}
-          onDetailsSectionChange={setDetailsSection}
-          selectedFramePersonId={selectedFramePerson?.id ?? null}
-          onFramePersonSelect={handleFramePersonSelect}
-          onTranscriptSeek={handleTranscriptSeek}
-          videoRef={videoRef}
-          onClose={() => setHistoryOpen(false)}
-          onEntryClick={(entry) => {
-            handleSeekToTimestamp(entry.videoTimestamp, entry.id);
-            if (['comment', 'drawing', 'shape', 'stamp'].includes(entry.type)) {
-              handleAnnotationClick(entry.id, entry.type as any);
+        {!isGlobalMediaAsset && (
+          <AnnotationHistoryDrawer
+            open={historyOpen}
+            availableTabs={
+              annotationsAllowed
+                ? (aiEntitled ? undefined : ['history', 'details'])
+                : ['details']
             }
-          }}
-          onToggleResolved={handleToggleResolved}
-          onTogglePinned={handleTogglePinned}
-          onMarkUnread={handleMarkUnread}
-          onMarkRead={handleMarkRead}
-          onCopyLink={handleCopyLink}
-          onDeleteEntry={handleDeleteEntry}
-          onHardDeleteEntry={handleHardDeleteEntry}
-          onRestoreEntry={handleRestoreEntry}
-          onEditComment={handleEditComment}
-          annotationGroups={annotationGroups}
-          collaborators={allCollaboratorsForMentions}
-          onVisibilityChange={handleEntryVisibilityChange}
-          onCreateAnnotationGroup={handleCreateAnnotationGroup}
-          onDeleteAnnotationGroup={handleDeleteAnnotationGroup}
-          onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
-          onAddCollaborator={handleAddCollaboratorForGroup}
-        />
+            activeHistoryEntryId={activeHistoryEntryId}
+            entries={history}
+            comments={comments}
+            mediaItem={item}
+            technicalDetails={videoTechnicalDetails}
+            tags={item.tags ?? []}
+            onTagsChange={handleTagsChange}
+            activeTab={drawerTab}
+            onTabChange={setDrawerTab}
+            detailsSection={detailsSection}
+            onDetailsSectionChange={setDetailsSection}
+            selectedFramePersonId={selectedFramePerson?.id ?? null}
+            onFramePersonSelect={handleFramePersonSelect}
+            onTranscriptSeek={handleTranscriptSeek}
+            videoRef={videoRef}
+            onClose={() => setHistoryOpen(false)}
+            onEntryClick={(entry) => {
+              handleSeekToTimestamp(entry.videoTimestamp, entry.id);
+              if (['comment', 'drawing', 'shape', 'stamp'].includes(entry.type)) {
+                handleAnnotationClick(entry.id, entry.type as any);
+              }
+            }}
+            onToggleResolved={handleToggleResolved}
+            onTogglePinned={handleTogglePinned}
+            onMarkUnread={handleMarkUnread}
+            onMarkRead={handleMarkRead}
+            onCopyLink={handleCopyLink}
+            onDeleteEntry={handleDeleteEntry}
+            onHardDeleteEntry={handleHardDeleteEntry}
+            onRestoreEntry={handleRestoreEntry}
+            onEditComment={handleEditComment}
+            annotationGroups={annotationGroups}
+            collaborators={allCollaboratorsForMentions}
+            onVisibilityChange={handleEntryVisibilityChange}
+            onCreateAnnotationGroup={handleCreateAnnotationGroup}
+            onDeleteAnnotationGroup={handleDeleteAnnotationGroup}
+            onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
+            onAddCollaborator={handleAddCollaboratorForGroup}
+          />
+        )}
         </Box>
 
-        <MediaSideRail
-          activePanel={historyOpen ? drawerTab : null}
-          onPanelSelect={handleRailPanelSelect}
-          onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
-          showAnnotations={annotationsAllowed}
-          showAi={aiEntitled}
-        />
+        {!isGlobalMediaAsset && (
+          <MediaSideRail
+            activePanel={historyOpen ? drawerTab : null}
+            onPanelSelect={handleRailPanelSelect}
+            onKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)}
+            showAnnotations={annotationsAllowed}
+            showAi={aiEntitled}
+          />
+        )}
       </Box>
 
       <PlayerToolsDrawer

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import toast from 'react-hot-toast';
 import {
   Box,
   Button,
@@ -160,7 +161,6 @@ export default function PlatformDefaultContentPage() {
   const [isWidgetVisible, setIsWidgetVisible] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
-
   const totalFiles = uploadQueue.length;
   const isAllComplete = totalFiles > 0 && completedCount === totalFiles;
   const hasFailed = uploadQueue.some((item) => item.status === 'failed');
@@ -314,6 +314,7 @@ export default function PlatformDefaultContentPage() {
       setBusyId('');
     }
   };
+
 
   return (
     <Box>

@@ -80,6 +80,13 @@ export async function createOrganization(body: Record<string, unknown>) {
   });
 }
 
+export async function inviteOrganization(body: { email: string }) {
+  return platformRequest<{ success: boolean; message: string }>('/platform/organizations/invite', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function fetchOrganization(orgId: string) {
   return platformRequest<{ success: boolean; organization: Record<string, unknown> }>(
     `/platform/organizations/${orgId}`,
@@ -570,5 +577,89 @@ export async function updateGlobalSecuritySettings(body: Partial<GlobalSecurityS
       method: 'PUT',
       body: JSON.stringify(body),
     },
+  );
+}
+
+export type DashboardNotificationImage = {
+  id: string;
+  filePath: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: string;
+  sortOrder: number;
+  url: string | null;
+};
+
+export type DashboardNotificationSettings = {
+  isEnabled: boolean;
+  title: string;
+  body: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  updatedAt?: string;
+  images: DashboardNotificationImage[];
+};
+
+export async function fetchDashboardNotification() {
+  return platformRequest<{ success: boolean; notification: DashboardNotificationSettings }>(
+    '/platform/dashboard-notification',
+  );
+}
+
+export async function fetchPublicDashboardNotification() {
+  return platformRequest<{ success: boolean; notification: DashboardNotificationSettings }>(
+    '/platform/dashboard-notification',
+    { skipAuth: true },
+  );
+}
+
+export async function updateDashboardNotification(body: Partial<DashboardNotificationSettings>) {
+  return platformRequest<{ success: boolean; message: string; notification: DashboardNotificationSettings }>(
+    '/platform/dashboard-notification',
+    {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export async function uploadNotificationImage(
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<{ success: boolean; image: DashboardNotificationImage }> {
+  const token = readPlatformToken();
+  const baseUrl = (env.apiBaseUrl || '/api').replace(/\/$/, '');
+  const url = `${baseUrl}/platform/dashboard-notification/images`;
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Accept', 'application/json');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+    }
+
+    xhr.onload = () => {
+      let data: any = {};
+      try { data = JSON.parse(xhr.responseText); } catch (e) {}
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else reject(new Error(data?.message || 'Upload failed'));
+    };
+    xhr.onerror = () => reject(new Error('Network error during upload'));
+
+    const formData = new FormData();
+    formData.append('file', file);
+    xhr.send(formData);
+  });
+}
+
+export async function deleteNotificationImage(imageId: string) {
+  return platformRequest<{ success: boolean }>(
+    `/platform/dashboard-notification/images/${imageId}`,
+    { method: 'DELETE' },
   );
 }

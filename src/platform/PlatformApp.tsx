@@ -16,6 +16,7 @@ import PlatformActivityPage from './pages/PlatformActivityPage';
 import PlatformReportingPage from './pages/PlatformReportingPage';
 import PlatformLandingPage from './pages/PlatformLandingPage';
 import PlatformDefaultContentPage from './pages/PlatformDefaultContentPage';
+import PlatformNotificationPopupPage from './pages/PlatformNotificationPopupPage';
 import PlatformSecurityPage from './pages/PlatformSecurityPage';
 
 /** Applied globally while PlatformApp is mounted so portaled Dialogs get the same size. */
@@ -64,6 +65,7 @@ export default function PlatformApp() {
             <Route path="security" element={<PlatformSecurityPage />} />
             <Route path="landing" element={<PlatformLandingPage />} />
             <Route path="default-content" element={<PlatformDefaultContentPage />} />
+            <Route path="notification-popup" element={<PlatformNotificationPopupPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/platform" replace />} />
         </Routes>

@@ -92,13 +92,13 @@ function slugifyWorkspaceName(value: string): string {
 }
 
 function formatWorkspaceNameWithSuffix(value: string): string {
-  if (!value || typeof value !== 'string') return 'Workspace-ARK';
+  if (!value || typeof value !== 'string') return 'ARK';
   let trimmed = value.trim();
-  if (trimmed.endsWith('-Workspace-ARK')) {
+  if (trimmed.endsWith('-ARK')) {
     return trimmed;
   }
   trimmed = trimmed.replace(/-Workspace$/i, '').replace(/-ARK$/i, '').replace(/-Workspace-ARK$/i, '').trim();
-  return `${trimmed}-Workspace-ARK`;
+  return `${trimmed}-ARK`;
 }
 
 function formatFileSize(bytes: number): string {

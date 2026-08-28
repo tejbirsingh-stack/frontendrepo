@@ -271,7 +271,7 @@ function AddUserDialog({
           }}
           error={Boolean(emailError)}
           helperText={emailError}
-          disabled={false}
+          disabled={isEdit}
           slotProps={{ inputLabel: { shrink: true } }}
         />
         <FormControl fullWidth size="small">
@@ -575,8 +575,8 @@ function PeopleTab({
 
   const handleBulkAction = async (action: 'active' | 'inactive' | 'delete') => {
     if (selectedIds.size === 0 || !canManage) return;
-    if (action === 'delete' && !isSuperAdmin) {
-      toast.error('Only Super Admin can delete users');
+    if (action === 'delete' && !isAdmin) {
+      toast.error('Only Super Admin or Admin can delete users');
       return;
     }
     const userIds = Array.from(selectedIds).filter((id) => {
@@ -602,7 +602,7 @@ function PeopleTab({
         setUsers((current) => current.filter((u) => !userIds.includes(u.id)));
         toast.success(`Deleted ${userIds.length} users`, { id: 'bulk-action' });
       } else {
-        const newStatus = action === 'active' ? 'Active' : 'Pending';
+        const newStatus = action === 'active' ? 'Active' : (action === 'inactive' ? 'Inactive' : 'Pending');
         setUsers((current) => current.map((u) => userIds.includes(u.id) ? { ...u, status: newStatus as any } : u));
         toast.success(`Marked ${userIds.length} users as ${action}`, { id: 'bulk-action' });
       }

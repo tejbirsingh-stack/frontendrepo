@@ -7,7 +7,6 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { cv } from '../../theme/cssVars';
 import HelpMenuDrawer, { getHelpMenuShortcutLabel } from './HelpMenuDrawer';
 import ShortcutTooltip from './ShortcutTooltip';
-import NoahMascot from '../NoahMascot';
 import { useResolvedKeyboardShortcuts } from '../../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../../utils/matchKeyboardShortcut';
 
@@ -124,46 +123,6 @@ export default function MediaSideRail({
       })}
 
       <Box sx={{ flex: 1, minHeight: 8 }} />
-
-      <Box
-        aria-hidden
-        sx={{
-          position: 'relative',
-          alignSelf: 'stretch',
-          width: '100%',
-          height: 64,
-          m: 0,
-          p: 0,
-          overflow: 'visible',
-          pointerEvents: 'none',
-        }}
-      >
-        <NoahMascot
-          pose="peek"
-          preset="panelPeek"
-          animated={false}
-          sx={{
-            position: 'absolute',
-            top: 0,
-            right: -32,
-            bottom: 0,
-            left: 'auto',
-            width: 77,
-            height: '120%',
-            m: 0,
-            p: 0,
-            zIndex: 1,
-            animation: 'none',
-            '& img': {
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-              objectPosition: 'right center',
-              display: 'block',
-            },
-          }}
-        />
-      </Box>
 
       <ShortcutTooltip label="Help" shortcut={helpShortcut} placement="left">
         <IconButton

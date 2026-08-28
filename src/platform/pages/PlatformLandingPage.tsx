@@ -25,7 +25,7 @@ export default function PlatformLandingPage() {
       .then((res) => {
         const page = res.page;
         setForm({
-          status: asString(page.status, 'draft'),
+          status: 'draft',
           heroTitle: asString(page.heroTitle || page.heroHeadline),
           heroSubtitle: asString(page.heroSubtitle || page.heroSubheadline),
           ctaLabel: asString(page.ctaLabel || page.heroCtaLabel),
