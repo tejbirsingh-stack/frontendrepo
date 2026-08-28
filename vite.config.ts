@@ -69,7 +69,10 @@ export default defineConfig({
             if (id.includes('react-router-dom')) {
               return 'router';
             }
-            if (id.includes('@mui')) {
+            // Keep @emotion/* in the same chunk as @mui to prevent
+            // TDZ "Cannot access before initialization" errors caused
+            // by Rollup splitting tightly-coupled emotion modules.
+            if (id.includes('@mui') || id.includes('@emotion')) {
               return 'mui';
             }
           }
