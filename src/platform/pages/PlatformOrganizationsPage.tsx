@@ -18,9 +18,9 @@ import {
   Typography,
 } from '@mui/material';
 import {
-  createOrganization,
   fetchOrganizations,
   fetchPlans,
+  inviteOrganization,
   type PlatformPlan,
 } from '../api/platformApi';
 import {
@@ -45,13 +45,10 @@ import { usePlatformTableSort } from '../hooks/usePlatformTableSort';
 import { noahDialogSlotProps } from '../../constants/dialogStyles';
 import { dropdownMenuInDialogProps } from '../../constants/dropdownMenu';
 import { cv } from '../../theme/cssVars';
+import toast from 'react-hot-toast';
 
 const emptyForm = {
-  name: '',
-  slug: '',
-  planId: '',
   adminEmail: '',
-  adminName: '',
 };
 
 type OrgSortField =
@@ -73,7 +70,7 @@ const DESCENDING_FIRST_FIELDS: readonly OrgSortField[] = [
 const COLUMNS: ReadonlyArray<PlatformTableColumn<OrgSortField>> = [
   { id: 'name', label: 'Organization', sortField: 'name' },
   { id: 'plan', label: 'Plan', sortField: 'plan' },
-  { id: 'status', label: 'Status', sortField: 'status', tooltip: 'Account status and Stripe subscription state' },
+  { id: 'status', label: 'Status', sortField: 'status', tooltip: 'Account status' },
   { id: 'users', label: 'Users', sortField: 'users', align: 'right' },
   { id: 'workspaces', label: 'Workspaces', sortField: 'workspaces', align: 'right' },
   { id: 'storage', label: 'Storage', sortField: 'storageUsedBytes', width: 170 },
@@ -87,16 +84,6 @@ const STATUS_OPTIONS: ReadonlyArray<FilterOption> = [
   { value: '', label: 'All statuses' },
   { value: 'active', label: 'Active' },
   { value: 'suspended', label: 'Suspended' },
-];
-
-const SUBSCRIPTION_OPTIONS: ReadonlyArray<FilterOption> = [
-  { value: '', label: 'All subscriptions' },
-  { value: 'active', label: 'Active' },
-  { value: 'trialing', label: 'Trialing' },
-  { value: 'past_due', label: 'Past due' },
-  { value: 'canceling', label: 'Canceling' },
-  { value: 'canceled', label: 'Canceled' },
-  { value: 'none', label: 'No subscription' },
 ];
 
 const STORAGE_OPTIONS: ReadonlyArray<FilterOption & { min?: number; max?: number }> = [
@@ -121,7 +108,6 @@ type OrgFilters = {
   q: string;
   status: string;
   planId: string;
-  subscriptionStatus: string;
   storage: string;
   created: string;
   createdFrom: string;
@@ -132,7 +118,6 @@ const emptyFilters: OrgFilters = {
   q: '',
   status: '',
   planId: '',
-  subscriptionStatus: '',
   storage: '',
   created: '',
   createdFrom: '',
@@ -211,7 +196,6 @@ export default function PlatformOrganizationsPage() {
     if (filters.q) params.q = filters.q;
     if (filters.status) params.status = filters.status;
     if (filters.planId) params.planId = filters.planId;
-    if (filters.subscriptionStatus) params.subscriptionStatus = filters.subscriptionStatus;
 
     const storage = STORAGE_OPTIONS.find((option) => option.value === filters.storage);
     if (storage?.min !== undefined) params.minStorageBytes = String(storage.min);
@@ -310,13 +294,6 @@ export default function PlatformOrganizationsPage() {
       const option = planOptions.find((item) => item.value === filters.planId);
       chips.push({ key: 'planId', label: `Plan: ${option?.label ?? filters.planId}` });
     }
-    if (filters.subscriptionStatus) {
-      const option = SUBSCRIPTION_OPTIONS.find((item) => item.value === filters.subscriptionStatus);
-      chips.push({
-        key: 'subscriptionStatus',
-        label: `Subscription: ${option?.label ?? filters.subscriptionStatus}`,
-      });
-    }
     if (filters.storage) {
       const option = STORAGE_OPTIONS.find((item) => item.value === filters.storage);
       chips.push({ key: 'storage', label: `Storage: ${option?.label ?? filters.storage}` });
@@ -340,21 +317,7 @@ export default function PlatformOrganizationsPage() {
   else if (activeFilterChips.length > 0) emptyMessage = 'No organizations match these filters';
 
   const openCreate = () => {
-    if (plans.length === 0) {
-      fetchPlans()
-        .then((res) => {
-          const list = res.plans || [];
-          setPlans(list);
-          const activePlans = list.filter((p) => p.isActive);
-          const freePlan = activePlans.find((p) => p.isFree);
-          setForm({ ...emptyForm, planId: freePlan?.id || activePlans[0]?.id || '' });
-        })
-        .catch(() => undefined);
-    } else {
-      const activePlans = plans.filter((p) => p.isActive);
-      const freePlan = activePlans.find((p) => p.isFree);
-      setForm({ ...emptyForm, planId: freePlan?.id || activePlans[0]?.id || '' });
-    }
+    setForm({ ...emptyForm });
     setFormError('');
     setModalOpen(true);
   };
@@ -370,8 +333,8 @@ export default function PlatformOrganizationsPage() {
 
   const save = async () => {
     setFormError('');
-    if (!form.name.trim()) {
-      setFormError('Organization name is required');
+    if (!form.adminEmail.trim()) {
+      setFormError('Business email is required');
       return;
     }
     if (form.adminEmail.trim()) {
@@ -384,20 +347,14 @@ export default function PlatformOrganizationsPage() {
     }
     setSaving(true);
     try {
-      const body: Record<string, unknown> = {
-        name: form.name.trim(),
-      };
-      if (form.slug.trim()) body.slug = form.slug.trim();
-      if (form.planId) body.planId = form.planId;
-      if (form.adminEmail.trim()) {
-        body.adminEmail = form.adminEmail.trim();
-        if (form.adminName.trim()) body.adminName = form.adminName.trim();
-      }
-      await createOrganization(body);
+      await inviteOrganization({ email: form.adminEmail.trim() });
+      toast.success('Invitation sent successfully');
       closeModal();
       reload();
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Create failed');
+      const errMsg = err instanceof Error ? err.message : 'Failed to send invite';
+      setFormError(errMsg);
+      toast.error(errMsg);
       setSaving(false);
     }
   };
@@ -409,7 +366,7 @@ export default function PlatformOrganizationsPage() {
         subtitle="All customer tenants — plan, seats, storage, and account status"
         actions={
           <Button variant="contained" onClick={openCreate} sx={{ textTransform: 'none' }}>
-            Add organization
+            Invite organization
           </Button>
         }
       />
@@ -440,13 +397,6 @@ export default function PlatformOrganizationsPage() {
           value={filters.planId}
           options={planOptions}
           onChange={(value) => patchFilters({ planId: value })}
-        />
-        <FilterSelect
-          label="Subscription"
-          value={filters.subscriptionStatus}
-          options={SUBSCRIPTION_OPTIONS}
-          onChange={(value) => patchFilters({ subscriptionStatus: value })}
-          minWidth={170}
         />
         <FilterSelect
           label="Storage used"
@@ -540,10 +490,6 @@ export default function PlatformOrganizationsPage() {
                     const used = org.storageUsedBytes as string;
                     const quota = org.storageQuotaBytes as string | undefined;
                     const percent = formatPercent(used, quota);
-                    const subscription =
-                      typeof org.subscriptionStatus === 'string' && org.subscriptionStatus
-                        ? org.subscriptionStatus.replaceAll('_', ' ')
-                        : null;
                     return (
                       <TableRow
                         key={String(org.id)}
@@ -608,18 +554,6 @@ export default function PlatformOrganizationsPage() {
                         </TableCell>
                         <TableCell>
                           <StatusChip status={text(org.status, 'active')} />
-                          {subscription ? (
-                            <Typography
-                              sx={{
-                                fontSize: '0.7rem',
-                                color: cv.textMuted,
-                                mt: 0.35,
-                                textTransform: 'capitalize',
-                              }}
-                            >
-                              {subscription}
-                            </Typography>
-                          ) : null}
                         </TableCell>
                         <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>
                           {count?.users ?? '—'}
@@ -703,7 +637,7 @@ export default function PlatformOrganizationsPage() {
         slotProps={noahDialogSlotProps({ overflow: 'hidden' })}
       >
         <DialogTitle id="create-org-dialog-title" sx={{ fontWeight: 600, color: cv.textPrimary }}>
-          Add organization
+          Invite organization
         </DialogTitle>
         <DialogContent sx={{ pt: '8px !important' }}>
           {formError ? (
@@ -712,65 +646,17 @@ export default function PlatformOrganizationsPage() {
             </Typography>
           ) : null}
           <Box sx={{ display: 'grid', gap: 1.5 }}>
-            <TextField
-              label="Organization name"
-              size="small"
-              required
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-            <TextField
-              label="Slug (optional)"
-              size="small"
-              helperText="Leave blank to auto-generate from the name"
-              value={form.slug}
-              onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
-            />
-            <TextField
-              select
-              label="Plan"
-              size="small"
-              value={form.planId}
-              onChange={(e) => setForm((f) => ({ ...f, planId: e.target.value }))}
-              helperText="Select plan for this organization (Free or Paid)"
-              SelectProps={{
-                displayEmpty: true,
-                MenuProps: dropdownMenuInDialogProps,
-              }}
-              slotProps={{
-                select: {
-                  displayEmpty: true,
-                  MenuProps: dropdownMenuInDialogProps,
-                },
-              }}
-            >
-              {plans.filter(p => p.isActive).map((plan) => {
-                const cents = plan.monthlyPriceCents ?? 0;
-                const label = cents > 0 ? `${plan.name} — $${(cents / 100).toFixed(0)}/mo` : `${plan.name} ($0)`;
-                return (
-                  <MenuItem key={plan.id} value={plan.id}>
-                    {label}
-                  </MenuItem>
-                );
-              })}
-            </TextField>
             <Typography sx={{ fontSize: '0.8rem', color: cv.textMuted, mt: 0.5 }}>
-              Super Admin Invite & Onboarding
+              Enter the business email of the primary administrator for this new organization. They will receive an email with a link to complete their setup.
             </Typography>
             <TextField
-              label="Admin email"
+              label="Business email"
               size="small"
               type="email"
               value={form.adminEmail}
               onChange={(e) => setForm((f) => ({ ...f, adminEmail: e.target.value }))}
-              helperText="Must be a valid business email. An invitation link to set up password will be sent."
-            />
-            <TextField
-              label="Admin name"
-              size="small"
-              value={form.adminName}
-              onChange={(e) => setForm((f) => ({ ...f, adminName: e.target.value }))}
-              disabled={!form.adminEmail.trim()}
+              helperText="Must be a valid business email."
+              required
             />
           </Box>
         </DialogContent>
@@ -784,7 +670,7 @@ export default function PlatformOrganizationsPage() {
             sx={{ textTransform: 'none' }}
             disabled={saving}
           >
-            {saving ? 'Creating…' : 'Create'}
+            {saving ? 'Sending…' : 'Send invite'}
           </Button>
         </DialogActions>
       </Dialog>

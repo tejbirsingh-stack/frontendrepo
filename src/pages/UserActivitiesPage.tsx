@@ -10,6 +10,7 @@ import {
   TableHead,
   TableRow,
   TableSortLabel,
+  TablePagination,
   TextField,
   InputAdornment,
   FormControl,
@@ -198,7 +199,13 @@ export default function UserActivitiesPage() {
   const [endDate, setEndDate] = useState(getToday());
   const [sortBy, setSortBy] = useState<SortField>('time');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
   const { formatDateTime, timeZone } = useLocalizedDate();
+
+  useEffect(() => {
+    setPage(0);
+  }, [searchQuery, roleFilter, typeFilter, startDate, endDate]);
 
   useEffect(() => {
     const fetchActivities = async () => {
@@ -327,6 +334,10 @@ export default function UserActivitiesPage() {
 
     return sorted;
   }, [filteredActivities, sortBy, sortDirection]);
+
+  const paginatedActivities = useMemo(() => {
+    return sortedActivities.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  }, [sortedActivities, page, rowsPerPage]);
 
   const handleSort = (field: SortField) => {
     if (sortBy === field) {
@@ -576,15 +587,16 @@ export default function UserActivitiesPage() {
           <CircularProgress />
         </Box>
       ) : (
-        <TableContainer
+        <Box
           sx={{
             borderRadius: '12px',
             border: `1px solid ${cv.border}`,
             backgroundColor: cv.surface,
-            overflowX: 'auto',
+            overflow: 'hidden',
           }}
         >
-          <Table sx={{ minWidth: 960 }}>
+          <TableContainer sx={{ overflowX: 'auto' }}>
+            <Table sx={{ minWidth: 960 }}>
             <TableHead>
               <TableRow>
                 <TableCell sx={headerCellSx} sortDirection={sortBy === 'user' ? sortDirection : false}>
@@ -655,7 +667,7 @@ export default function UserActivitiesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                sortedActivities.map((activity) => {
+                paginatedActivities.map((activity) => {
                   const actionLabel = normalizeActionLabel(activity);
                   const typeLabel = (activity.activityType || 'INFO').toUpperCase();
                   const typeTone = typeLabel === 'ERROR' ? 'danger' : getActionTone(actionLabel);
@@ -744,6 +756,31 @@ export default function UserActivitiesPage() {
             </TableBody>
           </Table>
         </TableContainer>
+        <TablePagination
+          component="div"
+          count={sortedActivities.length}
+          page={page}
+          onPageChange={(_, newPage) => setPage(newPage)}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
+          rowsPerPageOptions={[10, 25, 50, 100]}
+          sx={{
+            borderTop: `1px solid ${cv.border}`,
+            '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+              color: cv.textSecondary,
+            },
+            '.MuiTablePagination-select': {
+              color: cv.textPrimary,
+            },
+            '.MuiTablePagination-actions button': {
+              color: cv.textPrimary,
+            },
+          }}
+        />
+      </Box>
       )}
     </Box>
   );

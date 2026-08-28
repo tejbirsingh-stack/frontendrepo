@@ -18,9 +18,11 @@ import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
 import MediaItemActionsMenu from './MediaItemActionsMenu';
+import PlatformMediaInfoChip from './PlatformMediaInfoChip';
 import AiSummaryBlock from '../media/AiSummaryBlock';
 import TruncatedText from '../TruncatedText';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import CircularProgress from '@mui/material/CircularProgress';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { MediaItem, MediaType } from '../../data/mockMedia';
 import { getMediaViewerPath } from '../../utils/mediaNavigation';
 import { getMediaDragPayload, hasMediaDragPayload, setMediaDragPayload } from '../../utils/mediaDrag';
@@ -112,6 +114,7 @@ function FavoriteButton({
         sx={{
           width: 32,
           height: 32,
+          borderRadius: '8px',
           ...thumbnailOverlayChipStyles,
           color: isFavorite ? cv.warning : cv.textInverse,
           transition: 'all 0.2s ease',
@@ -183,17 +186,23 @@ function TypeBadge({ type, isProject }: { type: MediaType; isProject?: boolean }
         sx={{
           display: 'inline-flex',
           alignItems: 'center',
+          justifyContent: 'center',
           gap: 0.5,
-          px: 0.875,
-          py: 0.25,
-          borderRadius: '999px',
+          height: 32,
+          px: 1,
+          borderRadius: '8px',
           ...thumbnailOverlayChipStyles,
         }}
       >
-        <Icon sx={{ fontSize: 12, color: cv.textInverse }} />
+        <Icon sx={{ fontSize: 16, color: cv.textInverse }} />
         <Typography
           variant="caption"
-          sx={{ fontSize: '0.6875rem', fontWeight: 500, color: cv.textInverse }}
+          sx={{
+            fontSize: '0.6875rem',
+            fontWeight: 500,
+            color: cv.textInverse,
+            lineHeight: 1,
+          }}
         >
           {label}
         </Typography>
@@ -352,6 +361,7 @@ function VideoPreview({ item }: { item: MediaItem }) {
 
 function ImagePreview({ item }: { item: MediaItem }) {
   const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const [clientDecodedUrl, setClientDecodedUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -413,14 +423,39 @@ function ImagePreview({ item }: { item: MediaItem }) {
   }
 
   return (
-    <Box
-      component="img"
-      src={displaySrc}
-      alt={item.title}
-      loading="lazy"
-      onError={() => setImageError(true)}
-      sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-    />
+    <>
+      {!imageLoaded && !imageError && (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: `linear-gradient(160deg, ${cv.greenAccentSurface} 0%, ${cv.surfaceSubtle} 100%)`,
+            zIndex: 1,
+          }}
+        >
+          <CircularProgress size={24} sx={{ color: cv.textMuted }} />
+        </Box>
+      )}
+      <Box
+        component="img"
+        src={displaySrc}
+        alt={item.title}
+        loading="lazy"
+        onLoad={() => setImageLoaded(true)}
+        onError={() => setImageError(true)}
+        sx={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+          opacity: imageLoaded ? 1 : 0,
+          transition: 'opacity 0.2s ease',
+        }}
+      />
+    </>
   );
 }
 
@@ -794,6 +829,7 @@ export default function MediaItemCard({
           sx={{ flex: 1, minWidth: 0, fontWeight: 500, fontSize: '0.875rem', textAlign: 'left' }}
         />
         <ShareStatusBadge item={item} />
+        <PlatformMediaInfoChip item={item} />
         <MediaItemActionsMenu item={item} />
       </Box>
     </Box>

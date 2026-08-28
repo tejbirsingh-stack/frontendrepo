@@ -28,6 +28,7 @@ import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import FolderCopyOutlinedIcon from '@mui/icons-material/FolderCopyOutlined';
+import NotificationImportantOutlinedIcon from '@mui/icons-material/NotificationImportantOutlined';
 import NoahLogo from '../../components/NoahLogo';
 import { DASHBOARD_TOP_BAR_HEIGHT } from '../../constants/layout';
 import { cv } from '../../theme/cssVars';
@@ -137,6 +138,12 @@ const NAV_SECTIONS: NavSection[] = [
         label: 'Default content',
         icon: <FolderCopyOutlinedIcon sx={iconSx} />,
         hint: 'Starter files for new users',
+      },
+      {
+        to: '/platform/notification-popup',
+        label: 'Notification popup',
+        icon: <NotificationImportantOutlinedIcon sx={iconSx} />,
+        hint: 'Dashboard welcome message',
       },
     ],
   },

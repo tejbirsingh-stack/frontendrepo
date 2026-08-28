@@ -24,6 +24,7 @@ import {
   type Notification,
 } from '../../data/mockNotifications';
 import { fetchNotifications } from '../../api/notification.service';
+import { fetchPublicDashboardNotification } from '../../platform/api/platformApi';
 import { useGlobalSearchKeyboard } from '../../hooks/useGlobalSearchKeyboard';
 import { useAuth } from '../../auth/AuthContext';
 import { getDynamicPlanDetails } from '../../utils/planHelper';
@@ -57,10 +58,39 @@ export default function Header({
 
   useEffect(() => {
     const loadNotifications = async () => {
+      let allNotifs: Notification[] = [];
       const data = await fetchNotifications();
       if (data) {
-        setNotificationItems(data);
+        allNotifs = [...data];
       }
+
+      try {
+        const dashboardRes = await fetchPublicDashboardNotification();
+        if (dashboardRes?.success && dashboardRes?.notification?.isEnabled) {
+          const dashboardNotif = dashboardRes.notification;
+          
+          // Use the dismissed key so that dismissing the popup also marks the drawer item as read
+          const dismissalKey = `dashboard_notification_dismissed_${dashboardNotif.updatedAt}`;
+          const isDismissed = localStorage.getItem(dismissalKey) === 'true';
+
+          allNotifs = [{
+            id: 'dashboard_announcement',
+            type: 'system',
+            title: dashboardNotif.title || 'Platform Announcement',
+            message: dashboardNotif.body || 'New announcement from the platform administrators.',
+            time: new Date(dashboardNotif.updatedAt || Date.now()).toLocaleDateString(),
+            unread: !isDismissed,
+            metadata: { 
+              isDashboardNotification: true,
+              updatedAt: dashboardNotif.updatedAt 
+            }
+          } as Notification, ...allNotifs];
+        }
+      } catch (err) {
+        console.warn('Failed to load dashboard notification for header', err);
+      }
+
+      setNotificationItems(allNotifs);
     };
 
     if (user) {

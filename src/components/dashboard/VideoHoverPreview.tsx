@@ -4,6 +4,7 @@ import { thumbnailOverlayChipStyles } from '../../utils/thumbnailOverlayStyles';
 import { Box, Typography } from '@mui/material';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
+import CircularProgress from '@mui/material/CircularProgress';
 
 const PREVIEW_DURATION_SEC = 5;
 
@@ -33,6 +34,7 @@ export default function VideoHoverPreview({
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
   const [thumbnailError, setThumbnailError] = useState(false);
+  const [thumbnailLoaded, setThumbnailLoaded] = useState(false);
 
   const stopPreview = useCallback(() => {
     const video = videoRef.current;
@@ -92,21 +94,39 @@ export default function VideoHoverPreview({
       sx={{ position: 'relative', width: '100%', height: '100%' }}
     >
       {thumbnail && !thumbnailError ? (
-        <Box
-          component="img"
-          src={thumbnail}
-          alt=""
-          loading="lazy"
-          onError={() => setThumbnailError(true)}
-          sx={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            display: 'block',
-            opacity: isPreviewing ? 0 : 1,
-            transition: 'opacity 0.2s ease',
-          }}
-        />
+        <>
+          {!thumbnailLoaded && (
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: `linear-gradient(160deg, ${accent} 0%, ${cv.surfaceSubtle} 100%)`,
+                zIndex: 1,
+              }}
+            >
+              <CircularProgress size={24} sx={{ color: cv.textMuted }} />
+            </Box>
+          )}
+          <Box
+            component="img"
+            src={thumbnail}
+            alt=""
+            loading="lazy"
+            onLoad={() => setThumbnailLoaded(true)}
+            onError={() => setThumbnailError(true)}
+            sx={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block',
+              opacity: thumbnailLoaded ? (isPreviewing ? 0 : 1) : 0,
+              transition: 'opacity 0.2s ease',
+            }}
+          />
+        </>
       ) : videoSrc ? (
         <Box
           component="video"
