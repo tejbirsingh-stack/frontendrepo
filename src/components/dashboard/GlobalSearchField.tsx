@@ -1,7 +1,15 @@
-import { useRef, useState, useEffect, type RefObject, type KeyboardEvent } from 'react';
+import {
+  useRef,
+  useState,
+  useEffect,
+  type RefObject,
+  type KeyboardEvent,
+} from 'react';
+import { useNavigate } from 'react-router-dom';
 import { cv } from '../../theme/cssVars';
 import {
   Box,
+  CircularProgress,
   ClickAwayListener,
   IconButton,
   InputAdornment,
@@ -19,11 +27,19 @@ import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import { useDashboard } from '../../context/DashboardContext';
 import { getModKeyLabel } from '../../constants/dashboardShortcuts';
 import { useResolvedKeyboardShortcuts } from '../../hooks/useResolvedKeyboardShortcuts';
 import { env } from '../../config/env';
 import { searchFieldInputSx } from '../../utils/searchFieldStyles';
+import { getLibraryItems } from '../../api/library.service';
+import { mergeLibraryWithAiHits } from '../../api/mergeLibraryWithAiHits';
+import type { MediaItem, MediaType } from '../../data/mockMedia';
+import { getMediaFileName } from '../../utils/mediaFileName';
+import { getMediaViewerPath } from '../../utils/mediaNavigation';
+
+export const GLOBAL_SEARCH_CLEAR_EVENT = 'noah-clear-global-search';
 
 interface GlobalSearchFieldProps {
   inputRef?: RefObject<HTMLInputElement | null>;
@@ -32,52 +48,11 @@ interface GlobalSearchFieldProps {
   sx?: SxProps<Theme>;
 }
 
-type DummySearchType = 'video' | 'image' | 'document' | 'audio';
-
-interface DummySearchResult {
-  id: string;
-  title: string;
-  type: DummySearchType;
-  subtitle: string;
-  /** Optional image URL; falls back to a type placeholder when missing. */
-  thumbnail?: string;
-}
-
-const DUMMY_SEARCH_RESULTS: DummySearchResult[] = [
-  {
-    id: 'dummy-1',
-    title: 'Onboarding welcome clip',
-    type: 'video',
-    subtitle: 'Video · 0:42',
-  },
-  {
-    id: 'dummy-2',
-    title: 'Sample hero still',
-    type: 'image',
-    subtitle: 'Image · PNG',
-  },
-  {
-    id: 'dummy-3',
-    title: 'Noah starter brand kit',
-    type: 'document',
-    subtitle: 'File · PDF',
-  },
-  {
-    id: 'dummy-4',
-    title: 'Product walkthrough voiceover',
-    type: 'audio',
-    subtitle: 'Audio · 2:18',
-  },
-  {
-    id: 'dummy-5',
-    title: 'Campaign launch montage',
-    type: 'video',
-    subtitle: 'Video · 1:05',
-  },
-];
+const POPOVER_RESULT_LIMIT = 8;
+const MIN_SEARCH_LENGTH = 3;
 
 const typeMeta: Record<
-  DummySearchType,
+  MediaType,
   { label: string; accent: string; Icon: typeof VideocamOutlinedIcon }
 > = {
   video: {
@@ -100,6 +75,11 @@ const typeMeta: Record<
     accent: cv.purpleAccentSurface,
     Icon: AudioFileOutlinedIcon,
   },
+  folder: {
+    label: 'Folder',
+    accent: cv.surfaceHover,
+    Icon: FolderOutlinedIcon,
+  },
 };
 
 function formatFocusSearchPlaceholder(shortcut: string): string {
@@ -110,15 +90,36 @@ function formatFocusSearchPlaceholder(shortcut: string): string {
   return `Search for anything, or press ${shortcut}`;
 }
 
-function SearchResultThumbnail({ result }: Readonly<{ result: DummySearchResult }>) {
-  const meta = typeMeta[result.type];
+function getSearchResultSubtitle(item: MediaItem): string {
+  const meta = typeMeta[item.type];
+  const typeLabel = item.isProject ? 'Project' : meta.label;
+
+  if (item.type === 'video' || item.type === 'audio') {
+    return item.duration ? `${typeLabel} · ${item.duration}` : typeLabel;
+  }
+
+  if (item.type === 'folder') {
+    const count = item.itemCount ?? 0;
+    return count > 0 ? `${typeLabel} · ${count} items` : typeLabel;
+  }
+
+  const fileName = getMediaFileName(item);
+  const extension = fileName.includes('.')
+    ? fileName.split('.').pop()?.toUpperCase()
+    : undefined;
+
+  return extension ? `${typeLabel} · ${extension}` : typeLabel;
+}
+
+function SearchResultThumbnail({ item }: Readonly<{ item: MediaItem }>) {
+  const meta = typeMeta[item.type];
   const TypeIcon = meta.Icon;
 
-  if (result.thumbnail) {
+  if (item.thumbnail) {
     return (
       <Box
         component="img"
-        src={result.thumbnail}
+        src={item.thumbnail}
         alt=""
         sx={{
           width: 44,
@@ -149,7 +150,7 @@ function SearchResultThumbnail({ result }: Readonly<{ result: DummySearchResult 
         overflow: 'hidden',
       }}
     >
-      {result.type === 'video' ? (
+      {item.type === 'video' ? (
         <Box
           sx={{
             width: 22,
@@ -176,17 +177,16 @@ export default function GlobalSearchField({
   placeholder,
   sx,
 }: Readonly<GlobalSearchFieldProps>) {
-  const {
-    globalSearchQuery,
-    setGlobalSearchQuery,
-    aiSearchEnabled,
-    setAiSearchEnabled,
-  } = useDashboard();
+  const navigate = useNavigate();
+  const { activeWorkspaceId, aiSearchEnabled, setAiSearchEnabled } = useDashboard();
   const aiFeatureOn = env.aiEnabled;
-  const [inputValue, setInputValue] = useState(globalSearchQuery);
+  const [inputValue, setInputValue] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [searchResults, setSearchResults] = useState<MediaItem[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchRequestIdRef = useRef(0);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const next = event.target.value;
@@ -195,25 +195,66 @@ export default function GlobalSearchField({
     setActiveIndex(-1);
   };
 
-  useEffect(() => {
-    setInputValue(globalSearchQuery);
-  }, [globalSearchQuery]);
+  const closeDropdown = () => {
+    setDropdownOpen(false);
+    setActiveIndex(-1);
+  };
 
   useEffect(() => {
-    // If the input is 1–2 characters, wait until the 3-character floor
-    if (inputValue.length > 0 && inputValue.length <= 2) {
+    const handleClearEvent = () => {
+      searchRequestIdRef.current += 1;
+      setInputValue('');
+      setSearchResults([]);
+      setSearchLoading(false);
+      closeDropdown();
+    };
+
+    window.addEventListener(GLOBAL_SEARCH_CLEAR_EVENT, handleClearEvent);
+    return () => window.removeEventListener(GLOBAL_SEARCH_CLEAR_EVENT, handleClearEvent);
+  }, []);
+
+  useEffect(() => {
+    const query = inputValue.trim();
+
+    if (!query || !activeWorkspaceId || query.length < MIN_SEARCH_LENGTH) {
+      setSearchResults([]);
+      setSearchLoading(false);
       return;
     }
 
-    // Debounce the search API call
-    const handler = setTimeout(() => {
-      setGlobalSearchQuery(inputValue);
+    const requestId = ++searchRequestIdRef.current;
+    const handler = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await getLibraryItems({
+          workspaceId: activeWorkspaceId,
+          view: 'all',
+          q: query,
+          pageSize: POPOVER_RESULT_LIMIT,
+        });
+
+        const items =
+          env.aiEnabled && aiSearchEnabled && query.length >= MIN_SEARCH_LENGTH
+            ? await mergeLibraryWithAiHits(res.items, query)
+            : res.items;
+
+        if (searchRequestIdRef.current !== requestId) return;
+
+        setSearchResults(items.slice(0, POPOVER_RESULT_LIMIT));
+      } catch {
+        if (searchRequestIdRef.current !== requestId) return;
+        setSearchResults([]);
+      } finally {
+        if (searchRequestIdRef.current === requestId) {
+          setSearchLoading(false);
+        }
+      }
     }, 500);
 
     return () => {
       clearTimeout(handler);
     };
-  }, [inputValue, setGlobalSearchQuery]);
+  }, [inputValue, activeWorkspaceId, aiSearchEnabled]);
 
   const { getShortcut } = useResolvedKeyboardShortcuts();
   const localRef = useRef<HTMLInputElement>(null);
@@ -228,35 +269,53 @@ export default function GlobalSearchField({
       : formatFocusSearchPlaceholder(primaryShortcut));
 
   const showDropdown = dropdownOpen && inputValue.trim().length > 0;
-  const filteredResults = DUMMY_SEARCH_RESULTS.filter((item) =>
-    item.title.toLowerCase().includes(inputValue.trim().toLowerCase()),
-  );
-  const resultsToShow =
-    filteredResults.length > 0 ? filteredResults : DUMMY_SEARCH_RESULTS;
-
-  const closeDropdown = () => {
-    setDropdownOpen(false);
-    setActiveIndex(-1);
-  };
+  const trimmedQuery = inputValue.trim();
+  const queryTooShort =
+    trimmedQuery.length > 0 && trimmedQuery.length < MIN_SEARCH_LENGTH;
+  const resultsToShow = searchResults;
 
   const handleClear = () => {
+    searchRequestIdRef.current += 1;
     setInputValue('');
-    setGlobalSearchQuery('');
+    setSearchResults([]);
+    setSearchLoading(false);
     closeDropdown();
     inputRef.current?.focus();
   };
 
-  const handleSelect = (result: DummySearchResult) => {
-    setInputValue(result.title);
-    setGlobalSearchQuery(result.title);
-    closeDropdown();
+  const handleSelect = (result: MediaItem) => {
+    const openPath = getMediaViewerPath(result);
+    const documentUrl =
+      result.videoSrc ||
+      (result.id ? `/api/media/${encodeURIComponent(result.id)}/stream` : undefined);
+
+    handleClear();
+
+    if (openPath) {
+      navigate(openPath);
+      return;
+    }
+
+    if (result.type === 'document' && documentUrl) {
+      window.open(documentUrl, '_blank', 'noopener,noreferrer');
+    }
   };
 
   const hasQuery = inputValue.length > 0;
   const showEndAdornment = hasQuery || showShortcutHint || aiFeatureOn;
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (!showDropdown) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      if (showDropdown) {
+        closeDropdown();
+      } else if (hasQuery) {
+        handleClear();
+      }
+      return;
+    }
+
+    if (!showDropdown || resultsToShow.length === 0) return;
 
     if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -275,18 +334,33 @@ export default function GlobalSearchField({
     if (event.key === 'Enter' && activeIndex >= 0) {
       event.preventDefault();
       handleSelect(resultsToShow[activeIndex]);
-      return;
-    }
-
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeDropdown();
     }
   };
 
   return (
     <ClickAwayListener onClickAway={closeDropdown}>
-      <Box ref={containerRef} sx={[{ position: 'relative', width: '100%' }, ...(sx ? [sx] : [])]}>
+      <Box
+        ref={containerRef}
+        component="form"
+        autoComplete="off"
+        onSubmit={(event) => event.preventDefault()}
+        sx={[{ position: 'relative', width: '100%' }, ...(sx ? [sx] : [])]}
+      >
+        <Box
+          component="input"
+          type="text"
+          name="noah-global-search-decoy"
+          tabIndex={-1}
+          aria-hidden="true"
+          sx={{
+            position: 'absolute',
+            opacity: 0,
+            width: 0,
+            height: 0,
+            pointerEvents: 'none',
+          }}
+          readOnly
+        />
         <TextField
           fullWidth
           inputRef={inputRef}
@@ -301,8 +375,19 @@ export default function GlobalSearchField({
           aria-label="Global search"
           aria-expanded={showDropdown}
           aria-controls={showDropdown ? 'global-search-results' : undefined}
-          aria-autocomplete="list"
+          aria-autocomplete="none"
           slotProps={{
+            htmlInput: {
+              autoComplete: 'off',
+              autoCorrect: 'off',
+              autoCapitalize: 'off',
+              spellCheck: 'false',
+              name: 'noah-global-search-field',
+              id: 'noah-global-search-input',
+              'data-lpignore': 'true',
+              'data-1p-ignore': 'true',
+              'data-form-type': 'other',
+            },
             input: {
               startAdornment: (
                 <InputAdornment position="start">
@@ -450,82 +535,131 @@ export default function GlobalSearchField({
               Results
             </Typography>
 
-            {resultsToShow.map((result, index) => {
-              const meta = typeMeta[result.type];
-              const isActive = index === activeIndex;
+            {queryTooShort ? (
+              <Typography
+                sx={{
+                  px: 1.75,
+                  py: 1.5,
+                  fontSize: '0.8125rem',
+                  color: cv.textMuted,
+                }}
+              >
+                Type at least {MIN_SEARCH_LENGTH} characters to search
+              </Typography>
+            ) : null}
 
-              return (
-                <Box
-                  key={result.id}
-                  component="button"
-                  type="button"
-                  role="option"
-                  aria-selected={isActive}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => handleSelect(result)}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.25,
-                    width: '100%',
-                    px: 1.5,
-                    py: 1,
-                    border: 'none',
-                    background: isActive ? cv.surfaceHover : 'transparent',
-                    color: cv.textPrimary,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    fontFamily: 'inherit',
-                    '&:hover': {
-                      backgroundColor: cv.surfaceHover,
-                    },
-                  }}
-                >
-                  <SearchResultThumbnail result={result} />
-                  <Box sx={{ minWidth: 0, flex: 1 }}>
-                    <Typography
+            {!queryTooShort && searchLoading ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 1,
+                  px: 1.75,
+                  py: 2,
+                  color: cv.textMuted,
+                }}
+              >
+                <CircularProgress size={16} sx={{ color: cv.textMuted }} />
+                <Typography sx={{ fontSize: '0.8125rem' }}>Searching…</Typography>
+              </Box>
+            ) : null}
+
+            {!queryTooShort && !searchLoading && resultsToShow.length === 0 ? (
+              <Typography
+                sx={{
+                  px: 1.75,
+                  py: 1.5,
+                  fontSize: '0.8125rem',
+                  color: cv.textMuted,
+                }}
+              >
+                No results found
+              </Typography>
+            ) : null}
+
+            {!queryTooShort && !searchLoading
+              ? resultsToShow.map((result, index) => {
+                  const meta = typeMeta[result.type];
+                  const isActive = index === activeIndex;
+                  const badgeLabel = result.isProject ? 'Project' : meta.label;
+
+                  return (
+                    <Box
+                      key={result.id}
+                      component="button"
+                      type="button"
+                      role="option"
+                      aria-selected={isActive}
+                      onMouseEnter={() => setActiveIndex(index)}
+                      onClick={() => handleSelect(result)}
                       sx={{
-                        fontSize: '0.875rem',
-                        fontWeight: 500,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.25,
+                        width: '100%',
+                        px: 1.5,
+                        py: 1,
+                        border: 'none',
+                        background: isActive ? cv.surfaceHover : 'transparent',
                         color: cv.textPrimary,
-                        lineHeight: 1.3,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        fontFamily: 'inherit',
+                        '&:hover': {
+                          backgroundColor: cv.surfaceHover,
+                        },
                       }}
                     >
-                      {result.title}
-                    </Typography>
-                    <Typography
-                      sx={{
-                        fontSize: '0.75rem',
-                        color: cv.textMuted,
-                        lineHeight: 1.35,
-                        mt: 0.15,
-                      }}
-                    >
-                      {result.subtitle}
-                    </Typography>
-                  </Box>
-                  <Box
-                    component="span"
-                    sx={{
-                      flexShrink: 0,
-                      px: 0.75,
-                      py: 0.25,
-                      borderRadius: '6px',
-                      fontSize: '0.6875rem',
-                      fontWeight: 600,
-                      color: cv.textSecondary,
-                      backgroundColor: meta.accent,
-                      border: `1px solid ${cv.border}`,
-                    }}
-                  >
-                    {meta.label}
-                  </Box>
-                </Box>
-              );
-            })}
+                      <SearchResultThumbnail item={result} />
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography
+                          sx={{
+                            fontSize: '0.875rem',
+                            fontWeight: 500,
+                            color: cv.textPrimary,
+                            lineHeight: 1.3,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {result.title}
+                        </Typography>
+                        <Typography
+                          sx={{
+                            fontSize: '0.75rem',
+                            color: cv.textMuted,
+                            lineHeight: 1.35,
+                            mt: 0.15,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {getSearchResultSubtitle(result)}
+                        </Typography>
+                      </Box>
+                      <Box
+                        component="span"
+                        sx={{
+                          flexShrink: 0,
+                          px: 0.75,
+                          py: 0.25,
+                          borderRadius: '6px',
+                          fontSize: '0.6875rem',
+                          fontWeight: 600,
+                          color: cv.textSecondary,
+                          backgroundColor: meta.accent,
+                          border: `1px solid ${cv.border}`,
+                        }}
+                      >
+                        {badgeLabel}
+                      </Box>
+                    </Box>
+                  );
+                })
+              : null}
           </Box>
         ) : null}
       </Box>
