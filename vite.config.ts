@@ -57,24 +57,15 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
     rollupOptions: {
-      input: {
-        main: path.resolve(__dirname, 'index.html'),
-      },
       output: {
+        // MUI v9 + Emotion have internal circular refs that Rollup cannot
+        // safely split across chunk boundaries — any manualChunks heuristic
+        // just shifts the TDZ crash to a different minified variable.
+        // A single vendor chunk keeps all third-party modules together and
+        // preserves the initialization order Emotion requires.
         manualChunks(id: string) {
           if (id.includes('node_modules')) {
-            if (id.includes('react/') || id.includes('react-dom/')) {
-              return 'vendor';
-            }
-            if (id.includes('react-router-dom')) {
-              return 'router';
-            }
-            // Keep @emotion/* in the same chunk as @mui to prevent
-            // TDZ "Cannot access before initialization" errors caused
-            // by Rollup splitting tightly-coupled emotion modules.
-            if (id.includes('@mui') || id.includes('@emotion')) {
-              return 'mui';
-            }
+            return 'vendor';
           }
         },
       },
