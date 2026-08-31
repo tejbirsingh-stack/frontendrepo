@@ -39,6 +39,8 @@ import { ROLE_IDS } from '../../constants/userRoles';
 import { apiClient } from '../../api/client';
 import FolderDeleteFlowModal from '../modals/FolderDeleteFlowModal';
 import SuperAdminFolderDeleteFlowModal from '../modals/SuperAdminFolderDeleteFlowModal';
+import ProjectDeleteFlowModal from '../modals/ProjectDeleteFlowModal';
+import SuperAdminDeleteFlowModal from '../modals/SuperAdminDeleteFlowModal';
 import { isPlatformMediaAsset } from '../../utils/platformMedia';
 
 const menuPaperSx = {
@@ -70,7 +72,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
       const { getAccessToken } = await import('../../auth/authTokenBridge');
       const token = getAccessToken();
       const finalUrl = token ? `${url}${url.includes('?') ? '&' : '?'}token=${token}` : url;
-      
+
       const anchor = document.createElement('a');
       anchor.href = finalUrl;
       anchor.download = fallbackName;
@@ -104,14 +106,17 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [folderDeleteOpen, setFolderDeleteOpen] = useState(false);
   const [superAdminFolderDeleteOpen, setSuperAdminFolderDeleteOpen] = useState(false);
+  const [projectDeleteOpen, setProjectDeleteOpen] = useState(false);
+  const [superAdminProjectDeleteOpen, setSuperAdminProjectDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [colorPickerAnchor, setColorPickerAnchor] = useState<null | HTMLElement>(null);
-  const isFolder = item.type === 'folder';
+  const isProject = Boolean(item.isProject || (item.type as string) === 'project');
+  const isFolder = item.type === 'folder' && !isProject;
   const isPlatformMedia = isPlatformMediaAsset(item);
   const isRestoreFolder =
     isFolder &&
     ((item.title && item.title.trim().toLowerCase() === 'restore') ||
-     (item.name && item.name.trim().toLowerCase() === 'restore'));
+      (item.name && item.name.trim().toLowerCase() === 'restore'));
 
   const isSuperAdmin =
     user?.role === 'Super Admin' ||
@@ -120,7 +125,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
 
   const status = parseFileReviewStatus(
     (item.customMetadata as { reviewStatus?: unknown } | undefined)?.reviewStatus ??
-      (item as { reviewStatus?: unknown }).reviewStatus,
+    (item as { reviewStatus?: unknown }).reviewStatus,
   );
   const statusColor = getFileReviewStatusColor(status);
 
@@ -149,7 +154,13 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
       toast.error("The 'Restore' folder is protected and cannot be deleted.");
       return;
     }
-    if (isFolder) {
+    if (isProject) {
+      if (isSuperAdmin) {
+        setSuperAdminProjectDeleteOpen(true);
+      } else {
+        setProjectDeleteOpen(true);
+      }
+    } else if (isFolder) {
       if (isSuperAdmin) {
         setSuperAdminFolderDeleteOpen(true);
       } else {
@@ -503,12 +514,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
         )}
         {(() => {
           const isDeleteDisabled = isPlatformMedia
-            || (isFolder
-              ? (!canDeleteFolder(user) || isRestoreFolder)
-              : !hasPermission(user, PERMISSIONS.MANAGE_TRASH));
+            || (isProject
+              ? !canDeleteFolder(user)
+              : isFolder
+                ? (!canDeleteFolder(user) || isRestoreFolder)
+                : !hasPermission(user, PERMISSIONS.MANAGE_TRASH));
           return (
             <MenuItem
-              disabled={isDeleteDisabled}
+              disabled={Boolean(isDeleteDisabled)}
               onClick={(e) => {
                 e.stopPropagation();
                 if (isDeleteDisabled) return;
@@ -622,6 +635,63 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           } catch (err: any) {
             console.error('Failed to execute permanent folder delete:', err);
           }
+        }}
+      />
+
+      <ProjectDeleteFlowModal
+        open={projectDeleteOpen}
+        projectId={item.id}
+        projectName={item.title}
+        onClose={() => setProjectDeleteOpen(false)}
+        onConfirmDelete={async (targetProjectId, isWholeProject, selectedFileIds, selectedFolderIds) => {
+          try {
+            const token = localStorage.getItem('token');
+            const res = await apiClient.post<any>(
+              `/workspaces/project/delete/${targetProjectId}`,
+              {
+                isWholeProject,
+                deleteFileIds: selectedFileIds,
+                deleteFolderIds: selectedFolderIds,
+              },
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            removeFolderAndItemsFromState(targetProjectId, selectedFileIds, selectedFolderIds);
+            const msg = res?.message || 'Project deletion request submitted for Super Admin review.';
+            toast.success(msg);
+          } catch (err: any) {
+            console.error('Failed to delete project in backend:', err);
+            toast.error(err?.message || err?.response?.data?.message || 'Failed to delete project.');
+          }
+          setProjectDeleteOpen(false);
+        }}
+      />
+
+      <SuperAdminDeleteFlowModal
+        open={superAdminProjectDeleteOpen}
+        projectId={item.id}
+        projectName={item.title}
+        onClose={() => setSuperAdminProjectDeleteOpen(false)}
+        onConfirmPermanentDelete={async (targetProjectId, isWholeProject, selectedFileIds, selectedFolderIds) => {
+          try {
+            const token = localStorage.getItem('token');
+            const res = await apiClient.post<any>(
+              `/workspaces/project/delete/${targetProjectId}`,
+              {
+                isWholeProject,
+                deleteFileIds: selectedFileIds,
+                deleteFolderIds: selectedFolderIds,
+                isPermanent: true,
+              },
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            removeFolderAndItemsFromState(targetProjectId, selectedFileIds, selectedFolderIds);
+            const msg = res?.message || 'Project permanently deleted.';
+            toast.success(msg);
+          } catch (err: any) {
+            console.error('Failed to delete project permanently in backend:', err);
+            toast.error(err?.message || err?.response?.data?.message || 'Failed to delete project permanently.');
+          }
+          setSuperAdminProjectDeleteOpen(false);
         }}
       />
     </Box>
