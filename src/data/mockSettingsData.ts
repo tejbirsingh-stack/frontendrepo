@@ -36,6 +36,8 @@ export interface SettingsProjectRow {
   teamMembers?: WorkspaceTeamMember[];
   isRestricted?: boolean;
   isDefault?: boolean;
+  description?: string;
+  color?: string;
 }
 
 export interface WorkspaceTeamMember {
@@ -52,7 +54,7 @@ export interface WorkspaceTeamMember {
 }
 
 export type WorkspaceMemberAccess = 'Full Access' | 'Can edit' | 'Can view';
-export type WorkspaceMemberType = 'Member' | 'Guest' | 'Group';
+export type WorkspaceMemberType = 'Member' | 'Guest' | 'Group' | 'Owner';
 
 export interface WorkspaceInvitePayload {
   userId?: string;

@@ -708,32 +708,62 @@ export default function DashboardPage({
   const duplicateClusters = useMemo(() => {
     if (!isDuplicatesView) return [];
 
-    // Group library items (from the API) by title — items sharing the same title are duplicates.
-    // The oldest item (earliest createdAt) is treated as the "original".
-    const byTitle = new Map<string, typeof libraryItems>();
+    // Use the backend-stored duplicate relationships (customMetadata.duplicates) to group items.
+    // This is a union-find algorithm so any chain of duplicate references is merged into one cluster.
+    const allIds = new Set(libraryItems.map(item => item.id));
+    const parent: Record<string, string> = {};
+    libraryItems.forEach(item => { parent[item.id] = item.id; });
 
+    function find(id: string): string {
+      if (parent[id] !== id) parent[id] = find(parent[id]);
+      return parent[id];
+    }
+
+    function union(a: string, b: string) {
+      const pa = find(a), pb = find(b);
+      if (pa !== pb) parent[pa] = pb;
+    }
+
+    // Connect items via customMetadata.duplicates links
     libraryItems.forEach(item => {
-      const key = item.title?.trim().toLowerCase() || item.id;
-      if (!byTitle.has(key)) {
-        byTitle.set(key, []);
-      }
-      byTitle.get(key)!.push(item);
+      const dupIds: string[] = Array.isArray((item.customMetadata as any)?.duplicates)
+        ? (item.customMetadata as any).duplicates
+        : [];
+      dupIds.forEach(dupId => {
+        if (allIds.has(dupId)) union(item.id, dupId);
+      });
+    });
+
+    // Fallback: also group by exact file size + identical title (catches items without metadata links)
+    const bySizeTitle = new Map<string, string[]>();
+    libraryItems.forEach(item => {
+      if (item.type === 'folder' || item.type === 'project') return;
+      if (!item.sizeBytes || item.sizeBytes <= 0) return;
+      const key = `${item.sizeBytes}_${(item.title || '').trim().toLowerCase()}`;
+      if (!bySizeTitle.has(key)) bySizeTitle.set(key, []);
+      bySizeTitle.get(key)!.push(item.id);
+    });
+    bySizeTitle.forEach(ids => {
+      for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]);
+    });
+
+    // Group items by their union-find root
+    const groupMap = new Map<string, typeof libraryItems>();
+    libraryItems.forEach(item => {
+      const root = find(item.id);
+      if (!groupMap.has(root)) groupMap.set(root, []);
+      groupMap.get(root)!.push(item);
     });
 
     const result: { originalId: string; originalItem: (typeof libraryItems)[0]; duplicates: typeof libraryItems }[] = [];
-
-    byTitle.forEach((items) => {
-      if (items.length < 2) return; // not a duplicate group
-      // Sort ascending by createdAt — oldest is the original
+    groupMap.forEach(items => {
+      if (items.length < 2) return;
+      // Sort ascending by createdAt — oldest is treated as the original
       const sorted = [...items].sort(
         (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
       const [originalItem, ...duplicates] = sorted;
-      result.push({
-        originalId: originalItem.id,
-        originalItem,
-        duplicates,
-      });
+      result.push({ originalId: originalItem.id, originalItem, duplicates });
     });
 
     return result;

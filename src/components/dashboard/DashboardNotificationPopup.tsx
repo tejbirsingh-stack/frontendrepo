@@ -9,9 +9,43 @@ import {
   type DashboardNotificationSettings,
   type DashboardNotificationImage,
 } from '../../platform/api/platformApi';
-import { cv } from '../../theme/cssVars';
+import { readLocalDashboardNotification } from '../../platform/utils/localDashboardNotification';
+import { DISPLAY_FONT } from '../landing/landingContent';
 
-export default function DashboardNotificationPopup() {
+/** NOAH primary brand blue (royal purple → electric orchid system) */
+const BRAND = {
+  primary: '#8e44ad',
+  primaryDeep: '#703688',
+  primaryLight: '#d28cff',
+  ink: '#1C1C1C',
+  inkMuted: '#5A5A5A',
+  white: '#FFFFFF',
+  cream: '#FAFAFC',
+};
+
+type PreviewDetail = {
+  notification?: DashboardNotificationSettings;
+};
+
+function mergeNotificationSources(
+  remote: DashboardNotificationSettings | null,
+  local: DashboardNotificationSettings | null,
+): DashboardNotificationSettings | null {
+  if (!local) return remote;
+  if (!remote) return local;
+
+  const remoteTs = remote.updatedAt ? Date.parse(remote.updatedAt) : 0;
+  const localTs = local.updatedAt ? Date.parse(local.updatedAt) : 0;
+  if (localTs >= remoteTs) return local;
+  return remote;
+}
+
+type Props = {
+  /** When false, only opens via the preview event (platform admin). Default true. */
+  autoOpen?: boolean;
+};
+
+export default function DashboardNotificationPopup({ autoOpen = true }: Readonly<Props>) {
   const [open, setOpen] = useState(false);
   const [visible, setVisible] = useState(false);
   const [notification, setNotification] = useState<DashboardNotificationSettings | null>(null);
@@ -19,40 +53,70 @@ export default function DashboardNotificationPopup() {
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({});
   const touchStartX = useRef<number | null>(null);
 
+  const showPopup = (data: DashboardNotificationSettings, force = false) => {
+    setNotification(data);
+    setSlideIndex(0);
+    setLoadedImages({});
+
+    if (!force && data.updatedAt) {
+      const dismissalKey = `dashboard_notification_dismissed_${data.updatedAt}`;
+      if (localStorage.getItem(dismissalKey)) return;
+    }
+
+    setOpen(true);
+    setTimeout(() => setVisible(true), 50);
+  };
+
   useEffect(() => {
     let mounted = true;
+
     const checkNotification = async () => {
+      let remote: DashboardNotificationSettings | null = null;
       try {
         const res = await fetchPublicDashboardNotification();
-        if (mounted && res.success && res.notification && res.notification.isEnabled) {
-          const { updatedAt } = res.notification;
-          const dismissalKey = `dashboard_notification_dismissed_${updatedAt}`;
-          
-          setNotification(res.notification);
-          setSlideIndex(0);
-          setLoadedImages({});
-          
-          if (!localStorage.getItem(dismissalKey)) {
-            setOpen(true);
-            setTimeout(() => setVisible(true), 50);
-          }
-        }
+        if (res.success && res.notification) remote = res.notification;
       } catch (err) {
         console.warn('Failed to load dashboard notification', err);
       }
+
+      if (!mounted) return;
+
+      const local = readLocalDashboardNotification();
+      const merged = mergeNotificationSources(remote, local);
+      if (merged?.isEnabled) {
+        if (autoOpen) showPopup(merged);
+        else setNotification(merged);
+      }
     };
+
     checkNotification();
 
-    const handleOpenEvent = () => {
-      setOpen(true);
-      setTimeout(() => setVisible(true), 50);
+    const handleOpenEvent = (event: Event) => {
+      const custom = event as CustomEvent<PreviewDetail>;
+      const preview = custom.detail?.notification;
+      if (preview) {
+        showPopup(preview, true);
+        return;
+      }
+      const local = readLocalDashboardNotification();
+      if (local) {
+        showPopup(local, true);
+        return;
+      }
+      if (notification) {
+        showPopup(notification, true);
+      } else {
+        setOpen(true);
+        setTimeout(() => setVisible(true), 50);
+      }
     };
-    window.addEventListener('open-dashboard-notification', handleOpenEvent);
 
-    return () => { 
-      mounted = false; 
+    window.addEventListener('open-dashboard-notification', handleOpenEvent);
+    return () => {
+      mounted = false;
       window.removeEventListener('open-dashboard-notification', handleOpenEvent);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDismiss = () => {
@@ -84,153 +148,90 @@ export default function DashboardNotificationPopup() {
 
   return (
     <>
-      {/* Backdrop — lighter */}
       <Box
         onClick={handleDismiss}
         sx={{
           position: 'fixed',
           inset: 0,
           zIndex: 1300,
-          backgroundColor: 'rgba(0, 0, 0, 0.38)',
-          backdropFilter: 'blur(2px)',
+          backgroundColor: 'rgba(12, 10, 18, 0.62)',
+          backdropFilter: 'blur(4px)',
           opacity: visible ? 1 : 0,
           transition: 'opacity 0.3s ease',
         }}
       />
 
-      {/* Modal Card */}
+      {/* Positioning wrapper — close sits outside the modal */}
       <Box
-        onClick={(e) => e.stopPropagation()}
         sx={{
           position: 'fixed',
           top: '50%',
           left: '50%',
           transform: visible
             ? 'translate(-50%, -50%) scale(1)'
-            : 'translate(-50%, -46%) scale(0.96)',
+            : 'translate(-50%, -46%) scale(0.97)',
           zIndex: 1301,
-          width: { xs: 'calc(100vw - 32px)', sm: hasImages ? 560 : 520 },
-          maxWidth: '100%',
+          width: { xs: 'calc(100vw - 40px)', sm: hasImages ? 900 : 520 },
+          maxWidth: 'calc(100vw - 40px)',
           opacity: visible ? 1 : 0,
-          transition: 'all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)',
-          borderRadius: '20px',
-          overflow: 'hidden',
-          background: cv.dialogSurface,
-          border: `1px solid ${cv.border}`,
-          boxShadow: `0 32px 80px rgba(0,0,0,0.45), 0 0 0 1px ${cv.whiteBorderSoft}, inset 0 1px 0 ${cv.whiteSurfaceStrong}`,
+          transition: 'all 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
         }}
       >
-        {/* Brand gradient top accent bar */}
-        <Box sx={{ height: 4, background: cv.brandGradient, width: '100%' }} />
-
-        {/* Header */}
-        <Box
+        <IconButton
+          onClick={handleDismiss}
+          aria-label="Close notification"
           sx={{
-            position: 'relative',
-            px: 3.5,
-            pt: 3,
-            pb: 2,
-            background: `linear-gradient(180deg, ${cv.purpleSurface} 0%, transparent 100%)`,
+            position: 'absolute',
+            top: { xs: -14, sm: -18 },
+            right: { xs: -10, sm: -18 },
+            zIndex: 6,
+            width: 32,
+            height: 32,
+            bgcolor: BRAND.white,
+            color: BRAND.ink,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.28)',
+            '&:hover': {
+              bgcolor: BRAND.white,
+              color: BRAND.primary,
+              boxShadow: '0 10px 28px rgba(0,0,0,0.35)',
+            },
           }}
         >
-          {/* NOAH brand badge */}
-          <Box
-            sx={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 0.75,
-              mb: 2,
-              px: 1.25,
-              py: 0.4,
-              borderRadius: '8px',
-              background: cv.purpleSelectionSoft,
-              border: `1px solid ${cv.purpleChipBorder}`,
-            }}
-          >
+          <CloseRoundedIcon sx={{ fontSize: 18 }} />
+        </IconButton>
+
+        <Box
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dashboard-notification-title"
+          onClick={(e) => e.stopPropagation()}
+          sx={{
+            width: '100%',
+            maxHeight: 'min(92vh, 500px)',
+            borderTopLeftRadius: 0,
+            borderBottomLeftRadius: { xs: '40px', sm: '72px' },
+            borderTopRightRadius: { xs: '40px', sm: '72px' },
+            borderBottomRightRadius: 0,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: hasImages ? 'row' : 'column' },
+            background: BRAND.white,
+            boxShadow: '0 40px 100px rgba(20, 10, 40, 0.45)',
+          }}
+        >
+          {/* Left — image + logo + notification label */}
+          {hasImages && (
             <Box
               sx={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: cv.brandGradient,
-                boxShadow: `0 0 6px ${cv.brandBlue}`,
-                animation: 'noahPulse 2s ease-in-out infinite',
-                '@keyframes noahPulse': {
-                  '0%, 100%': { opacity: 1, transform: 'scale(1)' },
-                  '50%': { opacity: 0.6, transform: 'scale(1.3)' },
-                },
+                position: 'relative',
+                flex: { xs: '0 0 auto', sm: '1 1 50%' },
+                minHeight: { xs: 240, sm: 460 },
+                background: `linear-gradient(160deg, ${BRAND.primary} 0%, ${BRAND.primaryDeep} 75%)`,
+                overflow: 'hidden',
               }}
-            />
-            <Typography
-              sx={{
-                fontSize: '0.6875rem',
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                background: cv.brandGradient,
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
+              onTouchStart={(e) => {
+                touchStartX.current = e.touches[0].clientX;
               }}
-            >
-              NOAH Cloud
-            </Typography>
-          </Box>
-
-          {/* Close */}
-          <IconButton
-            onClick={handleDismiss}
-            size="small"
-            sx={{
-              position: 'absolute',
-              top: 14,
-              right: 14,
-              color: cv.textMuted,
-              '&:hover': { color: cv.textPrimary, backgroundColor: cv.surfaceHover },
-            }}
-          >
-            <CloseRoundedIcon fontSize="small" />
-          </IconButton>
-
-          {/* Title */}
-          <Typography
-            variant="h5"
-            sx={{
-              fontWeight: 700,
-              fontSize: { xs: '1.25rem', sm: '1.5rem' },
-              color: cv.textPrimary,
-              lineHeight: 1.25,
-              letterSpacing: '-0.02em',
-            }}
-          >
-            {notification.title}
-          </Typography>
-        </Box>
-
-        {/* Divider */}
-        <Box sx={{ height: '1px', mx: 3.5, background: cv.divider }} />
-
-        {/* Body */}
-        <Box sx={{ px: 3.5, py: 2.5 }}>
-          <Typography
-            sx={{
-              color: cv.textSecondary,
-              fontSize: '0.9375rem',
-              lineHeight: 1.7,
-              whiteSpace: 'pre-line',
-            }}
-          >
-            {notification.body}
-          </Typography>
-        </Box>
-
-        {/* Image Slider */}
-        {hasImages && (
-          <>
-            <Box sx={{ height: '1px', mx: 3.5, background: cv.divider }} />
-            <Box
-              sx={{ position: 'relative', mx: 2.5, my: 2, borderRadius: 2, overflow: 'hidden', minHeight: 180 }}
-              onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
               onTouchEnd={(e) => {
                 if (touchStartX.current === null) return;
                 const diff = touchStartX.current - e.changedTouches[0].clientX;
@@ -239,7 +240,6 @@ export default function DashboardNotificationPopup() {
                 touchStartX.current = null;
               }}
             >
-              {/* Skeleton shimmer — shown while current image is loading */}
               {!isCurrentLoaded && (
                 <Skeleton
                   variant="rectangular"
@@ -247,18 +247,15 @@ export default function DashboardNotificationPopup() {
                   sx={{
                     position: 'absolute',
                     inset: 0,
-                    width: '100%',
-                    height: '100%',
-                    borderRadius: 2,
-                    bgcolor: cv.surfaceMuted,
+                    bgcolor: 'rgba(255,255,255,0.18)',
                     '&::after': {
-                      background: `linear-gradient(90deg, transparent, ${cv.surfaceHover}, transparent)`,
+                      background:
+                        'linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)',
                     },
                   }}
                 />
               )}
 
-              {/* Render all images but only show the current one */}
               {images.map((img, i) => (
                 <Box
                   key={img.id}
@@ -269,38 +266,92 @@ export default function DashboardNotificationPopup() {
                   onLoad={() => markLoaded(img.id)}
                   onError={() => markLoaded(img.id)}
                   sx={{
-                    position: i === 0 ? 'relative' : 'absolute',
-                    top: 0,
-                    left: 0,
+                    position: 'absolute',
+                    inset: 0,
                     width: '100%',
-                    height: i === 0 ? 'auto' : '100%',
-                    maxHeight: 260,
+                    height: '100%',
                     objectFit: 'cover',
-                    display: 'block',
-                    borderRadius: 2,
+                    objectPosition: 'center',
                     opacity: i === slideIndex && loadedImages[img.id] ? 1 : 0,
-                    transition: 'opacity 0.3s ease',
-                    pointerEvents: i === slideIndex ? 'auto' : 'none',
+                    transition: 'opacity 0.35s ease',
                   }}
                 />
               ))}
 
-              {/* Slider nav arrows — only shown when multiple images */}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  inset: 0,
+                  background:
+                    'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.2) 45%, rgba(20,8,36,0.82) 100%)',
+                  pointerEvents: 'none',
+                }}
+              />
+
+              <Box
+                component="img"
+                src="/noah-logo.png"
+                alt="NOAH Cloud"
+                sx={{
+                  position: 'absolute',
+                  left: { xs: '50%', sm: '50%' },
+                  transform: { xs: 'translateX(-50%)', sm: 'translateX(-50%)' },
+                  bottom: { xs: 50, sm: 50 },
+                  zIndex: 3,
+                  width: 'auto',
+                  maxWidth: { xs: '72%', sm: '70%' },
+                  objectFit: 'contain',
+                  objectPosition: 'left bottom',
+                  mixBlendMode: 'lighten',
+                  filter: 'drop-shadow(0 4px 20px rgba(0,0,0,0.4))',
+                }}
+              />
+
+              <Box
+                sx={{
+                  position: 'absolute',
+                  right: { xs: 10, sm: 10 },
+                  bottom: { xs: 10, sm: 10 },
+                  zIndex: 3,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  px: 1.35,
+                  py: 0.5,
+                  borderRadius: '999px',
+                  bgcolor: 'rgba(255,255,255,0.16)',
+                  border: '1px solid rgba(255,255,255,0.35)',
+                  backdropFilter: 'blur(8px)',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+                }}
+              >
+                <Typography
+                  sx={{
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.02em',
+                    color: BRAND.white,
+                    lineHeight: 1.2,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Notification from NOAH Cloud
+                </Typography>
+              </Box>
+
               {hasSlider && (
                 <>
                   <IconButton
                     onClick={prevSlide}
                     size="small"
+                    aria-label="Previous image"
                     sx={{
                       position: 'absolute',
-                      left: 8,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      bgcolor: 'rgba(0,0,0,0.55)',
+                      left: 10,
+                      top: '42%',
+                      bgcolor: 'rgba(0,0,0,0.35)',
                       color: '#fff',
-                      backdropFilter: 'blur(4px)',
-                      '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' },
-                      zIndex: 2,
+                      zIndex: 3,
+                      '&:hover': { bgcolor: 'rgba(0,0,0,0.55)' },
                     }}
                   >
                     <ChevronLeftRoundedIcon />
@@ -308,46 +359,42 @@ export default function DashboardNotificationPopup() {
                   <IconButton
                     onClick={nextSlide}
                     size="small"
+                    aria-label="Next image"
                     sx={{
                       position: 'absolute',
-                      right: 8,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      bgcolor: 'rgba(0,0,0,0.55)',
+                      right: 10,
+                      top: '42%',
+                      bgcolor: 'rgba(0,0,0,0.35)',
                       color: '#fff',
-                      backdropFilter: 'blur(4px)',
-                      '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' },
-                      zIndex: 2,
+                      zIndex: 3,
+                      '&:hover': { bgcolor: 'rgba(0,0,0,0.55)' },
                     }}
                   >
                     <ChevronRightRoundedIcon />
                   </IconButton>
-
-                  {/* Dot indicators */}
                   <Box
                     sx={{
                       position: 'absolute',
-                      bottom: 10,
+                      top: 16,
                       left: 0,
                       right: 0,
                       display: 'flex',
                       justifyContent: 'center',
                       gap: 0.75,
-                      zIndex: 2,
+                      zIndex: 3,
                     }}
                   >
-                    {images.map((_, i) => (
+                    {images.map((img, i) => (
                       <Box
-                        key={i}
+                        key={img.id}
                         onClick={() => setSlideIndex(i)}
                         sx={{
-                          width: i === slideIndex ? 18 : 6,
+                          width: i === slideIndex ? 16 : 6,
                           height: 6,
                           borderRadius: '3px',
-                          bgcolor: i === slideIndex ? '#fff' : 'rgba(255,255,255,0.45)',
+                          bgcolor: i === slideIndex ? BRAND.white : 'rgba(255,255,255,0.45)',
                           cursor: 'pointer',
                           transition: 'all 0.25s ease',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
                         }}
                       />
                     ))}
@@ -355,63 +402,109 @@ export default function DashboardNotificationPopup() {
                 </>
               )}
             </Box>
-          </>
-        )}
+          )}
 
-        {/* Actions */}
-        <Box
-          sx={{
-            px: 3.5,
-            pb: 3,
-            pt: hasImages ? 0 : 0.5,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            gap: 1.5,
-          }}
-        >
-          <Button
-            variant="text"
-            onClick={handleDismiss}
+          {/* Right — title, body, actions */}
+          <Box
             sx={{
-              color: cv.textMuted,
-              textTransform: 'none',
-              fontWeight: 500,
-              fontSize: '0.875rem',
-              borderRadius: '10px',
-              px: 2,
-              '&:hover': { backgroundColor: cv.surfaceHover, color: cv.textPrimary },
+              position: 'relative',
+              flex: { xs: '1 1 auto', sm: hasImages ? '1 1 50%' : '1 1 auto' },
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              px: { xs: 3, sm: 4.5 },
+              py: { xs: 3.5, sm: 4.5 },
+              zIndex: 2,
+              background: BRAND.white,
+              minWidth: 0,
+              minHeight: { sm: hasImages ? 460 : undefined },
             }}
           >
-            Dismiss
-          </Button>
-
-          {notification.ctaLabel && notification.ctaUrl && (
-            <Button
-              variant="contained"
-              onClick={handleCtaClick}
-              endIcon={<OpenInNewRoundedIcon sx={{ fontSize: '14px !important' }} />}
+            <Typography
+              id="dashboard-notification-title"
               sx={{
-                textTransform: 'none',
+                fontFamily: DISPLAY_FONT,
                 fontWeight: 600,
-                fontSize: '0.875rem',
-                borderRadius: '10px',
-                px: 2.5,
-                py: 0.875,
-                background: cv.brandGradient,
-                boxShadow: cv.brandShadow,
-                color: '#fff',
-                '&:hover': {
-                  background: cv.brandGradientHover,
-                  boxShadow: cv.brandShadowStrong,
-                  transform: 'translateY(-1px)',
-                },
-                transition: 'all 0.2s ease',
+                fontSize: { xs: '1.5rem', sm: hasImages ? '1.85rem' : '2rem' },
+                lineHeight: 1.2,
+                letterSpacing: '-0.02em',
+                color: BRAND.ink,
+                mb: 2,
               }}
             >
-              {notification.ctaLabel}
-            </Button>
-          )}
+              {notification.title}
+            </Typography>
+
+            <Typography
+              sx={{
+                color: BRAND.inkMuted,
+                fontSize: { xs: '0.9rem', sm: '0.95rem' },
+                lineHeight: 1.7,
+                letterSpacing: '0.01em',
+                whiteSpace: 'pre-line',
+                mb: 4,
+              }}
+            >
+              {notification.body}
+            </Typography>
+
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 1.5,
+                mt: 'auto',
+                flexWrap: 'wrap',
+              }}
+            >
+              <Button
+                variant="text"
+                onClick={handleDismiss}
+                sx={{
+                  color: BRAND.inkMuted,
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  fontSize: '0.875rem',
+                  borderRadius: '999px',
+                  px: 2,
+                  '&:hover': {
+                    backgroundColor: 'rgba(142, 68, 173, 0.1)',
+                    color: BRAND.ink,
+                  },
+                }}
+              >
+                Dismiss
+              </Button>
+
+              {notification.ctaLabel && notification.ctaUrl && (
+                <Button
+                  variant="contained"
+                  onClick={handleCtaClick}
+                  endIcon={<OpenInNewRoundedIcon sx={{ fontSize: '14px !important' }} />}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.875rem',
+                    borderRadius: '999px',
+                    px: 2.75,
+                    py: 1,
+                    background: `linear-gradient(135deg, ${BRAND.primary} 0%, ${BRAND.primaryLight} 100%)`,
+                    color: BRAND.white,
+                    boxShadow: '0 8px 24px rgba(142, 68, 173, 0.4)',
+                    '&:hover': {
+                      background: `linear-gradient(135deg, ${BRAND.primaryDeep} 0%, ${BRAND.primary} 100%)`,
+                      boxShadow: '0 10px 28px rgba(112, 54, 136, 0.5)',
+                      transform: 'translateY(-1px)',
+                    },
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {notification.ctaLabel}
+                </Button>
+              )}
+            </Box>
+          </Box>
         </Box>
       </Box>
     </>

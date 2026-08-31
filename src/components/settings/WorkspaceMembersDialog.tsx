@@ -265,7 +265,8 @@ export default function WorkspaceMembersDialog({
         const res = await (apiClient as any).get('/workspaces/access-levels', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        const data = Array.isArray(res) ? res : (res as any)?.data ?? [];
+        const rawData = res?.data || res;
+        const data = Array.isArray(rawData) ? rawData : (rawData?.data || []);
         if (Array.isArray(data)) {
           setAccessOptions(data);
           const defaultCanView = data.find((o: any) => o.name === 'CAN_VIEW' || o.title === 'Can View');
@@ -535,44 +536,89 @@ export default function WorkspaceMembersDialog({
     });
   }, [suggestedUsers]);
 
-  const allInviteUsers = useMemo(() => {
-    const seen = new Set<string>();
-    const usersSource = isRestricted ? [...organizationUsers, ...guestUsers] : guestUsers;
-    return usersSource.filter((user) => {
-      const key = user.email.toLowerCase();
-      if (seen.has(key) || memberEmails.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [organizationUsers, guestUsers, memberEmails, isRestricted]);
+  // --- Live API Search State ---
+  const [searchResults, setSearchResults] = useState<InviteTypeaheadOption[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  const typeaheadOptions = useMemo((): InviteTypeaheadOption[] => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return [];
+  // resourceId is the workspaceId passed in — used for the search API
+  const workspaceSearchId = resourceId;
 
-    const userOptions = allInviteUsers
-      .filter(
-        (user) =>
-          user.name.toLowerCase().includes(normalizedQuery) ||
-          user.email.toLowerCase().includes(normalizedQuery),
-      )
-      .slice(0, 5)
-      .map((user) => ({ kind: 'user' as const, id: `user-${user.id}`, user }));
+  // Debounced live search — only fires for private workspaces
+  useEffect(() => {
+    const trimmed = query.trim();
 
-    const groupOptions = (isRestricted ? suggestedGroups : [])
-      .filter((group) => !memberGroupIds.has(group.id))
-      .filter(
-        (group) =>
-          group.name.toLowerCase().includes(normalizedQuery) ||
-          (group.description?.toLowerCase().includes(normalizedQuery) ?? false),
-      )
-      .slice(0, 3)
-      .map((group) => ({ kind: 'group' as const, id: `group-${group.id}`, group }));
+    // Public workspace: no recommendations at all
+    if (!isRestricted && effectiveVisibility !== 'private') {
+      setSearchResults([]);
+      return;
+    }
 
-    return [...userOptions, ...groupOptions];
-  }, [query, allInviteUsers, suggestedGroups, memberGroupIds, isRestricted]);
+    if (!trimmed || !workspaceSearchId) {
+      setSearchResults([]);
+      return;
+    }
 
-  const showTypeahead = typeaheadOpen && query.trim().length > 0 && typeaheadOptions.length > 0;
+    const delay = window.setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await (apiClient as any).get(
+          `/workspaces/${workspaceSearchId}/member/search?q=${encodeURIComponent(trimmed)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = res?.data ?? res;
+
+        const userOptions: InviteTypeaheadOption[] = (data.users || [])
+          .filter((u: any) => !memberEmails.has(u.email?.toLowerCase()))
+          .slice(0, 5)
+          .map((u: any) => ({
+            kind: 'user' as const,
+            id: `user-${u.id}`,
+            user: {
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              initials: (u.name || u.email)
+                .split(/\s+/).filter(Boolean).slice(0, 2)
+                .map((p: string) => p[0]?.toUpperCase() ?? '')
+                .join('') || u.email[0]?.toUpperCase() || 'U',
+              lastActive: '',
+              joinedDate: '',
+              role: 'Collaborator' as any,
+              status: 'Active' as any,
+              isOrganizationMember: true,
+            }
+          }));
+
+        const groupOptions: InviteTypeaheadOption[] = (data.groups || [])
+          .filter((g: any) => !memberGroupIds.has(g.id))
+          .slice(0, 3)
+          .map((g: any) => ({
+            kind: 'group' as const,
+            id: `group-${g.id}`,
+            group: { id: g.id, name: g.name, description: g.description || '', memberIds: [] }
+          }));
+
+        setSearchResults([...userOptions, ...groupOptions]);
+      } catch (err) {
+        console.error('Member search failed:', err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(delay);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, workspaceSearchId, isRestricted, effectiveVisibility]);
+
+  // Clear results when dialog closes
+  useEffect(() => {
+    if (!open) setSearchResults([]);
+  }, [open]);
+
+  const showTypeahead = typeaheadOpen && searchResults.length > 0;
 
   const canAdd = query.trim().length > 0;
 
@@ -724,15 +770,8 @@ export default function WorkspaceMembersDialog({
       return;
     }
 
-    const memberType = isOrganizationUser(option.user) ? 'Member' : 'Guest';
-    if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
-      setError('Organization members already have access to this public workspace.');
-      return;
-    }
-    if (memberType === 'Guest') {
-      inviteUser(option.user.email, option.user.name, memberType, option.user.id.replace('user-', ''));
-      return;
-    }
+    // All search results come from the same org (private workspace only), so always 'Member'
+    const memberType: WorkspaceMemberType = option.user.isOrganizationMember ? 'Member' : 'Guest';
     inviteUser(option.user.email, option.user.name, memberType, option.user.id.replace('user-', ''));
   };
 
@@ -971,7 +1010,9 @@ export default function WorkspaceMembersDialog({
             helperText={
               error
                 ? error
-                : 'Type to search people and groups, or enter an email to invite.'
+                : (!isRestricted && effectiveVisibility !== 'private')
+                  ? 'This is a public workspace — enter an external email address to invite someone from outside your organization.'
+                  : 'Type to search org members and groups, or enter an email to invite.'
             }
             autoFocus={!showShareLinks}
             slotProps={{
@@ -1015,7 +1056,7 @@ export default function WorkspaceMembersDialog({
             }}
           />
 
-          {showTypeahead ? (
+          {showTypeahead || (typeaheadOpen && isSearching && query.trim().length > 0) ? (
             <Box
               role="listbox"
               aria-label="Invite suggestions"
@@ -1034,7 +1075,13 @@ export default function WorkspaceMembersDialog({
                 overflowY: 'auto',
               }}
             >
-              {typeaheadOptions.map((option) =>
+              {isSearching ? (
+                <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CircularProgress size={14} sx={{ color: cv.textMuted }} />
+                  <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>Searching…</Typography>
+                </Box>
+              ) : null}
+              {searchResults.map((option) =>
                 option.kind === 'group' ? (
                   <Box
                     key={option.id}
@@ -1266,7 +1313,7 @@ export default function WorkspaceMembersDialog({
                   </Typography>
                 </Box>
               </Box>
-              {isCurrentMember ? (
+              {isCurrentMember || member.memberType === 'Owner' ? (
                 <Typography
                   sx={{
                     fontSize: '0.8125rem',
@@ -1333,7 +1380,7 @@ export default function WorkspaceMembersDialog({
                       </Select>
                     </FormControl>
                   )}
-                  {onRemoveMember && !isCurrentMember ? (
+                  {onRemoveMember && !isCurrentMember && member.memberType !== 'Owner' ? (
                     <IconButton
                       size="small"
                       onClick={() => beginMemberRemove(member)}
@@ -1487,11 +1534,8 @@ export default function WorkspaceMembersDialog({
     >
       {footerMembersSummary ?? <Box />}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-        <Button onClick={onClose} sx={{ textTransform: 'none', color: cv.textSecondary }}>
-          Cancel
-        </Button>
         <Button variant="contained" onClick={() => void handleShare()} sx={containedButtonSx}>
-          Done
+          Close
         </Button>
       </Box>
     </Box>
