@@ -105,7 +105,8 @@ export default function InvitePeopleFields({
         const res = await (apiClient as any).get('/workspaces/access-levels', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        const data = Array.isArray(res) ? res : res?.data || res;
+        const rawData = res?.data || res;
+        const data = Array.isArray(rawData) ? rawData : (rawData?.data || []);
         if (Array.isArray(data)) {
           setAccessOptions(data);
           if (data.length > 0 && typeof onAccessChange === 'function') {
