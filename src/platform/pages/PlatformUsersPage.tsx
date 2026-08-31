@@ -49,7 +49,7 @@ import {
   text,
 } from '../utils/platformListHelpers';
 import { noahDialogSlotProps } from '../../constants/dialogStyles';
-import { selectInDialogMenuProps } from '../../constants/dropdownMenu';
+import { textFieldSelectInDialogSlotProps } from '../../constants/dropdownMenu';
 import { cv } from '../../theme/cssVars';
 
 const emptyInvite = {
@@ -641,7 +641,7 @@ export default function PlatformUsersPage() {
               required
               value={invite.orgId}
               onChange={(e) => setInvite((f) => ({ ...f, orgId: e.target.value }))}
-              SelectProps={{ MenuProps: selectInDialogMenuProps }}
+              slotProps={textFieldSelectInDialogSlotProps}
             >
               {orgOptions.map((org) => (
                 <MenuItem key={org.id} value={org.id}>
@@ -656,9 +656,9 @@ export default function PlatformUsersPage() {
               required
               value={invite.roleId}
               onChange={(e) => setInvite((f) => ({ ...f, roleId: e.target.value }))}
-              SelectProps={{ MenuProps: selectInDialogMenuProps }}
+              slotProps={textFieldSelectInDialogSlotProps}
             >
-              {roles.map((role) => (
+              {roles.filter(role => role.name !== 'Super Admin').map((role) => (
                 <MenuItem key={role.id} value={role.id}>
                   {role.name}
                 </MenuItem>

@@ -39,6 +39,7 @@ import { ROLE_IDS } from '../../constants/userRoles';
 import { apiClient } from '../../api/client';
 import FolderDeleteFlowModal from '../modals/FolderDeleteFlowModal';
 import SuperAdminFolderDeleteFlowModal from '../modals/SuperAdminFolderDeleteFlowModal';
+import { isPlatformMediaAsset } from '../../utils/platformMedia';
 
 const menuPaperSx = {
   mt: 0.5,
@@ -106,6 +107,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
   const [moveOpen, setMoveOpen] = useState(false);
   const [colorPickerAnchor, setColorPickerAnchor] = useState<null | HTMLElement>(null);
   const isFolder = item.type === 'folder';
+  const isPlatformMedia = isPlatformMediaAsset(item);
   const isRestoreFolder =
     isFolder &&
     ((item.title && item.title.trim().toLowerCase() === 'restore') ||
@@ -126,6 +128,10 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
 
   const openRename = () => {
     closeMenu();
+    if (isPlatformMedia) {
+      toast.error('Platform content cannot be renamed.');
+      return;
+    }
     if (isRestoreFolder) {
       toast.error("The 'Restore' folder is protected and cannot be renamed.");
       return;
@@ -135,6 +141,10 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
 
   const openDelete = () => {
     closeMenu();
+    if (isPlatformMedia) {
+      toast.error('Platform content cannot be deleted.');
+      return;
+    }
     if (isRestoreFolder) {
       toast.error("The 'Restore' folder is protected and cannot be deleted.");
       return;
@@ -157,6 +167,10 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
 
   const openMove = () => {
     closeMenu();
+    if (isPlatformMedia) {
+      toast.error('Platform content cannot be moved.');
+      return;
+    }
     if (isRestoreFolder) {
       toast.error("The 'Restore' folder is protected and cannot be moved.");
       return;
@@ -306,9 +320,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
         ) : null}
         {!item.isProject ? (
           <MenuItem
-            disabled={!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder}
+            disabled={!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia}
             onClick={(event) => {
-              if (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder) return;
+              if (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia) return;
               consumeMenuPointerEvent(event);
               openMove();
             }}
@@ -316,14 +330,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             sx={{
               py: 1,
               fontSize: '0.875rem',
-              color: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder) ? cv.textMuted : cv.textSecondary,
-              opacity: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder) ? 0.6 : 1,
-              cursor: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder) ? 'not-allowed' : 'pointer',
-              '&:hover': { backgroundColor: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder) ? 'transparent' : cv.surfaceHover },
+              color: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia) ? cv.textMuted : cv.textSecondary,
+              opacity: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia) ? 0.6 : 1,
+              cursor: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia) ? 'not-allowed' : 'pointer',
+              '&:hover': { backgroundColor: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia) ? 'transparent' : cv.surfaceHover },
             }}
           >
             <ListItemIcon sx={{ minWidth: 32 }}>
-              <DriveFileMoveOutlinedIcon sx={{ fontSize: 18, color: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder) ? cv.textMuted : cv.textSecondary }} />
+              <DriveFileMoveOutlinedIcon sx={{ fontSize: 18, color: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia) ? cv.textMuted : cv.textSecondary }} />
             </ListItemIcon>
             Move
           </MenuItem>
@@ -377,9 +391,9 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           View in location
         </MenuItem>
         <MenuItem
-          disabled={!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder}
+          disabled={!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia}
           onClick={(event) => {
-            if (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder) return;
+            if (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia) return;
             consumeMenuPointerEvent(event);
             openRename();
           }}
@@ -387,14 +401,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           sx={{
             py: 1,
             fontSize: '0.875rem',
-            color: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder) ? cv.textMuted : cv.textSecondary,
-            opacity: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder) ? 0.6 : 1,
-            cursor: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder) ? 'not-allowed' : 'pointer',
-            '&:hover': { backgroundColor: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder) ? 'transparent' : cv.surfaceHover },
+            color: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia) ? cv.textMuted : cv.textSecondary,
+            opacity: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia) ? 0.6 : 1,
+            cursor: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia) ? 'not-allowed' : 'pointer',
+            '&:hover': { backgroundColor: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia) ? 'transparent' : cv.surfaceHover },
           }}
         >
           <ListItemIcon sx={{ minWidth: 32 }}>
-            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder) ? cv.textMuted : cv.textSecondary }} />
+            <DriveFileRenameOutlineIcon sx={{ fontSize: 18, color: (!hasPermission(user, PERMISSIONS.EDIT_METADATA_TAGS) || isRestoreFolder || isPlatformMedia) ? cv.textMuted : cv.textSecondary }} />
           </ListItemIcon>
           Rename
         </MenuItem>
@@ -488,9 +502,10 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           </MenuItem>
         )}
         {(() => {
-          const isDeleteDisabled = isFolder
-            ? (!canDeleteFolder(user) || isRestoreFolder)
-            : !hasPermission(user, PERMISSIONS.MANAGE_TRASH);
+          const isDeleteDisabled = isPlatformMedia
+            || (isFolder
+              ? (!canDeleteFolder(user) || isRestoreFolder)
+              : !hasPermission(user, PERMISSIONS.MANAGE_TRASH));
           return (
             <MenuItem
               disabled={isDeleteDisabled}

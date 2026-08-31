@@ -94,7 +94,15 @@ export default function NotificationDrawer({
   const toggleReadState = (id: string) => {
     const target = items.find(n => n.id === id);
     if (target && target.unread) {
-       markNotificationAsRead(id).catch(console.error);
+       if (id === 'dashboard_announcement') {
+          // If they mark it as read manually from drawer, store it as read
+          const updatedAt = target.metadata?.updatedAt;
+          if (updatedAt) {
+             localStorage.setItem(`dashboard_notification_dismissed_${updatedAt}`, 'true');
+          }
+       } else {
+          markNotificationAsRead(id).catch(console.error);
+       }
     }
     onItemsChange(
       items.map((notification) =>
@@ -106,13 +114,29 @@ export default function NotificationDrawer({
   };
 
   const deleteNotification = (id: string) => {
-    deleteNotificationApi(id).catch(console.error);
+    if (id === 'dashboard_announcement') {
+       const target = items.find(n => n.id === id);
+       const updatedAt = target?.metadata?.updatedAt;
+       if (updatedAt) {
+          localStorage.setItem(`dashboard_notification_dismissed_${updatedAt}`, 'true');
+       }
+    } else {
+       deleteNotificationApi(id).catch(console.error);
+    }
     onItemsChange(items.filter((notification) => notification.id !== id));
   };
 
 
   const markAllAsRead = () => {
     markNotificationAsRead('all').catch(console.error);
+    
+    // Also mark dashboard announcement as read in local storage if present
+    const dashboardItem = items.find(n => n.id === 'dashboard_announcement');
+    const updatedAt = dashboardItem?.metadata?.updatedAt;
+    if (updatedAt) {
+       localStorage.setItem(`dashboard_notification_dismissed_${updatedAt}`, 'true');
+    }
+
     onItemsChange(
       items.map((notification) => ({ ...notification, unread: false })),
     );
@@ -410,6 +434,35 @@ export default function NotificationDrawer({
                         }}
                       >
                         View Media
+                      </Button>
+                    </Box>
+                  )}
+
+                  {notification.id === 'dashboard_announcement' && (
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<PlayCircleOutlineIcon />}
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          window.dispatchEvent(new CustomEvent('open-dashboard-notification'));
+                          onClose(); 
+                        }}
+                        sx={{
+                          fontSize: '0.7rem',
+                          minWidth: 0,
+                          py: 0.25,
+                          px: 1.25,
+                          color: cv.brandBlue,
+                          borderColor: cv.brandBlue,
+                          '&:hover': {
+                            backgroundColor: cv.blueGlow18,
+                            borderColor: cv.brandBlue,
+                          },
+                        }}
+                      >
+                        View Announcement
                       </Button>
                     </Box>
                   )}

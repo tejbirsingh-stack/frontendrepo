@@ -28,6 +28,7 @@ function dtoToMediaItem(id: string, dto: Awaited<ReturnType<typeof getMediaAsset
       thumbnail: dto.thumbnail || undefined,
       url: dto.url,
       videoSrc: dto.url,
+      globalMedia: Boolean((dto as { globalMedia?: boolean }).globalMedia),
     },
     hit,
   );

@@ -112,7 +112,7 @@ export default function ForgotPasswordPage() {
               maxHeight: 140,
               objectFit: 'contain',
               objectPosition: 'center',
-              transform: 'scale(2.2)',
+              transform: 'scale(1)',
               transformOrigin: 'center center',
               mixBlendMode: 'lighten',
               filter: 'drop-shadow(0 4px 24px rgba(168, 85, 247, 0.7))',
