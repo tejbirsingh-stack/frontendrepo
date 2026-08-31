@@ -23,6 +23,15 @@ export function clearPersistedSession(): void {
   localStorage.removeItem(SESSION_TOKEN_KEY);
   localStorage.removeItem(SESSION_USER_KEY);
   localStorage.removeItem('response');
+
+  // Clear notification dismissals on logout
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('dashboard_notification_dismissed_')) {
+      localStorage.removeItem(key);
+      i--;
+    }
+  }
 }
 
 export function persistSignupSessionToken(token: string): void {

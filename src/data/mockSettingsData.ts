@@ -36,6 +36,8 @@ export interface SettingsProjectRow {
   teamMembers?: WorkspaceTeamMember[];
   isRestricted?: boolean;
   isDefault?: boolean;
+  description?: string;
+  color?: string;
 }
 
 export interface WorkspaceTeamMember {

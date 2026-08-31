@@ -29,6 +29,18 @@ export function toggleFilterValue(current: Set<string>, value: string): Set<stri
   return next;
 }
 
+export function toggleSingleFilterValue(current: Set<string>, value: string): Set<string> {
+  if (value === FILTER_ALL_OPTION) {
+    return createDefaultFilterSelection();
+  }
+  
+  if (current.has(value)) {
+    return createDefaultFilterSelection();
+  }
+  
+  return new Set([value]);
+}
+
 export function hasActiveFilterSelections(...selections: Set<string>[]): boolean {
   return selections.some((selection) => !isFilterAllSelected(selection));
 }

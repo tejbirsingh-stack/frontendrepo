@@ -59,6 +59,7 @@ import {
   hasActiveFilterSelections,
   matchesSetFilter,
   toggleFilterValue,
+  toggleSingleFilterValue,
 } from '../../utils/settingsTableFilterUtils';
 
 const tabSx = {
@@ -515,8 +516,6 @@ function PeopleTab({
   const [addOpen, setAddOpen] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [pendingRoleFilter, setPendingRoleFilter] = useState<Set<string>>(createDefaultFilterSelection);
-  const [pendingStatusFilter, setPendingStatusFilter] = useState<Set<string>>(createDefaultFilterSelection);
   const [appliedRoleFilter, setAppliedRoleFilter] = useState<Set<string>>(createDefaultFilterSelection);
   const [appliedStatusFilter, setAppliedStatusFilter] = useState<Set<string>>(createDefaultFilterSelection);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -524,15 +523,11 @@ function PeopleTab({
   const hasActiveFilters = hasActiveFilterSelections(appliedRoleFilter, appliedStatusFilter);
 
   const handleApplyFilters = () => {
-    setAppliedRoleFilter(new Set(pendingRoleFilter));
-    setAppliedStatusFilter(new Set(pendingStatusFilter));
     setFilterOpen(false);
   };
 
   const handleClearAllFilters = () => {
     const defaultSel = createDefaultFilterSelection();
-    setPendingRoleFilter(defaultSel);
-    setPendingStatusFilter(defaultSel);
     setAppliedRoleFilter(defaultSel);
     setAppliedStatusFilter(defaultSel);
   };
@@ -692,19 +687,18 @@ function PeopleTab({
                   id: 'role',
                   label: 'Account role',
                   options: [...USER_ROLES],
-                  selected: pendingRoleFilter,
-                  onToggle: (value) => setPendingRoleFilter((current) => toggleFilterValue(current, value)),
+                  selected: appliedRoleFilter,
+                  onToggle: (value) => setAppliedRoleFilter((current) => toggleFilterValue(current, value)),
                 },
                 {
                   id: 'status',
                   label: 'Status',
                   options: ['Active', 'Pending'],
-                  selected: pendingStatusFilter,
-                  onToggle: (value) => setPendingStatusFilter((current) => toggleFilterValue(current, value)),
+                  selected: appliedStatusFilter,
+                  onToggle: (value) => setAppliedStatusFilter((current) => toggleSingleFilterValue(current, value)),
                 },
               ]}
               onClearAll={handleClearAllFilters}
-              onApply={handleApplyFilters}
             />
           </Box>
         </Collapse>

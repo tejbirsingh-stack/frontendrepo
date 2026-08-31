@@ -29,6 +29,7 @@ export interface CreateWorkspaceFormData {
   accessLevel?: string;
   isRestricted?: boolean;
   sendInviteEmail?: boolean;
+  status?: 'Active' | 'Inactive';
 }
 
 interface CreateWorkspaceModalProps {
@@ -36,11 +37,12 @@ interface CreateWorkspaceModalProps {
   onClose: () => void;
   onCreate: (data: CreateWorkspaceFormData) => void;
   onSave?: (data: CreateWorkspaceFormData) => void;
-  initialWorkspace?: { 
-    name: string; 
-    description?: string; 
+  initialWorkspace?: {
+    name: string;
+    description?: string;
     color?: string;
     isRestricted?: boolean;
+    status?: 'Active' | 'Inactive';
     teamMembers?: import('../../data/mockSettingsData').WorkspaceTeamMember[];
   };
 }
@@ -65,6 +67,7 @@ export default function CreateWorkspaceModal({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [color, setColor] = useState(DEFAULT_WORKSPACE_COLOR);
+  const [status, setStatus] = useState<'Active' | 'Inactive'>('Active');
   const [isRestricted, setIsRestricted] = useState(false);
   const [inviteEmails, setInviteEmails] = useState<string[]>([]);
   const [inviteGroupIds, setInviteGroupIds] = useState<string[]>([]);
@@ -80,6 +83,7 @@ export default function CreateWorkspaceModal({
       setName(initialWorkspace.name);
       setDescription(initialWorkspace.description ?? '');
       setColor(initialWorkspace.color ?? DEFAULT_WORKSPACE_COLOR);
+      setStatus(initialWorkspace.status ?? 'Active');
       setIsRestricted(initialWorkspace.isRestricted ?? false);
       setInviteEmails([]);
       setInviteGroupIds([]);
@@ -88,6 +92,7 @@ export default function CreateWorkspaceModal({
     setName('');
     setDescription('');
     setColor(DEFAULT_WORKSPACE_COLOR);
+    setStatus('Active');
     setIsRestricted(false);
     setInviteEmails([]);
     setInviteGroupIds([]);
@@ -175,6 +180,7 @@ export default function CreateWorkspaceModal({
       accessLevel: inviteAccess,
       isRestricted,
       sendInviteEmail: inviteSendEmail,
+      status,
     };
     if (isEdit) {
       onSave?.(payload);
@@ -317,67 +323,99 @@ export default function CreateWorkspaceModal({
             />
           </Box>
 
-          {/* Always show invite section — Guest-only for public, all types for private */}
-          <Box sx={{ mt: 3 }}>
-            <Box
-              sx={{
-                p: 1.5,
-                mb: 3,
-                borderRadius: '12px',
-                border: `1px solid ${cv.border}`,
-                backgroundColor: cv.surfaceSubtle,
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: 1.5,
-              }}
-            >
-              <Box sx={{ minWidth: 0 }}>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
-                  Make Restricted
-                </Typography>
-                <Typography sx={{ mt: 0.35, fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.5 }}>
-                  Only people directly invited to the workspace can access, plus admins.
-                </Typography>
-              </Box>
-              <Switch
-                checked={isRestricted}
-                disabled={isEdit} // Admin cannot change private/public in edit mode per user request
-                onChange={(event) => {
-                  setIsRestricted(event.target.checked);
-                  // When switching to public, force Guest-only mode
-                  if (!event.target.checked) setInviteMemberType('Guest');
+          {isEdit && (
+            <Box sx={{ mt: 3, mb: 3 }}>
+              <Box
+                sx={{
+                  p: 1.5,
+                  borderRadius: '12px',
+                  border: `1px solid ${cv.border}`,
+                  backgroundColor: cv.surfaceSubtle,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 1.5,
                 }}
-                slotProps={{ input: { 'aria-label': 'Make workspace restricted' } }}
-              />
-            </Box>
-
-            {isEdit && initialWorkspace?.teamMembers && initialWorkspace.teamMembers.length > 0 && (
-              <Box sx={{ mb: 3 }}>
-                <Typography
-                  sx={{
-                    fontSize: '0.6875rem',
-                    fontWeight: 600,
-                    letterSpacing: '0.06em',
-                    textTransform: 'uppercase',
-                    color: cv.textMuted,
-                    mb: 1.25,
-                  }}
-                >
-                  Existing team members
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <TeamMemberAvatarStack 
-                    members={
-                      isRestricted 
-                        ? initialWorkspace.teamMembers 
-                        : initialWorkspace.teamMembers.filter(m => m.memberType === 'Guest' || m.isCurrentUser) // keep guest and current admin
-                    } 
-                    max={10} 
-                  />
+              >
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
+                    Workspace Status
+                  </Typography>
+                  <Typography sx={{ mt: 0.35, fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.5 }}>
+                    {status === 'Active' ? 'Active workspaces are visible to members.' : 'Inactive workspaces are hidden from all users except Super Admins.'}
+                  </Typography>
                 </Box>
+                <Switch
+                  checked={status === 'Active'}
+                  onChange={(event) => setStatus(event.target.checked ? 'Active' : 'Inactive')}
+                  slotProps={{ input: { 'aria-label': 'Workspace status' } }}
+                />
               </Box>
-            )}
+            </Box>
+          )}
+
+          {/* Only show invite section on create */}
+          {!isEdit && (
+            <Box sx={{ mt: 3 }}>
+              <Box
+                sx={{
+                  p: 1.5,
+                  mb: 3,
+                  borderRadius: '12px',
+                  border: `1px solid ${cv.border}`,
+                  backgroundColor: cv.surfaceSubtle,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 1.5,
+                }}
+              >
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
+                    Make Restricted
+                  </Typography>
+                  <Typography sx={{ mt: 0.35, fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.5 }}>
+                    Only people directly invited to the workspace can access, plus admins.
+                  </Typography>
+                </Box>
+                <Switch
+                  checked={isRestricted}
+                  disabled={isEdit} // Admin cannot change private/public in edit mode per user request
+                  onChange={(event) => {
+                    setIsRestricted(event.target.checked);
+                    // When switching to public, force Guest-only mode
+                    if (!event.target.checked) setInviteMemberType('Guest');
+                  }}
+                  slotProps={{ input: { 'aria-label': 'Make workspace restricted' } }}
+                />
+              </Box>
+
+              {isEdit && initialWorkspace?.teamMembers && initialWorkspace.teamMembers.length > 0 && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography
+                    sx={{
+                      fontSize: '0.6875rem',
+                      fontWeight: 600,
+                      letterSpacing: '0.06em',
+                      textTransform: 'uppercase',
+                      color: cv.textMuted,
+                      mb: 1.25,
+                    }}
+                  >
+                    Existing team members
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <TeamMemberAvatarStack
+                      members={
+                        isRestricted
+                          ? initialWorkspace.teamMembers
+                          : initialWorkspace.teamMembers.filter(m => m.memberType === 'Guest' || m.isCurrentUser) // keep guest and current admin
+                      }
+                      max={10}
+                    />
+                  </Box>
+                </Box>
+              )}
 
               <InvitePeopleFields
                 emails={inviteEmails}
@@ -399,7 +437,8 @@ export default function CreateWorkspaceModal({
                   ? 'Optional — invite people or groups to join this workspace.'
                   : 'Invite guests from other organizations to access this public workspace.'}
               />
-          </Box>
+            </Box>
+          )}
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 3, pt: 1, gap: 1 }}>
