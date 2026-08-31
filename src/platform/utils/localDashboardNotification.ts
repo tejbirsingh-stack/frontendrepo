@@ -28,7 +28,7 @@ export function writeLocalDashboardNotification(data: DashboardNotificationSetti
 }
 
 export function isLocalNotificationImage(img: DashboardNotificationImage): boolean {
-  return img.id.startsWith('local-') || (img.url?.startsWith('data:image/') ?? false);
+  return img.id.startsWith('local-') || (img.url?.startsWith('data:image/') ?? false); 
 }
 
 export function createLocalNotificationImage(file: File, dataUrl: string, index: number): DashboardNotificationImage {
