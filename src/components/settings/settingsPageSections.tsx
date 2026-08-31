@@ -111,6 +111,7 @@ import {
   hasActiveFilterSelections,
   matchesSetFilter,
   toggleFilterValue,
+  toggleSingleFilterValue,
   uniqueSorted,
 } from '../../utils/settingsTableFilterUtils';
 import { getProjectShareLink } from '../../utils/projectShareLink';
@@ -1528,31 +1529,9 @@ function ProjectRowActionsCell({
   onMarkActive,
   onMarkInactive,
 }: ProjectRowActionsCellProps) {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-
   const handleEditClick = (event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleOpenEditDialog = () => {
-    handleClose();
     onEdit?.(row.id);
-  };
-
-  const handleMarkActive = () => {
-    handleClose();
-    onMarkActive?.([row.id]);
-  };
-
-  const handleMarkInactive = () => {
-    handleClose();
-    onMarkInactive?.([row.id]);
   };
 
   const handleDelete = (e: React.MouseEvent) => {
@@ -1562,7 +1541,7 @@ function ProjectRowActionsCell({
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
-      <Tooltip title="Edit & status options">
+      <Tooltip title="Edit details">
         <IconButton
           size="small"
           onClick={handleEditClick}
@@ -1580,43 +1559,6 @@ function ProjectRowActionsCell({
           <EditOutlinedIcon sx={{ fontSize: '1.125rem' }} />
         </IconButton>
       </Tooltip>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={open}
-        onClose={handleClose}
-        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-        PaperProps={{
-          sx: {
-            bgcolor: cv.surfaceElevated || '#1b1726',
-            color: cv.textPrimary,
-            border: `1px solid ${cv.borderPrimary || cv.border}`,
-            borderRadius: '12px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
-            minWidth: 160,
-            py: 0.5,
-          },
-        }}
-      >
-        <MenuItem
-          onClick={handleMarkActive}
-          disabled={row.status === 'Active'}
-          sx={{ fontSize: '0.8125rem', gap: 1.25, py: 1, px: 1.5 }}
-        >
-          <CheckCircleOutlinedIcon fontSize="small" sx={{ fontSize: '1.1rem', color: '#10b981' }} />
-          Mark active
-        </MenuItem>
-
-        <MenuItem
-          onClick={handleMarkInactive}
-          disabled={row.status === 'Inactive'}
-          sx={{ fontSize: '0.8125rem', gap: 1.25, py: 1, px: 1.5 }}
-        >
-          <PauseCircleOutlinedIcon fontSize="small" sx={{ fontSize: '1.1rem', color: '#f59e0b' }} />
-          Mark inactive
-        </MenuItem>
-      </Menu>
 
       {!row.isDefault && onDelete && (
         <Tooltip title={`Delete ${showProjectColumn ? 'project' : 'workspace'}`}>
@@ -1676,8 +1618,6 @@ function ProjectWorkspaceTable({
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
-  const [pendingStatusFilter, setPendingStatusFilter] = useState<Set<string>>(createDefaultFilterSelection);
-  const [pendingWorkspaceFilter, setPendingWorkspaceFilter] = useState<Set<string>>(createDefaultFilterSelection);
   const [appliedStatusFilter, setAppliedStatusFilter] = useState<Set<string>>(createDefaultFilterSelection);
   const [appliedWorkspaceFilter, setAppliedWorkspaceFilter] = useState<Set<string>>(createDefaultFilterSelection);
 
@@ -1689,15 +1629,11 @@ function ProjectWorkspaceTable({
   const hasActiveFilters = hasActiveFilterSelections(appliedStatusFilter, appliedWorkspaceFilter);
 
   const handleApplyFilters = () => {
-    setAppliedStatusFilter(new Set(pendingStatusFilter));
-    setAppliedWorkspaceFilter(new Set(pendingWorkspaceFilter));
     setFilterOpen(false);
   };
 
   const handleClearAllFilters = () => {
     const defaultSel = createDefaultFilterSelection();
-    setPendingStatusFilter(defaultSel);
-    setPendingWorkspaceFilter(defaultSel);
     setAppliedStatusFilter(defaultSel);
     setAppliedWorkspaceFilter(defaultSel);
   };
@@ -1887,8 +1823,8 @@ function ProjectWorkspaceTable({
                   id: 'status',
                   label: 'Status',
                   options: ['Active', 'Inactive'],
-                  selected: pendingStatusFilter,
-                  onToggle: (value) => setPendingStatusFilter((current) => toggleFilterValue(current, value)),
+                  selected: appliedStatusFilter,
+                  onToggle: (value) => setAppliedStatusFilter((current) => toggleSingleFilterValue(current, value)),
                 },
                 ...(showProjectColumn
                   ? [
@@ -1896,15 +1832,14 @@ function ProjectWorkspaceTable({
                       id: 'workspace',
                       label: 'Workspace',
                       options: workspaceOptions,
-                      selected: pendingWorkspaceFilter,
+                      selected: appliedWorkspaceFilter,
                       onToggle: (value: string) =>
-                        setPendingWorkspaceFilter((current) => toggleFilterValue(current, value)),
+                        setAppliedWorkspaceFilter((current) => toggleFilterValue(current, value)),
                     },
                   ]
                   : []),
               ]}
               onClearAll={handleClearAllFilters}
-              onApply={handleApplyFilters}
             />
           </Box>
         </Collapse>
@@ -2730,7 +2665,7 @@ export function WorkspacesAdminSettingsSection() {
       try {
         const { apiClient } = await import('../../api/client');
         const token = localStorage.getItem('token');
-        const response = await apiClient.get<any>('/workspaces/find-all', {
+        const response = await apiClient.get<any>('/workspaces/find-all?includeInactive=true', {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = Array.isArray(response) ? response : response.data;
@@ -2779,7 +2714,7 @@ export function WorkspacesAdminSettingsSection() {
               return {
                 id: w.id,
                 workspace: w.name,
-                status: 'Active',
+                status: w.status === 'Inactive' || w.status === 'inactive' ? 'Inactive' : 'Active',
                 lastUpdated: today,
                 creationDate: today,
                 storage: '0 MB',
@@ -2787,6 +2722,8 @@ export function WorkspacesAdminSettingsSection() {
                 visibility: w.visibility === 'PUBLIC' ? 'public' : 'private',
                 isRestricted: w.visibility === 'PRIVATE',
                 isDefault: isDefaultWorkspace,
+                description: w.description || '',
+                color: w.color || '',
                 teamMembers: [adminMember, ...mappedUsers, ...mappedGroups]
               } as SettingsProjectRow;
           });
@@ -2826,8 +2763,29 @@ export function WorkspacesAdminSettingsSection() {
     ]);
   };
 
-  const handleSaveWorkspace = (data: CreateWorkspaceFormData) => {
+  const handleSaveWorkspace = async (data: CreateWorkspaceFormData) => {
     if (!editWorkspaceId) return;
+
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      await apiClient.post(
+        `/workspaces/update/${editWorkspaceId}`,
+        {
+          name: data.name,
+          description: data.description,
+          color: data.color,
+          status: data.status,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success('Workspace updated successfully.');
+    } catch (error: any) {
+      console.error('Failed to update workspace in backend:', error);
+      toast.error(error?.response?.data?.message || 'Failed to update workspace.');
+      return;
+    }
+
     const today = formatDate(Date.now(), {
       month: 'short',
       day: 'numeric',
@@ -2845,6 +2803,9 @@ export function WorkspacesAdminSettingsSection() {
           return {
             ...workspace,
             workspace: data.name,
+            description: data.description,
+            color: data.color,
+            status: data.status || workspace.status,
             lastUpdated: today,
             teamMembers: [...(workspace.teamMembers ?? []), ...newEmails, ...newGroups],
           };
@@ -2975,15 +2936,37 @@ export function WorkspacesAdminSettingsSection() {
         onEdit={setEditWorkspaceId}
         onDelete={handleDeleteWorkspace}
         onInviteTeamMembers={setInviteWorkspaceId}
-        onMarkActive={(ids) => {
-          setWorkspaces((prev) =>
-            prev.map((w) => (ids.includes(w.id) ? { ...w, status: 'Active' } : w))
-          );
+        onMarkActive={async (ids) => {
+          try {
+            const { apiClient } = await import('../../api/client');
+            const token = localStorage.getItem('token');
+            for (const id of ids) {
+              await apiClient.post(`/workspaces/update/${id}`, { status: 'active' }, { headers: { Authorization: `Bearer ${token}` } });
+            }
+            setWorkspaces((prev) =>
+              prev.map((w) => (ids.includes(w.id) ? { ...w, status: 'Active' } : w))
+            );
+            toast.success('Workspace(s) marked as active.');
+          } catch (e: any) {
+            console.error('Failed to mark workspace active', e);
+            toast.error(e?.response?.data?.message || 'Failed to mark workspace as active.');
+          }
         }}
-        onMarkInactive={(ids) => {
-          setWorkspaces((prev) =>
-            prev.map((w) => (ids.includes(w.id) ? { ...w, status: 'Inactive' } : w))
-          );
+        onMarkInactive={async (ids) => {
+          try {
+            const { apiClient } = await import('../../api/client');
+            const token = localStorage.getItem('token');
+            for (const id of ids) {
+              await apiClient.post(`/workspaces/update/${id}`, { status: 'inactive' }, { headers: { Authorization: `Bearer ${token}` } });
+            }
+            setWorkspaces((prev) =>
+              prev.map((w) => (ids.includes(w.id) ? { ...w, status: 'Inactive' } : w))
+            );
+            toast.success('Workspace(s) marked as inactive.');
+          } catch (e: any) {
+            console.error('Failed to mark workspace inactive', e);
+            toast.error(e?.response?.data?.message || 'Failed to mark workspace as inactive.');
+          }
         }}
       />
       <CreateWorkspaceModal
@@ -2998,6 +2981,9 @@ export function WorkspacesAdminSettingsSection() {
           editWorkspace
             ? {
                 name: editWorkspace.workspace,
+                description: editWorkspace.description,
+                color: editWorkspace.color,
+                status: editWorkspace.status,
                 isRestricted: editWorkspace.isRestricted,
                 teamMembers: editWorkspace.teamMembers,
               }
