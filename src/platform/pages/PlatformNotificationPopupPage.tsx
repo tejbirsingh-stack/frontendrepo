@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
+  Alert,
   Box,
   Button,
   CircularProgress,
@@ -16,6 +17,7 @@ import {
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import {
   fetchDashboardNotification,
   updateDashboardNotification,
@@ -26,6 +28,13 @@ import {
 } from '../api/platformApi';
 import { PageHeader, Panel } from '../components/PlatformUi';
 import { cv } from '../../theme/cssVars';
+import {
+  createLocalNotificationImage,
+  fileToDataUrl,
+  isLocalNotificationImage,
+  readLocalDashboardNotification,
+  writeLocalDashboardNotification,
+} from '../utils/localDashboardNotification';
 
 export default function PlatformNotificationPopupPage() {
   const [notification, setNotification] = useState<DashboardNotificationSettings>({
@@ -38,17 +47,54 @@ export default function PlatformNotificationPopupPage() {
   });
   const [savingNotification, setSavingNotification] = useState(false);
   const [uploadingNotifImage, setUploadingNotifImage] = useState(false);
+  const [usingLocalFallback, setUsingLocalFallback] = useState(false);
   const notifImageInputRef = useRef<HTMLInputElement>(null);
   const [imageToDelete, setImageToDelete] = useState<DashboardNotificationImage | null>(null);
   const [deletingImage, setDeletingImage] = useState(false);
 
   useEffect(() => {
+    const local = readLocalDashboardNotification();
     fetchDashboardNotification()
       .then((res) => {
-        if (res.notification) setNotification(res.notification);
+        if (!res.notification) {
+          if (local) {
+            setNotification(local);
+            setUsingLocalFallback(true);
+          }
+          return;
+        }
+
+        if (local?.updatedAt) {
+          const remoteTs = res.notification.updatedAt
+            ? Date.parse(res.notification.updatedAt)
+            : 0;
+          const localTs = Date.parse(local.updatedAt);
+          if (localTs >= remoteTs) {
+            setNotification(local);
+            setUsingLocalFallback(true);
+            return;
+          }
+        }
+
+        setNotification(res.notification);
+        setUsingLocalFallback(false);
       })
-      .catch((err) => console.error('Failed to load dashboard notification', err));
+      .catch((err) => {
+        console.error('Failed to load dashboard notification', err);
+        if (local) {
+          setNotification(local);
+          setUsingLocalFallback(true);
+          toast.success('Loaded local notification draft (API unavailable)');
+        }
+      });
   }, []);
+
+  const persistLocally = (next: DashboardNotificationSettings) => {
+    const saved = writeLocalDashboardNotification(next);
+    setNotification(saved);
+    setUsingLocalFallback(true);
+    return saved;
+  };
 
   const handleSaveNotification = async () => {
     if (notification.isEnabled) {
@@ -62,14 +108,94 @@ export default function PlatformNotificationPopupPage() {
     try {
       const res = await updateDashboardNotification(notification);
       if (res.notification) {
-        setNotification(res.notification);
+        // Keep any locally uploaded images that the API cannot store yet
+        const localOnlyImages = (notification.images || []).filter(isLocalNotificationImage);
+        const merged: DashboardNotificationSettings = {
+          ...res.notification,
+          images: [...(res.notification.images || []), ...localOnlyImages],
+        };
+        if (localOnlyImages.length > 0) {
+          persistLocally(merged);
+          toast.success('Settings saved to API. Local images kept for preview.');
+        } else {
+          setNotification(res.notification);
+          setUsingLocalFallback(false);
+          writeLocalDashboardNotification(res.notification);
+          toast.success('Dashboard Notification settings saved successfully');
+        }
+      } else {
+        toast.success('Dashboard Notification settings saved successfully');
       }
-      toast.success('Dashboard Notification settings saved successfully');
     } catch (err) {
       console.error('Failed to save dashboard notification:', err);
-      toast.error('Failed to save dashboard notification');
+      persistLocally(notification);
+      toast.success('Saved locally for preview (API save unavailable)');
     } finally {
       setSavingNotification(false);
+    }
+  };
+
+  const handlePreview = () => {
+    if (!notification.title?.trim() || !notification.body?.trim()) {
+      toast.error('Add a title and message body before previewing.');
+      return;
+    }
+    window.dispatchEvent(
+      new CustomEvent('open-dashboard-notification', {
+        detail: {
+          notification: {
+            ...notification,
+            isEnabled: true,
+            updatedAt: notification.updatedAt || new Date().toISOString(),
+          },
+        },
+      }),
+    );
+  };
+
+  const handleUploadImage = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Only image files are allowed');
+      return;
+    }
+    if ((notification.images?.length || 0) >= 10) {
+      toast.error('Maximum limit of 10 images reached');
+      return;
+    }
+
+    setUploadingNotifImage(true);
+    try {
+      const res = await uploadNotificationImage(file);
+      if (res.image) {
+        setNotification((prev) => ({
+          ...prev,
+          images: [...prev.images, res.image],
+        }));
+        setUsingLocalFallback(false);
+        toast.success('Image uploaded successfully');
+      }
+    } catch (err) {
+      console.error('Image upload failed — using local preview image', err);
+      try {
+        const dataUrl = await fileToDataUrl(file);
+        const localImage = createLocalNotificationImage(
+          file,
+          dataUrl,
+          notification.images?.length || 0,
+        );
+        const next = {
+          ...notification,
+          images: [...(notification.images || []), localImage],
+        };
+        persistLocally(next);
+        toast.success('Image stored locally for preview (cloud upload unavailable)');
+      } catch (localErr) {
+        console.error(localErr);
+        toast.error('Failed to upload image');
+      }
+    } finally {
+      setUploadingNotifImage(false);
+      if (notifImageInputRef.current) notifImageInputRef.current.value = '';
     }
   };
 
@@ -79,6 +205,13 @@ export default function PlatformNotificationPopupPage() {
         title="Notification Popup"
         subtitle="Configure a welcome popup shown to all users when they log into the dashboard"
       />
+
+      {usingLocalFallback && (
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+          Local preview mode is active. Settings and images are stored in this browser so you can
+          design the popup without cloud upload/save. Use Preview to open the branded notification.
+        </Alert>
+      )}
 
       <Panel title="Configuration" subtitle="Manage the content and media of the popup">
         <Box sx={{ display: 'grid', gap: 3, maxWidth: 620 }}>
@@ -99,7 +232,7 @@ export default function PlatformNotificationPopupPage() {
             fullWidth
             value={notification.title}
             onChange={(e) => setNotification({ ...notification, title: e.target.value })}
-            placeholder="e.g., Welcome to the New NOAH Cloud!"
+            placeholder="e.g., Vision in Focus"
             disabled={!notification.isEnabled}
           />
 
@@ -136,7 +269,6 @@ export default function PlatformNotificationPopupPage() {
             />
           </Box>
 
-          {/* Image Upload Section */}
           <Box
             sx={{
               borderTop: `1px solid ${cv.border}`,
@@ -147,11 +279,10 @@ export default function PlatformNotificationPopupPage() {
               Popup Images
             </Typography>
             <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted, mb: 2 }}>
-              Images shown below the message as a slider (Max 10). Stored in B2 under{' '}
-              <code>notification-media/</code>.
+              Primary image appears on the left of the branded popup. Max 10. Falls back to local
+              storage when cloud upload is unavailable.
             </Typography>
 
-            {/* Existing images grid */}
             {(notification.images || []).length > 0 && (
               <Box
                 sx={{
@@ -181,6 +312,26 @@ export default function PlatformNotificationPopupPage() {
                         sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                     )}
+                    {isLocalNotificationImage(img) && (
+                      <Typography
+                        sx={{
+                          position: 'absolute',
+                          left: 6,
+                          bottom: 6,
+                          px: 0.75,
+                          py: 0.15,
+                          borderRadius: 1,
+                          fontSize: '0.625rem',
+                          fontWeight: 700,
+                          letterSpacing: '0.04em',
+                          textTransform: 'uppercase',
+                          bgcolor: 'rgba(142, 68, 173, 0.92)',
+                          color: '#fff',
+                        }}
+                      >
+                        Local
+                      </Typography>
+                    )}
                     <IconButton
                       size="small"
                       onClick={() => setImageToDelete(img)}
@@ -202,7 +353,6 @@ export default function PlatformNotificationPopupPage() {
               </Box>
             )}
 
-            {/* Upload button */}
             <Button
               variant="outlined"
               component="label"
@@ -230,37 +380,21 @@ export default function PlatformNotificationPopupPage() {
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  if (!file.type.startsWith('image/')) {
-                    toast.error('Only image files are allowed');
-                    return;
-                  }
-                  if ((notification.images?.length || 0) >= 10) {
-                    toast.error('Maximum limit of 10 images reached');
-                    return;
-                  }
-                  setUploadingNotifImage(true);
-                  try {
-                    const res = await uploadNotificationImage(file);
-                    if (res.image) {
-                      setNotification((prev) => ({
-                        ...prev,
-                        images: [...prev.images, res.image],
-                      }));
-                      toast.success('Image uploaded successfully');
-                    }
-                  } catch (err) {
-                    console.error('Image upload failed', err);
-                    toast.error('Failed to upload image');
-                  } finally {
-                    setUploadingNotifImage(false);
-                    if (notifImageInputRef.current) notifImageInputRef.current.value = '';
-                  }
+                  await handleUploadImage(file);
                 }}
               />
             </Button>
           </Box>
 
-          <Box sx={{ pt: 1, borderTop: `1px solid ${cv.border}` }}>
+          <Box
+            sx={{
+              pt: 1,
+              borderTop: `1px solid ${cv.border}`,
+              display: 'flex',
+              gap: 1.5,
+              flexWrap: 'wrap',
+            }}
+          >
             <Button
               variant="contained"
               onClick={handleSaveNotification}
@@ -269,11 +403,19 @@ export default function PlatformNotificationPopupPage() {
             >
               {savingNotification ? 'Saving...' : 'Save Notification Settings'}
             </Button>
+            <Button
+              variant="outlined"
+              onClick={handlePreview}
+              disabled={!notification.isEnabled}
+              startIcon={<VisibilityOutlinedIcon />}
+              sx={{ textTransform: 'none' }}
+            >
+              Preview Popup
+            </Button>
           </Box>
         </Box>
       </Panel>
 
-      {/* Permanent Delete Warning Confirmation Modal for Image */}
       <Dialog
         open={Boolean(imageToDelete)}
         onClose={() => !deletingImage && setImageToDelete(null)}
@@ -308,16 +450,34 @@ export default function PlatformNotificationPopupPage() {
               if (!imageToDelete) return;
               setDeletingImage(true);
               try {
-                await deleteNotificationImage(imageToDelete.id);
-                setNotification((prev) => ({
-                  ...prev,
-                  images: prev.images.filter((i) => i.id !== imageToDelete.id),
-                }));
-                toast.success('Image deleted successfully');
+                if (isLocalNotificationImage(imageToDelete)) {
+                  const next = {
+                    ...notification,
+                    images: notification.images.filter((i) => i.id !== imageToDelete.id),
+                  };
+                  persistLocally(next);
+                  toast.success('Local image removed');
+                } else {
+                  await deleteNotificationImage(imageToDelete.id);
+                  const next = {
+                    ...notification,
+                    images: notification.images.filter((i) => i.id !== imageToDelete.id),
+                  };
+                  setNotification(next);
+                  if (usingLocalFallback) persistLocally(next);
+                  toast.success('Image deleted successfully');
+                }
                 setImageToDelete(null);
               } catch (e) {
                 console.error('Failed to delete image', e);
-                toast.error('Failed to delete image');
+                // Still allow removing from local draft
+                const next = {
+                  ...notification,
+                  images: notification.images.filter((i) => i.id !== imageToDelete.id),
+                };
+                persistLocally(next);
+                toast.success('Image removed from local draft');
+                setImageToDelete(null);
               } finally {
                 setDeletingImage(false);
               }
