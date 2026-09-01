@@ -2349,41 +2349,59 @@ export function ProjectsAdminSettingsSection() {
     setDeleteDialogIds([]);
   };
 
-  const handleInviteMember = (payload: WorkspaceInvitePayload) => {
+  const handleInviteMember = async (payload: WorkspaceInvitePayload) => {
     if (!inviteProjectId) return false;
 
-    const target = projects.find((project) => project.id === inviteProjectId);
-    const newMember = resolveWorkspaceInvite(payload, target?.teamMembers ?? []);
-    if (!newMember) return false;
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      const res = await apiClient.post(
+        `/workspaces/project/${inviteProjectId}/member`,
+        {
+          email: payload.email,
+          memberType: payload.memberType,
+          accessLevel: payload.access,
+          groupId: payload.groupId,
+          sendInviteEmail: payload.sendInviteEmail ?? false,
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const data = res.data ?? res;
 
-    (async () => {
-      try {
-        const { apiClient } = await import('../../api/client');
-        const token = localStorage.getItem('token');
-        await apiClient.post(
-          `/workspaces/project/${inviteProjectId}/member`,
-          {
-            email: payload.email,
-            memberType: payload.memberType,
-            accessLevel: payload.access,
-            groupId: payload.groupId,
-            sendInviteEmail: payload.sendInviteEmail ?? false,
-          },
-          { headers: { Authorization: `Bearer ${token}` } },
+      const finalPayload = {
+        ...payload,
+        name: data.user?.name || payload.name,
+        memberType: data.memberType || payload.memberType,
+        userId: data.user?.id || payload.userId,
+      };
+
+      const target = projects.find((project) => project.id === inviteProjectId);
+      const newMember = resolveWorkspaceInvite(finalPayload, target?.teamMembers ?? [], orgGroupsList);
+      if (newMember) {
+        setProjects((current) =>
+          current.map((project) =>
+            project.id === inviteProjectId
+              ? { ...project, teamMembers: [...(project.teamMembers ?? []), newMember] }
+              : project,
+          ),
         );
-      } catch (err) {
-        console.error('Failed to persist project member to backend:', err);
       }
-    })();
-
-    setProjects((current) =>
-      current.map((project) =>
-        project.id === inviteProjectId
-          ? { ...project, teamMembers: [...(project.teamMembers ?? []), newMember] }
-          : project,
-      ),
-    );
-    return true;
+      toast.success(`${finalPayload.memberType || 'Member'} added to project successfully.`);
+      return true;
+    } catch (err: any) {
+      console.error('Failed to add project member:', err);
+      const status = err.status || err.response?.status;
+      const data = err.details || err.response?.data;
+      
+      if (status === 404 && data?.notFound) {
+         return 'NOT_FOUND';
+      }
+      if (status === 400 && data?.orgMemberInPublic) {
+         return 'ORG_MEMBER_IN_PUBLIC';
+      }
+      toast.error(data?.message || err.message || 'Failed to add member to project.');
+      return false;
+    }
   };
 
   const handleUpdateMemberAccess = async (memberId: string, access: WorkspaceMemberAccess) => {
@@ -2682,18 +2700,7 @@ export function WorkspacesAdminSettingsSection() {
               const actualUserName = actualUser?.name || actualUserEmail.split('@')[0] || CURRENT_USER.name;
               const actualUserInitials = actualUserName.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2) || CURRENT_USER.initials;
 
-              const adminMember = {
-                id: `wm-admin-${w.id}`,
-                name: actualUserName,
-                initials: actualUserInitials,
-                email: actualUserEmail,
-                access: 'Full Access',
-                memberType: 'Owner',
-                isCurrentUser: true,
-              };
-              
               const mappedUsers = (w.users || [])
-                .filter((u: any) => u.user && u.user.email !== actualUserEmail)
                 .map((u: any) => {
                   const displayName = u.user.name || u.user.email.split('@')[0];
                   const inits = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2) || 'U';
@@ -2708,6 +2715,7 @@ export function WorkspacesAdminSettingsSection() {
                     email: u.user.email,
                     access: u.accessLevelId === '10f1fe4a-f28f-4d76-a7c2-6175dfe04c9b' ? 'Full Access' : (u.accessLevelId === 'd321a6c5-c28a-4dc4-900e-4dc57fe276bf' ? 'Can edit' : 'Can view'),
                     memberType: memType,
+                    isCurrentUser: u.user.email === actualUserEmail,
                   };
                 });
                 
@@ -2733,7 +2741,7 @@ export function WorkspacesAdminSettingsSection() {
                 isDefault: isDefaultWorkspace,
                 description: w.description || '',
                 color: w.color || '',
-                teamMembers: [adminMember, ...mappedUsers, ...mappedGroups]
+                teamMembers: [...mappedUsers, ...mappedGroups]
               } as SettingsProjectRow;
           });
           setWorkspaces(formatted);
@@ -2825,44 +2833,52 @@ export function WorkspacesAdminSettingsSection() {
     setEditWorkspaceId(null);
   };
 
-  const handleInviteMember = (payload: WorkspaceInvitePayload) => {
+  const handleInviteMember = async (payload: WorkspaceInvitePayload) => {
     if (!inviteWorkspaceId) return false;
 
-    const target = workspaces.find((workspace) => workspace.id === inviteWorkspaceId);
-    const newMember = resolveWorkspaceInvite(payload, target?.teamMembers ?? []);
-    if (!newMember) return false;
-
-    // Optimistic UI update
-    setWorkspaces((current) =>
-      current.map((workspace) =>
-        workspace.id === inviteWorkspaceId
-          ? { ...workspace, teamMembers: [...(workspace.teamMembers ?? []), newMember] }
-          : workspace,
-      ),
-    );
-
-    // Backend API Call
-    import('../../api/client').then(({ apiClient }) => {
+    try {
+      const { apiClient } = await import('../../api/client');
       const token = localStorage.getItem('token');
-      apiClient.post(`/workspaces/${inviteWorkspaceId}/member`, payload, {
+      const res = await apiClient.post(`/workspaces/${inviteWorkspaceId}/member`, payload, {
         headers: { Authorization: `Bearer ${token}` }
-      }).then(() => {
-        toast.success(`${payload.memberType || 'Member'} added to workspace successfully.`);
-      }).catch((err) => {
-        console.error('Failed to add workspace member:', err);
-        toast.error('Failed to add member to workspace.');
-        // Revert on failure (simplified)
+      });
+      const data = res.data ?? res;
+
+      const finalPayload = {
+        ...payload,
+        name: data.user?.name || payload.name,
+        memberType: data.memberType || payload.memberType,
+        userId: data.user?.id || payload.userId,
+      };
+
+      const target = workspaces.find((workspace) => workspace.id === inviteWorkspaceId);
+      const newMember = resolveWorkspaceInvite(finalPayload, target?.teamMembers ?? [], orgGroupsList);
+      
+      if (newMember) {
         setWorkspaces((current) =>
           current.map((workspace) =>
             workspace.id === inviteWorkspaceId
-              ? { ...workspace, teamMembers: workspace.teamMembers?.filter(m => m.id !== newMember.id) }
+              ? { ...workspace, teamMembers: [...(workspace.teamMembers ?? []), newMember] }
               : workspace,
           ),
         );
-      });
-    });
-
-    return true;
+      }
+      toast.success(`${finalPayload.memberType || 'Member'} added to workspace successfully.`);
+      return true;
+    } catch (err: any) {
+      console.error('Failed to add workspace member:', err);
+      const status = err.status || err.response?.status;
+      const data = err.details || err.response?.data;
+      
+      if (status === 404 && data?.notFound) {
+         return 'NOT_FOUND';
+      }
+      if (status === 400 && data?.orgMemberInPublic) {
+         return 'ORG_MEMBER_IN_PUBLIC';
+      }
+      toast.error(data?.message || err.message || 'Failed to add member to workspace.');
+      return false;
+    }
   };
 
   const handleUpdateMemberAccess = (memberId: string, access: WorkspaceMemberAccess) => {
