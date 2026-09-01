@@ -36,12 +36,13 @@ import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import { useActiveUser } from '../../hooks/useActiveUser';
 import type { MediaItem } from '../../data/mockMedia';
-import { MOCK_FRAME_PEOPLE, type FramePerson } from '../../data/mockFramePeople';
+import { getAiHighlightsRequest, getAiPeopleRequest, getAiScenesRequest } from '../../api/ai.service';
+import type { AiPersonDto, AiSceneDto } from '../../api/ai.service';
+import { useAiEntitled } from '../../hooks/useAiEntitled';
+import type { FramePerson } from '../../data/mockFramePeople';
 import TranscriptPanel from './TranscriptPanel';
 import AiSummaryBlock from './AiSummaryBlock';
 import type { AnnotationHistoryEntry, AnnotationHistoryType } from '../../types/annotationHistory';
-import { getAiHighlightsRequest } from '../../api/ai.service';
-import { useAiEntitled } from '../../hooks/useAiEntitled';
 import type { CommentReply, VideoComment } from '../../types/videoComments';
 import CommentImageAttachment from './CommentImageAttachment';
 import type { AnnotationAccessGroup, AnnotationVisibility } from '../../types/annotationVisibility';
@@ -914,6 +915,103 @@ function HistoryEntryRow({
   );
 }
 
+function initialsFromLabel(label: string): string {
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
+}
+
+function formatTimecode(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function mapPeopleToFramePeople(people: AiPersonDto[]): FramePerson[] {
+  return people.map((p, index) => ({
+    id: p.id,
+    name: p.displayLabel,
+    initials: initialsFromLabel(p.displayLabel),
+    detail: `${formatTimecode(p.startMs)}–${formatTimecode(p.endMs)}`,
+    // Placeholder box until VI supplies face rectangles (Phase 2a).
+    box: {
+      xPercent: 40 + (index % 3) * 5,
+      yPercent: 28 + (index % 2) * 8,
+      widthPercent: 12,
+      heightPercent: 18,
+    },
+  }));
+}
+
+function SceneInsightChips({
+  scenes,
+  query,
+  onSeekMs,
+}: Readonly<{
+  scenes: AiSceneDto[];
+  query: string;
+  onSeekMs?: (startMs: number) => void;
+}>) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = normalizedQuery
+    ? scenes.filter((s) =>
+        `${s.label} ${s.description || ''}`.toLowerCase().includes(normalizedQuery),
+      )
+    : scenes;
+
+  if (filtered.length === 0) {
+    return (
+      <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
+        {normalizedQuery ? `No scenes match "${query.trim()}".` : 'No scenes detected yet.'}
+      </Typography>
+    );
+  }
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 0.75,
+      }}
+      aria-label="Scenes detected in this video"
+    >
+      {filtered.slice(0, 24).map((scene) => (
+        <Box
+          key={scene.id}
+          component="button"
+          type="button"
+          onClick={() => onSeekMs?.(scene.startMs)}
+          sx={{
+            border: `1px solid ${cv.purpleChipBorder}`,
+            backgroundColor: cv.purpleSurface,
+            borderRadius: '999px',
+            px: 1,
+            py: 0.375,
+            cursor: onSeekMs ? 'pointer' : 'default',
+            color: cv.brandPurpleLight,
+            fontSize: '0.6875rem',
+            fontWeight: 600,
+            lineHeight: 1.3,
+            '&:hover': { backgroundColor: cv.purpleSelectionHover },
+            '&:focus-visible': {
+              outline: `2px solid ${cv.purpleFocusBorder}`,
+              outlineOffset: 2,
+            },
+          }}
+        >
+          {scene.label}
+          <Box component="span" sx={{ opacity: 0.75, ml: 0.5 }}>
+            {formatTimecode(scene.startMs)}
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 function FramePeopleHeadshots({
   people,
   query,
@@ -941,7 +1039,7 @@ function FramePeopleHeadshots({
     >
       {people.length === 0 ? (
         <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted, textAlign: 'center' }}>
-          No people match "{query.trim()}".
+          {query.trim() ? `No people match "${query.trim()}".` : 'No people detected yet.'}
         </Typography>
       ) : (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1120,6 +1218,9 @@ export default function AnnotationHistoryDrawer({
   const [highlightTags, setHighlightTags] = useState<string[]>([]);
   const [highlightLoading, setHighlightLoading] = useState(false);
   const [highlightError, setHighlightError] = useState<string | null>(null);
+  const [assetPeople, setAssetPeople] = useState<AiPersonDto[]>([]);
+  const [assetScenes, setAssetScenes] = useState<AiSceneDto[]>([]);
+  const [peopleScenesLoading, setPeopleScenesLoading] = useState(false);
 
   const commentById = useMemo(
     () => new Map(comments.map((comment) => [comment.id, comment])),
@@ -1190,14 +1291,16 @@ export default function AnnotationHistoryDrawer({
       });
   }, [commentById, customEndDate, customStartDate, dateRangeFilter, entries, query, statusFilter, typeFilter, activeUser.name]);
 
+  const framePeople = useMemo(() => mapPeopleToFramePeople(assetPeople), [assetPeople]);
+
   const filteredFramePeople = useMemo(() => {
     const normalizedQuery = aiQuery.trim().toLowerCase();
-    if (!normalizedQuery) return MOCK_FRAME_PEOPLE;
+    if (!normalizedQuery) return framePeople;
 
-    return MOCK_FRAME_PEOPLE.filter((person) =>
+    return framePeople.filter((person) =>
       `${person.name} ${person.detail}`.toLowerCase().includes(normalizedQuery),
     );
-  }, [aiQuery]);
+  }, [aiQuery, framePeople]);
 
   // People detection runs on frames, so audio and documents have no faces to list.
   const supportsFramePeople = mediaItem?.type === 'video' || mediaItem?.type === 'image';
@@ -1242,6 +1345,47 @@ export default function AnnotationHistoryDrawer({
       cancelled = true;
     };
   }, [activeTab, aiEntitled, mediaItem?.id]);
+
+  useEffect(() => {
+    if (activeTab !== 'ai' || aiSubTab !== 'transcript' || !aiEntitled || !mediaItem?.id) {
+      return;
+    }
+    if (mediaItem.type !== 'video' && mediaItem.type !== 'image') {
+      setAssetPeople([]);
+      setAssetScenes([]);
+      return;
+    }
+
+    let cancelled = false;
+    setPeopleScenesLoading(true);
+
+    void Promise.all([getAiPeopleRequest(mediaItem.id), getAiScenesRequest(mediaItem.id)])
+      .then(([peopleRes, scenesRes]) => {
+        if (cancelled) return;
+        setAssetPeople(Array.isArray(peopleRes.people) ? peopleRes.people : []);
+        setAssetScenes(Array.isArray(scenesRes.scenes) ? scenesRes.scenes : []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAssetPeople([]);
+        setAssetScenes([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPeopleScenesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, aiSubTab, aiEntitled, mediaItem?.id, mediaItem?.type]);
+
+  const handlePersonSelect = (person: FramePerson) => {
+    onFramePersonSelect?.(person);
+    const match = assetPeople.find((p) => p.id === person.id);
+    if (match && onTranscriptSeek) {
+      onTranscriptSeek(match.startMs);
+    }
+  };
 
   const insightsSummary = useMemo(() => {
     if (highlightSummary?.trim()) return highlightSummary.trim();
@@ -1442,12 +1586,29 @@ export default function AnnotationHistoryDrawer({
               />
 
               {supportsFramePeople && (
-                <FramePeopleHeadshots
-                  people={filteredFramePeople}
-                  query={aiQuery}
-                  selectedPersonId={selectedFramePersonId}
-                  onSelectPerson={onFramePersonSelect}
-                />
+                <>
+                  {peopleScenesLoading ? (
+                    <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
+                      Loading people and scenes…
+                    </Typography>
+                  ) : (
+                    <>
+                      <FramePeopleHeadshots
+                        people={filteredFramePeople}
+                        query={aiQuery}
+                        selectedPersonId={selectedFramePersonId}
+                        onSelectPerson={handlePersonSelect}
+                      />
+                      {mediaItem?.type === 'video' ? (
+                        <SceneInsightChips
+                          scenes={assetScenes}
+                          query={aiQuery}
+                          onSeekMs={onTranscriptSeek}
+                        />
+                      ) : null}
+                    </>
+                  )}
+                </>
               )}
             </>
           ) : null}

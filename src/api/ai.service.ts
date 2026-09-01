@@ -75,5 +75,37 @@ export async function listAiTagsRequest(): Promise<{ success: boolean; tags: str
   return apiClient.get('/ai/tags');
 }
 
+export interface AiPersonDto {
+  id: string;
+  viFaceId: string | null;
+  displayLabel: string;
+  startMs: number;
+  endMs: number;
+  thumbnailUrl: string | null;
+  ordinal: number;
+}
+
+export interface AiSceneDto {
+  id: string;
+  label: string;
+  description: string | null;
+  startMs: number;
+  endMs: number;
+  confidence: number | null;
+  ordinal: number;
+}
+
+export async function getAiPeopleRequest(
+  assetId: string,
+): Promise<{ success: boolean; assetId: string; people: AiPersonDto[] }> {
+  return apiClient.get(`/ai/assets/${encodeURIComponent(assetId)}/people`);
+}
+
+export async function getAiScenesRequest(
+  assetId: string,
+): Promise<{ success: boolean; assetId: string; scenes: AiSceneDto[] }> {
+  return apiClient.get(`/ai/assets/${encodeURIComponent(assetId)}/scenes`);
+}
+
 /** @deprecated Use searchAiRequest */
 export const searchAiTranscriptRequest = searchAiRequest;
