@@ -818,7 +818,7 @@ export default function CommentThreadPopover({
                 }}
                 sx={{ fontSize: '0.875rem', color: palette.redLight }}
               >
-                Delete thread...
+                Archive
               </MenuItem>
             ) : null}
           </Menu>

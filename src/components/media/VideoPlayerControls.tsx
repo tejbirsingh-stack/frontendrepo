@@ -64,6 +64,7 @@ function AnnotationTimelineToggleIcon(props: SvgIconProps) {
 const controlButtonSx = {
   width: 36,
   height: 36,
+  flexShrink: 0,
   color: cv.textPrimary,
   '&:hover': {
     backgroundColor: cv.surfaceHover,
@@ -73,6 +74,7 @@ const controlButtonSx = {
 const timelineToggleButtonSx = {
   width: 36,
   height: 36,
+  flexShrink: 0,
   color: cv.textPrimary,
   backgroundColor: cv.surfaceHover,
   '&:hover': {
@@ -471,11 +473,14 @@ export default function VideoPlayerControls({
         sx={{
           display: 'flex',
           alignItems: 'center',
-          gap: { xs: 0.75, md: 1.25 },
-          px: { xs: 1.25, md: 2 },
+          gap: { xs: 0.5, sm: 1, md: 1.25 },
+          px: { xs: 1, sm: 1.5, md: 2 },
           py: 1.25,
           borderTop: "1px solid var(--noah-border)",
           backgroundColor: 'var(--noah-popover-surface-deep)',
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+          '&::-webkit-scrollbar': { display: 'none' },
         }}
       >
         <ShortcutTooltip label={isPlaying ? 'Pause' : 'Play'} placement="top">
@@ -509,7 +514,7 @@ export default function VideoPlayerControls({
               type="button"
               aria-label="Previous frame"
               onClick={() => seekFrames(-1)}
-              sx={controlButtonSx}
+              sx={{ ...controlButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}
             >
               <FirstPageOutlinedIcon sx={{ fontSize: 22 }} />
             </IconButton>
@@ -522,7 +527,7 @@ export default function VideoPlayerControls({
               type="button"
               aria-label="Next frame"
               onClick={() => seekFrames(1)}
-              sx={controlButtonSx}
+              sx={{ ...controlButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}
             >
               <LastPageOutlinedIcon sx={{ fontSize: 22 }} />
             </IconButton>
