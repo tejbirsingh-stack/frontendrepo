@@ -237,6 +237,8 @@ export default function WorkspaceMembersDialog({
   const [typeaheadOpen, setTypeaheadOpen] = useState(false);
   // External email — single recipient for secure share
   const [pendingExternalEmail, setPendingExternalEmail] = useState<string | null>(null);
+  const [pendingExternalName, setPendingExternalName] = useState<string | undefined>(undefined);
+  const [pendingExternalUserId, setPendingExternalUserId] = useState<string | undefined>(undefined);
   // Real API share links state
   const [apiShareLinks, setApiShareLinks] = useState<BackendShareLink[]>([]);
   const [isSubmittingInvite, setIsSubmittingInvite] = useState(false);
@@ -494,6 +496,8 @@ export default function WorkspaceMembersDialog({
       setSendInviteEmail(false);
       setTypeaheadOpen(false);
       setPendingExternalEmail(null);
+      setPendingExternalName(undefined);
+      setPendingExternalUserId(undefined);
       setSecureShareOpen(false);
       setShareExpiry('7');
       setShareCustomDate('');
@@ -679,8 +683,10 @@ export default function WorkspaceMembersDialog({
     return arr.map((b) => chars[b % chars.length]).join('');
   };
 
-  const openSecureShare = (email: string) => {
+  const openSecureShare = (email: string, name?: string, userId?: string) => {
     setPendingExternalEmail(email);
+    setPendingExternalName(name);
+    setPendingExternalUserId(userId);
     setQuery('');
     setError('');
     setTypeaheadOpen(false);
@@ -703,7 +709,7 @@ export default function WorkspaceMembersDialog({
       return;
     }
 
-    const matchedUser = allInviteUsers.find(
+    const matchedUser = suggestedUsers.find(
       (user) =>
         user.email.toLowerCase() === trimmed.toLowerCase() ||
         user.name.toLowerCase() === trimmed.toLowerCase(),
@@ -715,7 +721,7 @@ export default function WorkspaceMembersDialog({
         return;
       }
       if (memberType === 'Guest') {
-        inviteUser(matchedUser.email, matchedUser.name, memberType, matchedUser.id);
+        openSecureShare(matchedUser.email, matchedUser.name, matchedUser.id);
         return;
       }
       inviteUser(matchedUser.email, matchedUser.name, memberType, matchedUser.id);
@@ -741,10 +747,12 @@ export default function WorkspaceMembersDialog({
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = response.data ?? response;
-        if (data?.valid && data?.user) {
-          inviteUser(email, data.user.name, 'Guest', data.user.id);
+        if (data?.valid === false && data?.reason?.includes('already a member of your organization')) {
+          setError(data.reason);
           return;
         }
+        openSecureShare(email, data?.user?.name, data?.user?.id);
+        return;
       } catch (err) {
         // Fallback below
       }
@@ -1889,7 +1897,9 @@ export default function WorkspaceMembersDialog({
                   await fetchBackendShareLinks();
                 }
                 onInvite({
+                  userId: pendingExternalUserId,
                   email: pendingExternalEmail,
+                  name: pendingExternalName,
                   memberType: 'Guest',
                   access: 'Can view',
                 });
@@ -1900,6 +1910,8 @@ export default function WorkspaceMembersDialog({
               }
 
               setPendingExternalEmail(null);
+              setPendingExternalName(undefined);
+              setPendingExternalUserId(undefined);
               setSecureShareOpen(false);
             }}
             sx={containedButtonSx}

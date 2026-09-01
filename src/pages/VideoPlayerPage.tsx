@@ -562,7 +562,8 @@ export default function VideoPlayerPage({
     if (!isGuestMode) {
       getCompanyInfoRequest()
         .then((res) => {
-          setInternalLogoUrl(res?.metadata?.logoUrl || null);
+          const meta = typeof res?.metadata === 'string' ? JSON.parse(res.metadata) : (res?.metadata || {});
+          setInternalLogoUrl(meta?.logoUrl || null);
         })
         .catch((err) => console.error('Failed to load company logo:', err));
     }
