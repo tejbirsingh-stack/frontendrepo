@@ -286,8 +286,6 @@ export default function DashboardPage({
     fetchLibraryNextPage,
     workspaces,
     activeWorkspaceId,
-    globalSearchQuery,
-    setGlobalSearchQuery,
     favorites,
     toggleFavorite,
     trashedIds,
@@ -437,7 +435,6 @@ export default function DashboardPage({
         view,
         folderId: view === 'folder' && folderMedia ? folderMedia.id : undefined,
         projectId: view === 'project' && folderMedia ? folderMedia.id : undefined,
-        q: globalSearchQuery,
         mediaType: mediaTypeFilter,
         dateRange: dateRangeFilter,
         tagIds: Array.from(selectedTags),
@@ -452,7 +449,6 @@ export default function DashboardPage({
     libraryView,
     activeWorkspaceId,
     folderMedia?.id,
-    globalSearchQuery,
     mediaTypeFilter,
     dateRangeFilter,
     selectedTags,
@@ -696,7 +692,6 @@ export default function DashboardPage({
     isSharedView,
     mediaItems,
     activeWorkspaceId,
-    globalSearchQuery,
     mediaTypeFilter,
     dateRangeFilter,
     selectedTags,
@@ -1543,7 +1538,6 @@ export default function DashboardPage({
         <MenuItem
           onClick={() => {
             clearPanelFilters();
-            setGlobalSearchQuery('');
             setSortBy('date');
             setSortDirection('desc');
             setMoreMenuAnchor(null);
