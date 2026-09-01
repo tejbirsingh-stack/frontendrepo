@@ -1928,7 +1928,7 @@ export default function AnnotationHistoryDrawer({
                   tags={insightsTags}
                   loading={highlightLoading}
                   error={highlightError}
-                  emptyMessage="No AI summary yet."
+                  emptyMessage="No AI summary yet. Open AI insights and run analysis to generate a summary, tags, transcript, and people & scenes."
                 />
               ) : (
                 <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted }}>

@@ -221,7 +221,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-    return true;
+    return false;
   });
   const setAiSearchEnabled = useCallback((enabled: boolean) => {
     setAiSearchEnabledState(enabled);

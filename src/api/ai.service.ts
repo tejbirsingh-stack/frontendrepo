@@ -43,8 +43,20 @@ export async function getAiStatusRequest(assetId: string): Promise<AiStatusRespo
   return apiClient.get<AiStatusResponseDto>(`/ai/assets/${encodeURIComponent(assetId)}/status`);
 }
 
-export async function retryAiAnalyzeRequest(assetId: string, force = true): Promise<{ success: boolean; status: string }> {
-  return apiClient.post(`/ai/assets/${encodeURIComponent(assetId)}/retry`, { force });
+export type AiAnalyzeFeature = 'asr' | 'highlights' | 'embeddings' | 'people_scenes';
+
+export async function retryAiAnalyzeRequest(
+  assetId: string,
+  options: boolean | { force?: boolean; features?: AiAnalyzeFeature[] } = true,
+): Promise<{ success: boolean; status: string; features?: AiAnalyzeFeature[] }> {
+  const body =
+    typeof options === 'boolean'
+      ? { force: options }
+      : {
+          force: options.force ?? true,
+          ...(options.features?.length ? { features: options.features } : {}),
+        };
+  return apiClient.post(`/ai/assets/${encodeURIComponent(assetId)}/retry`, body);
 }
 
 export async function searchAiRequest(q: string, page = 1): Promise<{
