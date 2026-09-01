@@ -3532,16 +3532,27 @@ export default function VideoPlayerPage({
 
   const handleDeleteEntry = useCallback(
     (entryId: string) => {
-      const entry = history.find((item) => item.id === entryId);
+      const rawId = entryId.replace(/^(comment|drawing|shape|stamp)-/, '');
+      const entry = history.find(
+        (item) =>
+          item.id === entryId ||
+          item.id === rawId ||
+          item.sourceCommentId === rawId ||
+          item.sourceCommentId === entryId ||
+          item.linkedDrawingId === rawId ||
+          item.linkedShapeId === rawId,
+      );
       if (!entry) return;
 
       pushSnapshot(getAnnotationSnapshot());
 
       const erasedBy = { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials };
+      const now = Date.now();
+      const targetCommentId = entry.sourceCommentId || (entryId.startsWith('comment-') ? rawId : undefined);
 
-      if (entry.sourceCommentId) {
+      if (targetCommentId) {
         setComments((prev) =>
-          prev.map((comment) => comment.id === entry.sourceCommentId ? { ...comment, erasedAt: Date.now(), erasedBy } : comment),
+          prev.map((comment) => comment.id === targetCommentId ? { ...comment, erasedAt: now, erasedBy } : comment),
         );
       }
 
@@ -3555,31 +3566,53 @@ export default function VideoPlayerPage({
         entry.id.startsWith('stamp-') ? entry.id.slice('stamp-'.length) : undefined;
 
       if (linkedDrawingId) {
-        setDrawings((prev) => prev.map((stroke) => stroke.id === linkedDrawingId ? { ...stroke, erasedAt: Date.now(), erasedBy } : stroke));
+        setDrawings((prev) => prev.map((stroke) => stroke.id === linkedDrawingId ? { ...stroke, erasedAt: now, erasedBy } : stroke));
       }
 
       if (linkedShapeId) {
-        setShapes((prev) => prev.map((shape) => shape.id === linkedShapeId ? { ...shape, erasedAt: Date.now(), erasedBy } : shape));
+        setShapes((prev) => prev.map((shape) => shape.id === linkedShapeId ? { ...shape, erasedAt: now, erasedBy } : shape));
       }
 
       if (linkedStampId) {
-        setStamps((prev) => prev.map((stamp) => stamp.id === linkedStampId ? { ...stamp, erasedAt: Date.now(), erasedBy } : stamp));
+        setStamps((prev) => prev.map((stamp) => stamp.id === linkedStampId ? { ...stamp, erasedAt: now, erasedBy } : stamp));
       }
 
-      setHistory((current) => current.map((item) => item.id === entryId ? { ...item, erasedAt: Date.now(), erasedBy } : item));
+      setHistory((current) =>
+        current.map((item) =>
+          item.id === entry.id ||
+          item.id === entryId ||
+          (targetCommentId && item.sourceCommentId === targetCommentId)
+            ? { ...item, erasedAt: now, erasedBy }
+            : item,
+        ),
+      );
+
+      const backendId = entry.backendId || (targetCommentId ? targetCommentId : undefined);
+      if (backendId) {
+        deleteMediaAnnotationRequest(backendId).catch(console.error);
+      }
     },
     [getAnnotationSnapshot, history, pushSnapshot, activeUser],
   );
 
   const handleHardDeleteEntry = useCallback(
     (entryId: string) => {
-      const entry = history.find((item) => item.id === entryId);
+      const rawId = entryId.replace(/^(comment|drawing|shape|stamp)-/, '');
+      const entry = history.find(
+        (item) =>
+          item.id === entryId ||
+          item.id === rawId ||
+          item.sourceCommentId === rawId ||
+          item.sourceCommentId === entryId,
+      );
       if (!entry) return;
 
       pushSnapshot(getAnnotationSnapshot());
 
-      if (entry.sourceCommentId) {
-        setComments((prev) => prev.filter((comment) => comment.id !== entry.sourceCommentId));
+      const targetCommentId = entry.sourceCommentId || (entryId.startsWith('comment-') ? rawId : undefined);
+
+      if (targetCommentId) {
+        setComments((prev) => prev.filter((comment) => comment.id !== targetCommentId));
       }
 
       const linkedDrawingId =
@@ -3603,21 +3636,42 @@ export default function VideoPlayerPage({
         setStamps((prev) => prev.filter((stamp) => stamp.id !== linkedStampId));
       }
 
-      setHistory((current) => current.filter((item) => item.id !== entryId));
+      setHistory((current) =>
+        current.filter(
+          (item) =>
+            item.id !== entry.id &&
+            item.id !== entryId &&
+            (!targetCommentId || item.sourceCommentId !== targetCommentId),
+        ),
+      );
+
+      const backendId = entry.backendId || (targetCommentId ? targetCommentId : undefined);
+      if (backendId) {
+        deleteMediaAnnotationRequest(backendId).catch(console.error);
+      }
     },
     [getAnnotationSnapshot, history, pushSnapshot],
   );
 
   const handleRestoreEntry = useCallback(
     (entryId: string) => {
-      const entry = history.find((item) => item.id === entryId);
+      const rawId = entryId.replace(/^(comment|drawing|shape|stamp)-/, '');
+      const entry = history.find(
+        (item) =>
+          item.id === entryId ||
+          item.id === rawId ||
+          item.sourceCommentId === rawId ||
+          item.sourceCommentId === entryId,
+      );
       if (!entry) return;
 
       pushSnapshot(getAnnotationSnapshot());
 
-      if (entry.sourceCommentId) {
+      const targetCommentId = entry.sourceCommentId || (entryId.startsWith('comment-') ? rawId : undefined);
+
+      if (targetCommentId) {
         setComments((prev) =>
-          prev.map((comment) => comment.id === entry.sourceCommentId ? { ...comment, erasedAt: undefined, erasedBy: undefined } : comment),
+          prev.map((comment) => comment.id === targetCommentId ? { ...comment, erasedAt: undefined, erasedBy: undefined } : comment),
         );
       }
 
@@ -3642,7 +3696,15 @@ export default function VideoPlayerPage({
         setStamps((prev) => prev.map((stamp) => stamp.id === linkedStampId ? { ...stamp, erasedAt: undefined, erasedBy: undefined } : stamp));
       }
 
-      setHistory((current) => current.map((item) => item.id === entryId ? { ...item, erasedAt: undefined, erasedBy: undefined } : item));
+      setHistory((current) =>
+        current.map((item) =>
+          item.id === entry.id ||
+          item.id === entryId ||
+          (targetCommentId && item.sourceCommentId === targetCommentId)
+            ? { ...item, erasedAt: undefined, erasedBy: undefined }
+            : item,
+        ),
+      );
     },
     [getAnnotationSnapshot, history, pushSnapshot],
   );

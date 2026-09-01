@@ -333,13 +333,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
         setMediaItems((prev) => {
           const nonTrash = prev.filter((m) => m.status !== 'trash');
-          const trashMap = new Map(trashMediaItems.map((item) => [item.id, item]));
-          prev.filter((m) => m.status === 'trash').forEach((item) => {
-            if (!trashMap.has(item.id)) {
-              trashMap.set(item.id, item);
-            }
-          });
-          return [...nonTrash, ...Array.from(trashMap.values())];
+          return [...nonTrash, ...trashMediaItems];
         });
       }
     } catch (err) {
