@@ -170,7 +170,7 @@ interface WorkspaceMembersDialogProps {
   resourceId?: string;
   onCopyLink?: () => void;
   onClose: () => void;
-  onInvite: (payload: WorkspaceInvitePayload) => boolean;
+  onInvite: (payload: WorkspaceInvitePayload) => boolean | Promise<boolean | string>;
   onUpdateMemberAccess: (memberId: string, access: WorkspaceMemberAccess) => void;
   onRemoveMember?: (memberId: string) => void;
   onRestrictedChange: (restricted: boolean) => void;
@@ -626,22 +626,20 @@ export default function WorkspaceMembersDialog({
 
   const canAdd = query.trim().length > 0;
 
-  const resolveMemberType = (email: string): WorkspaceMemberType => {
-    const normalizedEmail = email.toLowerCase();
-    const isOrgInvite =
-      isOrganizationEmail(normalizedEmail) ||
-      organizationUsers.some((user) => user.email.toLowerCase() === normalizedEmail);
-    return isOrgInvite ? 'Member' : 'Guest';
-  };
 
-  const inviteGroup = (group: SettingsUserGroup) => {
-    const success = onInvite({
+  const inviteGroup = async (group: SettingsUserGroup) => {
+    const success = await onInvite({
       groupId: group.id,
       groupName: group.name,
       memberType: 'Group',
       access,
       sendInviteEmail,
     });
+
+    if (success === 'ORG_MEMBER_IN_PUBLIC') {
+      setError('Organization members already have access to this public workspace.');
+      return false;
+    }
 
     if (!success) {
       setError('This group has already been added.');
@@ -654,8 +652,8 @@ export default function WorkspaceMembersDialog({
     return true;
   };
 
-  const inviteUser = (email: string, name: string | undefined, memberType: WorkspaceMemberType, userId?: string) => {
-    const success = onInvite({
+  const inviteUser = async (email: string, name: string | undefined, memberType: WorkspaceMemberType, userId?: string) => {
+    const success = await onInvite({
       userId,
       email,
       name,
@@ -663,6 +661,11 @@ export default function WorkspaceMembersDialog({
       access,
       sendInviteEmail,
     });
+
+    if (success === 'ORG_MEMBER_IN_PUBLIC') {
+      setError('Organization members already have access to this public workspace.');
+      return false;
+    }
 
     if (!success) {
       setError('This person is already a member.');
@@ -674,9 +677,6 @@ export default function WorkspaceMembersDialog({
     setTypeaheadOpen(false);
     return true;
   };
-
-  const isExternalEmail = (email: string) => resolveMemberType(email) === 'Guest';
-
   const generatePassword = () => {
     const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
     const arr = Array.from(crypto.getRandomValues(new Uint8Array(16)));
@@ -709,6 +709,7 @@ export default function WorkspaceMembersDialog({
       return;
     }
 
+<<<<<<< HEAD
     const matchedUser = suggestedUsers.find(
       (user) =>
         user.email.toLowerCase() === trimmed.toLowerCase() ||
@@ -725,6 +726,17 @@ export default function WorkspaceMembersDialog({
         return;
       }
       inviteUser(matchedUser.email, matchedUser.name, memberType, matchedUser.id);
+=======
+    const matchedUser = searchResults.find(
+      (option) =>
+        option.kind === 'user' &&
+        (option.user.email.toLowerCase() === trimmed.toLowerCase() ||
+          option.user.name.toLowerCase() === trimmed.toLowerCase()),
+    );
+    if (matchedUser && matchedUser.kind === 'user') {
+      const memberType = matchedUser.user.isOrganizationMember ? 'Member' : 'Guest';
+      inviteUser(matchedUser.user.email, matchedUser.user.name, memberType, matchedUser.user.id.replace('user-', ''));
+>>>>>>> devqa-older-current
       return;
     }
 
@@ -734,6 +746,7 @@ export default function WorkspaceMembersDialog({
     }
 
     const email = trimmed.toLowerCase();
+<<<<<<< HEAD
     const memberType = resolveMemberType(email);
     if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
       setError('Organization members already have access to this public workspace.');
@@ -755,11 +768,35 @@ export default function WorkspaceMembersDialog({
         return;
       } catch (err) {
         // Fallback below
+=======
+    
+    setIsSubmittingInvite(true);
+    try {
+      const result = await onInvite({
+        email,
+        access,
+        memberType: 'Member', // Placeholder, backend will determine
+        sendInviteEmail
+      });
+      
+      if (result === 'NOT_FOUND') {
+        setError('No user found with this email address.');
+      } else if (result === 'ORG_MEMBER_IN_PUBLIC') {
+        setError('Organization members already have access to this public workspace.');
+      } else if (result) {
+        setQuery('');
+        setError('');
+        setTypeaheadOpen(false);
+      } else {
+        setError('Failed to add user to workspace.');
+>>>>>>> devqa-older-current
       }
-      openSecureShare(email);
-      return;
+    } catch (e) {
+      console.error(e);
+      setError('An unexpected error occurred.');
+    } finally {
+      setIsSubmittingInvite(false);
     }
-    inviteUser(email, undefined, memberType);
   };
 
   const handleInviteKeyDown = (event: KeyboardEvent) => {
