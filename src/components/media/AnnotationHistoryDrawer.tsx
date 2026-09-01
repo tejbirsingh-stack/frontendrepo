@@ -1135,7 +1135,8 @@ export default function AnnotationHistoryDrawer({
           return false;
         }
 
-        const isArchived = Boolean(entry.erasedAt);
+        const sourceComment = entry.sourceCommentId ? commentById.get(entry.sourceCommentId) : null;
+        const isArchived = Boolean(entry.erasedAt || sourceComment?.erasedAt);
 
         if (isArchived && statusFilter !== 'archive') return false;
         if (statusFilter === 'archive' && !isArchived) return false;
