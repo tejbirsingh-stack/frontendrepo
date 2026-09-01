@@ -43,8 +43,20 @@ export async function getAiStatusRequest(assetId: string): Promise<AiStatusRespo
   return apiClient.get<AiStatusResponseDto>(`/ai/assets/${encodeURIComponent(assetId)}/status`);
 }
 
-export async function retryAiAnalyzeRequest(assetId: string, force = true): Promise<{ success: boolean; status: string }> {
-  return apiClient.post(`/ai/assets/${encodeURIComponent(assetId)}/retry`, { force });
+export type AiAnalyzeFeature = 'asr' | 'highlights' | 'embeddings' | 'people_scenes';
+
+export async function retryAiAnalyzeRequest(
+  assetId: string,
+  options: boolean | { force?: boolean; features?: AiAnalyzeFeature[] } = true,
+): Promise<{ success: boolean; status: string; features?: AiAnalyzeFeature[] }> {
+  const body =
+    typeof options === 'boolean'
+      ? { force: options }
+      : {
+          force: options.force ?? true,
+          ...(options.features?.length ? { features: options.features } : {}),
+        };
+  return apiClient.post(`/ai/assets/${encodeURIComponent(assetId)}/retry`, body);
 }
 
 export async function searchAiRequest(q: string, page = 1): Promise<{
@@ -73,6 +85,38 @@ export async function getAiHighlightsRequest(assetId: string): Promise<AiHighlig
 
 export async function listAiTagsRequest(): Promise<{ success: boolean; tags: string[] }> {
   return apiClient.get('/ai/tags');
+}
+
+export interface AiPersonDto {
+  id: string;
+  viFaceId: string | null;
+  displayLabel: string;
+  startMs: number;
+  endMs: number;
+  thumbnailUrl: string | null;
+  ordinal: number;
+}
+
+export interface AiSceneDto {
+  id: string;
+  label: string;
+  description: string | null;
+  startMs: number;
+  endMs: number;
+  confidence: number | null;
+  ordinal: number;
+}
+
+export async function getAiPeopleRequest(
+  assetId: string,
+): Promise<{ success: boolean; assetId: string; people: AiPersonDto[] }> {
+  return apiClient.get(`/ai/assets/${encodeURIComponent(assetId)}/people`);
+}
+
+export async function getAiScenesRequest(
+  assetId: string,
+): Promise<{ success: boolean; assetId: string; scenes: AiSceneDto[] }> {
+  return apiClient.get(`/ai/assets/${encodeURIComponent(assetId)}/scenes`);
 }
 
 /** @deprecated Use searchAiRequest */
