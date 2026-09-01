@@ -33,12 +33,19 @@ import {
 } from '../constants/annotationColors';
 import { DEFAULT_DRAW_COLOR } from '../constants/drawColors';
 import AnnotationHistoryDrawer from '../components/media/AnnotationHistoryDrawer';
-import AiFeatureSelectDialog from '../components/media/AiFeatureSelectDialog';
+import AiFeatureSelectDialog, {
+  getLockedAiFeatures,
+} from '../components/media/AiFeatureSelectDialog';
 import AudioWaveformVisualizer from '../components/media/AudioWaveformVisualizer';
 import FramePersonHighlight from '../components/media/FramePersonHighlight';
 import type { FramePerson } from '../data/mockFramePeople';
 import { useAiEntitled } from '../hooks/useAiEntitled';
 import { getAiStatusRequest, retryAiAnalyzeRequest, type AiAnalyzeFeature } from '../api/ai.service';
+import {
+  getAiPeopleRequest,
+  getAiScenesRequest,
+  getAiHighlightsRequest,
+} from '../api/ai.service';
 import type {
   MediaDetailsSection,
   MediaTechnicalDetails,
@@ -1017,6 +1024,8 @@ export default function VideoPlayerPage({
   const [drawerTab, setDrawerTab] = useState<MediaRailPanel>('history');
   const [aiFeatureDialogOpen, setAiFeatureDialogOpen] = useState(false);
   const [aiFeatureSubmitting, setAiFeatureSubmitting] = useState(false);
+  const [aiFeatureDialogMode, setAiFeatureDialogMode] = useState<'initial' | 'add'>('initial');
+  const [aiLockedFeatures, setAiLockedFeatures] = useState<AiAnalyzeFeature[]>([]);
   const aiPickerStartedAssetsRef = useRef<Set<string>>(new Set());
   const aiEntitled = useAiEntitled() && !isGuestMode;
   const [detailsSection, setDetailsSection] = useState<MediaDetailsSection>('file');
@@ -1046,6 +1055,37 @@ export default function VideoPlayerPage({
     setHistoryOpen(true);
   };
 
+  const openInitialAiFeatureDialog = () => {
+    setAiFeatureDialogMode('initial');
+    setAiLockedFeatures([]);
+    setAiFeatureDialogOpen(true);
+  };
+
+  const handleAddAiFeatures = async () => {
+    const assetId = item?.id;
+    if (!assetId) return;
+    try {
+      const [status, highlights, peopleRes, scenesRes] = await Promise.all([
+        getAiStatusRequest(assetId),
+        getAiHighlightsRequest(assetId).catch(() => null),
+        item?.type === 'video' ? getAiPeopleRequest(assetId).catch(() => null) : Promise.resolve(null),
+        item?.type === 'video' ? getAiScenesRequest(assetId).catch(() => null) : Promise.resolve(null),
+      ]);
+      const locked = getLockedAiFeatures({
+        steps: status.steps,
+        mediaType: item?.type,
+        hasHighlights: Boolean(highlights?.summary?.trim()) || (highlights?.tags?.length ?? 0) > 0,
+        hasPeopleOrScenes:
+          (peopleRes?.people?.length ?? 0) > 0 || (scenesRes?.scenes?.length ?? 0) > 0,
+      });
+      setAiFeatureDialogMode('add');
+      setAiLockedFeatures(locked);
+      setAiFeatureDialogOpen(true);
+    } catch (err) {
+      console.error('[AI] Failed to prepare add-features dialog:', err);
+    }
+  };
+
   const handleRailPanelSelect = async (panel: MediaRailPanel) => {
     if (historyOpen && drawerTab === panel) {
       setHistoryOpen(false);
@@ -1073,7 +1113,7 @@ export default function VideoPlayerPage({
     try {
       const status = await getAiStatusRequest(assetId);
       if (status.status === 'idle') {
-        setAiFeatureDialogOpen(true);
+        openInitialAiFeatureDialog();
         return;
       }
       if (status.status === 'queued' || status.status === 'processing') {
@@ -1091,7 +1131,8 @@ export default function VideoPlayerPage({
     if (!assetId || features.length === 0) return;
     setAiFeatureSubmitting(true);
     try {
-      await retryAiAnalyzeRequest(assetId, { force: false, features });
+      const force = aiFeatureDialogMode === 'add';
+      await retryAiAnalyzeRequest(assetId, { force, features });
       aiPickerStartedAssetsRef.current.add(assetId);
       setAiFeatureDialogOpen(false);
       openAiPanel();
@@ -5145,6 +5186,7 @@ export default function VideoPlayerPage({
             selectedFramePersonId={selectedFramePerson?.id ?? null}
             onFramePersonSelect={handleFramePersonSelect}
             onTranscriptSeek={handleTranscriptSeek}
+            onAddAiFeatures={aiEntitled ? () => { void handleAddAiFeatures(); } : undefined}
             videoRef={videoRef}
             onClose={() => setHistoryOpen(false)}
             onEntryClick={(entry) => {
@@ -5279,6 +5321,8 @@ export default function VideoPlayerPage({
       <AiFeatureSelectDialog
         open={aiFeatureDialogOpen}
         mediaType={item?.type}
+        mode={aiFeatureDialogMode}
+        lockedFeatures={aiFeatureDialogMode === 'add' ? aiLockedFeatures : []}
         submitting={aiFeatureSubmitting}
         onClose={() => {
           if (!aiFeatureSubmitting) setAiFeatureDialogOpen(false);

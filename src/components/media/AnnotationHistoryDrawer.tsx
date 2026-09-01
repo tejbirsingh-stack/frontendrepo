@@ -36,12 +36,16 @@ import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import { useActiveUser } from '../../hooks/useActiveUser';
 import type { MediaItem } from '../../data/mockMedia';
-import { getAiHighlightsRequest, getAiPeopleRequest, getAiScenesRequest } from '../../api/ai.service';
-import type { AiPersonDto, AiSceneDto } from '../../api/ai.service';
+import { getAiHighlightsRequest, getAiPeopleRequest, getAiScenesRequest, getAiStatusRequest } from '../../api/ai.service';
+import type { AiPersonDto, AiSceneDto, AiStatusResponseDto } from '../../api/ai.service';
 import { useAiEntitled } from '../../hooks/useAiEntitled';
 import type { FramePerson } from '../../data/mockFramePeople';
 import TranscriptPanel from './TranscriptPanel';
 import AiSummaryBlock from './AiSummaryBlock';
+import {
+  getAvailableAiFeatures,
+  getLockedAiFeatures,
+} from './AiFeatureSelectDialog';
 import type { AnnotationHistoryEntry, AnnotationHistoryType } from '../../types/annotationHistory';
 import type { CommentReply, VideoComment } from '../../types/videoComments';
 import CommentImageAttachment from './CommentImageAttachment';
@@ -189,6 +193,8 @@ interface AnnotationHistoryDrawerProps {
   onFramePersonSelect?: (person: FramePerson) => void;
   /** Seek player to a transcript segment (milliseconds). */
   onTranscriptSeek?: (startMs: number) => void;
+  /** Open the add-features dialog for AI tools not selected on first run. */
+  onAddAiFeatures?: () => void;
   /** Media element the transcript follows to highlight the line being spoken. */
   videoRef?: React.RefObject<HTMLVideoElement | null>;
   onClose: () => void;
@@ -1159,6 +1165,7 @@ export default function AnnotationHistoryDrawer({
   selectedFramePersonId,
   onFramePersonSelect,
   onTranscriptSeek,
+  onAddAiFeatures,
   videoRef,
   onClose,
   onEntryClick,
@@ -1221,6 +1228,7 @@ export default function AnnotationHistoryDrawer({
   const [assetPeople, setAssetPeople] = useState<AiPersonDto[]>([]);
   const [assetScenes, setAssetScenes] = useState<AiSceneDto[]>([]);
   const [peopleScenesLoading, setPeopleScenesLoading] = useState(false);
+  const [aiStatus, setAiStatus] = useState<AiStatusResponseDto | null>(null);
 
   const commentById = useMemo(
     () => new Map(comments.map((comment) => [comment.id, comment])),
@@ -1308,6 +1316,37 @@ export default function AnnotationHistoryDrawer({
   useEffect(() => {
     setAiSubTab('summary');
   }, [mediaItem?.id]);
+
+  useEffect(() => {
+    if (activeTab !== 'ai' || !aiEntitled || !mediaItem?.id) {
+      return;
+    }
+    if (mediaItem.type !== 'video' && mediaItem.type !== 'audio') {
+      setAiStatus(null);
+      return;
+    }
+
+    let cancelled = false;
+    const loadStatus = () => {
+      void getAiStatusRequest(mediaItem.id)
+        .then((res) => {
+          if (!cancelled) setAiStatus(res);
+        })
+        .catch(() => {
+          if (!cancelled) setAiStatus(null);
+        });
+    };
+
+    loadStatus();
+    const processing =
+      aiStatus?.status === 'queued' || aiStatus?.status === 'processing';
+    const timer = window.setInterval(loadStatus, processing ? 4000 : 12000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeTab, aiEntitled, mediaItem?.id, mediaItem?.type, aiStatus?.status]);
 
   useEffect(() => {
     if (activeTab !== 'ai' || !aiEntitled || !mediaItem?.id) {
@@ -1404,6 +1443,30 @@ export default function AnnotationHistoryDrawer({
       : [];
   }, [highlightTags, mediaItem?.aiTags]);
 
+  const showAddAiFeatures = useMemo(() => {
+    if (!onAddAiFeatures || !aiEntitled) return false;
+    if (mediaItem?.type !== 'video' && mediaItem?.type !== 'audio') return false;
+    if (aiStatus?.status === 'queued' || aiStatus?.status === 'processing') return false;
+    if (aiStatus?.status === 'idle' || !aiStatus) return false;
+
+    const locked = getLockedAiFeatures({
+      steps: aiStatus.steps,
+      mediaType: mediaItem?.type,
+      hasHighlights: Boolean(insightsSummary?.trim()) || insightsTags.length > 0,
+      hasPeopleOrScenes: assetPeople.length > 0 || assetScenes.length > 0,
+    });
+    return getAvailableAiFeatures(mediaItem?.type, locked).length > 0;
+  }, [
+    onAddAiFeatures,
+    aiEntitled,
+    mediaItem?.type,
+    aiStatus,
+    insightsSummary,
+    insightsTags.length,
+    assetPeople.length,
+    assetScenes.length,
+  ]);
+
   const panelBody = (
     <>
       <Box
@@ -1417,18 +1480,38 @@ export default function AnnotationHistoryDrawer({
         }}
       >
         {activeTab === 'ai' ? (
-          <Typography
-            component="h2"
-            sx={{
-              flex: 1,
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              color: cv.textPrimary,
-              lineHeight: 1.3,
-            }}
-          >
-            AI insights
-          </Typography>
+          <>
+            <Typography
+              component="h2"
+              sx={{
+                flex: 1,
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: cv.textPrimary,
+                lineHeight: 1.3,
+              }}
+            >
+              AI insights
+            </Typography>
+            {showAddAiFeatures ? (
+              <Button
+                type="button"
+                size="small"
+                onClick={onAddAiFeatures}
+                sx={{
+                  textTransform: 'none',
+                  color: cv.brandBlue,
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  minHeight: 44,
+                  px: 1,
+                  flexShrink: 0,
+                }}
+              >
+                Add AI features
+              </Button>
+            ) : null}
+          </>
         ) : (
           <Box
             role="tablist"
