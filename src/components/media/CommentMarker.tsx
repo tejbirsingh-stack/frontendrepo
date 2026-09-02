@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { cv } from '../../theme/cssVars';
 import { createPortal } from 'react-dom';
+import { getPortalTarget } from '../../utils/portalTarget';
 import {
   Box,
   Divider,
@@ -564,7 +565,7 @@ export default function CommentMarker({
                     onAddCollaborator={onAddCollaborator}
                   />
                 </Box>,
-                document.body,
+                getPortalTarget(),
               )
             : null}
         </Box>
@@ -769,6 +770,7 @@ export default function CommentMarker({
         />
 
         <Popover
+          container={getPortalTarget}
           open={mentionSearchText !== null && mentionSuggestions.length > 0}
           anchorEl={inputRef.current}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
@@ -886,7 +888,7 @@ export default function CommentMarker({
             >
               {draftEditor}
             </Box>,
-            document.body,
+            getPortalTarget(),
           )
         : null}
     </>

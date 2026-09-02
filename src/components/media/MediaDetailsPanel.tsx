@@ -446,7 +446,17 @@ export default function MediaDetailsPanel({
               <MatrixItem label="Album" value={technicalDetails?.album || (technicalDetails as any)?.album} />
               <MatrixItem label="Genre" value={(technicalDetails as any)?.genre} />
               <MatrixItem label="Year" value={(technicalDetails as any)?.year} />
-              <MatrixItem label="Duration" value={technicalDetails?.duration || mediaItem.duration} />
+              <MatrixItem label="Duration" value={(() => {
+                const raw = technicalDetails?.duration || mediaItem.duration;
+                if (!raw) return undefined;
+                const parsed = typeof raw === 'number' ? raw : (raw as any)?.includes(':') ? raw : Number(raw);
+                if (typeof parsed === 'number' && !isNaN(parsed)) {
+                  const m = Math.floor(parsed / 60);
+                  const s = Math.floor(parsed % 60);
+                  return `${m}:${s.toString().padStart(2, '0')}`;
+                }
+                return raw;
+              })()} />
               <MatrixItem label="Sample Rate" value={technicalDetails?.sampleRate || (technicalDetails as any)?.sampleRate || '44.1 kHz'} />
               <MatrixItem label="Channels" value={technicalDetails?.channels || (technicalDetails as any)?.channels || 'Stereo'} />
               <MatrixItem label="Est. Bitrate" value={technicalDetails?.estimatedBitrate || (technicalDetails as any)?.bitrate} />
@@ -466,7 +476,17 @@ export default function MediaDetailsPanel({
               <MatrixItem label="Aspect Ratio" value={aspectRatio} />
               <MatrixItem label="Orientation" value={orientation} />
               <MatrixItem label="Megapixels" value={megapixels} />
-              <MatrixItem label="Duration" value={technicalDetails?.duration || mediaItem.duration} />
+              <MatrixItem label="Duration" value={(() => {
+                const raw = technicalDetails?.duration || mediaItem.duration;
+                if (!raw) return undefined;
+                const parsed = typeof raw === 'number' ? raw : (raw as any)?.includes(':') ? raw : Number(raw);
+                if (typeof parsed === 'number' && !isNaN(parsed)) {
+                  const m = Math.floor(parsed / 60);
+                  const s = Math.floor(parsed % 60);
+                  return `${m}:${s.toString().padStart(2, '0')}`;
+                }
+                return raw;
+              })()} />
               <MatrixItem label="Frame Rate" value={technicalDetails?.frameRate || ((technicalDetails as any)?.fps !== undefined ? `${(technicalDetails as any).fps} fps` : undefined)} />
               <MatrixItem label="Scan Type" value={technicalDetails?.scanType || 'Progressive'} />
               <MatrixItem label="Container Format" value={technicalDetails?.containerFormat || (technicalDetails as any)?.container || 'MP4'} />
