@@ -709,34 +709,46 @@ export default function WorkspaceMembersDialog({
       return;
     }
 
-<<<<<<< HEAD
-    const matchedUser = suggestedUsers.find(
+    const matchedUserInSuggested = suggestedUsers.find(
       (user) =>
         user.email.toLowerCase() === trimmed.toLowerCase() ||
         user.name.toLowerCase() === trimmed.toLowerCase(),
     );
-    if (matchedUser) {
-      const memberType = isOrganizationUser(matchedUser) ? 'Member' : 'Guest';
-      if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
-        setError('Organization members already have access to this public workspace.');
-        return;
-      }
-      if (memberType === 'Guest') {
-        openSecureShare(matchedUser.email, matchedUser.name, matchedUser.id);
-        return;
-      }
-      inviteUser(matchedUser.email, matchedUser.name, memberType, matchedUser.id);
-=======
-    const matchedUser = searchResults.find(
+
+    const matchedSearchResult = searchResults.find(
       (option) =>
         option.kind === 'user' &&
         (option.user.email.toLowerCase() === trimmed.toLowerCase() ||
           option.user.name.toLowerCase() === trimmed.toLowerCase()),
     );
-    if (matchedUser && matchedUser.kind === 'user') {
-      const memberType = matchedUser.user.isOrganizationMember ? 'Member' : 'Guest';
-      inviteUser(matchedUser.user.email, matchedUser.user.name, memberType, matchedUser.user.id.replace('user-', ''));
->>>>>>> devqa-older-current
+
+    const targetUser = matchedUserInSuggested
+      ? {
+          email: matchedUserInSuggested.email,
+          name: matchedUserInSuggested.name,
+          id: matchedUserInSuggested.id,
+          isOrgMember: isOrganizationUser(matchedUserInSuggested),
+        }
+      : matchedSearchResult && matchedSearchResult.kind === 'user'
+      ? {
+          email: matchedSearchResult.user.email,
+          name: matchedSearchResult.user.name,
+          id: matchedSearchResult.user.id.replace(/^user-/, ''),
+          isOrgMember: matchedSearchResult.user.isOrganizationMember,
+        }
+      : null;
+
+    if (targetUser) {
+      const memberType: WorkspaceMemberType = targetUser.isOrgMember ? 'Member' : 'Guest';
+      if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
+        setError('Organization members already have access to this public workspace.');
+        return;
+      }
+      if (memberType === 'Guest') {
+        openSecureShare(targetUser.email, targetUser.name, targetUser.id);
+        return;
+      }
+      inviteUser(targetUser.email, targetUser.name, memberType, targetUser.id);
       return;
     }
 
@@ -746,39 +758,41 @@ export default function WorkspaceMembersDialog({
     }
 
     const email = trimmed.toLowerCase();
-<<<<<<< HEAD
-    const memberType = resolveMemberType(email);
+    const memberType: WorkspaceMemberType = isOrganizationEmail(email) ? 'Member' : 'Guest';
+
     if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
       setError('Organization members already have access to this public workspace.');
       return;
     }
-    if (memberType === 'Guest') {
-      try {
-        const { apiClient } = await import('../../api/client');
-        const token = localStorage.getItem('token');
-        const response = await (apiClient as any).get(`/workspaces/validate-guest?email=${encodeURIComponent(email)}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const data = response.data ?? response;
-        if (data?.valid === false && data?.reason?.includes('already a member of your organization')) {
-          setError(data.reason);
-          return;
-        }
-        openSecureShare(email, data?.user?.name, data?.user?.id);
-        return;
-      } catch (err) {
-        // Fallback below
-=======
-    
+
     setIsSubmittingInvite(true);
     try {
+      if (memberType === 'Guest') {
+        try {
+          const { apiClient } = await import('../../api/client');
+          const token = localStorage.getItem('token');
+          const response = await (apiClient as any).get(`/workspaces/validate-guest?email=${encodeURIComponent(email)}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const data = response.data ?? response;
+          if (data?.valid === false && data?.reason?.includes('already a member of your organization')) {
+            setError(data.reason);
+            return;
+          }
+          openSecureShare(email, data?.user?.name, data?.user?.id);
+          return;
+        } catch (err) {
+          // Fallback below
+        }
+      }
+
       const result = await onInvite({
         email,
         access,
-        memberType: 'Member', // Placeholder, backend will determine
-        sendInviteEmail
+        memberType,
+        sendInviteEmail,
       });
-      
+
       if (result === 'NOT_FOUND') {
         setError('No user found with this email address.');
       } else if (result === 'ORG_MEMBER_IN_PUBLIC') {
@@ -789,7 +803,6 @@ export default function WorkspaceMembersDialog({
         setTypeaheadOpen(false);
       } else {
         setError('Failed to add user to workspace.');
->>>>>>> devqa-older-current
       }
     } catch (e) {
       console.error(e);
