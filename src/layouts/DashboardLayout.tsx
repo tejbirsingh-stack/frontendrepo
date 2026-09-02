@@ -75,6 +75,7 @@ function DashboardLayoutContent() {
       ownerId: parentFolderId || activeWorkspaceId || undefined,
       linkedProjectId: linkedProjectId || undefined,
       parentFolderId: parentFolderId,
+      aiFeatures: details.aiFeatures,
     });
 
     // Close/advance current modal item

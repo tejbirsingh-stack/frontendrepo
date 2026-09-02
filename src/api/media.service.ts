@@ -1,6 +1,7 @@
 import { getAccessToken, handleUnauthorized } from '../auth/authTokenBridge';
 import { env } from '../config/env';
 import { apiClient } from './client';
+import type { AiAnalyzeFeature } from './ai.service';
 
 export interface UploadMediaProgress {
   loaded: number;
@@ -156,6 +157,7 @@ export interface UploadMediaMetadataOptions {
   tagIds?: string[];
   technicalSpecs?: Record<string, any>;
   visibility?: 'public' | 'private';
+  aiFeatures?: AiAnalyzeFeature[];
   onProgress?: (progress: UploadMediaProgress) => void;
 }
 
@@ -255,6 +257,7 @@ async function uploadResumableChunkedFile(
         tagIds: options?.tagIds,
         technicalSpecs: options?.technicalSpecs,
         visibility: options?.visibility,
+        aiFeatures: options?.aiFeatures,
       },
       { timeoutMs: 300_000 },
     );
@@ -294,6 +297,7 @@ export async function uploadMediaFileRequest(
     tagIds?: string[];
     technicalSpecs?: Record<string, any>;
     visibility?: 'public' | 'private';
+    aiFeatures?: AiAnalyzeFeature[];
     onProgress?: (progress: UploadMediaProgress) => void;
   },
   onProgress?: (progress: UploadMediaProgress) => void,

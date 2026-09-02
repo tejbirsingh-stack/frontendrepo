@@ -16,6 +16,7 @@ import {
   type StoredUploadItem,
 } from '../services/uploadQueueStorage';
 import { uploadMediaFileRequest } from '../api';
+import type { AiAnalyzeFeature } from '../api/ai.service';
 import { extractAudioMetadata, extractImageMetadata } from '../utils/mediaMetadataExtractors';
 import toast from 'react-hot-toast';
 import { getUsageSummary } from '../api/usage.service';
@@ -36,6 +37,7 @@ export interface EnqueueUploadOptions {
   tagIds?: string[];
   visibility?: 'public' | 'private' | string;
   durationSeconds?: number;
+  aiFeatures?: AiAnalyzeFeature[];
 }
 
 interface UploadManagerContextValue {
@@ -158,6 +160,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
             ownerId: currentItem.ownerId,
             linkedProjectId: currentItem.linkedProjectId,
             folderId: currentItem.folderId || currentItem.parentFolderId || undefined,
+            aiFeatures: currentItem.aiFeatures,
             onProgress: ({ loaded, total }) => {
               const filePercent = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
               setQueue((prev) =>
@@ -252,6 +255,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
         ownerId: options?.ownerId,
         linkedProjectId: options?.linkedProjectId,
         parentFolderId: options?.parentFolderId,
+        aiFeatures: options?.aiFeatures,
         createdAt: Date.now() + idx,
       }));
 
