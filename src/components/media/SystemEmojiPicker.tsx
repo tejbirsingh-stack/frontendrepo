@@ -1,6 +1,7 @@
 import { createElement, useEffect, useRef } from 'react';
 import { cv } from '../../theme/cssVars';
 import { Box, Popover } from '@mui/material';
+import { getPortalTarget } from '../../utils/portalTarget';
 import { FLOATING_PANEL_OVERLAY_Z_INDEX } from '../../constants/floatingPanel';
 import type { EmojiClickEvent, EmojiClickEventDetail } from 'emoji-picker-element/shared';
 import type { Picker } from 'emoji-picker-element';
@@ -103,6 +104,7 @@ export default function SystemEmojiPicker({
 
   return (
     <Popover
+      container={getPortalTarget}
       open={open}
       anchorEl={anchorEl}
       onClose={handlePopoverClose}

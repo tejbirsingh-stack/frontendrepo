@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cv, palette } from '../../theme/cssVars';
+import { getPortalTarget } from '../../utils/portalTarget';
 import {
   Avatar,
   Box,
@@ -278,6 +279,7 @@ function CommentMessage({
                 </IconButton>
               </Tooltip>
               <Menu
+                container={getPortalTarget}
                 anchorEl={menuAnchor}
                 open={Boolean(menuAnchor)}
                 onClose={() => setMenuAnchor(null)}
@@ -759,6 +761,7 @@ export default function CommentThreadPopover({
           </Tooltip>
 
           <Menu
+            container={getPortalTarget}
             anchorEl={menuAnchor}
             open={Boolean(menuAnchor)}
             onClose={() => setMenuAnchor(null)}
@@ -1158,6 +1161,7 @@ export default function CommentThreadPopover({
       />
 
       <Popover
+        container={getPortalTarget}
         open={mentionSearchText !== null && mentionSuggestions.length > 0}
         anchorEl={replyInputRef.current}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}

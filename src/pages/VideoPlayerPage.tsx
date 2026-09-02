@@ -858,6 +858,8 @@ export default function VideoPlayerPage({
     const target = videoStageRef.current || document;
     target.addEventListener('mousemove', resetIdleTimer);
     target.addEventListener('mousedown', resetIdleTimer);
+    target.addEventListener('pointerdown', resetIdleTimer);
+    target.addEventListener('click', resetIdleTimer);
     target.addEventListener('touchstart', resetIdleTimer);
     window.addEventListener('keydown', resetIdleTimer);
 
@@ -867,6 +869,8 @@ export default function VideoPlayerPage({
       }
       target.removeEventListener('mousemove', resetIdleTimer);
       target.removeEventListener('mousedown', resetIdleTimer);
+      target.removeEventListener('pointerdown', resetIdleTimer);
+      target.removeEventListener('click', resetIdleTimer);
       target.removeEventListener('touchstart', resetIdleTimer);
       window.removeEventListener('keydown', resetIdleTimer);
     };

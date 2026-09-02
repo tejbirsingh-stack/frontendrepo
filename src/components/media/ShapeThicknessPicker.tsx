@@ -3,6 +3,7 @@ import { cv } from '../../theme/cssVars';
 import { createPortal } from 'react-dom';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import { useFloatingPanelPosition } from '../../hooks/useFloatingPanelPosition';
+import { getPortalTarget } from '../../utils/portalTarget';
 import KeyboardArrowDownOutlinedIcon from '@mui/icons-material/KeyboardArrowDownOutlined';
 import StrokeThicknessControl, { type StrokeThickness } from './StrokeThicknessControl';
 import { DEFAULT_DRAW_STROKE_THICKNESS } from '../../utils/drawStrokeStyle';
@@ -126,7 +127,7 @@ export default function ShapeThicknessPicker({
     <Box ref={anchorRef} sx={{ position: 'relative', flexShrink: 0 }}>
       {open && (!portaled || portalPosition)
         ? portaled
-          ? createPortal(thicknessPanel, document.body)
+          ? createPortal(thicknessPanel, getPortalTarget())
           : thicknessPanel
         : null}
 

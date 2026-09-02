@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { cv } from '../../theme/cssVars';
+import { getPortalTarget } from '../../utils/portalTarget';
 import {
   Divider,
   IconButton,
@@ -170,6 +171,7 @@ export default function AnnotationVisibilityPicker({
       </Tooltip>
 
       <Menu
+        container={getPortalTarget}
         anchorEl={anchorEl}
         open={open}
         onClose={() => setAnchorEl(null)}
@@ -282,6 +284,7 @@ export default function AnnotationVisibilityPicker({
       />
 
       <Dialog
+        container={getPortalTarget}
         open={Boolean(groupToDelete)}
         onClose={() => setGroupToDelete(null)}
         PaperProps={{

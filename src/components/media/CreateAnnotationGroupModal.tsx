@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cv } from '../../theme/cssVars';
+import { getPortalTarget } from '../../utils/portalTarget';
 import {
   Avatar,
   Box,
@@ -185,6 +186,7 @@ export default function CreateAnnotationGroupModal({
 
   return (
     <Dialog
+      container={getPortalTarget}
       open={open}
       onClose={onClose}
       fullWidth

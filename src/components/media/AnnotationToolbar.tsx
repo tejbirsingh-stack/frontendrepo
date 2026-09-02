@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { cv } from '../../theme/cssVars';
 import { Box, Divider, IconButton, Popper, Portal } from '@mui/material';
+import { getPortalTarget } from '../../utils/portalTarget';
 import NearMeOutlinedIcon from '@mui/icons-material/NearMeOutlined';
 import PanToolOutlinedIcon from '@mui/icons-material/PanToolOutlined';
 import DrawOutlinedIcon from '@mui/icons-material/DrawOutlined';
@@ -134,6 +135,7 @@ function SubToolbarContainer({
 
   return (
     <Popper
+      container={getPortalTarget}
       open={Boolean(anchorRef.current)}
       anchorEl={anchorRef.current}
       placement="top"
