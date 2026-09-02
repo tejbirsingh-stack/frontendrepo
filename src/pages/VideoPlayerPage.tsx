@@ -19,6 +19,8 @@ import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
+import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
@@ -3724,6 +3726,7 @@ export default function VideoPlayerPage({
   const [liveProgress, setLiveProgress] = useState<string | null>(null);
   const [videoSrcVersion, setVideoSrcVersion] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [forcePlayOriginal, setForcePlayOriginal] = useState(false);
 
   const handleRetryTranscode = async () => {
     if (!mediaId || isRetrying) return;
@@ -3761,6 +3764,7 @@ export default function VideoPlayerPage({
     setLiveAssetStatus(item?.compressionStatus ?? null);
     setLiveProgress((item?.customMetadata?.transcodingProgress as string) || null);
     setVideoSrcVersion(0);
+    setForcePlayOriginal(false);
   }, [item?.id, item?.compressionStatus, item?.customMetadata?.transcodingProgress]);
 
   useEffect(() => {
@@ -3854,8 +3858,8 @@ export default function VideoPlayerPage({
       : item.type === 'audio'
         ? (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
         : (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : SAMPLE_VIDEO_SRC));
-  // Audio/original is available immediately; only blank video while proxy is processing.
-  const shouldBlockMediaSrc = isProcessing && item.type === 'video';
+  // Audio/original is available immediately; only blank video while proxy is processing unless user explicitly plays original.
+  const shouldBlockMediaSrc = isProcessing && !forcePlayOriginal && item.type === 'video';
   const videoSrc = shouldBlockMediaSrc || !baseSrc
     ? ''
     : `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}`;
@@ -4638,29 +4642,66 @@ export default function VideoPlayerPage({
               overflow: 'hidden',
             }}
           >
-            {(liveAssetStatus === 'in_progress' || liveAssetStatus === 'queued' || liveAssetStatus === 'processing') && (
+            {item?.type === 'video' && liveAssetStatus !== 'completed' && (
               <Box
                 sx={{
                   position: 'absolute',
                   top: 24,
                   right: 24,
                   zIndex: 50,
-                  pointerEvents: 'none'
+                  pointerEvents: 'auto'
                 }}
               >
-                <Chip
-                  size="medium"
-                  color="primary"
-                  label={liveProgress ? `Compressing: ${liveProgress}` : 'Processing Video...'}
-                  sx={{
-                    backdropFilter: 'blur(8px)',
-                    backgroundColor: 'rgba(25, 118, 210, 0.85)',
-                    fontWeight: 600,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                    px: 1,
-                    py: 2
-                  }}
-                />
+                <Tooltip title={isRetrying ? 'Triggering compression...' : 'Click to compress or retry processing'} arrow placement="left">
+                  <Chip
+                    size="medium"
+                    color={liveAssetStatus === 'failed' ? 'error' : forcePlayOriginal ? 'warning' : 'primary'}
+                    icon={
+                      isProcessing ? (
+                        <AutorenewIcon sx={{ animation: 'spin 2s linear infinite', fontSize: 18 }} />
+                      ) : (
+                        <AutorenewIcon sx={{ fontSize: 18 }} />
+                      )
+                    }
+                    label={
+                      isRetrying
+                        ? 'Queuing Compression...'
+                        : isProcessing
+                          ? (liveProgress ? `Compressing: ${liveProgress}` : 'Processing (Click to Retry)')
+                          : liveAssetStatus === 'failed'
+                            ? 'Processing Failed (Retry)'
+                            : 'Uncompressed (Click to Compress)'
+                    }
+                    onClick={handleRetryTranscode}
+                    disabled={isRetrying}
+                    sx={{
+                      backdropFilter: 'blur(8px)',
+                      backgroundColor: liveAssetStatus === 'failed' 
+                        ? 'rgba(211, 47, 47, 0.85)' 
+                        : forcePlayOriginal 
+                          ? 'rgba(237, 108, 2, 0.85)' 
+                          : 'rgba(25, 118, 210, 0.85)',
+                      fontWeight: 600,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      px: 1,
+                      py: 2,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease-in-out',
+                      '&:hover': {
+                        transform: 'scale(1.04)',
+                        backgroundColor: liveAssetStatus === 'failed'
+                          ? 'rgba(211, 47, 47, 1)'
+                          : forcePlayOriginal
+                            ? 'rgba(237, 108, 2, 1)'
+                            : 'rgba(25, 118, 210, 1)',
+                      },
+                      '@keyframes spin': {
+                        '0%': { transform: 'rotate(0deg)' },
+                        '100%': { transform: 'rotate(360deg)' },
+                      },
+                    }}
+                  />
+                </Tooltip>
               </Box>
             )}
             {isBuffering && item?.type !== 'image' && (
@@ -4857,6 +4898,45 @@ export default function VideoPlayerPage({
                         This may take a few moments
                       </Typography>
                     )}
+                    <Box sx={{ display: 'flex', gap: 1.5, mt: 3, zIndex: 11 }}>
+                      <Button
+                        variant="contained"
+                        onClick={handleRetryTranscode}
+                        disabled={isRetrying}
+                        startIcon={<AutorenewIcon />}
+                        sx={{
+                          borderRadius: '999px',
+                          px: 2.5,
+                          py: 1,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          backgroundColor: cv.brandBlue,
+                          '&:hover': { backgroundColor: '#0284C7' },
+                        }}
+                      >
+                        {isRetrying ? 'Queuing...' : 'Retry Processing'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        onClick={() => setForcePlayOriginal(true)}
+                        startIcon={<PlayArrowOutlinedIcon />}
+                        sx={{
+                          borderRadius: '999px',
+                          px: 2.5,
+                          py: 1,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          borderColor: 'rgba(255, 255, 255, 0.4)',
+                          color: '#FFFFFF',
+                          '&:hover': {
+                            borderColor: '#FFFFFF',
+                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                          },
+                        }}
+                      >
+                        Play Original Video
+                      </Button>
+                    </Box>
                   </Box>
                 ) : liveAssetStatus === 'failed' ? (
                   <Box

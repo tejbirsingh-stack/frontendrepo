@@ -1385,22 +1385,6 @@ export default function WorkspaceMembersDialog({
                 </Typography>
               ) : (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  {member.memberType === 'Guest' ? (
-                    <Typography
-                      sx={{
-                        fontSize: '0.8125rem',
-                        fontWeight: 500,
-                        color: cv.textSecondary,
-                        px: 1.5,
-                        py: 0.5,
-                        borderRadius: '8px',
-                        backgroundColor: cv.surfaceMuted,
-                        border: `1px solid ${cv.border}`,
-                      }}
-                    >
-                      Guest Access
-                    </Typography>
-                  ) : (
                     <FormControl size="small">
                       <InputLabel id={`access-${member.id}`} shrink>
                         Access
@@ -1437,7 +1421,6 @@ export default function WorkspaceMembersDialog({
                         ))}
                       </Select>
                     </FormControl>
-                  )}
                   {onRemoveMember && !isCurrentMember && member.memberType !== 'Owner' ? (
                     <IconButton
                       size="small"
