@@ -135,17 +135,25 @@ function FavoriteButton({
 }
 
 function SearchMatchBadge({ matchType }: { matchType?: string }) {
-  if (matchType !== 'semantic' && matchType !== 'transcript' && matchType !== 'highlight') {
+  if (
+    matchType !== 'semantic' &&
+    matchType !== 'transcript' &&
+    matchType !== 'highlight' &&
+    matchType !== 'scene'
+  ) {
     return null;
   }
   const isSemantic = matchType === 'semantic';
   const isHighlight = matchType === 'highlight';
-  const label = isSemantic ? 'Related' : isHighlight ? 'AI Tags' : 'Transcript';
+  const isScene = matchType === 'scene';
+  const label = isSemantic ? 'Related' : isHighlight ? 'AI Tags' : isScene ? 'Scene' : 'Transcript';
   const ariaLabel = isSemantic
     ? 'Matched because the spoken content is related'
     : isHighlight
       ? 'Matched because AI summary or tags contain this search'
-      : 'Matched because the transcript contains this search';
+      : isScene
+        ? 'Matched because a detected scene or label contains this search'
+        : 'Matched because the transcript contains this search';
 
   return (
     <Tooltip title={label} arrow placement="top">

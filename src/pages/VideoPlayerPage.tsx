@@ -33,10 +33,19 @@ import {
 } from '../constants/annotationColors';
 import { DEFAULT_DRAW_COLOR } from '../constants/drawColors';
 import AnnotationHistoryDrawer from '../components/media/AnnotationHistoryDrawer';
+import AiFeatureSelectDialog, {
+  getLockedAiFeatures,
+} from '../components/media/AiFeatureSelectDialog';
 import AudioWaveformVisualizer from '../components/media/AudioWaveformVisualizer';
 import FramePersonHighlight from '../components/media/FramePersonHighlight';
 import type { FramePerson } from '../data/mockFramePeople';
 import { useAiEntitled } from '../hooks/useAiEntitled';
+import { getAiStatusRequest, retryAiAnalyzeRequest, type AiAnalyzeFeature } from '../api/ai.service';
+import {
+  getAiPeopleRequest,
+  getAiScenesRequest,
+  getAiHighlightsRequest,
+} from '../api/ai.service';
 import type {
   MediaDetailsSection,
   MediaTechnicalDetails,
@@ -1013,6 +1022,11 @@ export default function VideoPlayerPage({
   const [shareTeamMembers, setShareTeamMembers] = useState<WorkspaceTeamMember[]>([]);
   const [availableGroups, setAvailableGroups] = useState<SettingsUserGroup[]>([]);
   const [drawerTab, setDrawerTab] = useState<MediaRailPanel>('history');
+  const [aiFeatureDialogOpen, setAiFeatureDialogOpen] = useState(false);
+  const [aiFeatureSubmitting, setAiFeatureSubmitting] = useState(false);
+  const [aiFeatureDialogMode, setAiFeatureDialogMode] = useState<'initial' | 'add'>('initial');
+  const [aiLockedFeatures, setAiLockedFeatures] = useState<AiAnalyzeFeature[]>([]);
+  const aiPickerStartedAssetsRef = useRef<Set<string>>(new Set());
   const aiEntitled = useAiEntitled() && !isGuestMode;
   const [detailsSection, setDetailsSection] = useState<MediaDetailsSection>('file');
   const [selectedFramePerson, setSelectedFramePerson] = useState<FramePerson | null>(null);
@@ -1036,14 +1050,99 @@ export default function VideoPlayerPage({
     }
   }, [drawerTab, historyOpen]);
 
-  const handleRailPanelSelect = (panel: MediaRailPanel) => {
+  const openAiPanel = () => {
+    setDrawerTab('ai');
+    setHistoryOpen(true);
+  };
+
+  const openInitialAiFeatureDialog = () => {
+    setAiFeatureDialogMode('initial');
+    setAiLockedFeatures([]);
+    setAiFeatureDialogOpen(true);
+  };
+
+  const handleAddAiFeatures = async () => {
+    const assetId = item?.id;
+    if (!assetId) return;
+    try {
+      const [status, highlights, peopleRes, scenesRes] = await Promise.all([
+        getAiStatusRequest(assetId),
+        getAiHighlightsRequest(assetId).catch(() => null),
+        item?.type === 'video' ? getAiPeopleRequest(assetId).catch(() => null) : Promise.resolve(null),
+        item?.type === 'video' ? getAiScenesRequest(assetId).catch(() => null) : Promise.resolve(null),
+      ]);
+      const locked = getLockedAiFeatures({
+        steps: status.steps,
+        mediaType: item?.type,
+        hasHighlights: Boolean(highlights?.summary?.trim()) || (highlights?.tags?.length ?? 0) > 0,
+        hasPeopleOrScenes:
+          (peopleRes?.people?.length ?? 0) > 0 || (scenesRes?.scenes?.length ?? 0) > 0,
+      });
+      setAiFeatureDialogMode('add');
+      setAiLockedFeatures(locked);
+      setAiFeatureDialogOpen(true);
+    } catch (err) {
+      console.error('[AI] Failed to prepare add-features dialog:', err);
+    }
+  };
+
+  const handleRailPanelSelect = async (panel: MediaRailPanel) => {
     if (historyOpen && drawerTab === panel) {
       setHistoryOpen(false);
       return;
     }
-    setDrawerTab(panel);
-    setHistoryOpen(true);
+
+    if (panel !== 'ai' || !aiEntitled) {
+      setDrawerTab(panel);
+      setHistoryOpen(true);
+      return;
+    }
+
+    const assetId = item?.id;
+    const canRunAi = item?.type === 'video' || item?.type === 'audio';
+    if (!assetId || !canRunAi) {
+      openAiPanel();
+      return;
+    }
+
+    if (aiPickerStartedAssetsRef.current.has(assetId)) {
+      openAiPanel();
+      return;
+    }
+
+    try {
+      const status = await getAiStatusRequest(assetId);
+      if (status.status === 'idle') {
+        openInitialAiFeatureDialog();
+        return;
+      }
+      if (status.status === 'queued' || status.status === 'processing') {
+        aiPickerStartedAssetsRef.current.add(assetId);
+      }
+      openAiPanel();
+    } catch {
+      // If status check fails, still open the panel so users can use Retry / empty states.
+      openAiPanel();
+    }
   };
+
+  const handleAiFeatureConfirm = async (features: AiAnalyzeFeature[]) => {
+    const assetId = item?.id;
+    if (!assetId || features.length === 0) return;
+    setAiFeatureSubmitting(true);
+    try {
+      const force = aiFeatureDialogMode === 'add';
+      await retryAiAnalyzeRequest(assetId, { force, features });
+      aiPickerStartedAssetsRef.current.add(assetId);
+      setAiFeatureDialogOpen(false);
+      openAiPanel();
+    } catch (err) {
+      console.error('[AI] Failed to start insights:', err);
+    } finally {
+      setAiFeatureSubmitting(false);
+    }
+  };
+
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
 
   const [annotationGroups, setAnnotationGroups] = useState<AnnotationAccessGroup[]>([]);
@@ -3433,16 +3532,27 @@ export default function VideoPlayerPage({
 
   const handleDeleteEntry = useCallback(
     (entryId: string) => {
-      const entry = history.find((item) => item.id === entryId);
+      const rawId = entryId.replace(/^(comment|drawing|shape|stamp)-/, '');
+      const entry = history.find(
+        (item) =>
+          item.id === entryId ||
+          item.id === rawId ||
+          item.sourceCommentId === rawId ||
+          item.sourceCommentId === entryId ||
+          item.linkedDrawingId === rawId ||
+          item.linkedShapeId === rawId,
+      );
       if (!entry) return;
 
       pushSnapshot(getAnnotationSnapshot());
 
       const erasedBy = { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials };
+      const now = Date.now();
+      const targetCommentId = entry.sourceCommentId || (entryId.startsWith('comment-') ? rawId : undefined);
 
-      if (entry.sourceCommentId) {
+      if (targetCommentId) {
         setComments((prev) =>
-          prev.map((comment) => comment.id === entry.sourceCommentId ? { ...comment, erasedAt: Date.now(), erasedBy } : comment),
+          prev.map((comment) => comment.id === targetCommentId ? { ...comment, erasedAt: now, erasedBy } : comment),
         );
       }
 
@@ -3456,31 +3566,53 @@ export default function VideoPlayerPage({
         entry.id.startsWith('stamp-') ? entry.id.slice('stamp-'.length) : undefined;
 
       if (linkedDrawingId) {
-        setDrawings((prev) => prev.map((stroke) => stroke.id === linkedDrawingId ? { ...stroke, erasedAt: Date.now(), erasedBy } : stroke));
+        setDrawings((prev) => prev.map((stroke) => stroke.id === linkedDrawingId ? { ...stroke, erasedAt: now, erasedBy } : stroke));
       }
 
       if (linkedShapeId) {
-        setShapes((prev) => prev.map((shape) => shape.id === linkedShapeId ? { ...shape, erasedAt: Date.now(), erasedBy } : shape));
+        setShapes((prev) => prev.map((shape) => shape.id === linkedShapeId ? { ...shape, erasedAt: now, erasedBy } : shape));
       }
 
       if (linkedStampId) {
-        setStamps((prev) => prev.map((stamp) => stamp.id === linkedStampId ? { ...stamp, erasedAt: Date.now(), erasedBy } : stamp));
+        setStamps((prev) => prev.map((stamp) => stamp.id === linkedStampId ? { ...stamp, erasedAt: now, erasedBy } : stamp));
       }
 
-      setHistory((current) => current.map((item) => item.id === entryId ? { ...item, erasedAt: Date.now(), erasedBy } : item));
+      setHistory((current) =>
+        current.map((item) =>
+          item.id === entry.id ||
+          item.id === entryId ||
+          (targetCommentId && item.sourceCommentId === targetCommentId)
+            ? { ...item, erasedAt: now, erasedBy }
+            : item,
+        ),
+      );
+
+      const backendId = entry.backendId || (targetCommentId ? targetCommentId : undefined);
+      if (backendId) {
+        deleteMediaAnnotationRequest(backendId).catch(console.error);
+      }
     },
     [getAnnotationSnapshot, history, pushSnapshot, activeUser],
   );
 
   const handleHardDeleteEntry = useCallback(
     (entryId: string) => {
-      const entry = history.find((item) => item.id === entryId);
+      const rawId = entryId.replace(/^(comment|drawing|shape|stamp)-/, '');
+      const entry = history.find(
+        (item) =>
+          item.id === entryId ||
+          item.id === rawId ||
+          item.sourceCommentId === rawId ||
+          item.sourceCommentId === entryId,
+      );
       if (!entry) return;
 
       pushSnapshot(getAnnotationSnapshot());
 
-      if (entry.sourceCommentId) {
-        setComments((prev) => prev.filter((comment) => comment.id !== entry.sourceCommentId));
+      const targetCommentId = entry.sourceCommentId || (entryId.startsWith('comment-') ? rawId : undefined);
+
+      if (targetCommentId) {
+        setComments((prev) => prev.filter((comment) => comment.id !== targetCommentId));
       }
 
       const linkedDrawingId =
@@ -3504,21 +3636,42 @@ export default function VideoPlayerPage({
         setStamps((prev) => prev.filter((stamp) => stamp.id !== linkedStampId));
       }
 
-      setHistory((current) => current.filter((item) => item.id !== entryId));
+      setHistory((current) =>
+        current.filter(
+          (item) =>
+            item.id !== entry.id &&
+            item.id !== entryId &&
+            (!targetCommentId || item.sourceCommentId !== targetCommentId),
+        ),
+      );
+
+      const backendId = entry.backendId || (targetCommentId ? targetCommentId : undefined);
+      if (backendId) {
+        deleteMediaAnnotationRequest(backendId).catch(console.error);
+      }
     },
     [getAnnotationSnapshot, history, pushSnapshot],
   );
 
   const handleRestoreEntry = useCallback(
     (entryId: string) => {
-      const entry = history.find((item) => item.id === entryId);
+      const rawId = entryId.replace(/^(comment|drawing|shape|stamp)-/, '');
+      const entry = history.find(
+        (item) =>
+          item.id === entryId ||
+          item.id === rawId ||
+          item.sourceCommentId === rawId ||
+          item.sourceCommentId === entryId,
+      );
       if (!entry) return;
 
       pushSnapshot(getAnnotationSnapshot());
 
-      if (entry.sourceCommentId) {
+      const targetCommentId = entry.sourceCommentId || (entryId.startsWith('comment-') ? rawId : undefined);
+
+      if (targetCommentId) {
         setComments((prev) =>
-          prev.map((comment) => comment.id === entry.sourceCommentId ? { ...comment, erasedAt: undefined, erasedBy: undefined } : comment),
+          prev.map((comment) => comment.id === targetCommentId ? { ...comment, erasedAt: undefined, erasedBy: undefined } : comment),
         );
       }
 
@@ -3543,7 +3696,15 @@ export default function VideoPlayerPage({
         setStamps((prev) => prev.map((stamp) => stamp.id === linkedStampId ? { ...stamp, erasedAt: undefined, erasedBy: undefined } : stamp));
       }
 
-      setHistory((current) => current.map((item) => item.id === entryId ? { ...item, erasedAt: undefined, erasedBy: undefined } : item));
+      setHistory((current) =>
+        current.map((item) =>
+          item.id === entry.id ||
+          item.id === entryId ||
+          (targetCommentId && item.sourceCommentId === targetCommentId)
+            ? { ...item, erasedAt: undefined, erasedBy: undefined }
+            : item,
+        ),
+      );
     },
     [getAnnotationSnapshot, history, pushSnapshot],
   );
@@ -5087,6 +5248,7 @@ export default function VideoPlayerPage({
             selectedFramePersonId={selectedFramePerson?.id ?? null}
             onFramePersonSelect={handleFramePersonSelect}
             onTranscriptSeek={handleTranscriptSeek}
+            onAddAiFeatures={aiEntitled ? () => { void handleAddAiFeatures(); } : undefined}
             videoRef={videoRef}
             onClose={() => setHistoryOpen(false)}
             onEntryClick={(entry) => {
@@ -5217,6 +5379,20 @@ export default function VideoPlayerPage({
           {statusToast.message}
         </Alert>
       </Snackbar>
+
+      <AiFeatureSelectDialog
+        open={aiFeatureDialogOpen}
+        mediaType={item?.type}
+        mode={aiFeatureDialogMode}
+        lockedFeatures={aiFeatureDialogMode === 'add' ? aiLockedFeatures : []}
+        submitting={aiFeatureSubmitting}
+        onClose={() => {
+          if (!aiFeatureSubmitting) setAiFeatureDialogOpen(false);
+        }}
+        onConfirm={(features) => {
+          void handleAiFeatureConfirm(features);
+        }}
+      />
     </Box>
   );
 }
