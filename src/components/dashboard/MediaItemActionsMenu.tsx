@@ -484,7 +484,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
               </MenuItem>
             )}
           </>
-        ) : (
+        ) : !isFolder && !isProject ? (
           <MenuItem
             disabled={!user?.permissions?.includes('timeline_annotations')}
             onClick={(event) => {
@@ -511,7 +511,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
             </ListItemIcon>
             Download File
           </MenuItem>
-        )}
+        ) : null}
         {(() => {
           const isDeleteDisabled = isPlatformMedia
             || (isProject
