@@ -5212,28 +5212,28 @@ export default function VideoPlayerPage({
               </Box>
             </Box>
 
-            {item?.type !== 'image' && (
-              <VideoPlayerControls
-                videoRef={videoRef}
-                fullscreenTargetRef={videoStageRef}
-                annotationCount={!isGuestMode || guestPermissions?.comment ? history.length : undefined}
-                annotationsVisible={annotationsVisible}
-                onToggleAnnotationsVisible={() => setAnnotationsVisible((visible) => !visible)}
-                timelineItems={!isGuestMode || guestPermissions?.comment ? timelineItems : []}
-                timelineFallbackDuration={timelineFallbackDuration}
-                onAnnotationRangeChange={handleAnnotationRangeChange}
-                onAnnotationClick={handleAnnotationClick}
-                frameRateLabel={
-                  videoTechnicalDetails?.frameRate ||
-                  item?.frameRate ||
-                  undefined
-                }
-                mediaTitle={item?.title || item?.name}
-                inPoint={playerInPoint}
-                outPoint={playerOutPoint}
-                rangeEnabled={playerRangeEnabled}
-              />
-            )}
+            <VideoPlayerControls
+              videoRef={videoRef}
+              fullscreenTargetRef={videoStageRef}
+              annotationCount={!isGuestMode || guestPermissions?.comment ? history.length : undefined}
+              annotationsVisible={annotationsVisible}
+              onToggleAnnotationsVisible={() => setAnnotationsVisible((visible) => !visible)}
+              timelineItems={!isGuestMode || guestPermissions?.comment ? timelineItems : []}
+              timelineFallbackDuration={timelineFallbackDuration}
+              onAnnotationRangeChange={handleAnnotationRangeChange}
+              onAnnotationClick={handleAnnotationClick}
+              frameRateLabel={
+                videoTechnicalDetails?.frameRate ||
+                item?.frameRate ||
+                undefined
+              }
+              mediaTitle={item?.title || item?.name}
+              inPoint={playerInPoint}
+              outPoint={playerOutPoint}
+              rangeEnabled={playerRangeEnabled}
+              isAudio={item?.type === 'audio'}
+              isImage={item?.type === 'image'}
+            />
 
             <Box
               component="footer"
