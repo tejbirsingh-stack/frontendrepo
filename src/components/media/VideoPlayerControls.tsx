@@ -161,24 +161,36 @@ export default function VideoPlayerControls({
 
     setIsPlaying(!element.paused && !element.ended);
     setCurrentTime(element.currentTime);
-    setDuration(Number.isFinite(element.duration) ? element.duration : 0);
+    const validDuration = Number.isFinite(element.duration) && element.duration > 0
+      ? element.duration
+      : (timelineFallbackDuration && Number.isFinite(timelineFallbackDuration) ? timelineFallbackDuration : 0);
+    setDuration(validDuration);
     setVolume(element.volume);
     setPlaybackRate(element.playbackRate);
-  }, [videoRef]);
+  }, [videoRef, timelineFallbackDuration]);
+
+  useEffect(() => {
+    if ((!duration || !Number.isFinite(duration) || duration === 0) && timelineFallbackDuration && Number.isFinite(timelineFallbackDuration)) {
+      setDuration(timelineFallbackDuration);
+    }
+  }, [timelineFallbackDuration, duration]);
+
+  const currentVideoElement = videoRef.current;
 
   useEffect(() => {
     const element = videoRef.current;
     if (!element) return;
 
-
     let rafId: number;
     let isVideoPlaying = false;
 
     const handleTimeUpdate = () => {
-      if (!isScrubbing) {
-        setCurrentTime(element.currentTime);
+      if (!isScrubbing && videoRef.current) {
+        setCurrentTime(videoRef.current.currentTime);
       }
-      setIsPlaying(!element.paused && !element.ended);
+      if (videoRef.current) {
+        setIsPlaying(!videoRef.current.paused && !videoRef.current.ended);
+      }
     };
 
     const tick = () => {
@@ -213,6 +225,7 @@ export default function VideoPlayerControls({
       'durationchange',
       'loadeddata',
       'canplay',
+      'timeupdate',
     ];
 
     events.forEach((event) => element.addEventListener(event, syncFromVideo));
@@ -220,7 +233,6 @@ export default function VideoPlayerControls({
     element.addEventListener('play', handlePlay);
     element.addEventListener('pause', handlePause);
     element.addEventListener('seeked', handleSeek);
-    // Still bind timeupdate as a fallback for some browsers when scrubbing natively
     element.addEventListener('timeupdate', handleSeek);
 
     syncFromVideo();
@@ -231,16 +243,26 @@ export default function VideoPlayerControls({
       handleTimeUpdate();
     }
 
+    // Continuous safety timer to update currentTime while playing
+    const timerId = setInterval(() => {
+      const el = videoRef.current;
+      if (el && !el.paused && !el.ended && !isScrubbing) {
+        setCurrentTime(el.currentTime);
+        setIsPlaying(true);
+      }
+    }, 150);
+
     return () => {
       isVideoPlaying = false;
       cancelAnimationFrame(rafId);
+      clearInterval(timerId);
       events.forEach((event) => element.removeEventListener(event, syncFromVideo));
       element.removeEventListener('play', handlePlay);
       element.removeEventListener('pause', handlePause);
       element.removeEventListener('seeked', handleSeek);
       element.removeEventListener('timeupdate', handleSeek);
     };
-  }, [videoRef, isScrubbing, syncFromVideo]);
+  }, [videoRef, currentVideoElement, isScrubbing, syncFromVideo]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -309,7 +331,9 @@ export default function VideoPlayerControls({
     const element = videoRef.current;
     if (!element) return;
 
-    const max = Number.isFinite(element.duration) ? element.duration : 0;
+    const max = Number.isFinite(element.duration) && element.duration > 0
+      ? element.duration
+      : (timelineFallbackDuration || 0);
     element.currentTime = Math.min(max, Math.max(0, element.currentTime + delta));
     setCurrentTime(element.currentTime);
   };
@@ -601,7 +625,7 @@ export default function VideoPlayerControls({
             }}
           >
             {formatVideoTimecode(currentTime, parseFps(frameRateLabel))} /{' '}
-            {formatVideoTimecode(duration, parseFps(frameRateLabel))}
+            {formatVideoTimecode((Number.isFinite(duration) && duration > 0) ? duration : (timelineFallbackDuration || 0), parseFps(frameRateLabel))}
           </Typography>
           {frameRateLabel ? (
             <Typography

@@ -447,6 +447,38 @@ export default function VideoPlayerPage({
   const [isBuffering, setIsBuffering] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  const [liveAssetStatus, setLiveAssetStatus] = useState<string | null>(null);
+  const [liveProgress, setLiveProgress] = useState<string | null>(null);
+  const [videoSrcVersion, setVideoSrcVersion] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [forcePlayOriginal, setForcePlayOriginalState] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && mediaId) {
+      return sessionStorage.getItem(`noah_force_play_original_${mediaId}`) === 'true';
+    }
+    return false;
+  });
+
+  const setForcePlayOriginal = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+    setForcePlayOriginalState((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      if (typeof window !== 'undefined' && mediaId) {
+        if (next) {
+          sessionStorage.setItem(`noah_force_play_original_${mediaId}`, 'true');
+        } else {
+          sessionStorage.removeItem(`noah_force_play_original_${mediaId}`);
+        }
+      }
+      return next;
+    });
+  }, [mediaId]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && mediaId) {
+      const saved = sessionStorage.getItem(`noah_force_play_original_${mediaId}`) === 'true';
+      setForcePlayOriginalState(saved);
+    }
+  }, [mediaId]);
+
   const [syncTrigger, setSyncTrigger] = useState(0);
 
   // Listen for incoming websocket messages from other users & external guests
@@ -550,9 +582,13 @@ export default function VideoPlayerPage({
             setEffectivePermissions(perms);
           }
         })
-        .catch((err) => {
+        .catch((err: any) => {
           console.error(err);
-          setFetchError(true);
+          if (err?.message?.includes('bandwidth') || err?.message?.includes('BandwidthCapExceeded') || err?.error === 'BandwidthCapExceeded') {
+            setBandwidthCapError(true);
+          } else {
+            setFetchError(true);
+          }
         })
         .finally(() => {
           setIsFetching(false);
@@ -579,6 +615,35 @@ export default function VideoPlayerPage({
         .catch((err) => console.error('Failed to load company logo:', err));
     }
   }, [isGuestMode]);
+
+  const mediaProbeUrl = useMemo(() => {
+    const rawItem = fetchedItem || contextItem;
+    if (!rawItem) return undefined;
+    const baseSrc = rawItem.videoSrc || rawItem.url || (rawItem.id ? `/api/media/${encodeURIComponent(rawItem.id)}/stream` : undefined);
+    return baseSrc ? `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}` : undefined;
+  }, [fetchedItem, contextItem, videoSrcVersion]);
+
+  useEffect(() => {
+    if (!mediaProbeUrl) return;
+    fetch(mediaProbeUrl, { method: 'HEAD' })
+      .then((res) => {
+        if (res.status === 403 || res.status === 429) {
+          return res.json().then((body) => {
+            if (body.error === 'BandwidthCapExceeded' || body.message?.includes('bandwidth') || body.message?.includes('cap exceeded')) {
+              setBandwidthCapError(true);
+            }
+          }).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, [mediaProbeUrl]);
+
+  useEffect(() => {
+    const processing = (liveAssetStatus === 'processing' || liveAssetStatus === 'queued' || liveAssetStatus === 'in_progress') && liveProgress !== '100%';
+    if (processing && forcePlayOriginal) {
+      setActiveTool('select');
+    }
+  }, [liveAssetStatus, liveProgress, forcePlayOriginal]);
 
   const handleAnnotationClick = useCallback((id: string, type: TimelineAnnotationType) => {
     setSelectedShapeId(null);
@@ -1182,10 +1247,11 @@ export default function VideoPlayerPage({
   const [annotationsVisible, setAnnotationsVisible] = useState(true);
   const [commentThreadOpen, setCommentThreadOpen] = useState(false);
   const [videoTechnicalDetails, setVideoTechnicalDetails] = useState<MediaTechnicalDetails>({});
+  const [bandwidthCapError, setBandwidthCapError] = useState(false);
   const [statusToast, setStatusToast] = useState<{
     open: boolean;
     message: string;
-    variant: 'resolved' | 'reopen' | 'error';
+    variant: 'resolved' | 'reopen' | 'error' | 'failed';
   }>({ open: false, message: '', variant: 'resolved' });
 
   const { getShortcut } = useResolvedKeyboardShortcuts();
@@ -1403,8 +1469,19 @@ export default function VideoPlayerPage({
   }, []);
 
   const timelineFallbackDuration = useMemo(
-    () => parseMediaDurationLabel(item?.duration),
-    [item?.duration],
+    () => {
+      const serverDuration = (item as any)?.duration || (item as any)?.metadata?.duration;
+      const rawDur = serverDuration ||
+        videoTechnicalDetails?.duration ||
+        videoTechnicalDetails?.durationSeconds ||
+        item?.duration ||
+        (item as any)?.metadata?.technicalSpecs?.durationSeconds ||
+        (item as any)?.metadata?.technicalSpecs?.duration ||
+        (item as any)?.technicalSpecs?.durationSeconds ||
+        (item as any)?.customMetadata?.duration;
+      return parseMediaDurationLabel(rawDur);
+    },
+    [item, videoTechnicalDetails],
   );
 
   const canSeeAnnotation = useCallback(
@@ -3722,11 +3799,7 @@ export default function VideoPlayerPage({
     [handleDeleteEntry],
   );
 
-  const [liveAssetStatus, setLiveAssetStatus] = useState<string | null>(null);
-  const [liveProgress, setLiveProgress] = useState<string | null>(null);
-  const [videoSrcVersion, setVideoSrcVersion] = useState(0);
-  const [isRetrying, setIsRetrying] = useState(false);
-  const [forcePlayOriginal, setForcePlayOriginal] = useState(false);
+
 
   const handleRetryTranscode = async () => {
     if (!mediaId || isRetrying) return;
@@ -3783,6 +3856,7 @@ export default function VideoPlayerPage({
 
         if (currentStatus === 'completed' || currentStatus === 'ready' || currentStatus === 'failed') {
           setVideoSrcVersion((v) => v + 1);
+          setForcePlayOriginal(false);
           clearInterval(interval);
         }
       } catch (err) {
@@ -3862,7 +3936,7 @@ export default function VideoPlayerPage({
   const shouldBlockMediaSrc = isProcessing && !forcePlayOriginal && item.type === 'video';
   const videoSrc = shouldBlockMediaSrc || !baseSrc
     ? ''
-    : `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}`;
+    : `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}${forcePlayOriginal ? '&original=true' : ''}`;
   const mediaElementSrc = shouldBlockMediaSrc ? undefined : (videoSrc || undefined);
   const surfaceEnabled = SURFACE_TOOLS.includes(activeTool);
 
@@ -4652,7 +4726,8 @@ export default function VideoPlayerPage({
                   pointerEvents: 'auto'
                 }}
               >
-                <Chip
+                <Tooltip title={isProcessing ? (forcePlayOriginal ? "Click to return to compression overlay" : "Click to play original video") : ""} arrow placement="left">
+                  <Chip
                     size="medium"
                     color={liveAssetStatus === 'failed' ? 'error' : 'primary'}
                     icon={
@@ -4667,12 +4742,17 @@ export default function VideoPlayerPage({
                         ? 'Queuing Compression...'
                         : isProcessing
                           ? (liveProgress && liveProgress !== 'processing'
-                              ? `Compressing: ${liveProgress}`
-                              : 'Preparing Video...')
+                              ? `Compressing: ${liveProgress}${forcePlayOriginal ? ' • Playing Original' : ''}`
+                              : `Preparing Video...${forcePlayOriginal ? ' • Playing Original' : ''}`)
                           : liveAssetStatus === 'failed'
                             ? 'Processing Failed'
                             : 'Uncompressed'
                     }
+                    onClick={() => {
+                      if (isProcessing) {
+                        setForcePlayOriginal((prev) => !prev);
+                      }
+                    }}
                     sx={{
                       backdropFilter: 'blur(8px)',
                       backgroundColor: liveAssetStatus === 'failed'
@@ -4682,14 +4762,17 @@ export default function VideoPlayerPage({
                       boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                       px: 1,
                       py: 2,
-                      cursor: 'default',
-                      pointerEvents: 'none',
+                      cursor: isProcessing ? 'pointer' : 'default',
+                      pointerEvents: 'auto',
+                      '&:hover': isProcessing ? { opacity: 0.9, transform: 'scale(1.03)' } : undefined,
+                      transition: 'all 0.2s ease',
                       '@keyframes spin': {
                         '0%': { transform: 'rotate(0deg)' },
                         '100%': { transform: 'rotate(360deg)' },
                       },
                     }}
                   />
+                </Tooltip>
               </Box>
             )}
             {isBuffering && item?.type !== 'image' && (
@@ -4758,6 +4841,33 @@ export default function VideoPlayerPage({
                     onPlaying={() => { setIsBuffering(false); setIsPlaying(true); }}
                     onCanPlay={() => setIsBuffering(false)}
                     onLoadedData={() => setIsBuffering(false)}
+                    onError={async () => {
+                      setIsBuffering(false);
+                      if (mediaElementSrc) {
+                        try {
+                          const res = await fetch(mediaElementSrc, { method: 'GET', headers: { Range: 'bytes=0-10' } });
+                          if (res.status === 403 || res.status === 429) {
+                            const body = await res.json().catch(() => ({}));
+                            if (body.error === 'BandwidthCapExceeded' || res.status === 403 || body.message?.includes('bandwidth') || body.message?.includes('cap exceeded')) {
+                              setBandwidthCapError(true);
+                              setStatusToast({
+                                open: true,
+                                message: 'Storage Bandwidth Limit Exceeded: Backblaze B2 daily cap reached.',
+                                variant: 'error',
+                              });
+                            }
+                          } else if (res.status === 404) {
+                            setStatusToast({
+                              open: true,
+                              message: 'Video asset file not found in storage bucket. It may still be uploading or was removed.',
+                              variant: 'error',
+                            });
+                          }
+                        } catch {
+                          // ignore network errors
+                        }
+                      }
+                    }}
                     sx={{
                       width: '100%',
                       height: '100%',
@@ -4844,7 +4954,36 @@ export default function VideoPlayerPage({
                   </Box>
                 )}
 
-                {isProcessing ? (
+                {bandwidthCapError ? (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                      backdropFilter: 'blur(12px)',
+                      zIndex: 60,
+                      p: 4,
+                      textAlign: 'center',
+                    }}
+                  >
+                    <ErrorOutlineOutlinedIcon sx={{ fontSize: 56, color: '#F59E0B', mb: 2 }} />
+                    <Typography variant="h6" sx={{ color: '#FFFFFF', fontWeight: 700, mb: 1 }}>
+                      Storage Bandwidth Limit Exceeded
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#94A3B8', maxWidth: 480, mb: 3, lineHeight: 1.6 }}>
+                      Your Backblaze B2 account daily download bandwidth limit has been reached.
+                      <span style={{ display: 'block', marginTop: 8, color: '#CBD5E1' }}>
+                        Please log into your <b>Backblaze B2 Console &gt; Caps &amp; Alerts</b> and increase your daily bandwidth limit.
+                      </span>
+                    </Typography>
+                  </Box>
+                ) : null}
+
+                {isProcessing && !forcePlayOriginal ? (
                   <Box
                     sx={{
                       position: 'absolute',
@@ -4906,6 +5045,26 @@ export default function VideoPlayerPage({
                         }}
                       >
                         {isRetrying ? 'Queuing...' : 'Retry Processing'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        onClick={() => setForcePlayOriginal(true)}
+                        startIcon={<PlayArrowOutlinedIcon />}
+                        sx={{
+                          borderRadius: '999px',
+                          px: 2.5,
+                          py: 1,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          borderColor: 'rgba(255, 255, 255, 0.4)',
+                          color: '#FFFFFF',
+                          '&:hover': {
+                            borderColor: '#FFFFFF',
+                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                          },
+                        }}
+                      >
+                        Play Original Video
                       </Button>
                     </Box>
                   </Box>
@@ -5154,7 +5313,8 @@ export default function VideoPlayerPage({
                       }}
                     >
                       <AnnotationToolbar
-                        disabled={isViewer}
+                        disabled={isViewer || (isProcessing && forcePlayOriginal)}
+                        disabledTooltip={isProcessing && forcePlayOriginal ? "Annotation tools are locked while background video compression is in progress. Tools will unlock automatically once compression finishes." : undefined}
                         mediaType={item?.type}
                         activeTool={activeTool}
                         onToolChange={handleToolChange}
@@ -5218,7 +5378,8 @@ export default function VideoPlayerPage({
                   <Box sx={mergedMobileIslandSx}>
                     <AnnotationToolbar
                       compact
-                      disabled={isViewer}
+                      disabled={isViewer || (isProcessing && forcePlayOriginal)}
+                      disabledTooltip={isProcessing && forcePlayOriginal ? "Annotation tools are locked while background video compression is in progress. Tools will unlock automatically once compression finishes." : undefined}
                       mediaType={item?.type}
                       mobilePlayerFooterRef={mobilePlayerFooterRef}
                       activeTool={activeTool}

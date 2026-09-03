@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { cv } from '../../theme/cssVars';
-import { Box, Divider, IconButton, Popper, Portal } from '@mui/material';
+import { Box, Divider, IconButton, Popper, Portal, Tooltip } from '@mui/material';
 import { getPortalTarget } from '../../utils/portalTarget';
 import NearMeOutlinedIcon from '@mui/icons-material/NearMeOutlined';
 import PanToolOutlinedIcon from '@mui/icons-material/PanToolOutlined';
@@ -182,6 +182,7 @@ interface AnnotationToolbarProps {
   compact?: boolean;
   mobilePlayerFooterRef?: RefObject<HTMLElement | null>;
   disabled?: boolean;
+  disabledTooltip?: string;
   mediaType?: string;
 }
 
@@ -220,9 +221,9 @@ export default function AnnotationToolbar({
   compact = false,
   mobilePlayerFooterRef,
   disabled = false,
+  disabledTooltip,
   mediaType = 'video',
 }: AnnotationToolbarProps) {
-  if (disabled) return null;
 
   const [internalTool, setInternalTool] = useState<AnnotationTool>('select');
   const [internalShape, setInternalShape] = useState<ShapeTool>('circle');
@@ -399,13 +400,16 @@ export default function AnnotationToolbar({
     onShapeToolChange: handleShapeSelect,
   });
 
-  return (
+  const toolbarContent = (
     <Box
       sx={{
         position: 'relative',
         display: compact ? 'contents' : 'inline-flex',
         maxWidth: compact ? undefined : '100%',
         minWidth: compact ? undefined : 0,
+        opacity: disabled ? 0.55 : 1,
+        pointerEvents: disabled ? 'none' : 'auto',
+        transition: 'opacity 0.2s ease',
       }}
     >
       <Box
@@ -707,4 +711,14 @@ export default function AnnotationToolbar({
       </SubToolbarContainer>
     </Box>
   );
+
+  if (disabled && disabledTooltip) {
+    return (
+      <Tooltip title={disabledTooltip} placement="top" arrow>
+        <span>{toolbarContent}</span>
+      </Tooltip>
+    );
+  }
+
+  return toolbarContent;
 }
