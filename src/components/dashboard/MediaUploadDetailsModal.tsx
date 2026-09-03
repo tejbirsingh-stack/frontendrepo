@@ -42,6 +42,12 @@ import { getManagedTagChipSx } from '../../utils/managedTagStyles';
 import type { TagScopeColors } from '../../types/tagScopeColors';
 import type { PendingMediaUpload, MediaUploadDetails, UploadableMediaType } from '../../types/mediaUpload';
 import { captureVideoThumbnail, getAudioDuration, readImageFileAsDataUrl } from '../../utils/videoThumbnail';
+import { useAiEntitled } from '../../hooks/useAiEntitled';
+import type { AiAnalyzeFeature } from '../../api/ai.service';
+import AiFeatureCheckboxGroup, {
+  defaultSelection,
+  selectionToFeatures,
+} from '../media/AiFeatureCheckboxGroup';
 
 interface MediaUploadDetailsModalProps {
   open: boolean;
@@ -421,6 +427,10 @@ export default function MediaUploadDetailsModal({
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [createTagOpen, setCreateTagOpen] = useState(false);
+  const aiEntitled = useAiEntitled();
+  const [aiFeatureSelection, setAiFeatureSelection] = useState<Record<AiAnalyzeFeature, boolean>>(() =>
+    defaultSelection('video'),
+  );
 
   const assignableTags = useMemo(
     () => getAssignableTags(activeWorkspace.id),
@@ -454,6 +464,7 @@ export default function MediaUploadDetailsModal({
     setVisibility('public');
     setIsUploading(false);
     setUploadProgress(null);
+    setAiFeatureSelection(defaultSelection(pendingUpload.type));
 
     let cancelled = false;
 
@@ -576,6 +587,12 @@ export default function MediaUploadDetailsModal({
     !isGeneratingThumbnail &&
     !isUploading;
 
+  const showAiSection = aiEntitled && (isVideo || isAudio);
+  const selectedAiFeatures = useMemo(
+    () => selectionToFeatures(aiFeatureSelection, mediaType),
+    [aiFeatureSelection, mediaType],
+  );
+
   const handleSubmit = async () => {
     if (!canUpload || isUploading) return;
     setIsUploading(true);
@@ -589,6 +606,9 @@ export default function MediaUploadDetailsModal({
         folderId: folderId || null,
         visibility,
         ...(duration ? { duration } : {}),
+        ...(showAiSection && selectedAiFeatures.length > 0
+          ? { aiFeatures: selectedAiFeatures }
+          : {}),
       });
     } catch (err) {
       console.error('Failed to submit media upload details:', err);
@@ -875,6 +895,42 @@ export default function MediaUploadDetailsModal({
                 />
               )}
             </Box>
+
+            {showAiSection ? (
+              <Box
+                component="fieldset"
+                sx={{
+                  border: 'none',
+                  m: 0,
+                  p: 0,
+                  minWidth: 0,
+                }}
+              >
+                <Typography
+                  component="legend"
+                  sx={{ ...fieldLabelSx, mb: 0.25 }}
+                >
+                  AI analysis
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: '0.8125rem',
+                    color: cv.textSecondary,
+                    mb: 1,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  Selected features run automatically after upload.
+                </Typography>
+                <AiFeatureCheckboxGroup
+                  mediaType={mediaType}
+                  selected={aiFeatureSelection}
+                  onSelectedChange={setAiFeatureSelection}
+                  disabled={isUploading}
+                  variant="compact"
+                />
+              </Box>
+            ) : null}
 
             {!pendingUpload?.linkedProjectId && (
               <Box>

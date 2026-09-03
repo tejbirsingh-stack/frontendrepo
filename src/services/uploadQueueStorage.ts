@@ -3,6 +3,8 @@
  * Retains file blobs and metadata so uploads can continue/resume across page refreshes.
  */
 
+import type { AiAnalyzeFeature } from '../api/ai.service';
+
 export interface StoredUploadItem {
   id: string;
   file: File;
@@ -22,6 +24,7 @@ export interface StoredUploadItem {
   ownerId?: string;
   linkedProjectId?: string;
   parentFolderId?: string | null;
+  aiFeatures?: AiAnalyzeFeature[];
   errorMessage?: string;
   createdAt: number;
 }

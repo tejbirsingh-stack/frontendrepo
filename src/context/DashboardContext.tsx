@@ -2452,6 +2452,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             tagIds: details.tagIds,
             technicalSpecs: fullTechSpecs,
             visibility: details.visibility,
+            aiFeatures: details.aiFeatures,
           },
           onProgress,
         );
