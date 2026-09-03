@@ -4652,10 +4652,9 @@ export default function VideoPlayerPage({
                   pointerEvents: 'auto'
                 }}
               >
-                <Tooltip title={isRetrying ? 'Triggering compression...' : 'Click to compress or retry processing'} arrow placement="left">
-                  <Chip
+                <Chip
                     size="medium"
-                    color={liveAssetStatus === 'failed' ? 'error' : forcePlayOriginal ? 'warning' : 'primary'}
+                    color={liveAssetStatus === 'failed' ? 'error' : 'primary'}
                     icon={
                       isProcessing ? (
                         <AutorenewIcon sx={{ animation: 'spin 2s linear infinite', fontSize: 18 }} />
@@ -4667,41 +4666,30 @@ export default function VideoPlayerPage({
                       isRetrying
                         ? 'Queuing Compression...'
                         : isProcessing
-                          ? (liveProgress ? `Compressing: ${liveProgress}` : 'Processing (Click to Retry)')
+                          ? (liveProgress && liveProgress !== 'processing'
+                              ? `Compressing: ${liveProgress}`
+                              : 'Preparing Video...')
                           : liveAssetStatus === 'failed'
-                            ? 'Processing Failed (Retry)'
-                            : 'Uncompressed (Click to Compress)'
+                            ? 'Processing Failed'
+                            : 'Uncompressed'
                     }
-                    onClick={handleRetryTranscode}
-                    disabled={isRetrying}
                     sx={{
                       backdropFilter: 'blur(8px)',
-                      backgroundColor: liveAssetStatus === 'failed' 
-                        ? 'rgba(211, 47, 47, 0.85)' 
-                        : forcePlayOriginal 
-                          ? 'rgba(237, 108, 2, 0.85)' 
-                          : 'rgba(25, 118, 210, 0.85)',
+                      backgroundColor: liveAssetStatus === 'failed'
+                        ? 'rgba(211, 47, 47, 0.85)'
+                        : 'rgba(25, 118, 210, 0.85)',
                       fontWeight: 600,
                       boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                       px: 1,
                       py: 2,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease-in-out',
-                      '&:hover': {
-                        transform: 'scale(1.04)',
-                        backgroundColor: liveAssetStatus === 'failed'
-                          ? 'rgba(211, 47, 47, 1)'
-                          : forcePlayOriginal
-                            ? 'rgba(237, 108, 2, 1)'
-                            : 'rgba(25, 118, 210, 1)',
-                      },
+                      cursor: 'default',
+                      pointerEvents: 'none',
                       '@keyframes spin': {
                         '0%': { transform: 'rotate(0deg)' },
                         '100%': { transform: 'rotate(360deg)' },
                       },
                     }}
                   />
-                </Tooltip>
               </Box>
             )}
             {isBuffering && item?.type !== 'image' && (
@@ -4887,15 +4875,18 @@ export default function VideoPlayerPage({
                       <CircularProgress size={48} sx={{ color: cv.brandBlue, mb: 3 }} />
                     )}
                     <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
-                      Processing Video...
+                      {liveProgress && liveProgress !== 'processing'
+                        ? 'Compressing Video'
+                        : 'Preparing Video...'}
                     </Typography>
-                    {liveProgress ? (
+                    {liveProgress && liveProgress !== 'processing' ? (
                       <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em' }}>
-                        {liveProgress}
+                        Encoding in progress — {liveProgress} complete
                       </Typography>
                     ) : (
-                      <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em' }}>
-                        This may take a few moments
+                      <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 300 }}>
+                        Noah is optimizing your video for smooth playback.
+                        <span style={{ display: 'block', marginTop: 4, opacity: 0.7 }}>Large files may take up to 30 minutes. You can leave and come back later.</span>
                       </Typography>
                     )}
                     <Box sx={{ display: 'flex', gap: 1.5, mt: 3, zIndex: 11 }}>
@@ -4915,26 +4906,6 @@ export default function VideoPlayerPage({
                         }}
                       >
                         {isRetrying ? 'Queuing...' : 'Retry Processing'}
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        onClick={() => setForcePlayOriginal(true)}
-                        startIcon={<PlayArrowOutlinedIcon />}
-                        sx={{
-                          borderRadius: '999px',
-                          px: 2.5,
-                          py: 1,
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          borderColor: 'rgba(255, 255, 255, 0.4)',
-                          color: '#FFFFFF',
-                          '&:hover': {
-                            borderColor: '#FFFFFF',
-                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                          },
-                        }}
-                      >
-                        Play Original Video
                       </Button>
                     </Box>
                   </Box>
