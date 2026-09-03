@@ -1713,8 +1713,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             item.id === folderId ? { ...item, title: trimmed } : item
           )
         );
+        
+        toast.success(`Successfully renamed to "${trimmed}"`);
       } catch (err) {
         console.error('Failed to rename folder:', err);
+        toast.error('Failed to rename folder. Please try again.');
       }
     },
     [activeWorkspaceId, mediaItems],
@@ -2016,6 +2019,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         } else {
           await apiClient.put(`/media/${mediaId}/rename`, { title: trimmed });
         }
+        
+        toast.success(`Successfully renamed to "${trimmed}"`);
       } catch (err) {
         console.error('Failed to rename item:', err);
         toast.error('Failed to rename item. Please try again.');

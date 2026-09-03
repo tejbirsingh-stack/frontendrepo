@@ -124,6 +124,8 @@ interface VideoPlayerControlsProps {
   inPoint?: number | null;
   outPoint?: number | null;
   rangeEnabled?: boolean;
+  isAudio?: boolean;
+  isImage?: boolean;
 }
 
 export default function VideoPlayerControls({
@@ -142,6 +144,8 @@ export default function VideoPlayerControls({
   inPoint,
   outPoint,
   rangeEnabled,
+  isAudio,
+  isImage,
 }: VideoPlayerControlsProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -483,7 +487,9 @@ export default function VideoPlayerControls({
           '&::-webkit-scrollbar': { display: 'none' },
         }}
       >
-        <ShortcutTooltip label={isPlaying ? 'Pause' : 'Play'} placement="top">
+        {!isImage && (
+          <>
+            <ShortcutTooltip label={isPlaying ? 'Pause' : 'Play'} placement="top">
           <span>
             <IconButton type="button" aria-label={isPlaying ? 'Pause' : 'Play'} onClick={togglePlay} sx={controlButtonSx}>
               {isPlaying ? (
@@ -616,6 +622,8 @@ export default function VideoPlayerControls({
             </Typography>
           ) : null}
         </Box>
+        </>
+        )}
 
         <Box sx={{ flex: 1, minWidth: 8 }} />
 
@@ -672,104 +680,124 @@ export default function VideoPlayerControls({
             </>
           ) : null}
 
-          <ShortcutTooltip label="Playback speed" placement="top">
-            <Box
-              component="button"
-              type="button"
-              aria-label="Playback speed"
-              aria-haspopup="menu"
-              onClick={(event) => setSpeedAnchor(event.currentTarget)}
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 0.25,
-                border: 'none',
-                background: 'transparent',
-                color: cv.textPrimary,
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                px: 0.75,
-                py: 0.5,
-                borderRadius: '8px',
-                '&:hover': {
-                  backgroundColor: cv.surfaceHover,
-                },
-              }}
-            >
-              {playbackRate === 1 ? '1x' : `${playbackRate}x`}
-              <KeyboardArrowDownOutlinedIcon sx={{ fontSize: 18, color: cv.textSecondary }} />
-            </Box>
-          </ShortcutTooltip>
+          {!isImage && (
+            <>
+              <ShortcutTooltip label="Playback speed" placement="top">
+                <Box
+                  component="button"
+                  type="button"
+                  aria-label="Playback speed"
+                  aria-haspopup="menu"
+                  onClick={(event) => setSpeedAnchor(event.currentTarget)}
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.25,
+                    border: 'none',
+                    background: 'transparent',
+                    color: cv.textPrimary,
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    px: 0.75,
+                    py: 0.5,
+                    borderRadius: '8px',
+                    '&:hover': {
+                      backgroundColor: cv.surfaceHover,
+                    },
+                  }}
+                >
+                  {playbackRate === 1 ? '1x' : `${playbackRate}x`}
+                  <KeyboardArrowDownOutlinedIcon sx={{ fontSize: 18, color: cv.textSecondary }} />
+                </Box>
+              </ShortcutTooltip>
 
-          <Menu
-            anchorEl={speedAnchor}
-            open={Boolean(speedAnchor)}
-            onClose={() => setSpeedAnchor(null)}
-            anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-            transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            slotProps={{
-              paper: {
-                sx: {
-                  mt: -0.5,
-                  minWidth: 88,
-                  borderRadius: '12px',
-                  border: "1px solid var(--noah-border)",
-                  background: 'var(--noah-dialog-surface-strong)',
-                },
-              },
-            }}
-          >
-            {PLAYBACK_RATES.map((rate) => (
-              <MenuItem
-                key={rate}
-                selected={rate === playbackRate}
-                onClick={() => handlePlaybackRate(rate)}
-                sx={{
-                  fontSize: '0.875rem',
-                  color: cv.textPrimary,
-                  '&.Mui-selected': {
-                    backgroundColor: cv.purpleSelectionHover,
+              <Menu
+                anchorEl={speedAnchor}
+                open={Boolean(speedAnchor)}
+                onClose={() => setSpeedAnchor(null)}
+                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+                transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                slotProps={{
+                  paper: {
+                    sx: {
+                      mt: -0.5,
+                      minWidth: 88,
+                      borderRadius: '12px',
+                      border: "1px solid var(--noah-border)",
+                      background: 'var(--noah-dialog-surface-strong)',
+                    },
                   },
                 }}
               >
-                {rate}x
-              </MenuItem>
-            ))}
-          </Menu>
+                {PLAYBACK_RATES.map((rate) => (
+                  <MenuItem
+                    key={rate}
+                    selected={rate === playbackRate}
+                    onClick={() => handlePlaybackRate(rate)}
+                    sx={{
+                      fontSize: '0.875rem',
+                      color: cv.textPrimary,
+                      '&.Mui-selected': {
+                        backgroundColor: cv.purpleSelectionHover,
+                      },
+                    }}
+                  >
+                    {rate}x
+                  </MenuItem>
+                ))}
+              </Menu>
+            </>
+          )}
         </Box>
 
-        <ShortcutTooltip
-          label={timelineVisible ? 'Hide Annotation timeline' : 'Show Annotation timeline'}
-          placement="top"
-        >
-          <span>
-            <IconButton
-              type="button"
-              aria-label={timelineVisible ? 'Hide Annotation timeline' : 'Show Annotation timeline'}
-              aria-pressed={timelineVisible}
-              onClick={() => setTimelineVisible((visible) => !visible)}
-              sx={{
-                ...timelineToggleButtonSx,
-                color: timelineVisible ? cv.textPrimary : cv.textMuted,
-                backgroundColor: timelineVisible ? cv.surfaceHover : 'transparent',
-              }}
-            >
-              <AnnotationTimelineToggleIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          </span>
-        </ShortcutTooltip>
+        {!isImage && (
+          <ShortcutTooltip
+            label={timelineVisible ? 'Hide Annotation timeline' : 'Show Annotation timeline'}
+            placement="top"
+          >
+            <span>
+              <IconButton
+                type="button"
+                aria-label={timelineVisible ? 'Hide Annotation timeline' : 'Show Annotation timeline'}
+                aria-pressed={timelineVisible}
+                onClick={() => setTimelineVisible((visible) => !visible)}
+                sx={{
+                  ...timelineToggleButtonSx,
+                  color: timelineVisible ? cv.textPrimary : cv.textMuted,
+                  backgroundColor: timelineVisible ? cv.surfaceHover : 'transparent',
+                }}
+              >
+                <AnnotationTimelineToggleIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </span>
+          </ShortcutTooltip>
+        )}
 
         <ShortcutTooltip
-          label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          label={
+            isAudio
+              ? 'Fullscreen mode is not supported for audio files.'
+              : isFullscreen
+                ? 'Exit fullscreen'
+                : 'Enter fullscreen'
+          }
           placement="top"
         >
           <span>
             <IconButton
               type="button"
               aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              onClick={() => void toggleFullscreen()}
-              sx={controlButtonSx}
+              onClick={() => {
+                if (!isAudio) {
+                  void toggleFullscreen();
+                }
+              }}
+              disabled={isAudio}
+              sx={{
+                ...controlButtonSx,
+                ...(isAudio ? { color: cv.textMuted, opacity: 0.5 } : {}),
+              }}
             >
               {isFullscreen ? (
                 <FullscreenExitOutlinedIcon sx={{ fontSize: 20 }} />
