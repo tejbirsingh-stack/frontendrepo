@@ -1,5 +1,5 @@
 import { useEffect, type RefObject } from 'react';
-import { useDashboard } from '../context/DashboardContext';
+import { GLOBAL_SEARCH_CLEAR_EVENT } from '../components/dashboard/GlobalSearchField';
 import { useResolvedKeyboardShortcuts } from './useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
 import { getModKeyLabel } from '../constants/dashboardShortcuts';
@@ -14,7 +14,6 @@ export function useGlobalSearchKeyboard(
   searchInputRef: RefObject<HTMLInputElement | null>,
   enabled = true,
 ) {
-  const { globalSearchQuery, setGlobalSearchQuery } = useDashboard();
   const { getShortcut } = useResolvedKeyboardShortcuts();
 
   const focusSearchShortcut = getShortcut('dashboard-focus-search') ?? '/';
@@ -45,10 +44,10 @@ export function useGlobalSearchKeyboard(
       if (
         matchesKeyboardShortcut(event, clearSearchShortcut) &&
         document.activeElement === searchInputRef.current &&
-        globalSearchQuery
+        searchInputRef.current?.value
       ) {
         event.preventDefault();
-        setGlobalSearchQuery('');
+        window.dispatchEvent(new CustomEvent(GLOBAL_SEARCH_CLEAR_EVENT));
       }
     };
 
@@ -59,8 +58,6 @@ export function useGlobalSearchKeyboard(
     enabled,
     focusSearchModShortcut,
     focusSearchShortcut,
-    globalSearchQuery,
     searchInputRef,
-    setGlobalSearchQuery,
   ]);
 }

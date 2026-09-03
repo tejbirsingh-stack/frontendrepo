@@ -31,16 +31,19 @@ export function FolderTreeNode({
   foldersByParent,
   selectedFolderId,
   onSelect,
+  onExpand,
   level = 0,
 }: {
   folder: any;
   foldersByParent: Record<string, any[]>;
   selectedFolderId: string | null;
   onSelect: (id: string) => void;
+  onExpand?: (id: string) => void;
   level?: number;
 }) {
   const children = foldersByParent[folder.id] || [];
-  const hasChildren = children.length > 0;
+  // Use backend metadata if available, otherwise assume it could have children so it's clickable
+  const appearsToHaveChildren = children.length > 0 || folder.itemCount > 0 || folder.itemCount === undefined;
   const [expanded, setExpanded] = useState(false);
   const selected = selectedFolderId === folder.id;
   const color = resolveFolderColor(folder.folderColor);
@@ -69,18 +72,14 @@ export function FolderTreeNode({
         }}
         onClick={() => {
           if (!folder.disabled) onSelect(folder.id);
-          if (hasChildren) {
-            setExpanded(!expanded);
-          }
         }}
       >
         <Box
           component="span"
           onClick={(e) => {
-            if (hasChildren) {
-              e.stopPropagation();
-              setExpanded(!expanded);
-            }
+            e.stopPropagation();
+            if (!expanded && onExpand && children.length === 0) onExpand(folder.id);
+            setExpanded(!expanded);
           }}
           sx={{
             display: 'flex',
@@ -88,11 +87,11 @@ export function FolderTreeNode({
             justifyContent: 'center',
             width: 20,
             height: 20,
-            cursor: hasChildren ? 'pointer' : 'default',
-            opacity: hasChildren ? 1 : 0.3,
+            cursor: 'pointer',
+            opacity: appearsToHaveChildren ? 1 : 0.4,
             '&:hover': {
-               backgroundColor: hasChildren ? cv.surfaceHover : 'transparent',
-               borderRadius: '4px'
+              backgroundColor: cv.surfaceHover,
+              borderRadius: '4px'
             }
           }}
         >
@@ -108,7 +107,7 @@ export function FolderTreeNode({
         </Typography>
       </Box>
 
-      {expanded && hasChildren && (
+      {expanded && children.length > 0 && (
         <Box sx={{ display: 'flex', flexDirection: 'column' }}>
           {children.map((child) => (
             <FolderTreeNode
@@ -117,6 +116,7 @@ export function FolderTreeNode({
               foldersByParent={foldersByParent}
               selectedFolderId={selectedFolderId}
               onSelect={onSelect}
+              onExpand={onExpand}
               level={level + 1}
             />
           ))}
@@ -267,13 +267,31 @@ export default function MoveItemsModal({
     return () => { mounted = false; };
   }, [selectedWorkspaceId, open]);
 
+  const handleFetchChildren = async (folderId: string) => {
+    try {
+      const { apiClient } = await import('../../api/client');
+      const response = await apiClient.get<any>(`/workspaces/folder/find-all-data/${folderId}`);
+      const data = response.data || response;
+      const actualData = data.data || data;
+      if (actualData && Array.isArray(actualData.folders)) {
+        setFetchedFolders((prev) => {
+          const newFolders = actualData.folders.filter((nf: any) => !prev.some((pf) => pf.id === nf.id));
+          if (newFolders.length === 0) return prev;
+          return [...prev, ...newFolders];
+        });
+      }
+    } catch (err) {
+      console.error('[MoveModal] Failed to fetch folder children', err);
+    }
+  };
+
   const { rootFolders, foldersByParent } = useMemo(() => {
     const activeFolders = fetchedFolders.filter(f => !trashedIds.has(f.id));
 
     const excludedIds = new Set<string>();
     if (excludeItemId) excludedIds.add(excludeItemId);
     if (sourceItemIds) sourceItemIds.forEach(id => excludedIds.add(id));
-    
+
     if (excludedIds.size > 0) {
       let changed = true;
       while (changed) {
@@ -297,7 +315,7 @@ export default function MoveItemsModal({
 
     const byParent: Record<string, any[]> = {};
     const roots: any[] = [];
-    
+
     mappedFolders.forEach(f => {
       const pid = f.parentFolderId;
       if (pid) {
@@ -565,6 +583,7 @@ export default function MoveItemsModal({
                         setSelectedFolderId(id);
                         setSelectedProjectId(null);
                       }}
+                      onExpand={handleFetchChildren}
                     />
                   ))}
                 </>

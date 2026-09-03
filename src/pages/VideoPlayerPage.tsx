@@ -19,6 +19,8 @@ import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
+import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
@@ -33,10 +35,19 @@ import {
 } from '../constants/annotationColors';
 import { DEFAULT_DRAW_COLOR } from '../constants/drawColors';
 import AnnotationHistoryDrawer from '../components/media/AnnotationHistoryDrawer';
+import AiFeatureSelectDialog, {
+  getLockedAiFeatures,
+} from '../components/media/AiFeatureSelectDialog';
 import AudioWaveformVisualizer from '../components/media/AudioWaveformVisualizer';
 import FramePersonHighlight from '../components/media/FramePersonHighlight';
 import type { FramePerson } from '../data/mockFramePeople';
 import { useAiEntitled } from '../hooks/useAiEntitled';
+import { getAiStatusRequest, retryAiAnalyzeRequest, type AiAnalyzeFeature } from '../api/ai.service';
+import {
+  getAiPeopleRequest,
+  getAiScenesRequest,
+  getAiHighlightsRequest,
+} from '../api/ai.service';
 import type {
   MediaDetailsSection,
   MediaTechnicalDetails,
@@ -436,6 +447,38 @@ export default function VideoPlayerPage({
   const [isBuffering, setIsBuffering] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  const [liveAssetStatus, setLiveAssetStatus] = useState<string | null>(null);
+  const [liveProgress, setLiveProgress] = useState<string | null>(null);
+  const [videoSrcVersion, setVideoSrcVersion] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [forcePlayOriginal, setForcePlayOriginalState] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && mediaId) {
+      return sessionStorage.getItem(`noah_force_play_original_${mediaId}`) === 'true';
+    }
+    return false;
+  });
+
+  const setForcePlayOriginal = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+    setForcePlayOriginalState((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      if (typeof window !== 'undefined' && mediaId) {
+        if (next) {
+          sessionStorage.setItem(`noah_force_play_original_${mediaId}`, 'true');
+        } else {
+          sessionStorage.removeItem(`noah_force_play_original_${mediaId}`);
+        }
+      }
+      return next;
+    });
+  }, [mediaId]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && mediaId) {
+      const saved = sessionStorage.getItem(`noah_force_play_original_${mediaId}`) === 'true';
+      setForcePlayOriginalState(saved);
+    }
+  }, [mediaId]);
+
   const [syncTrigger, setSyncTrigger] = useState(0);
 
   // Listen for incoming websocket messages from other users & external guests
@@ -539,9 +582,13 @@ export default function VideoPlayerPage({
             setEffectivePermissions(perms);
           }
         })
-        .catch((err) => {
+        .catch((err: any) => {
           console.error(err);
-          setFetchError(true);
+          if (err?.message?.includes('bandwidth') || err?.message?.includes('BandwidthCapExceeded') || err?.error === 'BandwidthCapExceeded') {
+            setBandwidthCapError(true);
+          } else {
+            setFetchError(true);
+          }
         })
         .finally(() => {
           setIsFetching(false);
@@ -562,11 +609,41 @@ export default function VideoPlayerPage({
     if (!isGuestMode) {
       getCompanyInfoRequest()
         .then((res) => {
-          setInternalLogoUrl(res?.metadata?.logoUrl || null);
+          const meta = typeof res?.metadata === 'string' ? JSON.parse(res.metadata) : (res?.metadata || {});
+          setInternalLogoUrl(meta?.logoUrl || null);
         })
         .catch((err) => console.error('Failed to load company logo:', err));
     }
   }, [isGuestMode]);
+
+  const mediaProbeUrl = useMemo(() => {
+    const rawItem = fetchedItem || contextItem;
+    if (!rawItem) return undefined;
+    const baseSrc = rawItem.videoSrc || rawItem.url || (rawItem.id ? `/api/media/${encodeURIComponent(rawItem.id)}/stream` : undefined);
+    return baseSrc ? `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}` : undefined;
+  }, [fetchedItem, contextItem, videoSrcVersion]);
+
+  useEffect(() => {
+    if (!mediaProbeUrl) return;
+    fetch(mediaProbeUrl, { method: 'HEAD' })
+      .then((res) => {
+        if (res.status === 403 || res.status === 429) {
+          return res.json().then((body) => {
+            if (body.error === 'BandwidthCapExceeded' || body.message?.includes('bandwidth') || body.message?.includes('cap exceeded')) {
+              setBandwidthCapError(true);
+            }
+          }).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, [mediaProbeUrl]);
+
+  useEffect(() => {
+    const processing = (liveAssetStatus === 'processing' || liveAssetStatus === 'queued' || liveAssetStatus === 'in_progress') && liveProgress !== '100%';
+    if (processing && forcePlayOriginal) {
+      setActiveTool('select');
+    }
+  }, [liveAssetStatus, liveProgress, forcePlayOriginal]);
 
   const handleAnnotationClick = useCallback((id: string, type: TimelineAnnotationType) => {
     setSelectedShapeId(null);
@@ -848,6 +925,8 @@ export default function VideoPlayerPage({
     const target = videoStageRef.current || document;
     target.addEventListener('mousemove', resetIdleTimer);
     target.addEventListener('mousedown', resetIdleTimer);
+    target.addEventListener('pointerdown', resetIdleTimer);
+    target.addEventListener('click', resetIdleTimer);
     target.addEventListener('touchstart', resetIdleTimer);
     window.addEventListener('keydown', resetIdleTimer);
 
@@ -857,6 +936,8 @@ export default function VideoPlayerPage({
       }
       target.removeEventListener('mousemove', resetIdleTimer);
       target.removeEventListener('mousedown', resetIdleTimer);
+      target.removeEventListener('pointerdown', resetIdleTimer);
+      target.removeEventListener('click', resetIdleTimer);
       target.removeEventListener('touchstart', resetIdleTimer);
       window.removeEventListener('keydown', resetIdleTimer);
     };
@@ -1012,6 +1093,11 @@ export default function VideoPlayerPage({
   const [shareTeamMembers, setShareTeamMembers] = useState<WorkspaceTeamMember[]>([]);
   const [availableGroups, setAvailableGroups] = useState<SettingsUserGroup[]>([]);
   const [drawerTab, setDrawerTab] = useState<MediaRailPanel>('history');
+  const [aiFeatureDialogOpen, setAiFeatureDialogOpen] = useState(false);
+  const [aiFeatureSubmitting, setAiFeatureSubmitting] = useState(false);
+  const [aiFeatureDialogMode, setAiFeatureDialogMode] = useState<'initial' | 'add'>('initial');
+  const [aiLockedFeatures, setAiLockedFeatures] = useState<AiAnalyzeFeature[]>([]);
+  const aiPickerStartedAssetsRef = useRef<Set<string>>(new Set());
   const aiEntitled = useAiEntitled() && !isGuestMode;
   const [detailsSection, setDetailsSection] = useState<MediaDetailsSection>('file');
   const [selectedFramePerson, setSelectedFramePerson] = useState<FramePerson | null>(null);
@@ -1035,14 +1121,99 @@ export default function VideoPlayerPage({
     }
   }, [drawerTab, historyOpen]);
 
-  const handleRailPanelSelect = (panel: MediaRailPanel) => {
+  const openAiPanel = () => {
+    setDrawerTab('ai');
+    setHistoryOpen(true);
+  };
+
+  const openInitialAiFeatureDialog = () => {
+    setAiFeatureDialogMode('initial');
+    setAiLockedFeatures([]);
+    setAiFeatureDialogOpen(true);
+  };
+
+  const handleAddAiFeatures = async () => {
+    const assetId = item?.id;
+    if (!assetId) return;
+    try {
+      const [status, highlights, peopleRes, scenesRes] = await Promise.all([
+        getAiStatusRequest(assetId),
+        getAiHighlightsRequest(assetId).catch(() => null),
+        item?.type === 'video' ? getAiPeopleRequest(assetId).catch(() => null) : Promise.resolve(null),
+        item?.type === 'video' ? getAiScenesRequest(assetId).catch(() => null) : Promise.resolve(null),
+      ]);
+      const locked = getLockedAiFeatures({
+        steps: status.steps,
+        mediaType: item?.type,
+        hasHighlights: Boolean(highlights?.summary?.trim()) || (highlights?.tags?.length ?? 0) > 0,
+        hasPeopleOrScenes:
+          (peopleRes?.people?.length ?? 0) > 0 || (scenesRes?.scenes?.length ?? 0) > 0,
+      });
+      setAiFeatureDialogMode('add');
+      setAiLockedFeatures(locked);
+      setAiFeatureDialogOpen(true);
+    } catch (err) {
+      console.error('[AI] Failed to prepare add-features dialog:', err);
+    }
+  };
+
+  const handleRailPanelSelect = async (panel: MediaRailPanel) => {
     if (historyOpen && drawerTab === panel) {
       setHistoryOpen(false);
       return;
     }
-    setDrawerTab(panel);
-    setHistoryOpen(true);
+
+    if (panel !== 'ai' || !aiEntitled) {
+      setDrawerTab(panel);
+      setHistoryOpen(true);
+      return;
+    }
+
+    const assetId = item?.id;
+    const canRunAi = item?.type === 'video' || item?.type === 'audio';
+    if (!assetId || !canRunAi) {
+      openAiPanel();
+      return;
+    }
+
+    if (aiPickerStartedAssetsRef.current.has(assetId)) {
+      openAiPanel();
+      return;
+    }
+
+    try {
+      const status = await getAiStatusRequest(assetId);
+      if (status.status === 'idle') {
+        openInitialAiFeatureDialog();
+        return;
+      }
+      if (status.status === 'queued' || status.status === 'processing') {
+        aiPickerStartedAssetsRef.current.add(assetId);
+      }
+      openAiPanel();
+    } catch {
+      // If status check fails, still open the panel so users can use Retry / empty states.
+      openAiPanel();
+    }
   };
+
+  const handleAiFeatureConfirm = async (features: AiAnalyzeFeature[]) => {
+    const assetId = item?.id;
+    if (!assetId || features.length === 0) return;
+    setAiFeatureSubmitting(true);
+    try {
+      const force = aiFeatureDialogMode === 'add';
+      await retryAiAnalyzeRequest(assetId, { force, features });
+      aiPickerStartedAssetsRef.current.add(assetId);
+      setAiFeatureDialogOpen(false);
+      openAiPanel();
+    } catch (err) {
+      console.error('[AI] Failed to start insights:', err);
+    } finally {
+      setAiFeatureSubmitting(false);
+    }
+  };
+
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
 
   const [annotationGroups, setAnnotationGroups] = useState<AnnotationAccessGroup[]>([]);
@@ -1076,10 +1247,11 @@ export default function VideoPlayerPage({
   const [annotationsVisible, setAnnotationsVisible] = useState(true);
   const [commentThreadOpen, setCommentThreadOpen] = useState(false);
   const [videoTechnicalDetails, setVideoTechnicalDetails] = useState<MediaTechnicalDetails>({});
+  const [bandwidthCapError, setBandwidthCapError] = useState(false);
   const [statusToast, setStatusToast] = useState<{
     open: boolean;
     message: string;
-    variant: 'resolved' | 'reopen' | 'error';
+    variant: 'resolved' | 'reopen' | 'error' | 'failed';
   }>({ open: false, message: '', variant: 'resolved' });
 
   const { getShortcut } = useResolvedKeyboardShortcuts();
@@ -1297,8 +1469,19 @@ export default function VideoPlayerPage({
   }, []);
 
   const timelineFallbackDuration = useMemo(
-    () => parseMediaDurationLabel(item?.duration),
-    [item?.duration],
+    () => {
+      const serverDuration = (item as any)?.duration || (item as any)?.metadata?.duration;
+      const rawDur = serverDuration ||
+        videoTechnicalDetails?.duration ||
+        videoTechnicalDetails?.durationSeconds ||
+        item?.duration ||
+        (item as any)?.metadata?.technicalSpecs?.durationSeconds ||
+        (item as any)?.metadata?.technicalSpecs?.duration ||
+        (item as any)?.technicalSpecs?.durationSeconds ||
+        (item as any)?.customMetadata?.duration;
+      return parseMediaDurationLabel(rawDur);
+    },
+    [item, videoTechnicalDetails],
   );
 
   const canSeeAnnotation = useCallback(
@@ -3432,16 +3615,27 @@ export default function VideoPlayerPage({
 
   const handleDeleteEntry = useCallback(
     (entryId: string) => {
-      const entry = history.find((item) => item.id === entryId);
+      const rawId = entryId.replace(/^(comment|drawing|shape|stamp)-/, '');
+      const entry = history.find(
+        (item) =>
+          item.id === entryId ||
+          item.id === rawId ||
+          item.sourceCommentId === rawId ||
+          item.sourceCommentId === entryId ||
+          item.linkedDrawingId === rawId ||
+          item.linkedShapeId === rawId,
+      );
       if (!entry) return;
 
       pushSnapshot(getAnnotationSnapshot());
 
       const erasedBy = { name: activeUser.name, avatarUrl: activeUser.avatarUrl, initials: activeUser.initials };
+      const now = Date.now();
+      const targetCommentId = entry.sourceCommentId || (entryId.startsWith('comment-') ? rawId : undefined);
 
-      if (entry.sourceCommentId) {
+      if (targetCommentId) {
         setComments((prev) =>
-          prev.map((comment) => comment.id === entry.sourceCommentId ? { ...comment, erasedAt: Date.now(), erasedBy } : comment),
+          prev.map((comment) => comment.id === targetCommentId ? { ...comment, erasedAt: now, erasedBy } : comment),
         );
       }
 
@@ -3455,31 +3649,53 @@ export default function VideoPlayerPage({
         entry.id.startsWith('stamp-') ? entry.id.slice('stamp-'.length) : undefined;
 
       if (linkedDrawingId) {
-        setDrawings((prev) => prev.map((stroke) => stroke.id === linkedDrawingId ? { ...stroke, erasedAt: Date.now(), erasedBy } : stroke));
+        setDrawings((prev) => prev.map((stroke) => stroke.id === linkedDrawingId ? { ...stroke, erasedAt: now, erasedBy } : stroke));
       }
 
       if (linkedShapeId) {
-        setShapes((prev) => prev.map((shape) => shape.id === linkedShapeId ? { ...shape, erasedAt: Date.now(), erasedBy } : shape));
+        setShapes((prev) => prev.map((shape) => shape.id === linkedShapeId ? { ...shape, erasedAt: now, erasedBy } : shape));
       }
 
       if (linkedStampId) {
-        setStamps((prev) => prev.map((stamp) => stamp.id === linkedStampId ? { ...stamp, erasedAt: Date.now(), erasedBy } : stamp));
+        setStamps((prev) => prev.map((stamp) => stamp.id === linkedStampId ? { ...stamp, erasedAt: now, erasedBy } : stamp));
       }
 
-      setHistory((current) => current.map((item) => item.id === entryId ? { ...item, erasedAt: Date.now(), erasedBy } : item));
+      setHistory((current) =>
+        current.map((item) =>
+          item.id === entry.id ||
+          item.id === entryId ||
+          (targetCommentId && item.sourceCommentId === targetCommentId)
+            ? { ...item, erasedAt: now, erasedBy }
+            : item,
+        ),
+      );
+
+      const backendId = entry.backendId || (targetCommentId ? targetCommentId : undefined);
+      if (backendId) {
+        deleteMediaAnnotationRequest(backendId).catch(console.error);
+      }
     },
     [getAnnotationSnapshot, history, pushSnapshot, activeUser],
   );
 
   const handleHardDeleteEntry = useCallback(
     (entryId: string) => {
-      const entry = history.find((item) => item.id === entryId);
+      const rawId = entryId.replace(/^(comment|drawing|shape|stamp)-/, '');
+      const entry = history.find(
+        (item) =>
+          item.id === entryId ||
+          item.id === rawId ||
+          item.sourceCommentId === rawId ||
+          item.sourceCommentId === entryId,
+      );
       if (!entry) return;
 
       pushSnapshot(getAnnotationSnapshot());
 
-      if (entry.sourceCommentId) {
-        setComments((prev) => prev.filter((comment) => comment.id !== entry.sourceCommentId));
+      const targetCommentId = entry.sourceCommentId || (entryId.startsWith('comment-') ? rawId : undefined);
+
+      if (targetCommentId) {
+        setComments((prev) => prev.filter((comment) => comment.id !== targetCommentId));
       }
 
       const linkedDrawingId =
@@ -3503,21 +3719,42 @@ export default function VideoPlayerPage({
         setStamps((prev) => prev.filter((stamp) => stamp.id !== linkedStampId));
       }
 
-      setHistory((current) => current.filter((item) => item.id !== entryId));
+      setHistory((current) =>
+        current.filter(
+          (item) =>
+            item.id !== entry.id &&
+            item.id !== entryId &&
+            (!targetCommentId || item.sourceCommentId !== targetCommentId),
+        ),
+      );
+
+      const backendId = entry.backendId || (targetCommentId ? targetCommentId : undefined);
+      if (backendId) {
+        deleteMediaAnnotationRequest(backendId).catch(console.error);
+      }
     },
     [getAnnotationSnapshot, history, pushSnapshot],
   );
 
   const handleRestoreEntry = useCallback(
     (entryId: string) => {
-      const entry = history.find((item) => item.id === entryId);
+      const rawId = entryId.replace(/^(comment|drawing|shape|stamp)-/, '');
+      const entry = history.find(
+        (item) =>
+          item.id === entryId ||
+          item.id === rawId ||
+          item.sourceCommentId === rawId ||
+          item.sourceCommentId === entryId,
+      );
       if (!entry) return;
 
       pushSnapshot(getAnnotationSnapshot());
 
-      if (entry.sourceCommentId) {
+      const targetCommentId = entry.sourceCommentId || (entryId.startsWith('comment-') ? rawId : undefined);
+
+      if (targetCommentId) {
         setComments((prev) =>
-          prev.map((comment) => comment.id === entry.sourceCommentId ? { ...comment, erasedAt: undefined, erasedBy: undefined } : comment),
+          prev.map((comment) => comment.id === targetCommentId ? { ...comment, erasedAt: undefined, erasedBy: undefined } : comment),
         );
       }
 
@@ -3542,7 +3779,15 @@ export default function VideoPlayerPage({
         setStamps((prev) => prev.map((stamp) => stamp.id === linkedStampId ? { ...stamp, erasedAt: undefined, erasedBy: undefined } : stamp));
       }
 
-      setHistory((current) => current.map((item) => item.id === entryId ? { ...item, erasedAt: undefined, erasedBy: undefined } : item));
+      setHistory((current) =>
+        current.map((item) =>
+          item.id === entry.id ||
+          item.id === entryId ||
+          (targetCommentId && item.sourceCommentId === targetCommentId)
+            ? { ...item, erasedAt: undefined, erasedBy: undefined }
+            : item,
+        ),
+      );
     },
     [getAnnotationSnapshot, history, pushSnapshot],
   );
@@ -3554,10 +3799,7 @@ export default function VideoPlayerPage({
     [handleDeleteEntry],
   );
 
-  const [liveAssetStatus, setLiveAssetStatus] = useState<string | null>(null);
-  const [liveProgress, setLiveProgress] = useState<string | null>(null);
-  const [videoSrcVersion, setVideoSrcVersion] = useState(0);
-  const [isRetrying, setIsRetrying] = useState(false);
+
 
   const handleRetryTranscode = async () => {
     if (!mediaId || isRetrying) return;
@@ -3595,6 +3837,7 @@ export default function VideoPlayerPage({
     setLiveAssetStatus(item?.compressionStatus ?? null);
     setLiveProgress((item?.customMetadata?.transcodingProgress as string) || null);
     setVideoSrcVersion(0);
+    setForcePlayOriginal(false);
   }, [item?.id, item?.compressionStatus, item?.customMetadata?.transcodingProgress]);
 
   useEffect(() => {
@@ -3613,6 +3856,7 @@ export default function VideoPlayerPage({
 
         if (currentStatus === 'completed' || currentStatus === 'ready' || currentStatus === 'failed') {
           setVideoSrcVersion((v) => v + 1);
+          setForcePlayOriginal(false);
           clearInterval(interval);
         }
       } catch (err) {
@@ -3688,11 +3932,11 @@ export default function VideoPlayerPage({
       : item.type === 'audio'
         ? (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
         : (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : SAMPLE_VIDEO_SRC));
-  // Audio/original is available immediately; only blank video while proxy is processing.
-  const shouldBlockMediaSrc = isProcessing && item.type === 'video';
+  // Audio/original is available immediately; only blank video while proxy is processing unless user explicitly plays original.
+  const shouldBlockMediaSrc = isProcessing && !forcePlayOriginal && item.type === 'video';
   const videoSrc = shouldBlockMediaSrc || !baseSrc
     ? ''
-    : `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}`;
+    : `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}${forcePlayOriginal ? '&original=true' : ''}`;
   const mediaElementSrc = shouldBlockMediaSrc ? undefined : (videoSrc || undefined);
   const surfaceEnabled = SURFACE_TOOLS.includes(activeTool);
 
@@ -4472,29 +4716,63 @@ export default function VideoPlayerPage({
               overflow: 'hidden',
             }}
           >
-            {(liveAssetStatus === 'in_progress' || liveAssetStatus === 'queued' || liveAssetStatus === 'processing') && (
+            {item?.type === 'video' && liveAssetStatus !== 'completed' && (
               <Box
                 sx={{
                   position: 'absolute',
                   top: 24,
                   right: 24,
                   zIndex: 50,
-                  pointerEvents: 'none'
+                  pointerEvents: 'auto'
                 }}
               >
-                <Chip
-                  size="medium"
-                  color="primary"
-                  label={liveProgress ? `Compressing: ${liveProgress}` : 'Processing Video...'}
-                  sx={{
-                    backdropFilter: 'blur(8px)',
-                    backgroundColor: 'rgba(25, 118, 210, 0.85)',
-                    fontWeight: 600,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                    px: 1,
-                    py: 2
-                  }}
-                />
+                <Tooltip title={isProcessing ? (forcePlayOriginal ? "Click to return to compression overlay" : "Click to play original video") : ""} arrow placement="left">
+                  <Chip
+                    size="medium"
+                    color={liveAssetStatus === 'failed' ? 'error' : 'primary'}
+                    icon={
+                      isProcessing ? (
+                        <AutorenewIcon sx={{ animation: 'spin 2s linear infinite', fontSize: 18 }} />
+                      ) : (
+                        <AutorenewIcon sx={{ fontSize: 18 }} />
+                      )
+                    }
+                    label={
+                      isRetrying
+                        ? 'Queuing Compression...'
+                        : isProcessing
+                          ? (liveProgress && liveProgress !== 'processing'
+                              ? `Compressing: ${liveProgress}${forcePlayOriginal ? ' • Playing Original' : ''}`
+                              : `Preparing Video...${forcePlayOriginal ? ' • Playing Original' : ''}`)
+                          : liveAssetStatus === 'failed'
+                            ? 'Processing Failed'
+                            : 'Uncompressed'
+                    }
+                    onClick={() => {
+                      if (isProcessing) {
+                        setForcePlayOriginal((prev) => !prev);
+                      }
+                    }}
+                    sx={{
+                      backdropFilter: 'blur(8px)',
+                      backgroundColor: liveAssetStatus === 'failed'
+                        ? 'rgba(211, 47, 47, 0.85)'
+                        : 'rgba(25, 118, 210, 0.85)',
+                      fontWeight: 600,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      px: 1,
+                      py: 2,
+                      cursor: isProcessing ? 'pointer' : 'default',
+                      pointerEvents: 'auto',
+                      '&:hover': isProcessing ? { opacity: 0.9, transform: 'scale(1.03)' } : undefined,
+                      transition: 'all 0.2s ease',
+                      '@keyframes spin': {
+                        '0%': { transform: 'rotate(0deg)' },
+                        '100%': { transform: 'rotate(360deg)' },
+                      },
+                    }}
+                  />
+                </Tooltip>
               </Box>
             )}
             {isBuffering && item?.type !== 'image' && (
@@ -4563,6 +4841,33 @@ export default function VideoPlayerPage({
                     onPlaying={() => { setIsBuffering(false); setIsPlaying(true); }}
                     onCanPlay={() => setIsBuffering(false)}
                     onLoadedData={() => setIsBuffering(false)}
+                    onError={async () => {
+                      setIsBuffering(false);
+                      if (mediaElementSrc) {
+                        try {
+                          const res = await fetch(mediaElementSrc, { method: 'GET', headers: { Range: 'bytes=0-10' } });
+                          if (res.status === 403 || res.status === 429) {
+                            const body = await res.json().catch(() => ({}));
+                            if (body.error === 'BandwidthCapExceeded' || res.status === 403 || body.message?.includes('bandwidth') || body.message?.includes('cap exceeded')) {
+                              setBandwidthCapError(true);
+                              setStatusToast({
+                                open: true,
+                                message: 'Storage Bandwidth Limit Exceeded: Backblaze B2 daily cap reached.',
+                                variant: 'error',
+                              });
+                            }
+                          } else if (res.status === 404) {
+                            setStatusToast({
+                              open: true,
+                              message: 'Video asset file not found in storage bucket. It may still be uploading or was removed.',
+                              variant: 'error',
+                            });
+                          }
+                        } catch {
+                          // ignore network errors
+                        }
+                      }
+                    }}
                     sx={{
                       width: '100%',
                       height: '100%',
@@ -4649,7 +4954,36 @@ export default function VideoPlayerPage({
                   </Box>
                 )}
 
-                {isProcessing ? (
+                {bandwidthCapError ? (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                      backdropFilter: 'blur(12px)',
+                      zIndex: 60,
+                      p: 4,
+                      textAlign: 'center',
+                    }}
+                  >
+                    <ErrorOutlineOutlinedIcon sx={{ fontSize: 56, color: '#F59E0B', mb: 2 }} />
+                    <Typography variant="h6" sx={{ color: '#FFFFFF', fontWeight: 700, mb: 1 }}>
+                      Storage Bandwidth Limit Exceeded
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#94A3B8', maxWidth: 480, mb: 3, lineHeight: 1.6 }}>
+                      Your Backblaze B2 account daily download bandwidth limit has been reached.
+                      <span style={{ display: 'block', marginTop: 8, color: '#CBD5E1' }}>
+                        Please log into your <b>Backblaze B2 Console &gt; Caps &amp; Alerts</b> and increase your daily bandwidth limit.
+                      </span>
+                    </Typography>
+                  </Box>
+                ) : null}
+
+                {isProcessing && !forcePlayOriginal ? (
                   <Box
                     sx={{
                       position: 'absolute',
@@ -4680,17 +5014,59 @@ export default function VideoPlayerPage({
                       <CircularProgress size={48} sx={{ color: cv.brandBlue, mb: 3 }} />
                     )}
                     <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
-                      Processing Video...
+                      {liveProgress && liveProgress !== 'processing'
+                        ? 'Compressing Video'
+                        : 'Preparing Video...'}
                     </Typography>
-                    {liveProgress ? (
+                    {liveProgress && liveProgress !== 'processing' ? (
                       <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em' }}>
-                        {liveProgress}
+                        Encoding in progress — {liveProgress} complete
                       </Typography>
                     ) : (
-                      <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em' }}>
-                        This may take a few moments
+                      <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 300 }}>
+                        Noah is optimizing your video for smooth playback.
+                        <span style={{ display: 'block', marginTop: 4, opacity: 0.7 }}>Large files may take up to 30 minutes. You can leave and come back later.</span>
                       </Typography>
                     )}
+                    <Box sx={{ display: 'flex', gap: 1.5, mt: 3, zIndex: 11 }}>
+                      <Button
+                        variant="contained"
+                        onClick={handleRetryTranscode}
+                        disabled={isRetrying}
+                        startIcon={<AutorenewIcon />}
+                        sx={{
+                          borderRadius: '999px',
+                          px: 2.5,
+                          py: 1,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          backgroundColor: cv.brandBlue,
+                          '&:hover': { backgroundColor: '#0284C7' },
+                        }}
+                      >
+                        {isRetrying ? 'Queuing...' : 'Retry Processing'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        onClick={() => setForcePlayOriginal(true)}
+                        startIcon={<PlayArrowOutlinedIcon />}
+                        sx={{
+                          borderRadius: '999px',
+                          px: 2.5,
+                          py: 1,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          borderColor: 'rgba(255, 255, 255, 0.4)',
+                          color: '#FFFFFF',
+                          '&:hover': {
+                            borderColor: '#FFFFFF',
+                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                          },
+                        }}
+                      >
+                        Play Original Video
+                      </Button>
+                    </Box>
                   </Box>
                 ) : liveAssetStatus === 'failed' ? (
                   <Box
@@ -4836,28 +5212,28 @@ export default function VideoPlayerPage({
               </Box>
             </Box>
 
-            {item?.type !== 'image' && (
-              <VideoPlayerControls
-                videoRef={videoRef}
-                fullscreenTargetRef={videoStageRef}
-                annotationCount={!isGuestMode || guestPermissions?.comment ? history.length : undefined}
-                annotationsVisible={annotationsVisible}
-                onToggleAnnotationsVisible={() => setAnnotationsVisible((visible) => !visible)}
-                timelineItems={!isGuestMode || guestPermissions?.comment ? timelineItems : []}
-                timelineFallbackDuration={timelineFallbackDuration}
-                onAnnotationRangeChange={handleAnnotationRangeChange}
-                onAnnotationClick={handleAnnotationClick}
-                frameRateLabel={
-                  videoTechnicalDetails?.frameRate ||
-                  item?.frameRate ||
-                  undefined
-                }
-                mediaTitle={item?.title || item?.name}
-                inPoint={playerInPoint}
-                outPoint={playerOutPoint}
-                rangeEnabled={playerRangeEnabled}
-              />
-            )}
+            <VideoPlayerControls
+              videoRef={videoRef}
+              fullscreenTargetRef={videoStageRef}
+              annotationCount={!isGuestMode || guestPermissions?.comment ? history.length : undefined}
+              annotationsVisible={annotationsVisible}
+              onToggleAnnotationsVisible={() => setAnnotationsVisible((visible) => !visible)}
+              timelineItems={!isGuestMode || guestPermissions?.comment ? timelineItems : []}
+              timelineFallbackDuration={timelineFallbackDuration}
+              onAnnotationRangeChange={handleAnnotationRangeChange}
+              onAnnotationClick={handleAnnotationClick}
+              frameRateLabel={
+                videoTechnicalDetails?.frameRate ||
+                item?.frameRate ||
+                undefined
+              }
+              mediaTitle={item?.title || item?.name}
+              inPoint={playerInPoint}
+              outPoint={playerOutPoint}
+              rangeEnabled={playerRangeEnabled}
+              isAudio={item?.type === 'audio'}
+              isImage={item?.type === 'image'}
+            />
 
             <Box
               component="footer"
@@ -4937,7 +5313,8 @@ export default function VideoPlayerPage({
                       }}
                     >
                       <AnnotationToolbar
-                        disabled={isViewer}
+                        disabled={isViewer || (isProcessing && forcePlayOriginal)}
+                        disabledTooltip={isProcessing && forcePlayOriginal ? "Annotation tools are locked while background video compression is in progress. Tools will unlock automatically once compression finishes." : undefined}
                         mediaType={item?.type}
                         activeTool={activeTool}
                         onToolChange={handleToolChange}
@@ -5001,7 +5378,8 @@ export default function VideoPlayerPage({
                   <Box sx={mergedMobileIslandSx}>
                     <AnnotationToolbar
                       compact
-                      disabled={isViewer}
+                      disabled={isViewer || (isProcessing && forcePlayOriginal)}
+                      disabledTooltip={isProcessing && forcePlayOriginal ? "Annotation tools are locked while background video compression is in progress. Tools will unlock automatically once compression finishes." : undefined}
                       mediaType={item?.type}
                       mobilePlayerFooterRef={mobilePlayerFooterRef}
                       activeTool={activeTool}
@@ -5086,6 +5464,7 @@ export default function VideoPlayerPage({
             selectedFramePersonId={selectedFramePerson?.id ?? null}
             onFramePersonSelect={handleFramePersonSelect}
             onTranscriptSeek={handleTranscriptSeek}
+            onAddAiFeatures={aiEntitled ? () => { void handleAddAiFeatures(); } : undefined}
             videoRef={videoRef}
             onClose={() => setHistoryOpen(false)}
             onEntryClick={(entry) => {
@@ -5216,6 +5595,20 @@ export default function VideoPlayerPage({
           {statusToast.message}
         </Alert>
       </Snackbar>
+
+      <AiFeatureSelectDialog
+        open={aiFeatureDialogOpen}
+        mediaType={item?.type}
+        mode={aiFeatureDialogMode}
+        lockedFeatures={aiFeatureDialogMode === 'add' ? aiLockedFeatures : []}
+        submitting={aiFeatureSubmitting}
+        onClose={() => {
+          if (!aiFeatureSubmitting) setAiFeatureDialogOpen(false);
+        }}
+        onConfirm={(features) => {
+          void handleAiFeatureConfirm(features);
+        }}
+      />
     </Box>
   );
 }

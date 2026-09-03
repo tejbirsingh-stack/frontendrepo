@@ -161,8 +161,6 @@ interface DashboardContextValue {
   clearDraggingMedia: () => void;
   dropTargetKey: string | null;
   setDropTargetKey: (key: string | null) => void;
-  globalSearchQuery: string;
-  setGlobalSearchQuery: (query: string) => void;
   aiSearchEnabled: boolean;
   setAiSearchEnabled: (enabled: boolean) => void;
   sidebarSelection: SidebarSelection | null;
@@ -215,7 +213,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavoriteMediaIds());
   const [draggingMediaIds, setDraggingMediaIdsState] = useState<Set<string>>(new Set());
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
-  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [aiSearchEnabled, setAiSearchEnabledState] = useState(() => {
     try {
       const stored = localStorage.getItem('noah-ai-search-enabled');
@@ -224,7 +221,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-    return true;
+    return false;
   });
   const setAiSearchEnabled = useCallback((enabled: boolean) => {
     setAiSearchEnabledState(enabled);
@@ -336,13 +333,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
         setMediaItems((prev) => {
           const nonTrash = prev.filter((m) => m.status !== 'trash');
-          const trashMap = new Map(trashMediaItems.map((item) => [item.id, item]));
-          prev.filter((m) => m.status === 'trash').forEach((item) => {
-            if (!trashMap.has(item.id)) {
-              trashMap.set(item.id, item);
-            }
-          });
-          return [...nonTrash, ...Array.from(trashMap.values())];
+          return [...nonTrash, ...trashMediaItems];
         });
       }
     } catch (err) {
@@ -2461,6 +2452,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             tagIds: details.tagIds,
             technicalSpecs: fullTechSpecs,
             visibility: details.visibility,
+            aiFeatures: details.aiFeatures,
           },
           onProgress,
         );
@@ -2931,8 +2923,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       clearDraggingMedia,
       dropTargetKey,
       setDropTargetKey,
-      globalSearchQuery,
-      setGlobalSearchQuery,
       aiSearchEnabled,
       setAiSearchEnabled,
       sidebarSelection,
@@ -3023,7 +3013,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       setDraggingMediaIds,
       clearDraggingMedia,
       dropTargetKey,
-      globalSearchQuery,
       aiSearchEnabled,
       setAiSearchEnabled,
       sidebarSelection,

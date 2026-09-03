@@ -37,6 +37,7 @@ export type {
   AiStatusResponseDto,
   AiSearchHitDto,
   AiHighlightsResponseDto,
+  AiAnalyzeFeature,
 } from './ai.service';
 export type { MediaAssetResponseDto, UploadMediaProgress } from './media.service';
 export {

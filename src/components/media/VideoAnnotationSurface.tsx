@@ -552,11 +552,12 @@ export default function VideoAnnotationSurface({
   }, [onAnnotationActionStart, onRecord, onShapesChange, selectedShapeId, shapes]);
 
   const getVideoTimestamp = useCallback(() => {
-    const video = containerRef.current
-      ?.closest('[data-video-stage]')
-      ?.querySelector('video');
+    const video =
+      videoRef?.current ||
+      containerRef.current?.closest('[data-video-stage]')?.querySelector('video') ||
+      document.querySelector('video');
     return video instanceof HTMLVideoElement ? video.currentTime : 0;
-  }, []);
+  }, [videoRef]);
 
   const selectedStamp = useMemo(
     () => stamps.find((stamp) => stamp.id === selectedStampId) ?? null,

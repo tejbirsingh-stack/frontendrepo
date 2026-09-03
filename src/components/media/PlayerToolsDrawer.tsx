@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState, type ReactNode, type RefObject } from 'react';
 import { cv } from '../../theme/cssVars';
 import { Box, Divider, IconButton, Popover, Tooltip, Typography } from '@mui/material';
+import { getPortalTarget } from '../../utils/portalTarget';
 import ChevronRightOutlinedIcon from '@mui/icons-material/ChevronRightOutlined';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
@@ -335,6 +336,7 @@ export default function PlayerToolsDrawer({
       ) : null}
 
       <Popover
+        container={getPortalTarget}
         open={isPopoverOpen}
         anchorEl={anchorEl}
         onClose={onClose}

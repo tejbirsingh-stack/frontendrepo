@@ -2349,41 +2349,59 @@ export function ProjectsAdminSettingsSection() {
     setDeleteDialogIds([]);
   };
 
-  const handleInviteMember = (payload: WorkspaceInvitePayload) => {
+  const handleInviteMember = async (payload: WorkspaceInvitePayload) => {
     if (!inviteProjectId) return false;
 
-    const target = projects.find((project) => project.id === inviteProjectId);
-    const newMember = resolveWorkspaceInvite(payload, target?.teamMembers ?? []);
-    if (!newMember) return false;
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      const res = await apiClient.post(
+        `/workspaces/project/${inviteProjectId}/member`,
+        {
+          email: payload.email,
+          memberType: payload.memberType,
+          accessLevel: payload.access,
+          groupId: payload.groupId,
+          sendInviteEmail: payload.sendInviteEmail ?? false,
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const data = res.data ?? res;
 
-    (async () => {
-      try {
-        const { apiClient } = await import('../../api/client');
-        const token = localStorage.getItem('token');
-        await apiClient.post(
-          `/workspaces/project/${inviteProjectId}/member`,
-          {
-            email: payload.email,
-            memberType: payload.memberType,
-            accessLevel: payload.access,
-            groupId: payload.groupId,
-            sendInviteEmail: payload.sendInviteEmail ?? false,
-          },
-          { headers: { Authorization: `Bearer ${token}` } },
+      const finalPayload = {
+        ...payload,
+        name: data.user?.name || payload.name,
+        memberType: data.memberType || payload.memberType,
+        userId: data.user?.id || payload.userId,
+      };
+
+      const target = projects.find((project) => project.id === inviteProjectId);
+      const newMember = resolveWorkspaceInvite(finalPayload, target?.teamMembers ?? [], orgGroupsList);
+      if (newMember) {
+        setProjects((current) =>
+          current.map((project) =>
+            project.id === inviteProjectId
+              ? { ...project, teamMembers: [...(project.teamMembers ?? []), newMember] }
+              : project,
+          ),
         );
-      } catch (err) {
-        console.error('Failed to persist project member to backend:', err);
       }
-    })();
-
-    setProjects((current) =>
-      current.map((project) =>
-        project.id === inviteProjectId
-          ? { ...project, teamMembers: [...(project.teamMembers ?? []), newMember] }
-          : project,
-      ),
-    );
-    return true;
+      toast.success(`${finalPayload.memberType || 'Member'} added to project successfully.`);
+      return true;
+    } catch (err: any) {
+      console.error('Failed to add project member:', err);
+      const status = err.status || err.response?.status;
+      const data = err.details || err.response?.data;
+      
+      if (status === 404 && data?.notFound) {
+         return 'NOT_FOUND';
+      }
+      if (status === 400 && data?.orgMemberInPublic) {
+         return 'ORG_MEMBER_IN_PUBLIC';
+      }
+      toast.error(data?.message || err.message || 'Failed to add member to project.');
+      return false;
+    }
   };
 
   const handleUpdateMemberAccess = async (memberId: string, access: WorkspaceMemberAccess) => {
@@ -2602,6 +2620,7 @@ export function ProjectsAdminSettingsSection() {
 }
 
 export function WorkspacesAdminSettingsSection() {
+  const { user: actualUser } = useAuth();
   const { createWorkspace } = useDashboard();
   const [workspaces, setWorkspaces] = useState<SettingsProjectRow[]>([]);
   const [addOpen, setAddOpen] = useState(false);
@@ -2677,28 +2696,26 @@ export function WorkspacesAdminSettingsSection() {
               year: 'numeric',
             });
               const isDefaultWorkspace = Boolean(w.isDefault || w.is_default || index === data.length - 1);
-              const adminMember = {
-                id: `wm-admin-${w.id}`,
-                name: CURRENT_USER.name,
-                initials: CURRENT_USER.initials,
-                email: CURRENT_USER.email,
-                access: 'Full Access',
-                memberType: 'Member',
-                isCurrentUser: true,
-              };
-              
+              const actualUserEmail = actualUser?.email || CURRENT_USER.email;
+              const actualUserName = actualUser?.name || actualUserEmail.split('@')[0] || CURRENT_USER.name;
+              const actualUserInitials = actualUserName.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2) || CURRENT_USER.initials;
+
               const mappedUsers = (w.users || [])
-                .filter((u: any) => u.user && u.user.email !== CURRENT_USER.email)
                 .map((u: any) => {
                   const displayName = u.user.name || u.user.email.split('@')[0];
                   const inits = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2) || 'U';
+                  let memType = 'Member';
+                  if (u.memberType === 'OWNER') memType = 'Owner';
+                  else if (u.memberType === 'GUEST') memType = 'Guest';
+
                   return {
                     id: `wm-u-${u.user.id}`,
                     name: displayName,
                     initials: inits,
                     email: u.user.email,
-                    access: u.accessLevelId === 1 ? 'Full Access' : (u.accessLevelId === 2 ? 'Can edit' : 'Can view'),
-                    memberType: 'Member',
+                    access: u.accessLevelId === '10f1fe4a-f28f-4d76-a7c2-6175dfe04c9b' ? 'Full Access' : (u.accessLevelId === 'd321a6c5-c28a-4dc4-900e-4dc57fe276bf' ? 'Can edit' : 'Can view'),
+                    memberType: memType,
+                    isCurrentUser: u.user.email === actualUserEmail,
                   };
                 });
                 
@@ -2707,7 +2724,7 @@ export function WorkspacesAdminSettingsSection() {
                   name: g.group.name,
                   initials: g.group.name.substring(0, 2).toUpperCase() || 'G',
                   groupId: g.group.id,
-                  access: g.accessLevelId === 1 ? 'Full Access' : (g.accessLevelId === 2 ? 'Can edit' : 'Can view'),
+                  access: g.accessLevelId === '10f1fe4a-f28f-4d76-a7c2-6175dfe04c9b' ? 'Full Access' : (g.accessLevelId === 'd321a6c5-c28a-4dc4-900e-4dc57fe276bf' ? 'Can edit' : 'Can view'),
                   memberType: 'Group',
               }));
 
@@ -2718,13 +2735,13 @@ export function WorkspacesAdminSettingsSection() {
                 lastUpdated: today,
                 creationDate: today,
                 storage: '0 MB',
-                projectAdmin: CURRENT_USER.name,
-                visibility: w.visibility === 'PUBLIC' ? 'public' : 'private',
-                isRestricted: w.visibility === 'PRIVATE',
+                projectAdmin: actualUser?.name || CURRENT_USER.name,
+                visibility: String(w.visibility || '').toUpperCase() === 'PUBLIC' ? 'public' : 'private',
+                isRestricted: String(w.visibility || '').toUpperCase() === 'PRIVATE',
                 isDefault: isDefaultWorkspace,
                 description: w.description || '',
                 color: w.color || '',
-                teamMembers: [adminMember, ...mappedUsers, ...mappedGroups]
+                teamMembers: [...mappedUsers, ...mappedGroups]
               } as SettingsProjectRow;
           });
           setWorkspaces(formatted);
@@ -2746,13 +2763,13 @@ export function WorkspacesAdminSettingsSection() {
       ...current,
       createSettingsWorkspace(
         data.name,
-        CURRENT_USER.name,
+        actualUser?.name || CURRENT_USER.name,
         {
           id: `wm-admin-${Date.now()}`,
-          name: CURRENT_USER.name,
-          initials: CURRENT_USER.initials,
-          email: CURRENT_USER.email,
-          avatarUrl: CURRENT_USER.avatarUrl,
+          name: actualUser?.name || CURRENT_USER.name,
+          initials: actualUser?.name ? actualUser.name.substring(0, 2).toUpperCase() : CURRENT_USER.initials,
+          email: actualUser?.email || CURRENT_USER.email,
+          avatarUrl: actualUser?.avatarUrl || CURRENT_USER.avatarUrl,
           access: 'Full Access',
           memberType: 'Member',
           isCurrentUser: true,
@@ -2816,25 +2833,58 @@ export function WorkspacesAdminSettingsSection() {
     setEditWorkspaceId(null);
   };
 
-  const handleInviteMember = (payload: WorkspaceInvitePayload) => {
+  const handleInviteMember = async (payload: WorkspaceInvitePayload) => {
     if (!inviteWorkspaceId) return false;
 
-    const target = workspaces.find((workspace) => workspace.id === inviteWorkspaceId);
-    const newMember = resolveWorkspaceInvite(payload, target?.teamMembers ?? []);
-    if (!newMember) return false;
+    try {
+      const { apiClient } = await import('../../api/client');
+      const token = localStorage.getItem('token');
+      const res = await apiClient.post(`/workspaces/${inviteWorkspaceId}/member`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = res.data ?? res;
 
-    setWorkspaces((current) =>
-      current.map((workspace) =>
-        workspace.id === inviteWorkspaceId
-          ? { ...workspace, teamMembers: [...(workspace.teamMembers ?? []), newMember] }
-          : workspace,
-      ),
-    );
-    return true;
+      const finalPayload = {
+        ...payload,
+        name: data.user?.name || payload.name,
+        memberType: data.memberType || payload.memberType,
+        userId: data.user?.id || payload.userId,
+      };
+
+      const target = workspaces.find((workspace) => workspace.id === inviteWorkspaceId);
+      const newMember = resolveWorkspaceInvite(finalPayload, target?.teamMembers ?? [], orgGroupsList);
+      
+      if (newMember) {
+        setWorkspaces((current) =>
+          current.map((workspace) =>
+            workspace.id === inviteWorkspaceId
+              ? { ...workspace, teamMembers: [...(workspace.teamMembers ?? []), newMember] }
+              : workspace,
+          ),
+        );
+      }
+      toast.success(`${finalPayload.memberType || 'Member'} added to workspace successfully.`);
+      return true;
+    } catch (err: any) {
+      console.error('Failed to add workspace member:', err);
+      const status = err.status || err.response?.status;
+      const data = err.details || err.response?.data;
+      
+      if (status === 404 && data?.notFound) {
+         return 'NOT_FOUND';
+      }
+      if (status === 400 && data?.orgMemberInPublic) {
+         return 'ORG_MEMBER_IN_PUBLIC';
+      }
+      toast.error(data?.message || err.message || 'Failed to add member to workspace.');
+      return false;
+    }
   };
 
   const handleUpdateMemberAccess = (memberId: string, access: WorkspaceMemberAccess) => {
     if (!inviteWorkspaceId) return;
+
+    // Optimistic UI update
     setWorkspaces((current) =>
       current.map((workspace) =>
         workspace.id === inviteWorkspaceId
@@ -2847,10 +2897,36 @@ export function WorkspacesAdminSettingsSection() {
           : workspace,
       ),
     );
+
+    // Extract raw DB id from the frontend prefix (e.g. wm-u-1234 -> 1234)
+    const rawMemberId = memberId.replace(/^wm-(u|g)-/, '');
+
+    // Backend API Call
+    import('../../api/client').then(({ apiClient }) => {
+      const token = localStorage.getItem('token');
+      apiClient.put(`/workspaces/${inviteWorkspaceId}/member/${rawMemberId}`, { accessLevel: access }, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).then(() => {
+        toast.success('Workspace access updated.');
+      }).catch((err) => {
+        console.error('Failed to update workspace member access:', err);
+        toast.error('Failed to update workspace access.');
+      });
+    });
   };
 
   const handleRemoveMember = (memberId: string) => {
     if (!inviteWorkspaceId) return;
+
+    const targetWorkspace = workspaces.find((w) => w.id === inviteWorkspaceId);
+    const memberToRemove = targetWorkspace?.teamMembers?.find(m => m.id === memberId);
+    
+    if (memberToRemove?.isCurrentUser || memberId.startsWith('wm-admin-')) {
+      toast.error('Cannot remove the owner of the workspace.');
+      return;
+    }
+
+    // Optimistic UI update
     setWorkspaces((current) =>
       current.map((workspace) =>
         workspace.id === inviteWorkspaceId
@@ -2861,15 +2937,57 @@ export function WorkspacesAdminSettingsSection() {
           : workspace,
       ),
     );
+
+    // Extract raw DB id from the frontend prefix
+    const rawMemberId = memberId.replace(/^wm-(u|g)-/, '');
+
+    // Backend API Call
+    import('../../api/client').then(({ apiClient }) => {
+      const token = localStorage.getItem('token');
+      apiClient.delete(`/workspaces/${inviteWorkspaceId}/member/${rawMemberId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).then(() => {
+        toast.success('Member removed from workspace.');
+      }).catch((err) => {
+        console.error('Failed to remove workspace member:', err);
+        toast.error('Failed to remove member from workspace.');
+        // Revert on failure
+        if (memberToRemove) {
+          setWorkspaces((current) =>
+            current.map((workspace) =>
+              workspace.id === inviteWorkspaceId
+                ? { ...workspace, teamMembers: [...(workspace.teamMembers ?? []), memberToRemove] }
+                : workspace,
+            ),
+          );
+        }
+      });
+    });
   };
 
   const handleRestrictedChange = (restricted: boolean) => {
     if (!inviteWorkspaceId) return;
+    
+    // Optimistic UI update
     setWorkspaces((current) =>
       current.map((workspace) =>
         workspace.id === inviteWorkspaceId ? { ...workspace, isRestricted: restricted } : workspace,
       ),
     );
+
+    // Backend API Call
+    const visibility = restricted ? 'private' : 'public';
+    import('../../api/client').then(({ apiClient }) => {
+      const token = localStorage.getItem('token');
+      apiClient.post(`/workspaces/update/${inviteWorkspaceId}`, { visibility }, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).then(() => {
+        toast.success(`Workspace is now ${restricted ? 'Restricted' : 'Public'}.`);
+      }).catch((err) => {
+        console.error('Failed to update workspace visibility:', err);
+        toast.error('Failed to update workspace visibility.');
+      });
+    });
   };
 
   const [deleteConfirmStep, setDeleteConfirmStep] = useState<0 | 1 | 2>(0);
@@ -2998,6 +3116,7 @@ export function WorkspacesAdminSettingsSection() {
         suggestedUsers={orgUsersList}
         suggestedGroups={orgGroupsList}
         isRestricted={inviteWorkspace?.isRestricted ?? false}
+        visibility={inviteWorkspace?.visibility ?? 'public'}
         onClose={() => setInviteWorkspaceId(null)}
         onInvite={handleInviteMember}
         onUpdateMemberAccess={handleUpdateMemberAccess}

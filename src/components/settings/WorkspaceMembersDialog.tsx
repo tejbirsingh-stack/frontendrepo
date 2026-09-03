@@ -170,7 +170,7 @@ interface WorkspaceMembersDialogProps {
   resourceId?: string;
   onCopyLink?: () => void;
   onClose: () => void;
-  onInvite: (payload: WorkspaceInvitePayload) => boolean;
+  onInvite: (payload: WorkspaceInvitePayload) => boolean | Promise<boolean | string>;
   onUpdateMemberAccess: (memberId: string, access: WorkspaceMemberAccess) => void;
   onRemoveMember?: (memberId: string) => void;
   onRestrictedChange: (restricted: boolean) => void;
@@ -237,6 +237,8 @@ export default function WorkspaceMembersDialog({
   const [typeaheadOpen, setTypeaheadOpen] = useState(false);
   // External email — single recipient for secure share
   const [pendingExternalEmail, setPendingExternalEmail] = useState<string | null>(null);
+  const [pendingExternalName, setPendingExternalName] = useState<string | undefined>(undefined);
+  const [pendingExternalUserId, setPendingExternalUserId] = useState<string | undefined>(undefined);
   // Real API share links state
   const [apiShareLinks, setApiShareLinks] = useState<BackendShareLink[]>([]);
   const [isSubmittingInvite, setIsSubmittingInvite] = useState(false);
@@ -265,7 +267,8 @@ export default function WorkspaceMembersDialog({
         const res = await (apiClient as any).get('/workspaces/access-levels', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        const data = Array.isArray(res) ? res : (res as any)?.data ?? [];
+        const rawData = res?.data || res;
+        const data = Array.isArray(rawData) ? rawData : (rawData?.data || []);
         if (Array.isArray(data)) {
           setAccessOptions(data);
           const defaultCanView = data.find((o: any) => o.name === 'CAN_VIEW' || o.title === 'Can View');
@@ -493,6 +496,8 @@ export default function WorkspaceMembersDialog({
       setSendInviteEmail(false);
       setTypeaheadOpen(false);
       setPendingExternalEmail(null);
+      setPendingExternalName(undefined);
+      setPendingExternalUserId(undefined);
       setSecureShareOpen(false);
       setShareExpiry('7');
       setShareCustomDate('');
@@ -535,63 +540,106 @@ export default function WorkspaceMembersDialog({
     });
   }, [suggestedUsers]);
 
-  const allInviteUsers = useMemo(() => {
-    const seen = new Set<string>();
-    const usersSource = isRestricted ? [...organizationUsers, ...guestUsers] : guestUsers;
-    return usersSource.filter((user) => {
-      const key = user.email.toLowerCase();
-      if (seen.has(key) || memberEmails.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [organizationUsers, guestUsers, memberEmails, isRestricted]);
+  // --- Live API Search State ---
+  const [searchResults, setSearchResults] = useState<InviteTypeaheadOption[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  const typeaheadOptions = useMemo((): InviteTypeaheadOption[] => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return [];
+  // resourceId is the workspaceId passed in — used for the search API
+  const workspaceSearchId = resourceId;
 
-    const userOptions = allInviteUsers
-      .filter(
-        (user) =>
-          user.name.toLowerCase().includes(normalizedQuery) ||
-          user.email.toLowerCase().includes(normalizedQuery),
-      )
-      .slice(0, 5)
-      .map((user) => ({ kind: 'user' as const, id: `user-${user.id}`, user }));
+  // Debounced live search — only fires for private workspaces
+  useEffect(() => {
+    const trimmed = query.trim();
 
-    const groupOptions = (isRestricted ? suggestedGroups : [])
-      .filter((group) => !memberGroupIds.has(group.id))
-      .filter(
-        (group) =>
-          group.name.toLowerCase().includes(normalizedQuery) ||
-          (group.description?.toLowerCase().includes(normalizedQuery) ?? false),
-      )
-      .slice(0, 3)
-      .map((group) => ({ kind: 'group' as const, id: `group-${group.id}`, group }));
+    // Public workspace: no recommendations at all
+    if (!isRestricted && effectiveVisibility !== 'private') {
+      setSearchResults([]);
+      return;
+    }
 
-    return [...userOptions, ...groupOptions];
-  }, [query, allInviteUsers, suggestedGroups, memberGroupIds, isRestricted]);
+    if (!trimmed || !workspaceSearchId) {
+      setSearchResults([]);
+      return;
+    }
 
-  const showTypeahead = typeaheadOpen && query.trim().length > 0 && typeaheadOptions.length > 0;
+    const delay = window.setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const { apiClient } = await import('../../api/client');
+        const token = localStorage.getItem('token');
+        const res = await (apiClient as any).get(
+          `/workspaces/${workspaceSearchId}/member/search?q=${encodeURIComponent(trimmed)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = res?.data ?? res;
+
+        const userOptions: InviteTypeaheadOption[] = (data.users || [])
+          .filter((u: any) => !memberEmails.has(u.email?.toLowerCase()))
+          .slice(0, 5)
+          .map((u: any) => ({
+            kind: 'user' as const,
+            id: `user-${u.id}`,
+            user: {
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              initials: (u.name || u.email)
+                .split(/\s+/).filter(Boolean).slice(0, 2)
+                .map((p: string) => p[0]?.toUpperCase() ?? '')
+                .join('') || u.email[0]?.toUpperCase() || 'U',
+              lastActive: '',
+              joinedDate: '',
+              role: 'Collaborator' as any,
+              status: 'Active' as any,
+              isOrganizationMember: true,
+            }
+          }));
+
+        const groupOptions: InviteTypeaheadOption[] = (data.groups || [])
+          .filter((g: any) => !memberGroupIds.has(g.id))
+          .slice(0, 3)
+          .map((g: any) => ({
+            kind: 'group' as const,
+            id: `group-${g.id}`,
+            group: { id: g.id, name: g.name, description: g.description || '', memberIds: [] }
+          }));
+
+        setSearchResults([...userOptions, ...groupOptions]);
+      } catch (err) {
+        console.error('Member search failed:', err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(delay);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, workspaceSearchId, isRestricted, effectiveVisibility]);
+
+  // Clear results when dialog closes
+  useEffect(() => {
+    if (!open) setSearchResults([]);
+  }, [open]);
+
+  const showTypeahead = typeaheadOpen && searchResults.length > 0;
 
   const canAdd = query.trim().length > 0;
 
-  const resolveMemberType = (email: string): WorkspaceMemberType => {
-    const normalizedEmail = email.toLowerCase();
-    const isOrgInvite =
-      isOrganizationEmail(normalizedEmail) ||
-      organizationUsers.some((user) => user.email.toLowerCase() === normalizedEmail);
-    return isOrgInvite ? 'Member' : 'Guest';
-  };
 
-  const inviteGroup = (group: SettingsUserGroup) => {
-    const success = onInvite({
+  const inviteGroup = async (group: SettingsUserGroup) => {
+    const success = await onInvite({
       groupId: group.id,
       groupName: group.name,
       memberType: 'Group',
       access,
       sendInviteEmail,
     });
+
+    if (success === 'ORG_MEMBER_IN_PUBLIC') {
+      setError('Organization members already have access to this public workspace.');
+      return false;
+    }
 
     if (!success) {
       setError('This group has already been added.');
@@ -604,8 +652,8 @@ export default function WorkspaceMembersDialog({
     return true;
   };
 
-  const inviteUser = (email: string, name: string | undefined, memberType: WorkspaceMemberType, userId?: string) => {
-    const success = onInvite({
+  const inviteUser = async (email: string, name: string | undefined, memberType: WorkspaceMemberType, userId?: string) => {
+    const success = await onInvite({
       userId,
       email,
       name,
@@ -613,6 +661,11 @@ export default function WorkspaceMembersDialog({
       access,
       sendInviteEmail,
     });
+
+    if (success === 'ORG_MEMBER_IN_PUBLIC') {
+      setError('Organization members already have access to this public workspace.');
+      return false;
+    }
 
     if (!success) {
       setError('This person is already a member.');
@@ -624,17 +677,16 @@ export default function WorkspaceMembersDialog({
     setTypeaheadOpen(false);
     return true;
   };
-
-  const isExternalEmail = (email: string) => resolveMemberType(email) === 'Guest';
-
   const generatePassword = () => {
     const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
     const arr = Array.from(crypto.getRandomValues(new Uint8Array(16)));
     return arr.map((b) => chars[b % chars.length]).join('');
   };
 
-  const openSecureShare = (email: string) => {
+  const openSecureShare = (email: string, name?: string, userId?: string) => {
     setPendingExternalEmail(email);
+    setPendingExternalName(name);
+    setPendingExternalUserId(userId);
     setQuery('');
     setError('');
     setTypeaheadOpen(false);
@@ -657,22 +709,46 @@ export default function WorkspaceMembersDialog({
       return;
     }
 
-    const matchedUser = allInviteUsers.find(
+    const matchedUserInSuggested = suggestedUsers.find(
       (user) =>
         user.email.toLowerCase() === trimmed.toLowerCase() ||
         user.name.toLowerCase() === trimmed.toLowerCase(),
     );
-    if (matchedUser) {
-      const memberType = isOrganizationUser(matchedUser) ? 'Member' : 'Guest';
+
+    const matchedSearchResult = searchResults.find(
+      (option) =>
+        option.kind === 'user' &&
+        (option.user.email.toLowerCase() === trimmed.toLowerCase() ||
+          option.user.name.toLowerCase() === trimmed.toLowerCase()),
+    );
+
+    const targetUser = matchedUserInSuggested
+      ? {
+          email: matchedUserInSuggested.email,
+          name: matchedUserInSuggested.name,
+          id: matchedUserInSuggested.id,
+          isOrgMember: isOrganizationUser(matchedUserInSuggested),
+        }
+      : matchedSearchResult && matchedSearchResult.kind === 'user'
+      ? {
+          email: matchedSearchResult.user.email,
+          name: matchedSearchResult.user.name,
+          id: matchedSearchResult.user.id.replace(/^user-/, ''),
+          isOrgMember: matchedSearchResult.user.isOrganizationMember,
+        }
+      : null;
+
+    if (targetUser) {
+      const memberType: WorkspaceMemberType = targetUser.isOrgMember ? 'Member' : 'Guest';
       if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
         setError('Organization members already have access to this public workspace.');
         return;
       }
       if (memberType === 'Guest') {
-        inviteUser(matchedUser.email, matchedUser.name, memberType, matchedUser.id);
+        openSecureShare(targetUser.email, targetUser.name, targetUser.id);
         return;
       }
-      inviteUser(matchedUser.email, matchedUser.name, memberType, matchedUser.id);
+      inviteUser(targetUser.email, targetUser.name, memberType, targetUser.id);
       return;
     }
 
@@ -682,30 +758,58 @@ export default function WorkspaceMembersDialog({
     }
 
     const email = trimmed.toLowerCase();
-    const memberType = resolveMemberType(email);
+    const memberType: WorkspaceMemberType = isOrganizationEmail(email) ? 'Member' : 'Guest';
+
     if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
       setError('Organization members already have access to this public workspace.');
       return;
     }
-    if (memberType === 'Guest') {
-      try {
-        const { apiClient } = await import('../../api/client');
-        const token = localStorage.getItem('token');
-        const response = await (apiClient as any).get(`/workspaces/validate-guest?email=${encodeURIComponent(email)}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const data = response.data ?? response;
-        if (data?.valid && data?.user) {
-          inviteUser(email, data.user.name, 'Guest', data.user.id);
+
+    setIsSubmittingInvite(true);
+    try {
+      if (memberType === 'Guest') {
+        try {
+          const { apiClient } = await import('../../api/client');
+          const token = localStorage.getItem('token');
+          const response = await (apiClient as any).get(`/workspaces/validate-guest?email=${encodeURIComponent(email)}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const data = response.data ?? response;
+          if (data?.valid === false && data?.reason?.includes('already a member of your organization')) {
+            setError(data.reason);
+            return;
+          }
+          openSecureShare(email, data?.user?.name, data?.user?.id);
           return;
+        } catch (err) {
+          // Fallback below
         }
-      } catch (err) {
-        // Fallback below
       }
-      openSecureShare(email);
-      return;
+
+      const result = await onInvite({
+        email,
+        access,
+        memberType,
+        sendInviteEmail,
+      });
+
+      if (result === 'NOT_FOUND') {
+        setError('No user found with this email address.');
+      } else if (result === 'ORG_MEMBER_IN_PUBLIC') {
+        setError('Organization members already have access to this public workspace.');
+      } else if (result) {
+        setQuery('');
+        setError('');
+        setTypeaheadOpen(false);
+      } else {
+        setError('Failed to add user to workspace.');
+      }
+    } catch (e) {
+      console.error(e);
+      setError('An unexpected error occurred.');
+    } finally {
+      setIsSubmittingInvite(false);
     }
-    inviteUser(email, undefined, memberType);
   };
 
   const handleInviteKeyDown = (event: KeyboardEvent) => {
@@ -724,15 +828,8 @@ export default function WorkspaceMembersDialog({
       return;
     }
 
-    const memberType = isOrganizationUser(option.user) ? 'Member' : 'Guest';
-    if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
-      setError('Organization members already have access to this public workspace.');
-      return;
-    }
-    if (memberType === 'Guest') {
-      inviteUser(option.user.email, option.user.name, memberType, option.user.id.replace('user-', ''));
-      return;
-    }
+    // All search results come from the same org (private workspace only), so always 'Member'
+    const memberType: WorkspaceMemberType = option.user.isOrganizationMember ? 'Member' : 'Guest';
     inviteUser(option.user.email, option.user.name, memberType, option.user.id.replace('user-', ''));
   };
 
@@ -971,7 +1068,9 @@ export default function WorkspaceMembersDialog({
             helperText={
               error
                 ? error
-                : 'Type to search people and groups, or enter an email to invite.'
+                : (!isRestricted && effectiveVisibility !== 'private')
+                  ? 'This is a public workspace — enter an external email address to invite someone from outside your organization.'
+                  : 'Type to search org members and groups, or enter an email to invite.'
             }
             autoFocus={!showShareLinks}
             slotProps={{
@@ -1015,7 +1114,7 @@ export default function WorkspaceMembersDialog({
             }}
           />
 
-          {showTypeahead ? (
+          {showTypeahead || (typeaheadOpen && isSearching && query.trim().length > 0) ? (
             <Box
               role="listbox"
               aria-label="Invite suggestions"
@@ -1034,7 +1133,13 @@ export default function WorkspaceMembersDialog({
                 overflowY: 'auto',
               }}
             >
-              {typeaheadOptions.map((option) =>
+              {isSearching ? (
+                <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CircularProgress size={14} sx={{ color: cv.textMuted }} />
+                  <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>Searching…</Typography>
+                </Box>
+              ) : null}
+              {searchResults.map((option) =>
                 option.kind === 'group' ? (
                   <Box
                     key={option.id}
@@ -1266,7 +1371,7 @@ export default function WorkspaceMembersDialog({
                   </Typography>
                 </Box>
               </Box>
-              {isCurrentMember ? (
+              {isCurrentMember || member.memberType === 'Owner' ? (
                 <Typography
                   sx={{
                     fontSize: '0.8125rem',
@@ -1280,22 +1385,6 @@ export default function WorkspaceMembersDialog({
                 </Typography>
               ) : (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  {member.memberType === 'Guest' ? (
-                    <Typography
-                      sx={{
-                        fontSize: '0.8125rem',
-                        fontWeight: 500,
-                        color: cv.textSecondary,
-                        px: 1.5,
-                        py: 0.5,
-                        borderRadius: '8px',
-                        backgroundColor: cv.surfaceMuted,
-                        border: `1px solid ${cv.border}`,
-                      }}
-                    >
-                      Guest Access
-                    </Typography>
-                  ) : (
                     <FormControl size="small">
                       <InputLabel id={`access-${member.id}`} shrink>
                         Access
@@ -1332,8 +1421,7 @@ export default function WorkspaceMembersDialog({
                         ))}
                       </Select>
                     </FormControl>
-                  )}
-                  {onRemoveMember && !isCurrentMember ? (
+                  {onRemoveMember && !isCurrentMember && member.memberType !== 'Owner' ? (
                     <IconButton
                       size="small"
                       onClick={() => beginMemberRemove(member)}
@@ -1487,11 +1575,8 @@ export default function WorkspaceMembersDialog({
     >
       {footerMembersSummary ?? <Box />}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-        <Button onClick={onClose} sx={{ textTransform: 'none', color: cv.textSecondary }}>
-          Cancel
-        </Button>
         <Button variant="contained" onClick={() => void handleShare()} sx={containedButtonSx}>
-          Done
+          Close
         </Button>
       </Box>
     </Box>
@@ -1845,7 +1930,9 @@ export default function WorkspaceMembersDialog({
                   await fetchBackendShareLinks();
                 }
                 onInvite({
+                  userId: pendingExternalUserId,
                   email: pendingExternalEmail,
+                  name: pendingExternalName,
                   memberType: 'Guest',
                   access: 'Can view',
                 });
@@ -1856,6 +1943,8 @@ export default function WorkspaceMembersDialog({
               }
 
               setPendingExternalEmail(null);
+              setPendingExternalName(undefined);
+              setPendingExternalUserId(undefined);
               setSecureShareOpen(false);
             }}
             sx={containedButtonSx}

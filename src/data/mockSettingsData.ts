@@ -54,7 +54,7 @@ export interface WorkspaceTeamMember {
 }
 
 export type WorkspaceMemberAccess = 'Full Access' | 'Can edit' | 'Can view';
-export type WorkspaceMemberType = 'Member' | 'Guest' | 'Group';
+export type WorkspaceMemberType = 'Member' | 'Guest' | 'Group' | 'Owner';
 
 export interface WorkspaceInvitePayload {
   userId?: string;
@@ -757,6 +757,7 @@ let workspaceMemberCounter = 0;
 export function createWorkspaceTeamMember(
   email: string,
   options?: {
+    id?: string;
     name?: string;
     access?: WorkspaceMemberAccess;
     memberType?: WorkspaceMemberType;
@@ -764,7 +765,7 @@ export function createWorkspaceTeamMember(
 ): WorkspaceTeamMember {
   workspaceMemberCounter += 1;
   return {
-    id: `wm-invite-${workspaceMemberCounter}`,
+    id: options?.id ?? `wm-invite-${workspaceMemberCounter}`,
     name: options?.name ?? emailToDisplayName(email),
     initials: emailToInitials(email),
     email,
@@ -838,6 +839,7 @@ export function resolveWorkspaceInvite(
   if (alreadyAdded) return null;
 
   return createWorkspaceTeamMember(email, {
+    id: payload.userId ? `wm-u-${payload.userId}` : undefined,
     name: payload.name,
     access: payload.access,
     memberType: payload.memberType,

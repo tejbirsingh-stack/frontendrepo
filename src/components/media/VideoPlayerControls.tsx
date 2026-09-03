@@ -64,6 +64,7 @@ function AnnotationTimelineToggleIcon(props: SvgIconProps) {
 const controlButtonSx = {
   width: 36,
   height: 36,
+  flexShrink: 0,
   color: cv.textPrimary,
   '&:hover': {
     backgroundColor: cv.surfaceHover,
@@ -73,6 +74,7 @@ const controlButtonSx = {
 const timelineToggleButtonSx = {
   width: 36,
   height: 36,
+  flexShrink: 0,
   color: cv.textPrimary,
   backgroundColor: cv.surfaceHover,
   '&:hover': {
@@ -119,9 +121,9 @@ interface VideoPlayerControlsProps {
   onAnnotationClick?: (id: string, type: TimelineAnnotationType) => void;
   frameRateLabel?: string;
   mediaTitle?: string;
-  inPoint?: number | null;
-  outPoint?: number | null;
   rangeEnabled?: boolean;
+  isAudio?: boolean;
+  isImage?: boolean;
 }
 
 export default function VideoPlayerControls({
@@ -140,6 +142,8 @@ export default function VideoPlayerControls({
   inPoint,
   outPoint,
   rangeEnabled,
+  isAudio,
+  isImage,
 }: VideoPlayerControlsProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -159,24 +163,36 @@ export default function VideoPlayerControls({
 
     setIsPlaying(!element.paused && !element.ended);
     setCurrentTime(element.currentTime);
-    setDuration(Number.isFinite(element.duration) ? element.duration : 0);
+    const validDuration = Number.isFinite(element.duration) && element.duration > 0
+      ? element.duration
+      : (timelineFallbackDuration && Number.isFinite(timelineFallbackDuration) ? timelineFallbackDuration : 0);
+    setDuration(validDuration);
     setVolume(element.volume);
     setPlaybackRate(element.playbackRate);
-  }, [videoRef]);
+  }, [videoRef, timelineFallbackDuration]);
+
+  useEffect(() => {
+    if ((!duration || !Number.isFinite(duration) || duration === 0) && timelineFallbackDuration && Number.isFinite(timelineFallbackDuration)) {
+      setDuration(timelineFallbackDuration);
+    }
+  }, [timelineFallbackDuration, duration]);
+
+  const currentVideoElement = videoRef.current;
 
   useEffect(() => {
     const element = videoRef.current;
     if (!element) return;
 
-
     let rafId: number;
     let isVideoPlaying = false;
 
     const handleTimeUpdate = () => {
-      if (!isScrubbing) {
-        setCurrentTime(element.currentTime);
+      if (!isScrubbing && videoRef.current) {
+        setCurrentTime(videoRef.current.currentTime);
       }
-      setIsPlaying(!element.paused && !element.ended);
+      if (videoRef.current) {
+        setIsPlaying(!videoRef.current.paused && !videoRef.current.ended);
+      }
     };
 
     const tick = () => {
@@ -211,34 +227,44 @@ export default function VideoPlayerControls({
       'durationchange',
       'loadeddata',
       'canplay',
+      'timeupdate',
     ];
 
     events.forEach((event) => element.addEventListener(event, syncFromVideo));
-    
+
     element.addEventListener('play', handlePlay);
     element.addEventListener('pause', handlePause);
     element.addEventListener('seeked', handleSeek);
-    // Still bind timeupdate as a fallback for some browsers when scrubbing natively
     element.addEventListener('timeupdate', handleSeek);
 
     syncFromVideo();
-    
+
     if (!element.paused && !element.ended) {
       handlePlay();
     } else {
       handleTimeUpdate();
     }
 
+    // Continuous safety timer to update currentTime while playing
+    const timerId = setInterval(() => {
+      const el = videoRef.current;
+      if (el && !el.paused && !el.ended && !isScrubbing) {
+        setCurrentTime(el.currentTime);
+        setIsPlaying(true);
+      }
+    }, 150);
+
     return () => {
       isVideoPlaying = false;
       cancelAnimationFrame(rafId);
+      clearInterval(timerId);
       events.forEach((event) => element.removeEventListener(event, syncFromVideo));
       element.removeEventListener('play', handlePlay);
       element.removeEventListener('pause', handlePause);
       element.removeEventListener('seeked', handleSeek);
       element.removeEventListener('timeupdate', handleSeek);
     };
-  }, [videoRef, isScrubbing, syncFromVideo]);
+  }, [videoRef, currentVideoElement, isScrubbing, syncFromVideo]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -307,7 +333,9 @@ export default function VideoPlayerControls({
     const element = videoRef.current;
     if (!element) return;
 
-    const max = Number.isFinite(element.duration) ? element.duration : 0;
+    const max = Number.isFinite(element.duration) && element.duration > 0
+      ? element.duration
+      : (timelineFallbackDuration || 0);
     element.currentTime = Math.min(max, Math.max(0, element.currentTime + delta));
     setCurrentTime(element.currentTime);
   };
@@ -463,346 +491,371 @@ export default function VideoPlayerControls({
           transition: 'opacity 0.3s ease-in-out',
         }}
       >
-      <Box
-        role="group"
-        aria-label="Video player controls"
-        onClick={(event) => event.stopPropagation()}
-        onMouseDown={(event) => event.stopPropagation()}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: { xs: 0.75, md: 1.25 },
-          px: { xs: 1.25, md: 2 },
-          py: 1.25,
-          borderTop: "1px solid var(--noah-border)",
-          backgroundColor: 'var(--noah-popover-surface-deep)',
-        }}
-      >
-        <ShortcutTooltip label={isPlaying ? 'Pause' : 'Play'} placement="top">
-          <span>
-            <IconButton type="button" aria-label={isPlaying ? 'Pause' : 'Play'} onClick={togglePlay} sx={controlButtonSx}>
-              {isPlaying ? (
-                <PauseOutlinedIcon sx={{ fontSize: 22 }} />
-              ) : (
-                <PlayArrowOutlinedIcon sx={{ fontSize: 24 }} />
-              )}
-            </IconButton>
-          </span>
-        </ShortcutTooltip>
-
-        <ShortcutTooltip label={`Rewind ${SKIP_SECONDS} seconds`} placement="top">
-          <span>
-            <IconButton
-              type="button"
-              aria-label={`Rewind ${SKIP_SECONDS} seconds`}
-              onClick={() => seekBy(-SKIP_SECONDS)}
-              sx={controlButtonSx}
-            >
-              <Replay5OutlinedIcon sx={{ fontSize: 20 }} />
-            </IconButton>
-          </span>
-        </ShortcutTooltip>
-
-        <ShortcutTooltip label="Previous frame (Shift+← or ,)" placement="top">
-          <span>
-            <IconButton
-              type="button"
-              aria-label="Previous frame"
-              onClick={() => seekFrames(-1)}
-              sx={controlButtonSx}
-            >
-              <FirstPageOutlinedIcon sx={{ fontSize: 22 }} />
-            </IconButton>
-          </span>
-        </ShortcutTooltip>
-
-        <ShortcutTooltip label="Next frame (Shift+→ or .)" placement="top">
-          <span>
-            <IconButton
-              type="button"
-              aria-label="Next frame"
-              onClick={() => seekFrames(1)}
-              sx={controlButtonSx}
-            >
-              <LastPageOutlinedIcon sx={{ fontSize: 22 }} />
-            </IconButton>
-          </span>
-        </ShortcutTooltip>
-
-        <ShortcutTooltip label={`Forward ${SKIP_SECONDS} seconds`} placement="top">
-          <span>
-            <IconButton
-              type="button"
-              aria-label={`Forward ${SKIP_SECONDS} seconds`}
-              onClick={() => seekBy(SKIP_SECONDS)}
-              sx={controlButtonSx}
-            >
-              <Forward5OutlinedIcon sx={{ fontSize: 20 }} />
-            </IconButton>
-          </span>
-        </ShortcutTooltip>
-
-        <ShortcutTooltip label={volume === 0 ? 'Unmute' : 'Mute'} placement="top">
-          <span>
-            <IconButton
-              type="button"
-              aria-label={volume === 0 ? 'Unmute' : 'Mute'}
-              onClick={toggleMute}
-              sx={{ ...controlButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}
-            >
-              {volume === 0 ? (
-                <VolumeOffOutlinedIcon sx={{ fontSize: 20 }} />
-              ) : (
-                <VolumeUpOutlinedIcon sx={{ fontSize: 20 }} />
-              )}
-            </IconButton>
-          </span>
-        </ShortcutTooltip>
-
-        <Slider
-          aria-label="Volume"
-          min={0}
-          max={1}
-          step={0.05}
-          value={volume}
-          onChange={handleVolumeChange}
-          sx={{
-            ...sliderSx,
-            color: cv.brandPurple,
-            width: { xs: 0, sm: 72, md: 88 },
-            display: { xs: 'none', sm: 'block' },
-          }}
-        />
-
         <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'baseline',
-            gap: 1,
-            ml: { xs: 0.5, sm: 1 },
-            minWidth: 0,
-            flexShrink: 1,
-          }}
-        >
-          <Typography
-            aria-live="polite"
-            noWrap
-            sx={{
-              fontSize: { xs: '0.75rem', sm: '0.8125rem' },
-              fontWeight: 600,
-              fontVariantNumeric: 'tabular-nums',
-              color: cv.textPrimary,
-              letterSpacing: '0.02em',
-            }}
-          >
-            {formatVideoTimecode(currentTime, parseFps(frameRateLabel))} /{' '}
-            {formatVideoTimecode(duration, parseFps(frameRateLabel))}
-          </Typography>
-          {frameRateLabel ? (
-            <Typography
-              noWrap
-              sx={{
-                display: { xs: 'none', md: 'block' },
-                fontSize: '0.75rem',
-                color: cv.textMuted,
-              }}
-            >
-              {frameRateLabel}
-            </Typography>
-          ) : null}
-        </Box>
-
-        <Box sx={{ flex: 1, minWidth: 8 }} />
-
-        <Box
+          role="group"
+          aria-label="Video player controls"
+          onClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 0.25,
-            flexShrink: 0,
-            minWidth: 0,
+            gap: { xs: 0.5, sm: 1, md: 1.25 },
+            px: { xs: 1, sm: 1.5, md: 2 },
+            py: 1.25,
+            borderTop: "1px solid var(--noah-border)",
+            backgroundColor: 'var(--noah-popover-surface-deep)',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            '&::-webkit-scrollbar': { display: 'none' },
           }}
         >
-          {showAnnotationMeta ? (
+          {!isImage && (
             <>
-              <Typography
-                variant="caption"
-                noWrap
-                sx={{
-                  display: { xs: 'none', sm: 'block' },
-                  color: cv.textMuted,
-                  mr: 0.25,
-                }}
-              >
-                {annotationCount} annotation{annotationCount === 1 ? '' : 's'} recorded
-              </Typography>
-              <ShortcutTooltip
-                label={annotationsVisible ? 'Hide annotations' : 'Show annotations'}
-                placement="top"
-              >
+              <ShortcutTooltip label={isPlaying ? 'Pause' : 'Play'} placement="top">
                 <span>
-                  <IconButton
-                    size="small"
-                    aria-label={annotationsVisible ? 'Hide annotations' : 'Show annotations'}
-                    aria-pressed={annotationsVisible}
-                    onClick={onToggleAnnotationsVisible}
-                    sx={{
-                      width: 32,
-                      height: 32,
-                      color: annotationsVisible ? cv.textSecondary : cv.textMuted,
-                      '&:hover': {
-                        color: cv.textPrimary,
-                        backgroundColor: cv.insetHighlight,
-                      },
-                    }}
-                  >
-                    {annotationsVisible ? (
-                      <VisibilityOutlinedIcon sx={{ fontSize: 18 }} />
+                  <IconButton type="button" aria-label={isPlaying ? 'Pause' : 'Play'} onClick={togglePlay} sx={controlButtonSx}>
+                    {isPlaying ? (
+                      <PauseOutlinedIcon sx={{ fontSize: 22 }} />
                     ) : (
-                      <VisibilityOffOutlinedIcon sx={{ fontSize: 18 }} />
+                      <PlayArrowOutlinedIcon sx={{ fontSize: 24 }} />
                     )}
                   </IconButton>
                 </span>
               </ShortcutTooltip>
-            </>
-          ) : null}
 
-          <ShortcutTooltip label="Playback speed" placement="top">
-            <Box
-              component="button"
-              type="button"
-              aria-label="Playback speed"
-              aria-haspopup="menu"
-              onClick={(event) => setSpeedAnchor(event.currentTarget)}
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 0.25,
-                border: 'none',
-                background: 'transparent',
-                color: cv.textPrimary,
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                px: 0.75,
-                py: 0.5,
-                borderRadius: '8px',
-                '&:hover': {
-                  backgroundColor: cv.surfaceHover,
-                },
-              }}
-            >
-              {playbackRate === 1 ? '1x' : `${playbackRate}x`}
-              <KeyboardArrowDownOutlinedIcon sx={{ fontSize: 18, color: cv.textSecondary }} />
-            </Box>
-          </ShortcutTooltip>
+              <ShortcutTooltip label={`Rewind ${SKIP_SECONDS} seconds`} placement="top">
+                <span>
+                  <IconButton
+                    type="button"
+                    aria-label={`Rewind ${SKIP_SECONDS} seconds`}
+                    onClick={() => seekBy(-SKIP_SECONDS)}
+                    sx={controlButtonSx}
+                  >
+                    <Replay5OutlinedIcon sx={{ fontSize: 20 }} />
+                  </IconButton>
+                </span>
+              </ShortcutTooltip>
 
-          <Menu
-            anchorEl={speedAnchor}
-            open={Boolean(speedAnchor)}
-            onClose={() => setSpeedAnchor(null)}
-            anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-            transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            slotProps={{
-              paper: {
-                sx: {
-                  mt: -0.5,
-                  minWidth: 88,
-                  borderRadius: '12px',
-                  border: "1px solid var(--noah-border)",
-                  background: 'var(--noah-dialog-surface-strong)',
-                },
-              },
-            }}
-          >
-            {PLAYBACK_RATES.map((rate) => (
-              <MenuItem
-                key={rate}
-                selected={rate === playbackRate}
-                onClick={() => handlePlaybackRate(rate)}
+              <ShortcutTooltip label="Previous frame (Shift+← or ,)" placement="top">
+                <span>
+                  <IconButton
+                    type="button"
+                    aria-label="Previous frame"
+                    onClick={() => seekFrames(-1)}
+                    sx={{ ...controlButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}
+                  >
+                    <FirstPageOutlinedIcon sx={{ fontSize: 22 }} />
+                  </IconButton>
+                </span>
+              </ShortcutTooltip>
+
+              <ShortcutTooltip label="Next frame (Shift+→ or .)" placement="top">
+                <span>
+                  <IconButton
+                    type="button"
+                    aria-label="Next frame"
+                    onClick={() => seekFrames(1)}
+                    sx={{ ...controlButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}
+                  >
+                    <LastPageOutlinedIcon sx={{ fontSize: 22 }} />
+                  </IconButton>
+                </span>
+              </ShortcutTooltip>
+
+              <ShortcutTooltip label={`Forward ${SKIP_SECONDS} seconds`} placement="top">
+                <span>
+                  <IconButton
+                    type="button"
+                    aria-label={`Forward ${SKIP_SECONDS} seconds`}
+                    onClick={() => seekBy(SKIP_SECONDS)}
+                    sx={controlButtonSx}
+                  >
+                    <Forward5OutlinedIcon sx={{ fontSize: 20 }} />
+                  </IconButton>
+                </span>
+              </ShortcutTooltip>
+
+              <ShortcutTooltip label={volume === 0 ? 'Unmute' : 'Mute'} placement="top">
+                <span>
+                  <IconButton
+                    type="button"
+                    aria-label={volume === 0 ? 'Unmute' : 'Mute'}
+                    onClick={toggleMute}
+                    sx={{ ...controlButtonSx, display: { xs: 'none', sm: 'inline-flex' } }}
+                  >
+                    {volume === 0 ? (
+                      <VolumeOffOutlinedIcon sx={{ fontSize: 20 }} />
+                    ) : (
+                      <VolumeUpOutlinedIcon sx={{ fontSize: 20 }} />
+                    )}
+                  </IconButton>
+                </span>
+              </ShortcutTooltip>
+
+              <Slider
+                aria-label="Volume"
+                min={0}
+                max={1}
+                step={0.05}
+                value={volume}
+                onChange={handleVolumeChange}
                 sx={{
-                  fontSize: '0.875rem',
-                  color: cv.textPrimary,
-                  '&.Mui-selected': {
-                    backgroundColor: cv.purpleSelectionHover,
-                  },
+                  ...sliderSx,
+                  color: cv.brandPurple,
+                  width: { xs: 0, sm: 72, md: 88 },
+                  display: { xs: 'none', sm: 'block' },
+                }}
+              />
+
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: 1,
+                  ml: { xs: 0.5, sm: 1 },
+                  minWidth: 0,
+                  flexShrink: 1,
                 }}
               >
-                {rate}x
-              </MenuItem>
-            ))}
-          </Menu>
+                <Typography
+                  aria-live="polite"
+                  noWrap
+                  sx={{
+                    fontSize: { xs: '0.75rem', sm: '0.8125rem' },
+                    fontWeight: 600,
+                    fontVariantNumeric: 'tabular-nums',
+                    color: cv.textPrimary,
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {formatVideoTimecode(currentTime, parseFps(frameRateLabel))} /{' '}
+                  {formatVideoTimecode((Number.isFinite(duration) && duration > 0) ? duration : (timelineFallbackDuration || 0), parseFps(frameRateLabel))}
+                </Typography>
+                {frameRateLabel ? (
+                  <Typography
+                    noWrap
+                    sx={{
+                      display: { xs: 'none', md: 'block' },
+                      fontSize: '0.75rem',
+                      color: cv.textMuted,
+                    }}
+                  >
+                    {frameRateLabel}
+                  </Typography>
+                ) : null}
+              </Box>
+            </>
+          )}
+
+          <Box sx={{ flex: 1, minWidth: 8 }} />
+
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.25,
+              flexShrink: 0,
+              minWidth: 0,
+            }}
+          >
+            {showAnnotationMeta ? (
+              <>
+                <Typography
+                  variant="caption"
+                  noWrap
+                  sx={{
+                    display: { xs: 'none', sm: 'block' },
+                    color: cv.textMuted,
+                    mr: 0.25,
+                  }}
+                >
+                  {annotationCount} annotation{annotationCount === 1 ? '' : 's'} recorded
+                </Typography>
+                <ShortcutTooltip
+                  label={annotationsVisible ? 'Hide annotations' : 'Show annotations'}
+                  placement="top"
+                >
+                  <span>
+                    <IconButton
+                      size="small"
+                      aria-label={annotationsVisible ? 'Hide annotations' : 'Show annotations'}
+                      aria-pressed={annotationsVisible}
+                      onClick={onToggleAnnotationsVisible}
+                      sx={{
+                        width: 32,
+                        height: 32,
+                        color: annotationsVisible ? cv.textSecondary : cv.textMuted,
+                        '&:hover': {
+                          color: cv.textPrimary,
+                          backgroundColor: cv.insetHighlight,
+                        },
+                      }}
+                    >
+                      {annotationsVisible ? (
+                        <VisibilityOutlinedIcon sx={{ fontSize: 18 }} />
+                      ) : (
+                        <VisibilityOffOutlinedIcon sx={{ fontSize: 18 }} />
+                      )}
+                    </IconButton>
+                  </span>
+                </ShortcutTooltip>
+              </>
+            ) : null}
+
+            {!isImage && (
+              <>
+                <ShortcutTooltip label="Playback speed" placement="top">
+                  <Box
+                    component="button"
+                    type="button"
+                    aria-label="Playback speed"
+                    aria-haspopup="menu"
+                    onClick={(event) => setSpeedAnchor(event.currentTarget)}
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 0.25,
+                      border: 'none',
+                      background: 'transparent',
+                      color: cv.textPrimary,
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      px: 0.75,
+                      py: 0.5,
+                      borderRadius: '8px',
+                      '&:hover': {
+                        backgroundColor: cv.surfaceHover,
+                      },
+                    }}
+                  >
+                    {playbackRate === 1 ? '1x' : `${playbackRate}x`}
+                    <KeyboardArrowDownOutlinedIcon sx={{ fontSize: 18, color: cv.textSecondary }} />
+                  </Box>
+                </ShortcutTooltip>
+
+                <Menu
+                  anchorEl={speedAnchor}
+                  open={Boolean(speedAnchor)}
+                  onClose={() => setSpeedAnchor(null)}
+                  anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+                  transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                  slotProps={{
+                    paper: {
+                      sx: {
+                        mt: -0.5,
+                        minWidth: 88,
+                        borderRadius: '12px',
+                        border: "1px solid var(--noah-border)",
+                        background: 'var(--noah-dialog-surface-strong)',
+                      },
+                    },
+                  }}
+                >
+                  {PLAYBACK_RATES.map((rate) => (
+                    <MenuItem
+                      key={rate}
+                      selected={rate === playbackRate}
+                      onClick={() => handlePlaybackRate(rate)}
+                      sx={{
+                        fontSize: '0.875rem',
+                        color: cv.textPrimary,
+                        '&.Mui-selected': {
+                          backgroundColor: cv.purpleSelectionHover,
+                        },
+                      }}
+                    >
+                      {rate}x
+                    </MenuItem>
+                  ))}
+                </Menu>
+
+                <ShortcutTooltip
+                  label={timelineVisible ? 'Hide Annotation timeline' : 'Show Annotation timeline'}
+                  placement="top"
+                >
+                  <span>
+                    <IconButton
+                      type="button"
+                      aria-label={timelineVisible ? 'Hide Annotation timeline' : 'Show Annotation timeline'}
+                      aria-pressed={timelineVisible}
+                      onClick={() => setTimelineVisible((visible) => !visible)}
+                      sx={{
+                        ...timelineToggleButtonSx,
+                        color: timelineVisible ? cv.textPrimary : cv.textMuted,
+                        backgroundColor: timelineVisible ? cv.surfaceHover : 'transparent',
+                      }}
+                    >
+                      <AnnotationTimelineToggleIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </span>
+                </ShortcutTooltip>
+              </>
+            )}
+
+            <ShortcutTooltip
+              label={
+                isAudio
+                  ? 'Fullscreen mode is not supported for audio files.'
+                  : isFullscreen
+                    ? 'Exit fullscreen'
+                    : 'Enter fullscreen'
+              }
+              placement="top"
+            >
+              <span>
+                <IconButton
+                  type="button"
+                  aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                  onClick={() => {
+                    if (!isAudio) {
+                      void toggleFullscreen();
+                    }
+                  }}
+                  disabled={isAudio}
+                  sx={{
+                    ...controlButtonSx,
+                    ...(isAudio ? { color: cv.textMuted, opacity: 0.5 } : {}),
+                  }}
+                >
+                  {isFullscreen ? (
+                    <FullscreenExitOutlinedIcon sx={{ fontSize: 20 }} />
+                  ) : (
+                    <FullscreenOutlinedIcon sx={{ fontSize: 20 }} />
+                  )}
+                </IconButton>
+              </span>
+            </ShortcutTooltip>
+
+            {onClose ? (
+              <ShortcutTooltip label="Close player controls" placement="top">
+                <span>
+                  <IconButton type="button" aria-label="Close player controls" onClick={onClose} sx={controlButtonSx}>
+                    <CloseOutlinedIcon sx={{ fontSize: 20 }} />
+                  </IconButton>
+                </span>
+              </ShortcutTooltip>
+            ) : null}
+          </Box>
         </Box>
 
-        <ShortcutTooltip
-          label={timelineVisible ? 'Hide Annotation timeline' : 'Show Annotation timeline'}
-          placement="top"
-        >
-          <span>
-            <IconButton
-              type="button"
-              aria-label={timelineVisible ? 'Hide Annotation timeline' : 'Show Annotation timeline'}
-              aria-pressed={timelineVisible}
-              onClick={() => setTimelineVisible((visible) => !visible)}
-              sx={{
-                ...timelineToggleButtonSx,
-                color: timelineVisible ? cv.textPrimary : cv.textMuted,
-                backgroundColor: timelineVisible ? cv.surfaceHover : 'transparent',
-              }}
-            >
-              <AnnotationTimelineToggleIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          </span>
-        </ShortcutTooltip>
-
-        <ShortcutTooltip
-          label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-          placement="top"
-        >
-          <span>
-            <IconButton
-              type="button"
-              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              onClick={() => void toggleFullscreen()}
-              sx={controlButtonSx}
-            >
-              {isFullscreen ? (
-                <FullscreenExitOutlinedIcon sx={{ fontSize: 20 }} />
-              ) : (
-                <FullscreenOutlinedIcon sx={{ fontSize: 20 }} />
-              )}
-            </IconButton>
-          </span>
-        </ShortcutTooltip>
-
-        {onClose ? (
-          <ShortcutTooltip label="Close player controls" placement="top">
-            <span>
-              <IconButton type="button" aria-label="Close player controls" onClick={onClose} sx={controlButtonSx}>
-                <CloseOutlinedIcon sx={{ fontSize: 20 }} />
-              </IconButton>
-            </span>
-          </ShortcutTooltip>
+        {!isImage && timelineVisible ? (
+          <AnnotationTimeline
+            duration={duration}
+            currentTime={currentTime}
+            items={timelineItems}
+            onSeek={seekTo}
+            onRangeChange={onAnnotationRangeChange}
+            onScrubStart={() => setIsScrubbing(true)}
+            onScrubEnd={() => setIsScrubbing(false)}
+            fallbackDuration={timelineFallbackDuration}
+            onAnnotationClick={onAnnotationClick}
+            inPoint={inPoint}
+            outPoint={outPoint}
+            rangeEnabled={rangeEnabled}
+          />
         ) : null}
       </Box>
-
-      {timelineVisible ? (
-        <AnnotationTimeline
-          duration={duration}
-          currentTime={currentTime}
-          items={timelineItems}
-          onSeek={seekTo}
-          onRangeChange={onAnnotationRangeChange}
-          onScrubStart={() => setIsScrubbing(true)}
-          onScrubEnd={() => setIsScrubbing(false)}
-          fallbackDuration={timelineFallbackDuration}
-          onAnnotationClick={onAnnotationClick}
-          inPoint={inPoint}
-          outPoint={outPoint}
-          rangeEnabled={rangeEnabled}
-        />
-      ) : null}
-    </Box>
     </>
   );
 }

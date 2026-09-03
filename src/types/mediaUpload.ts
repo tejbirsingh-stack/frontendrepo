@@ -1,4 +1,5 @@
 import type { MediaType } from '../data/mockMedia';
+import type { AiAnalyzeFeature } from '../api/ai.service';
 
 export type UploadableMediaType = Exclude<MediaType, 'folder'>;
 
@@ -27,4 +28,5 @@ export interface MediaUploadDetails {
   folderId: string | null;
   duration?: string;
   visibility?: 'public' | 'private';
+  aiFeatures?: AiAnalyzeFeature[];
 }

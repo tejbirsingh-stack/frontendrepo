@@ -3,6 +3,7 @@ import { cv } from '../../theme/cssVars';
 import { createPortal } from 'react-dom';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import { useFloatingPanelPosition } from '../../hooks/useFloatingPanelPosition';
+import { getPortalTarget } from '../../utils/portalTarget';
 import KeyboardArrowDownOutlinedIcon from '@mui/icons-material/KeyboardArrowDownOutlined';
 import {
   annotationColors,
@@ -156,7 +157,7 @@ export default function ShapeColorPicker({
     <Box ref={anchorRef} sx={{ position: 'relative', flexShrink: 0 }}>
       {open && (!portaled || portalPosition)
         ? portaled
-          ? createPortal(colorPanel, document.body)
+          ? createPortal(colorPanel, getPortalTarget())
           : colorPanel
         : null}
 

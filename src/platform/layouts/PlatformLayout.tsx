@@ -30,6 +30,7 @@ import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import FolderCopyOutlinedIcon from '@mui/icons-material/FolderCopyOutlined';
 import NotificationImportantOutlinedIcon from '@mui/icons-material/NotificationImportantOutlined';
 import NoahLogo from '../../components/NoahLogo';
+import DashboardNotificationPopup from '../../components/dashboard/DashboardNotificationPopup';
 import { DASHBOARD_TOP_BAR_HEIGHT } from '../../constants/layout';
 import { cv } from '../../theme/cssVars';
 import { usePlatformAuth } from '../auth/PlatformAuthContext';
@@ -510,6 +511,7 @@ export default function PlatformLayout() {
           <Outlet />
         </Box>
       </Box>
+      <DashboardNotificationPopup autoOpen={false} />
     </Box>
   );
 }

@@ -389,6 +389,20 @@ export default function SignUpPage() {
     }
   };
 
+  const handleResendCode = async () => {
+    setIsChecking(true);
+    setError('');
+    try {
+      await sendSignupOtpRequest(email.trim().toLowerCase());
+      setVerificationCode('');
+      toast.success('A new verification code has been sent to your email.');
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || 'Failed to resend code.');
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
   const handleVerifyContinue = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -1273,33 +1287,55 @@ export default function SignUpPage() {
                 Verify Code
               </Button>
 
-              <Typography
-                variant="body2"
+              <Box
                 sx={{
-                  textAlign: 'center',
-                  color: cv.textSecondary,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 1.25,
+                  alignItems: 'center',
                 }}
               >
                 <Link
                   component="button"
                   type="button"
                   underline="hover"
+                  disabled={isChecking}
+                  onClick={() => void handleResendCode()}
+                  sx={{
+                    color: cv.brandPurple,
+                    fontWeight: 600,
+                    background: 'none',
+                    border: 0,
+                    p: 0,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: '0.875rem',
+                    '&:hover': { color: cv.textPrimary },
+                  }}
+                >
+                  Resend code
+                </Link>
+
+                <Link
+                  component="button"
+                  type="button"
+                  underline="hover"
                   onClick={goBackToEmail}
                   sx={{
-                    color: cv.textPrimary,
+                    color: cv.textSecondary,
                     fontWeight: 500,
                     background: 'none',
                     border: 0,
                     p: 0,
                     cursor: 'pointer',
                     fontFamily: 'inherit',
-                    fontSize: 'inherit',
-                    '&:hover': { color: cv.brandBlue },
+                    fontSize: '0.875rem',
+                    '&:hover': { color: cv.textPrimary },
                   }}
                 >
                   Use a different email
                 </Link>
-              </Typography>
+              </Box>
             </Box>
           ) : phase === 'workspace' ? (
             <Box
