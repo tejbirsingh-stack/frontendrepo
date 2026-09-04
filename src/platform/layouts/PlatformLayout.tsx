@@ -1,8 +1,14 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
+  Alert,
   Avatar,
   Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   List,
   ListItemButton,
@@ -11,11 +17,14 @@ import {
   ListSubheader,
   Menu,
   MenuItem,
+  Snackbar,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
@@ -160,10 +169,22 @@ function getInitials(name?: string | null, email?: string | null): string {
 }
 
 export default function PlatformLayout() {
-  const { admin, logout } = usePlatformAuth();
+  const { admin, logout, updateProfile } = usePlatformAuth();
   const navigate = useNavigate();
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const menuOpen = Boolean(menuAnchor);
+
+  // Edit profile dialog state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastOpen, setToastOpen] = useState(false);
 
   const displayName = admin?.name?.trim() || 'Platform Admin';
   const displayEmail = admin?.email || '';
@@ -176,6 +197,53 @@ export default function PlatformLayout() {
     setMenuAnchor(null);
     await logout();
     navigate('/platform/login');
+  };
+
+  const handleOpenEditModal = () => {
+    setMenuAnchor(null);
+    setEditName(admin?.name || '');
+    setEditEmail(admin?.email || '');
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setError('');
+    setEditModalOpen(true);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (newPassword) {
+      if (!currentPassword) {
+        setError('Current password is required to set a new password.');
+        return;
+      }
+      if (newPassword.length < 8) {
+        setError('New password must be at least 8 characters long.');
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setError('New passwords do not match.');
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      await updateProfile({
+        name: editName.trim(),
+        email: editEmail.trim(),
+        ...(newPassword ? { currentPassword, newPassword } : {}),
+      });
+      setEditModalOpen(false);
+      setToastMessage('Platform Admin profile updated successfully!');
+      setToastOpen(true);
+    } catch (err: any) {
+      setError(err instanceof Error ? err.message : 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -480,6 +548,18 @@ export default function PlatformLayout() {
             </Box>
             <Divider sx={{ borderColor: cv.border }} />
             <MenuItem
+              onClick={handleOpenEditModal}
+              sx={{
+                gap: 1.25,
+                py: 1.25,
+                color: cv.textPrimary,
+                '&:hover': { backgroundColor: cv.surfaceHover },
+              }}
+            >
+              <EditOutlinedIcon sx={{ fontSize: 18, color: cv.brandOrchid }} />
+              Edit Profile & Password
+            </MenuItem>
+            <MenuItem
               onClick={() => void handleLogout()}
               sx={{
                 gap: 1.25,
@@ -511,6 +591,127 @@ export default function PlatformLayout() {
           <Outlet />
         </Box>
       </Box>
+
+      {/* --- Edit Profile & Password Dialog --- */}
+      <Dialog
+        open={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              background: cv.drawerSurface,
+              border: `1px solid ${cv.border}`,
+              borderRadius: '8px',
+              color: cv.textPrimary,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
+          Edit Platform Admin Profile
+        </DialogTitle>
+        <Box component="form" onSubmit={(e) => void handleSaveProfile(e)}>
+          <DialogContent dividers sx={{ borderColor: cv.border, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary }}>
+              Update your account details or set a new password below.
+            </Typography>
+
+            <TextField
+              fullWidth
+              size="small"
+              label="Full Name"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+
+            <TextField
+              fullWidth
+              size="small"
+              label="Email Address"
+              type="email"
+              value={editEmail}
+              onChange={(e) => setEditEmail(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+
+            <Divider sx={{ borderColor: cv.border, my: 0.5 }}>
+              <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, fontWeight: 600, uppercase: true }}>
+                Change Password (Optional)
+              </Typography>
+            </Divider>
+
+            <TextField
+              fullWidth
+              size="small"
+              label="Current Password"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+
+            <TextField
+              fullWidth
+              size="small"
+              label="New Password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+
+            <TextField
+              fullWidth
+              size="small"
+              label="Confirm New Password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+
+            {error ? (
+              <Typography sx={{ color: cv.destructive, fontSize: '0.8125rem' }}>
+                {error}
+              </Typography>
+            ) : null}
+          </DialogContent>
+
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setEditModalOpen(false)} sx={{ color: cv.textSecondary, textTransform: 'none' }}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={saving}
+              sx={{
+                background: cv.brandGradient,
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
+            >
+              {saving ? 'Saving...' : 'Save Profile'}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      {/* Toast Notification */}
+      <Snackbar
+        open={toastOpen}
+        autoHideDuration={4000}
+        onClose={() => setToastOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert severity="success" onClose={() => setToastOpen(false)} sx={{ width: '100%' }}>
+          {toastMessage}
+        </Alert>
+      </Snackbar>
+
       <DashboardNotificationPopup autoOpen={false} />
     </Box>
   );
