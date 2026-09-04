@@ -694,6 +694,30 @@ export default function DashboardPage({
       });
     }
 
+    // Apply client-side sort so the merged local+API list is always in the correct order
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    items = [...items].sort((a, b) => {
+      if (sortBy === 'name') {
+        const na = (a.title || '').toLowerCase();
+        const nb = (b.title || '').toLowerCase();
+        return na.localeCompare(nb) * dir;
+      }
+      if (sortBy === 'size') {
+        const sa = a.sizeBytes ?? 0;
+        const sb = b.sizeBytes ?? 0;
+        return (sa - sb) * dir;
+      }
+      if (sortBy === 'type') {
+        const ta = (a.type || '').toLowerCase();
+        const tb = (b.type || '').toLowerCase();
+        return ta.localeCompare(tb) * dir;
+      }
+      // default: date
+      const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return (da - db) * dir;
+    });
+
     return items;
   }, [
     libraryView,
