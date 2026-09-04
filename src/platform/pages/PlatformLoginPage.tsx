@@ -14,8 +14,6 @@ export default function PlatformLoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('platformadmin@noahcloud.ai');
   const [password, setPassword] = useState('');
-  const [mfaCode, setMfaCode] = useState('');
-  const [requiresMfa, setRequiresMfa] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -24,29 +22,13 @@ export default function PlatformLoginPage() {
     setError('');
     setLoading(true);
     try {
-      const res = await login(email.trim(), password, requiresMfa ? mfaCode.trim() : undefined);
-      if (res?.requiresMfa) {
-        setRequiresMfa(true);
-        setError(res.message || 'An authentication code has been sent to your email');
-      } else {
-        navigate('/platform', { replace: true });
-      }
+      await login(email.trim(), password);
+      navigate('/platform', { replace: true });
     } catch (err: any) {
-      if (err?.requiresMfa || err?.data?.requiresMfa || err?.response?.data?.requiresMfa) {
-        setRequiresMfa(true);
-        setError(err instanceof Error ? err.message : (err?.data?.message || err?.message || 'Invalid or expired code'));
-      } else {
-        setError(err instanceof Error ? err.message : (err?.data?.message || err?.response?.data?.message || 'Login failed'));
-      }
+      setError(err instanceof Error ? err.message : (err?.data?.message || err?.response?.data?.message || 'Login failed'));
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleBackToLogin = () => {
-    setRequiresMfa(false);
-    setMfaCode('');
-    setError('');
   };
 
   return (
@@ -86,56 +68,34 @@ export default function PlatformLoginPage() {
                 Platform Admin
               </Typography>
               <Typography sx={{ color: cv.textSecondary, mb: 3, fontSize: '0.9rem' }}>
-                {requiresMfa
-                  ? `Enter the 6-digit authentication code sent to ${email}`
-                  : 'NOAH operator console — not for customer accounts'}
+                NOAH operator console — not for customer accounts
               </Typography>
 
-              {!requiresMfa ? (
-                <>
-                  <TextField
-                    fullWidth
-                    label="Email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    sx={{ mb: 2 }}
-                    slotProps={{ inputLabel: { shrink: true } }}
-                  />
-                  <TextField
-                    fullWidth
-                    label="Password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    sx={{ mb: 2 }}
-                    slotProps={{ inputLabel: { shrink: true } }}
-                  />
-                </>
-              ) : (
-                <TextField
-                  fullWidth
-                  label="Authentication Code"
-                  type="text"
-                  placeholder="Enter 6-digit code"
-                  value={mfaCode}
-                  onChange={(e) => setMfaCode(e.target.value)}
-                  sx={{ mb: 2 }}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                  autoFocus
-                />
-              )}
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                sx={{ mb: 2 }}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+              <TextField
+                fullWidth
+                label="Password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                sx={{ mb: 2 }}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
 
               {error ? (
                 <Typography
                   sx={{
-                    color: requiresMfa && !error.toLowerCase().includes('invalid') && !error.toLowerCase().includes('expired') && !error.toLowerCase().includes('denied') ? cv.brandOrchid : cv.destructive,
+                    color: cv.destructive,
                     fontSize: '0.8125rem',
                     mb: 2,
-                    p: requiresMfa && !error.toLowerCase().includes('invalid') && !error.toLowerCase().includes('expired') ? 1.25 : 0,
-                    borderRadius: '6px',
-                    background: requiresMfa && !error.toLowerCase().includes('invalid') && !error.toLowerCase().includes('expired') ? cv.purpleSurface : 'transparent',
-                    border: requiresMfa && !error.toLowerCase().includes('invalid') && !error.toLowerCase().includes('expired') ? `1px solid ${cv.purpleChipBorder}` : 'none',
                   }}
                 >
                   {error}
@@ -146,7 +106,7 @@ export default function PlatformLoginPage() {
                 type="submit"
                 fullWidth
                 variant="contained"
-                disabled={loading || (requiresMfa && !mfaCode)}
+                disabled={loading}
                 sx={{
                   height: 40,
                   minHeight: 40,
@@ -155,29 +115,8 @@ export default function PlatformLoginPage() {
                   boxShadow: cv.loginBrandShadow,
                 }}
               >
-                {loading
-                  ? 'Verifying…'
-                  : requiresMfa
-                  ? 'Verify Code'
-                  : 'Sign in'}
+                {loading ? 'Signing in…' : 'Sign in'}
               </Button>
-
-              {requiresMfa && (
-                <Button
-                  fullWidth
-                  variant="text"
-                  onClick={handleBackToLogin}
-                  sx={{
-                    mt: 1.5,
-                    color: cv.textSecondary,
-                    fontSize: '0.8125rem',
-                    textTransform: 'none',
-                    '&:hover': { color: cv.textPrimary },
-                  }}
-                >
-                  Back to login
-                </Button>
-              )}
             </Box>
           </GlassCard>
         </Box>

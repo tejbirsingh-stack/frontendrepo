@@ -35,13 +35,13 @@ export type PlatformPlan = {
   yearlyPriceId?: string | null;
 };
 
-export async function platformLogin(email: string, password: string, mfaCode?: string) {
-  return platformRequest<{ success: boolean; accessToken: string; admin: PlatformAdmin; requiresMfa?: boolean; mfaType?: string; message?: string }>(
+export async function platformLogin(email: string, password: string) {
+  return platformRequest<{ success: boolean; accessToken: string; admin: PlatformAdmin }>(
     '/platform/auth/login',
     {
       method: 'POST',
       skipAuth: true,
-      body: JSON.stringify({ email, password, ...(mfaCode ? { mfaCode } : {}) }),
+      body: JSON.stringify({ email, password }),
     },
   );
 }
@@ -52,21 +52,6 @@ export async function platformMe() {
 
 export async function platformLogout() {
   return platformRequest<{ success: boolean }>('/platform/auth/logout', { method: 'POST' });
-}
-
-export async function updatePlatformProfile(body: {
-  name?: string;
-  email?: string;
-  currentPassword?: string;
-  newPassword?: string;
-}) {
-  return platformRequest<{ success: boolean; message: string; admin: PlatformAdmin }>(
-    '/platform/auth/me',
-    {
-      method: 'PATCH',
-      body: JSON.stringify(body),
-    },
-  );
 }
 
 export async function fetchDashboardSummary() {
@@ -576,7 +561,6 @@ export type GlobalSecuritySettings = {
   ssoDomain: string;
   sessionTimeoutDays: number;
   contentSecurityPolicy: string;
-  platformMfaRequired?: boolean;
   platformIpRestrictionEnabled?: boolean;
   platformAllowedIps?: string;
   updatedAt?: string;
