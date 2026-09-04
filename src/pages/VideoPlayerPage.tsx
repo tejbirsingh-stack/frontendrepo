@@ -21,6 +21,7 @@ import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import PlayArrowOutlinedIcon from '@mui/icons-material/PlayArrowOutlined';
+import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import NoahLogo from '../components/NoahLogo';
 import TruncatedText from '../components/TruncatedText';
@@ -178,10 +179,15 @@ import {
 import {
   formatWorkspaceZoomLabel,
   isWorkspaceZoomDefault,
+  isWorkspacePanDefault,
+  canPanWorkspace,
+  clampWorkspacePan,
   stepWorkspaceZoom,
   WORKSPACE_ZOOM_DEFAULT,
   WORKSPACE_ZOOM_MAX,
   WORKSPACE_ZOOM_MIN,
+  WORKSPACE_PAN_DEFAULT,
+  type WorkspacePanOffset,
 } from '../utils/workspaceZoom';
 import type { PlayerBackground, PlayerToolHandlers, PlayerToolId } from '../types/playerTools';
 import { shouldBlockAnnotationShortcuts, getRedoShortcutLabel, getUndoShortcutLabel } from '../constants/annotationShortcuts';
@@ -445,6 +451,8 @@ export default function VideoPlayerPage({
   const [isDecodingImage, setIsDecodingImage] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
+  const [isPlaybackLoading, setIsPlaybackLoading] = useState(false);
 
   const [liveAssetStatus, setLiveAssetStatus] = useState<string | null>(null);
   const [liveProgress, setLiveProgress] = useState<string | null>(null);
@@ -1230,6 +1238,8 @@ export default function VideoPlayerPage({
   const [clearAnnotationsModalOpen, setClearAnnotationsModalOpen] = useState(false);
   const [keyboardShortcutsOpen, setKeyboardShortcutsOpen] = useState(false);
   const [workspaceZoom, setWorkspaceZoom] = useState(WORKSPACE_ZOOM_DEFAULT);
+  const [workspacePan, setWorkspacePan] = useState<WorkspacePanOffset>(WORKSPACE_PAN_DEFAULT);
+  const workspaceStageRef = useRef<HTMLDivElement>(null);
   const [pinnedPlayerTools, setPinnedPlayerTools] = useState<PlayerToolId[]>(() =>
     loadPinnedPlayerTools(),
   );
@@ -1314,9 +1324,12 @@ export default function VideoPlayerPage({
 
   const handleMoveComment = useCallback((commentId: string, xPercent: number, yPercent: number) => {
     setComments((prev) =>
-      prev.map((comment) =>
-        comment.id === commentId ? { ...comment, xPercent, yPercent } : comment,
-      ),
+      prev.map((comment) => {
+        if (comment.id !== commentId) return comment;
+        // Shape/drawing-linked comment pins move only with their parent annotation.
+        if (comment.linkedShapeId || comment.linkedDrawingId) return comment;
+        return { ...comment, xPercent, yPercent };
+      }),
     );
   }, []);
 
@@ -1584,20 +1597,62 @@ export default function VideoPlayerPage({
 
   const canWorkspaceZoomOut = workspaceZoom > WORKSPACE_ZOOM_MIN;
   const canWorkspaceZoomIn = workspaceZoom < WORKSPACE_ZOOM_MAX;
-  const canWorkspaceZoomReset = !isWorkspaceZoomDefault(workspaceZoom);
+  const canWorkspaceZoomReset =
+    !isWorkspaceZoomDefault(workspaceZoom) || !isWorkspacePanDefault(workspacePan);
   const workspaceZoomLabel = formatWorkspaceZoomLabel(workspaceZoom);
+  const workspacePanEnabled = canPanWorkspace(workspaceZoom);
+
+  const getWorkspaceStageSize = useCallback(() => {
+    const rect = workspaceStageRef.current?.getBoundingClientRect();
+    return {
+      width: rect?.width ?? 0,
+      height: rect?.height ?? 0,
+    };
+  }, []);
 
   const handleWorkspaceZoomOut = useCallback(() => {
-    setWorkspaceZoom((current) => stepWorkspaceZoom(current, 'out'));
-  }, []);
+    const next = stepWorkspaceZoom(workspaceZoom, 'out');
+    setWorkspaceZoom(next);
+    if (!isViewer) {
+      setActiveTool(isWorkspaceZoomDefault(next) ? 'select' : 'pan');
+    }
+  }, [isViewer, workspaceZoom]);
 
   const handleWorkspaceZoomIn = useCallback(() => {
-    setWorkspaceZoom((current) => stepWorkspaceZoom(current, 'in'));
-  }, []);
+    const next = stepWorkspaceZoom(workspaceZoom, 'in');
+    setWorkspaceZoom(next);
+    if (!isViewer) {
+      setActiveTool(isWorkspaceZoomDefault(next) ? 'select' : 'pan');
+    }
+  }, [isViewer, workspaceZoom]);
 
   const handleWorkspaceZoomReset = useCallback(() => {
     setWorkspaceZoom(WORKSPACE_ZOOM_DEFAULT);
-  }, []);
+    setWorkspacePan(WORKSPACE_PAN_DEFAULT);
+    if (!isViewer) {
+      setActiveTool('select');
+    }
+  }, [isViewer]);
+
+  const handleWorkspacePanBy = useCallback(
+    ({ dx, dy }: { dx: number; dy: number }) => {
+      const { width, height } = getWorkspaceStageSize();
+      setWorkspacePan((current) =>
+        clampWorkspacePan(
+          { x: current.x + dx, y: current.y + dy },
+          workspaceZoom,
+          width,
+          height,
+        ),
+      );
+    },
+    [getWorkspaceStageSize, workspaceZoom],
+  );
+
+  useEffect(() => {
+    const { width, height } = getWorkspaceStageSize();
+    setWorkspacePan((current) => clampWorkspacePan(current, workspaceZoom, width, height));
+  }, [getWorkspaceStageSize, workspaceZoom]);
 
   const handleOpenClearAnnotationsModal = useCallback(() => {
     if (!hasAnnotationContent(getAnnotationSnapshot())) return;
@@ -1713,6 +1768,19 @@ export default function VideoPlayerPage({
       variant: 'resolved',
     });
   }, [getVideoTimestamp, item]);
+
+  const handleCenterPlayClick = useCallback(() => {
+    const element = videoRef.current;
+    if (!element || (!element.paused && !element.ended) || isPlaybackLoading) return;
+
+    setHasStartedPlayback(true);
+    setIsPlaybackLoading(true);
+
+    void element.play().catch(() => {
+      setIsPlaybackLoading(false);
+      setHasStartedPlayback(false);
+    });
+  }, [isPlaybackLoading]);
 
   const resolvedOverlayEntryIds = useMemo(
     () => buildResolvedOverlayEntryIds(history),
@@ -2054,6 +2122,7 @@ export default function VideoPlayerPage({
     setActiveTool('select');
     resetStacks();
     setWorkspaceZoom(WORKSPACE_ZOOM_DEFAULT);
+    setWorkspacePan(WORKSPACE_PAN_DEFAULT);
   }, [mediaId, resetStacks]);
 
 
@@ -3837,6 +3906,9 @@ export default function VideoPlayerPage({
     setLiveProgress((item?.customMetadata?.transcodingProgress as string) || null);
     setVideoSrcVersion(0);
     setForcePlayOriginal(false);
+    setHasStartedPlayback(false);
+    setIsPlaying(false);
+    setIsPlaybackLoading(false);
   }, [item?.id, item?.compressionStatus, item?.customMetadata?.transcodingProgress]);
 
   useEffect(() => {
@@ -3991,7 +4063,7 @@ export default function VideoPlayerPage({
           maxHeight: DASHBOARD_TOP_BAR_HEIGHT,
           boxSizing: 'border-box',
           borderBottom: DASHBOARD_TOP_BAR_BORDER,
-          backgroundColor: 'rgba(15, 17, 26, 0.85)',
+          backgroundColor: cv.headerBackground,
           backgroundImage: guestBranding?.headerImageUrl ? `url(${guestBranding.headerImageUrl})` : undefined,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
@@ -4047,7 +4119,7 @@ export default function VideoPlayerPage({
                 </Box>
               )}
               {guestBranding?.accountName && (
-                <Typography sx={{ fontSize: '0.975rem', fontWeight: 700, color: '#f8fafc' }}>
+                <Typography sx={{ fontSize: '0.975rem', fontWeight: 700, color: cv.textPrimary }}>
                   {guestBranding.accountName}
                 </Typography>
               )}
@@ -4580,7 +4652,7 @@ export default function VideoPlayerPage({
                       width: 36,
                       height: 36,
                       borderRadius: '10px',
-                      color: cv.textPrimary,
+                      color: cv.textOnCta,
                       background: cv.brandGradient,
                       boxShadow: cv.brandShadowSoft,
                       '&:hover': {
@@ -4610,7 +4682,7 @@ export default function VideoPlayerPage({
                       fontWeight: 600,
                       fontSize: '0.8125rem',
                       letterSpacing: '0.01em',
-                      color: cv.textPrimary,
+                      color: cv.textOnCta,
                       background: cv.brandGradient,
                       boxShadow: cv.brandShadowSoft,
                       '&:hover': {
@@ -4780,12 +4852,13 @@ export default function VideoPlayerPage({
                 </Tooltip>
               </Box>
             )}
-            {isBuffering && item?.type !== 'image' && (
+            {(isBuffering || isPlaybackLoading) && item?.type !== 'image' && (
               <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 40, pointerEvents: 'none' }}>
                 <CircularProgress size={48} sx={{ color: '#6366F1' }} />
               </Box>
             )}
             <Box
+              ref={workspaceStageRef}
               sx={{
                 position: 'relative',
                 flex: 1,
@@ -4800,8 +4873,9 @@ export default function VideoPlayerPage({
                   position: 'relative',
                   width: '100%',
                   height: '100%',
-                  transform: `scale(${workspaceZoom})`,
+                  transform: `translate(${workspacePan.x}px, ${workspacePan.y}px) scale(${workspaceZoom})`,
                   transformOrigin: 'center center',
+                  willChange: workspacePanEnabled || !isWorkspacePanDefault(workspacePan) ? 'transform' : undefined,
                 }}
               >
                 {item?.type === 'image' ? (
@@ -4839,15 +4913,30 @@ export default function VideoPlayerPage({
                     poster={item?.thumbnail}
                     playsInline
                     preload="metadata"
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                    onEnded={() => setIsPlaying(false)}
+                    onPlay={() => {
+                      setIsPlaying(true);
+                      setHasStartedPlayback(true);
+                    }}
+                    onPause={() => {
+                      setIsPlaying(false);
+                      setIsPlaybackLoading(false);
+                    }}
+                    onEnded={() => {
+                      setIsPlaying(false);
+                      setIsPlaybackLoading(false);
+                    }}
                     onWaiting={() => setIsBuffering(true)}
-                    onPlaying={() => { setIsBuffering(false); setIsPlaying(true); }}
+                    onPlaying={() => {
+                      setIsBuffering(false);
+                      setIsPlaybackLoading(false);
+                      setIsPlaying(true);
+                      setHasStartedPlayback(true);
+                    }}
                     onCanPlay={() => setIsBuffering(false)}
                     onLoadedData={() => setIsBuffering(false)}
                     onError={async () => {
                       setIsBuffering(false);
+                      setIsPlaybackLoading(false);
                       if (mediaElementSrc) {
                         try {
                           const res = await fetch(mediaElementSrc, { method: 'GET', headers: { Range: 'bytes=0-10' } });
@@ -4902,6 +4991,54 @@ export default function VideoPlayerPage({
                     fileSizeText={item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : undefined}
                   />
                 )}
+
+                {!hasStartedPlayback
+                  && !isPlaying
+                  && !isBuffering
+                  && !isPlaybackLoading
+                  && !bandwidthCapError
+                  && !(isProcessing && !forcePlayOriginal)
+                  && liveAssetStatus !== 'failed'
+                  && (item?.type === 'video' || item?.type === 'audio') ? (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 6,
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <IconButton
+                      type="button"
+                      aria-label="Play"
+                      onClick={handleCenterPlayClick}
+                      sx={{
+                        pointerEvents:
+                          !isViewer && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
+                            ? 'none'
+                            : 'auto',
+                        width: 80,
+                        height: 80,
+                        backgroundColor: 'rgba(0, 0, 0, 0.55)',
+                        border: '1px solid rgba(255, 255, 255, 0.22)',
+                        backdropFilter: 'blur(10px)',
+                        WebkitBackdropFilter: 'blur(10px)',
+                        color: '#FFFFFF',
+                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
+                        transition: 'transform 0.15s ease, background-color 0.15s ease',
+                        '&:hover': {
+                          backgroundColor: 'rgba(142, 68, 173, 0.9)',
+                          transform: 'scale(1.06)',
+                        },
+                      }}
+                    >
+                      <PlayArrowRoundedIcon sx={{ fontSize: 48, ml: '3px' }} />
+                    </IconButton>
+                  </Box>
+                ) : null}
 
                 {item?.type === 'document' && (
                   <Box
@@ -5167,6 +5304,8 @@ export default function VideoPlayerPage({
                   onAnnotationNeedsComment={handleAnnotationNeedsComment}
                   annotationCommentPending={annotationCommentPending}
                   onMoveLinkedComment={handleMoveLinkedComment}
+                  workspacePanEnabled={workspacePanEnabled}
+                  onWorkspacePanBy={handleWorkspacePanBy}
                 />
 
                 <VideoCommentLayer
@@ -5254,6 +5393,9 @@ export default function VideoPlayerPage({
                 py: { xs: 0.75, md: 1 },
                 borderTop: '1px solid var(--noah-border)',
                 backgroundColor: 'var(--noah-footer-tint)',
+                '[data-theme="light"] &': {
+                  backgroundColor: 'transparent',
+                },
                 minHeight: { xs: 72, md: 72 },
                 overflow: 'visible',
                 zIndex: 12,

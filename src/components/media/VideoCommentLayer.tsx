@@ -259,7 +259,16 @@ export default function VideoCommentLayer({
               : 'default',
       }}
     >
-      {annotationsVisible && visibleComments.map((comment) => (
+      {annotationsVisible && visibleComments.map((comment) => {
+        // Linked comment pins follow their shape/drawing; they must not be
+        // independently repositioned (that would detach the username avatar).
+        const isLinkedToAnnotation = Boolean(
+          comment.linkedShapeId || comment.linkedDrawingId,
+        );
+        const canReposition = panActive && !isLinkedToAnnotation;
+        const moveComment = canReposition ? onMoveComment : undefined;
+
+        return (
         <CommentMarker
           key={comment.id}
           index={comment.historyIndex}
@@ -267,13 +276,14 @@ export default function VideoCommentLayer({
           yPercent={comment.yPercent}
           mode="placed"
           panMode={panActive}
+          lockPosition={isLinkedToAnnotation}
           overlayRef={overlayRef}
           onPositionChange={
-            onMoveComment
-              ? (xPercent, yPercent) => onMoveComment(comment.id, xPercent, yPercent)
+            moveComment
+              ? (xPercent, yPercent) => moveComment(comment.id, xPercent, yPercent)
               : undefined
           }
-          onPanActionStart={onPanActionStart}
+          onPanActionStart={moveComment ? onPanActionStart : undefined}
           text={comment.text}
           imageUrl={comment.imageUrl}
           author={comment.author}
@@ -317,7 +327,8 @@ export default function VideoCommentLayer({
           onUpdateAnnotationGroup={onUpdateAnnotationGroup}
           onAddCollaborator={onAddCollaborator}
         />
-      ))}
+        );
+      })}
 
       {annotationsVisible && draftComment && (
         <CommentMarker

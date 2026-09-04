@@ -12,12 +12,14 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
+import TipsAndUpdatesOutlinedIcon from '@mui/icons-material/TipsAndUpdatesOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import GlobalSearchField from './GlobalSearchField';
 import LogoutConfirmModal from './LogoutConfirmModal';
 import NotificationDrawer from './NotificationDrawer';
 import ProfileMenuDropdown from './ProfileMenuDropdown';
 import PlanBadge from './PlanBadge';
+import AiFeaturesTutorialDialog from './AiFeaturesTutorialDialog';
 import NoahLogo from '../NoahLogo';
 import { HEADER_LOGO_WIDTH, DASHBOARD_TOP_BAR_HEIGHT, DASHBOARD_TOP_BAR_BORDER } from '../../constants/layout';
 import {
@@ -27,6 +29,7 @@ import { fetchNotifications } from '../../api/notification.service';
 import { fetchPublicDashboardNotification } from '../../platform/api/platformApi';
 import { useGlobalSearchKeyboard } from '../../hooks/useGlobalSearchKeyboard';
 import { useAuth } from '../../auth/AuthContext';
+import { useAiEntitled } from '../../hooks/useAiEntitled';
 import { getDynamicPlanDetails } from '../../utils/planHelper';
 import { env } from '../../config/env';
 
@@ -40,6 +43,7 @@ export default function Header({
   const navigate = useNavigate();
   const location = useLocation();
   const { clearSession, user } = useAuth();
+  const aiEntitled = useAiEntitled();
   const planDetails = useMemo(() => getDynamicPlanDetails(user), [user]);
   const isFreePlan = planDetails.planId === 'free';
   const displayName = user?.name ? user.name.split(' ')[0] : 'User';
@@ -54,6 +58,7 @@ export default function Header({
   const [profileMenuAnchor, setProfileMenuAnchor] = useState<HTMLElement | null>(null);
   const profileMenuOpen = Boolean(profileMenuAnchor);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [aiTutorialOpen, setAiTutorialOpen] = useState(false);
   const [notificationItems, setNotificationItems] = useState<Notification[]>([]);
 
   useEffect(() => {
@@ -284,6 +289,24 @@ export default function Header({
         </Box>
       ) : null}
 
+      {aiEntitled ? (
+        <Tooltip title="How to use AI features" arrow placement="bottom">
+          <IconButton
+            size="small"
+            aria-label="How to use AI features"
+            aria-haspopup="dialog"
+            aria-expanded={aiTutorialOpen}
+            onClick={() => setAiTutorialOpen(true)}
+            sx={{
+              color: aiTutorialOpen ? cv.brandPurple : cv.textSecondary,
+              '&:hover': { color: cv.brandPurple, backgroundColor: cv.surfaceHover },
+            }}
+          >
+            <TipsAndUpdatesOutlinedIcon sx={{ fontSize: 22 }} />
+          </IconButton>
+        </Tooltip>
+      ) : null}
+
       <Tooltip
         title={
           unreadNotificationCount > 0
@@ -429,6 +452,13 @@ export default function Header({
         items={userNotifications}
         onItemsChange={handleNotificationsChange}
       />
+
+      {aiEntitled ? (
+        <AiFeaturesTutorialDialog
+          open={aiTutorialOpen}
+          onClose={() => setAiTutorialOpen(false)}
+        />
+      ) : null}
     </Box>
   );
 }
