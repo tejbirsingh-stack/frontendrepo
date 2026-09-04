@@ -81,6 +81,8 @@ interface CommentMarkerProps {
   placeholder?: string;
   requireText?: boolean;
   panMode?: boolean;
+  /** When true, pin stays fixed (e.g. linked to a shape) and cannot be dragged. */
+  lockPosition?: boolean;
   overlayRef?: RefObject<HTMLElement | null>;
   onPositionChange?: (xPercent: number, yPercent: number) => void;
   onPanActionStart?: () => void;
@@ -136,6 +138,7 @@ export default function CommentMarker({
   placeholder = 'Add a comment',
   requireText = false,
   panMode = false,
+  lockPosition = false,
   overlayRef,
   onPositionChange,
   onPanActionStart,
@@ -232,8 +235,10 @@ export default function CommentMarker({
     };
   };
 
+  const canPanDrag = panMode && !lockPosition && Boolean(onPositionChange);
+
   const handlePanPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!panMode || !onPositionChange) return;
+    if (!canPanDrag || !onPositionChange) return;
 
     const point = getOverlayPoint(event.clientX, event.clientY);
     if (!point) return;
@@ -445,7 +450,9 @@ export default function CommentMarker({
           top: `${yPercent}%`,
           transform: 'translate(-50%, -50%)',
           zIndex: isThreadOpen ? 30 : isPanDragging ? 25 : isHovered ? 20 : 6,
-          pointerEvents: 'auto',
+          // Locked pins (linked to shapes/drawings) pass through in pan mode
+          // so the parent annotation can be dragged instead.
+          pointerEvents: panMode && lockPosition ? 'none' : 'auto',
         }}
       >
         <Box sx={{ position: 'relative', display: 'inline-block' }}>
@@ -455,9 +462,9 @@ export default function CommentMarker({
             type="button"
             aria-label={`Comment by ${author.name}: ${text}`}
             aria-expanded={panMode ? undefined : isThreadOpen}
-            onPointerDown={panMode ? handlePanPointerDown : undefined}
-            onPointerMove={panMode ? handlePanPointerMove : undefined}
-            onPointerUp={panMode ? handlePanPointerUp : undefined}
+            onPointerDown={canPanDrag ? handlePanPointerDown : undefined}
+            onPointerMove={canPanDrag ? handlePanPointerMove : undefined}
+            onPointerUp={canPanDrag ? handlePanPointerUp : undefined}
             onClick={(event) => {
               if (panMode || isPanDragging) {
                 event.stopPropagation();
@@ -476,9 +483,9 @@ export default function CommentMarker({
               m: 0,
               border: 'none',
               background: 'transparent',
-              cursor: panMode ? (isPanDragging ? 'grabbing' : 'grab') : 'pointer',
+              cursor: canPanDrag ? (isPanDragging ? 'grabbing' : 'grab') : 'pointer',
               lineHeight: 0,
-              touchAction: panMode ? 'none' : 'auto',
+              touchAction: canPanDrag ? 'none' : 'auto',
               '&:focus-visible': {
                 outline: `2px solid ${cv.brandPurple}`,
                 outlineOffset: 3,
