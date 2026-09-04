@@ -561,8 +561,6 @@ export type GlobalSecuritySettings = {
   ssoDomain: string;
   sessionTimeoutDays: number;
   contentSecurityPolicy: string;
-  platformIpRestrictionEnabled?: boolean;
-  platformAllowedIps?: string;
   updatedAt?: string;
 };
 
