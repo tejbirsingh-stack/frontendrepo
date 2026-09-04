@@ -5,6 +5,7 @@ import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { cv } from '../../theme/cssVars';
+import NoahMascot from '../NoahMascot';
 import HelpMenuDrawer, { getHelpMenuShortcutLabel } from './HelpMenuDrawer';
 import ShortcutTooltip from './ShortcutTooltip';
 import { useResolvedKeyboardShortcuts } from '../../hooks/useResolvedKeyboardShortcuts';
@@ -124,19 +125,32 @@ export default function MediaSideRail({
 
       <Box sx={{ flex: 1, minHeight: 8 }} />
 
-      <ShortcutTooltip label="Help" shortcut={helpShortcut} placement="left">
-        <IconButton
-          ref={helpButtonRef}
-          type="button"
-          aria-label="Help"
-          aria-haspopup="menu"
-          aria-expanded={helpMenuOpen}
-          onClick={() => setHelpMenuOpen((open) => !open)}
-          sx={{ ...railButtonSx(helpMenuOpen), position: 'relative', zIndex: 2 }}
-        >
-          <HelpOutlineOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
-        </IconButton>
-      </ShortcutTooltip>
+      <Box
+        sx={{
+          position: 'relative',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          overflow: 'visible',
+        }}
+      >
+        <NoahMascot pose="peek" preset="panelPeek" sx={{ mb: 0.5 }} />
+
+        <ShortcutTooltip label="Help" shortcut={helpShortcut} placement="left">
+          <IconButton
+            ref={helpButtonRef}
+            type="button"
+            aria-label="Help"
+            aria-haspopup="menu"
+            aria-expanded={helpMenuOpen}
+            onClick={() => setHelpMenuOpen((open) => !open)}
+            sx={{ ...railButtonSx(helpMenuOpen), position: 'relative', zIndex: 2 }}
+          >
+            <HelpOutlineOutlinedIcon sx={{ fontSize: ICON_SIZE }} />
+          </IconButton>
+        </ShortcutTooltip>
+      </Box>
 
       <HelpMenuDrawer
         open={helpMenuOpen}

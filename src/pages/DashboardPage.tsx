@@ -20,18 +20,16 @@ import {
   Typography,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
-import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import GridViewIcon from '@mui/icons-material/GridView';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen';
-import SearchIcon from '@mui/icons-material/Search';
+import FilterListOutlinedIcon from '@mui/icons-material/FilterListOutlined';
 import AddIcon from '@mui/icons-material/Add';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import CreateNewFolderOutlinedIcon from '@mui/icons-material/CreateNewFolderOutlined';
 import HelpOutlinedIcon from '@mui/icons-material/HelpOutlined';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
@@ -383,7 +381,6 @@ export default function DashboardPage({
   const [keyboardShortcutsOpen, setKeyboardShortcutsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   // Applied filter state — these drive the API call
   const [mediaTypeFilter, setMediaTypeFilter] = useState<MediaTypeFilter>('all');
@@ -400,7 +397,6 @@ export default function DashboardPage({
   const [sortBy, setSortBy] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [linkNewItemsToProject, setLinkNewItemsToProject] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [newMenuAnchor, setNewMenuAnchor] = useState<null | HTMLElement>(null);
   const [newFolderModalOpen, setNewFolderModalOpen] = useState(false);
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
@@ -670,16 +666,31 @@ export default function DashboardPage({
   ]);
 
   const displayedItems = useMemo(() => {
+    let items = librarySourceItems;
+    
     if (isFavoritesView) {
-      return libraryItems.filter(item => favorites.has(item.id));
+      items = libraryItems.filter(item => favorites.has(item.id));
+    } else if (isDuplicatesView || isSharedView) {
+      items = libraryItems;
     }
-    if (isDuplicatesView || isSharedView) {
-      return libraryItems;
+
+    if (mediaTypeFilter !== 'all') {
+      items = items.filter(item => matchesMediaTypeFilter(item, mediaTypeFilter));
     }
-    if (!folderMedia && !sidebarSelection && !isProjectsView) {
-      return librarySourceItems;
+    if (dateRangeFilter !== 'all') {
+      items = items.filter(item => matchesDateRange(item.createdAt, dateRangeFilter));
     }
-    return librarySourceItems;
+    if (reviewStatusFilter !== 'all') {
+      items = items.filter(item => (item.customMetadata as any)?.reviewStatus === reviewStatusFilter);
+    }
+    if (selectedTags.size > 0) {
+      items = items.filter(item => {
+        const itemTags = item.tags || [];
+        return Array.from(selectedTags).every(t => itemTags.includes(t));
+      });
+    }
+
+    return items;
   }, [
     libraryView,
     libraryItems,
@@ -699,7 +710,6 @@ export default function DashboardPage({
     sortBy,
     sortDirection,
     trashedIds,
-    refreshKey,
     sidebarSelection,
     isProjectsView,
     favorites,
@@ -879,6 +889,13 @@ export default function DashboardPage({
     setDateRangeFilter('all');
     setSelectedTags(new Set());
     setSelectedAiTags(new Set());
+  };
+
+  const handleResetFilters = () => {
+    clearPanelFilters();
+    setReviewStatusFilter('all');
+    setSortBy('date');
+    setSortDirection('desc');
   };
 
   const toggleFullscreen = async () => {
@@ -1146,17 +1163,6 @@ export default function DashboardPage({
               ) : null}
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-              <ToolbarTooltip title="More options">
-                <IconButton
-                  size="small"
-                  sx={toolbarIconSx}
-                  onClick={(e) => setMoreMenuAnchor(e.currentTarget)}
-                  aria-label="More options"
-                >
-                  <MoreHorizIcon sx={{ fontSize: 20 }} />
-                </IconButton>
-              </ToolbarTooltip>
-
               <ToolbarTooltip title="Group by type">
                 <IconButton
                   size="small"
@@ -1169,27 +1175,19 @@ export default function DashboardPage({
                 </IconButton>
               </ToolbarTooltip>
 
-              <ToolbarTooltip title="List view">
+              <ToolbarTooltip title={viewMode === 'list' ? 'Grid view' : 'List view'}>
                 <IconButton
                   size="small"
-                  sx={viewMode === 'list' ? activeToolbarSx : toolbarIconSx}
-                  onClick={() => setViewMode('list')}
-                  aria-label="List view"
-                  aria-pressed={viewMode === 'list'}
+                  sx={['list', 'grid'].includes(viewMode) ? activeToolbarSx : toolbarIconSx}
+                  onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+                  aria-label={viewMode === 'list' ? 'Grid view' : 'List view'}
+                  aria-pressed={['list', 'grid'].includes(viewMode)}
                 >
-                  <ViewListIcon sx={{ fontSize: 20 }} />
-                </IconButton>
-              </ToolbarTooltip>
-
-              <ToolbarTooltip title="Grid view">
-                <IconButton
-                  size="small"
-                  sx={viewMode === 'grid' ? activeToolbarSx : toolbarIconSx}
-                  onClick={() => setViewMode('grid')}
-                  aria-label="Grid view"
-                  aria-pressed={viewMode === 'grid'}
-                >
-                  <GridViewIcon sx={{ fontSize: 20 }} />
+                  {viewMode === 'list' ? (
+                    <GridViewIcon sx={{ fontSize: 20 }} />
+                  ) : (
+                    <ViewListIcon sx={{ fontSize: 20 }} />
+                  )}
                 </IconButton>
               </ToolbarTooltip>
 
@@ -1211,7 +1209,7 @@ export default function DashboardPage({
 
             <Tooltip title="Filter media" arrow>
               <Button
-                startIcon={<SearchIcon sx={{ fontSize: 18 }} />}
+                startIcon={<FilterListOutlinedIcon sx={{ fontSize: 18 }} />}
                 size="small"
                 onClick={() => setFilterPanelOpen((open) => !open)}
                 aria-expanded={filterPanelOpen}
@@ -1224,6 +1222,7 @@ export default function DashboardPage({
                   px: 1.5,
                   py: 0.75,
                   fontSize: '0.8125rem',
+                  textTransform: 'none',
                   border: `1px solid ${hasActiveFilters || filterPanelOpen ? cv.borderFocus : cv.border
                     }`,
                   backgroundColor:
@@ -1323,6 +1322,29 @@ export default function DashboardPage({
                 </IconButton>
               </ToolbarTooltip>
             </Box>
+
+            {(hasActiveFilters || hasNonDefaultSort) && (
+              <Button
+                size="small"
+                onClick={handleResetFilters}
+                sx={{
+                  textTransform: 'none',
+                  color: cv.brandPurple,
+                  borderRadius: '10px',
+                  px: 1.5,
+                  py: 0.75,
+                  fontSize: '0.8125rem',
+                  fontWeight: 500,
+                  minWidth: 0,
+                  '&:hover': {
+                    backgroundColor: cv.purpleSelectionHover,
+                    color: cv.purpleLight,
+                  },
+                }}
+              >
+                Reset filters
+              </Button>
+            )}
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', width: { xs: '100%', lg: 'auto' } }}>
@@ -1499,54 +1521,11 @@ export default function DashboardPage({
               onDateRangeChange={setPendingDateRange}
               onToggleTag={toggleTag}
               onToggleAiTag={toggleAiTag}
-              onClearAll={clearPanelFilters}
               onApply={handleApplyFilters}
             />
           </Box>
         </Collapse>
       </Box>
-
-      <Menu
-        anchorEl={moreMenuAnchor}
-        open={Boolean(moreMenuAnchor)}
-        onClose={() => setMoreMenuAnchor(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        slotProps={{
-          paper: {
-            sx: {
-              mt: 0.5,
-              minWidth: 200,
-              borderRadius: '12px',
-              border: "1px solid var(--noah-border)",
-              background: 'var(--noah-popover-surface)',
-              backdropFilter: 'blur(20px)',
-            },
-          },
-        }}
-      >
-        <MenuItem
-          onClick={() => {
-            setRefreshKey((k) => k + 1);
-            setMoreMenuAnchor(null);
-          }}
-          sx={{ fontSize: '0.875rem', color: cv.textSecondary }}
-        >
-          <RefreshIcon sx={{ fontSize: 18, mr: 1.5, color: cv.textMuted }} />
-          Refresh library
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            clearPanelFilters();
-            setSortBy('date');
-            setSortDirection('desc');
-            setMoreMenuAnchor(null);
-          }}
-          sx={{ fontSize: '0.875rem', color: cv.textSecondary }}
-        >
-          Reset filters
-        </MenuItem>
-      </Menu>
 
       {(() => {
         const selectedHasFolder = mediaItems.some(

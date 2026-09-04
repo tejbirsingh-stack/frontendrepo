@@ -24,8 +24,8 @@ export default function PlatformLoginPage() {
     try {
       await login(email.trim(), password);
       navigate('/platform', { replace: true });
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+    } catch (err: any) {
+      setError(err instanceof Error ? err.message : (err?.data?.message || err?.response?.data?.message || 'Login failed'));
     } finally {
       setLoading(false);
     }
@@ -45,60 +45,80 @@ export default function PlatformLoginPage() {
     >
       <LiquidBackground />
       <WaveBackground />
-      <Box sx={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: { xs: 640, sm: 920 }, display: 'flex', flexDirection: 'column', alignItems: 'center', overflow: 'visible' }}>
+      <Box
+        sx={{
+          position: 'relative',
+          zIndex: 1,
+          width: '100%',
+          maxWidth: { xs: 640, sm: 920 },
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          overflow: 'visible',
+        }}
+      >
         <Box sx={AUTH_LOGO_PARENT_SX}>
           <NoahLogo sx={AUTH_LOGO_SX} showGlow={false} animated={false} disableCustomBranding />
         </Box>
         <Box sx={{ position: 'relative', width: '100%', maxWidth: 420, overflow: 'visible' }}>
           <NoahMascot pose="wave" preset="authCompanion" />
           <GlassCard glow sx={{ position: 'relative', zIndex: 1, width: '100%' }}>
-          <Box component="form" onSubmit={(e) => void onSubmit(e)} sx={{ p: 4 }}>
-            <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-              Platform Admin
-            </Typography>
-            <Typography sx={{ color: cv.textSecondary, mb: 3, fontSize: '0.9rem' }}>
-              NOAH operator console — not for customer accounts
-            </Typography>
-            <TextField
-              fullWidth
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              sx={{ mb: 2 }}
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-            <TextField
-              fullWidth
-              label="Password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              sx={{ mb: 2 }}
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-            {error ? (
-              <Typography sx={{ color: cv.destructive, fontSize: '0.8125rem', mb: 2 }}>
-                {error}
+            <Box component="form" onSubmit={(e) => void onSubmit(e)} sx={{ p: 4 }}>
+              <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
+                Platform Admin
               </Typography>
-            ) : null}
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              disabled={loading}
-              sx={{
-                height: 40,
-                minHeight: 40,
-                py: 0,
-                background: cv.brandGradient,
-                boxShadow: cv.loginBrandShadow,
-              }}
-            >
-              {loading ? 'Signing in…' : 'Sign in'}
-            </Button>
-          </Box>
-        </GlassCard>
+              <Typography sx={{ color: cv.textSecondary, mb: 3, fontSize: '0.9rem' }}>
+                NOAH operator console — not for customer accounts
+              </Typography>
+
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                sx={{ mb: 2 }}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+              <TextField
+                fullWidth
+                label="Password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                sx={{ mb: 2 }}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+
+              {error ? (
+                <Typography
+                  sx={{
+                    color: cv.destructive,
+                    fontSize: '0.8125rem',
+                    mb: 2,
+                  }}
+                >
+                  {error}
+                </Typography>
+              ) : null}
+
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                disabled={loading}
+                sx={{
+                  height: 40,
+                  minHeight: 40,
+                  py: 0,
+                  background: cv.brandGradient,
+                  boxShadow: cv.loginBrandShadow,
+                }}
+              >
+                {loading ? 'Signing in…' : 'Sign in'}
+              </Button>
+            </Box>
+          </GlassCard>
         </Box>
       </Box>
     </Box>

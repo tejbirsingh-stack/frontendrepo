@@ -511,6 +511,7 @@ export default function PlatformLayout() {
           <Outlet />
         </Box>
       </Box>
+
       <DashboardNotificationPopup autoOpen={false} />
     </Box>
   );

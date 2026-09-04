@@ -71,12 +71,13 @@ import {
 import { dropdownMenuPaperSx } from '../../constants/dropdownMenu';
 
 type DrawerTab = 'history' | 'details' | 'ai';
-type AiSubTab = 'summary' | 'transcript';
+type AiSubTab = 'summary' | 'transcript' | 'people';
 type StatusFilter = 'all' | 'unread' | 'resolved' | 'archive';
 
 const AI_SUB_TABS: { value: AiSubTab; label: string }[] = [
   { value: 'summary', label: 'Summary' },
   { value: 'transcript', label: 'Transcript' },
+  { value: 'people', label: 'People' },
 ];
 
 function getCommentIdForEntry(entry: AnnotationHistoryEntry): string | null {
@@ -1319,6 +1320,12 @@ export default function AnnotationHistoryDrawer({
   }, [mediaItem?.id]);
 
   useEffect(() => {
+    if (!supportsFramePeople && aiSubTab === 'people') {
+      setAiSubTab('summary');
+    }
+  }, [supportsFramePeople, aiSubTab]);
+
+  useEffect(() => {
     if (activeTab !== 'ai' || !aiEntitled || !mediaItem?.id) {
       return;
     }
@@ -1387,7 +1394,7 @@ export default function AnnotationHistoryDrawer({
   }, [activeTab, aiEntitled, mediaItem?.id]);
 
   useEffect(() => {
-    if (activeTab !== 'ai' || aiSubTab !== 'transcript' || !aiEntitled || !mediaItem?.id) {
+    if (activeTab !== 'ai' || !aiEntitled || !mediaItem?.id) {
       return;
     }
     if (mediaItem.type !== 'video' && mediaItem.type !== 'image') {
@@ -1417,7 +1424,7 @@ export default function AnnotationHistoryDrawer({
     return () => {
       cancelled = true;
     };
-  }, [activeTab, aiSubTab, aiEntitled, mediaItem?.id, mediaItem?.type]);
+  }, [activeTab, aiEntitled, mediaItem?.id, mediaItem?.type]);
 
   const handlePersonSelect = (person: FramePerson) => {
     onFramePersonSelect?.(person);
@@ -1596,7 +1603,10 @@ export default function AnnotationHistoryDrawer({
               backgroundColor: cv.surface,
             }}
           >
-            {AI_SUB_TABS.map((tab) => {
+            {(supportsFramePeople
+              ? AI_SUB_TABS
+              : AI_SUB_TABS.filter((tab) => tab.value !== 'people')
+            ).map((tab) => {
               const isActive = aiSubTab === tab.value;
               return (
                 <Box
@@ -1634,67 +1644,47 @@ export default function AnnotationHistoryDrawer({
             })}
           </Box>
 
-          {aiSubTab === 'transcript' ? (
-            <>
-              <TextField
-                fullWidth
-                size="small"
-                placeholder={supportsFramePeople ? 'Search people, objects or moments' : 'Search transcript'}
-                value={aiQuery}
-                onChange={(event) => setAiQuery(event.target.value)}
-                aria-label="Search transcript"
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: '999px',
-                    backgroundColor: cv.surface,
-                    fontSize: '0.875rem',
-                    color: cv.textPrimary,
-                    '& fieldset': { borderColor: cv.border },
-                    '&:hover fieldset': { borderColor: cv.annotationGuide },
-                    '&.Mui-focused fieldset': { borderColor: cv.purpleFocusBorder },
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: cv.textMuted,
-                    opacity: 1,
-                  },
-                }}
-                slotProps={{
-                  input: {
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
-                      </InputAdornment>
-                    ),
-                  },
-                }}
-              />
-
-              {supportsFramePeople && (
-                <>
-                  {peopleScenesLoading ? (
-                    <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
-                      Loading people and scenes…
-                    </Typography>
-                  ) : (
-                    <>
-                      <FramePeopleHeadshots
-                        people={filteredFramePeople}
-                        query={aiQuery}
-                        selectedPersonId={selectedFramePersonId}
-                        onSelectPerson={handlePersonSelect}
-                      />
-                      {mediaItem?.type === 'video' ? (
-                        <SceneInsightChips
-                          scenes={assetScenes}
-                          query={aiQuery}
-                          onSeekMs={onTranscriptSeek}
-                        />
-                      ) : null}
-                    </>
-                  )}
-                </>
-              )}
-            </>
+          {aiSubTab === 'transcript' || aiSubTab === 'people' ? (
+            <TextField
+              fullWidth
+              size="small"
+              placeholder={
+                aiSubTab === 'people'
+                  ? 'Search people, objects or moments'
+                  : 'Search transcript'
+              }
+              value={aiQuery}
+              onChange={(event) => setAiQuery(event.target.value)}
+              aria-label={
+                aiSubTab === 'people'
+                  ? 'Search people, objects or moments'
+                  : 'Search transcript'
+              }
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '999px',
+                  backgroundColor: cv.surface,
+                  fontSize: '0.875rem',
+                  color: cv.textPrimary,
+                  '& fieldset': { borderColor: cv.border },
+                  '&:hover fieldset': { borderColor: cv.annotationGuide },
+                  '&.Mui-focused fieldset': { borderColor: cv.purpleFocusBorder },
+                },
+                '& .MuiInputBase-input::placeholder': {
+                  color: cv.textMuted,
+                  opacity: 1,
+                },
+              }}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchOutlinedIcon sx={{ fontSize: 18, color: cv.textMuted }} />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
           ) : null}
         </Box>
       )}
@@ -2018,6 +2008,39 @@ export default function AnnotationHistoryDrawer({
                 <Typography sx={{ fontSize: '0.875rem', color: cv.textMuted }}>
                   AI summary is not available for this organization.
                 </Typography>
+              )}
+            </Box>
+          ) : aiSubTab === 'people' ? (
+            <Box
+              role="tabpanel"
+              aria-label="People"
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1.25,
+                py: 1,
+              }}
+            >
+              {peopleScenesLoading ? (
+                <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
+                  Loading people and scenes…
+                </Typography>
+              ) : (
+                <>
+                  <FramePeopleHeadshots
+                    people={filteredFramePeople}
+                    query={aiQuery}
+                    selectedPersonId={selectedFramePersonId}
+                    onSelectPerson={handlePersonSelect}
+                  />
+                  {mediaItem?.type === 'video' ? (
+                    <SceneInsightChips
+                      scenes={assetScenes}
+                      query={aiQuery}
+                      onSeekMs={onTranscriptSeek}
+                    />
+                  ) : null}
+                </>
               )}
             </Box>
           ) : (

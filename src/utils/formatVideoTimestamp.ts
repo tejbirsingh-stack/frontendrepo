@@ -1,5 +1,5 @@
 export function formatVideoTimestamp(seconds: number): string {
-  const safe = Math.max(0, Math.floor(seconds));
+  const safe = Math.max(0, Math.round(seconds));
   const minutes = Math.floor(safe / 60);
   const remainingSeconds = safe % 60;
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;

@@ -52,8 +52,10 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await platformLogin(email, password);
-    persistPlatformSession(res.accessToken, res.admin);
-    setAdmin(res.admin);
+    if (res?.accessToken && res?.admin) {
+      persistPlatformSession(res.accessToken, res.admin);
+      setAdmin(res.admin);
+    }
   }, []);
 
   const logout = useCallback(async () => {
