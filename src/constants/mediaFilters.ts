@@ -19,6 +19,7 @@ export const MEDIA_TYPE_FILTER_OPTIONS: { value: MediaTypeFilter; label: string 
   { value: 'video', label: 'Videos' },
   { value: 'image', label: 'Images' },
   { value: 'audio', label: 'Audio' },
+  { value: 'document', label: 'Files' },
 ];
 
 export function matchesMediaTypeFilter(
