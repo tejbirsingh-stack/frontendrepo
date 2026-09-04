@@ -2,11 +2,9 @@ version: 0.2
 
 env:
   variables:
-    ENV_NAME: "uat"
+    ENV_NAME: "qa"
     AWS_REGION: "us-east-2"
-    ECR_REPO: "noah-uat/frontend"
-    ASG_TAG_NAME: "noah-uat-ec2"
-    QA_TAG_NAME: "noah-qa"
+    ECR_REPO: "noah-qa/frontend"
 
 phases:
   pre_build:
@@ -25,11 +23,7 @@ phases:
 
   post_build:
     commands:
-      - echo "Pushing image to ECR.."
+      - echo "Pushing image to ECR..."
       - docker push "$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
       - docker push "$ECR_REGISTRY/$ECR_REPO:latest"
-      - echo "Deploying to all $ASG_TAG_NAME instances via SSM..."
-      - COMMAND_ID=$(aws ssm send-command --region "$AWS_REGION" --targets "Key=tag:Name,Values=${ASG_TAG_NAME}" --document-name "AWS-RunShellScript" --parameters "{\"commands\":[\"aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}\",\"docker pull ${ECR_REGISTRY}/${ECR_REPO}:latest\",\"cd /opt/noah && docker compose up -d --force-recreate frontend\"]}" --output text --query "Command.CommandId")
-      - echo "SSM Command ID is $COMMAND_ID"
-      - sleep 15
-      - aws ssm list-command-invocations --command-id "$COMMAND_ID" --region "$AWS_REGION" --details --query "CommandInvocations[].{Instance:InstanceId,Status:Status}"
+      - echo "QA frontend image pushed successfully."
