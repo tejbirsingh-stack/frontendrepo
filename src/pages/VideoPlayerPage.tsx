@@ -61,7 +61,6 @@ import {
 } from '../components/media/LabeledToolbarButton';
 import ClearAnnotationsModal from '../components/media/ClearAnnotationsModal';
 import WorkspaceControlsIsland from '../components/media/WorkspaceControlsIsland';
-import NoahWalkingMascot from '../components/NoahWalkingMascot';
 import MediaSideRail, { type MediaRailPanel } from '../components/media/MediaSideRail';
 import PlayerToolsDrawer from '../components/media/PlayerToolsDrawer';
 import PeopleCollaboratorsPopover from '../components/media/PeopleCollaboratorsPopover';
@@ -4292,7 +4291,10 @@ export default function VideoPlayerPage({
                       fontWeight: 600,
                       fontSize: '0.8125rem',
                       letterSpacing: '0.01em',
-                      color: getFileReviewStatusColor(fileReviewStatus),
+                      color:
+                        fileReviewStatus === 'In-Progress' && theme.palette.mode === 'dark'
+                          ? '#FFFFFF'
+                          : getFileReviewStatusColor(fileReviewStatus),
                       border: `1px solid ${cv.border}`,
                       backgroundColor: cv.surface,
                       '& .MuiButton-endIcon': {
@@ -4307,7 +4309,10 @@ export default function VideoPlayerPage({
                         : {},
                       '&.Mui-disabled': {
                         opacity: 0.6,
-                        color: getFileReviewStatusColor(fileReviewStatus),
+                        color:
+                          fileReviewStatus === 'In-Progress' && theme.palette.mode === 'dark'
+                            ? '#FFFFFF'
+                            : getFileReviewStatusColor(fileReviewStatus),
                         borderColor: cv.border,
                       },
                     }}
@@ -5268,20 +5273,6 @@ export default function VideoPlayerPage({
                     position: 'relative',
                   }}
                 >
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      left: 0,
-                      bottom: -24,
-                      zIndex: 2,
-                      lineHeight: 0,
-                      backgroundColor: 'transparent',
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    <NoahWalkingMascot size={56} />
-                  </Box>
-
                   {showClearIsland && !isViewer ? (
                     <Box
                       sx={{

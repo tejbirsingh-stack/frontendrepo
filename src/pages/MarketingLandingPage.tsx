@@ -581,7 +581,6 @@ export default function MarketingLandingPage() {
               'radial-gradient(ellipse 80% 50% at 50% -10%, rgba(142,68,173,0.22), transparent 55%), radial-gradient(ellipse 40% 40% at 90% 10%, rgba(210,140,255,0.12), transparent 50%)',
           }}
         >
-          <NoahMascot pose="gesture" preset="hero" />
           <Box sx={{ position: 'relative', zIndex: 1, maxWidth: MAX, mx: 'auto', textAlign: 'center' }}>
             <Box
               component="div"
@@ -648,6 +647,7 @@ export default function MarketingLandingPage() {
               </Button>
             </Box>
             <Box sx={{ mt: { xs: 5, md: 8 }, ...heroAnim(440) }}>
+              <NoahMascot pose="gesture" preset="hero" />
               <ProductPreview />
             </Box>
           </Box>

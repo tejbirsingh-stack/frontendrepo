@@ -12,9 +12,18 @@ function resolveUrl(path: string): string {
 
 export class PlatformApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  data: any;
+  requiresMfa?: boolean;
+  mfaType?: string;
+
+  constructor(message: string, status: number, data?: any) {
     super(message);
     this.status = status;
+    this.data = data;
+    if (data && typeof data === 'object' && data.requiresMfa) {
+      this.requiresMfa = true;
+      this.mfaType = data.mfaType;
+    }
   }
 }
 
@@ -45,10 +54,11 @@ export async function platformRequest<T>(
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401) clearPlatformSession();
+    if (response.status === 401 && !data?.requiresMfa) clearPlatformSession();
     throw new PlatformApiError(
       (data as { message?: string })?.message || 'Platform request failed',
       response.status,
+      data,
     );
   }
   return data as T;

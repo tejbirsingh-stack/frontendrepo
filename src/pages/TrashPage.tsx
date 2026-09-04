@@ -89,26 +89,18 @@ export default function TrashPage() {
             Trash
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-            <Tooltip title="List view" arrow>
+            <Tooltip title={viewMode === 'list' ? 'Grid view' : 'List view'} arrow>
               <IconButton
                 size="small"
-                sx={viewMode === 'list' ? activeToolbarSx : toolbarIconSx}
-                onClick={() => setViewMode('list')}
-                aria-label="List view"
-                aria-pressed={viewMode === 'list'}
+                sx={toolbarIconSx}
+                onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+                aria-label={viewMode === 'list' ? 'Grid view' : 'List view'}
               >
-                <ViewListIcon sx={{ fontSize: 20 }} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Grid view" arrow>
-              <IconButton
-                size="small"
-                sx={viewMode === 'grid' ? activeToolbarSx : toolbarIconSx}
-                onClick={() => setViewMode('grid')}
-                aria-label="Grid view"
-                aria-pressed={viewMode === 'grid'}
-              >
-                <GridViewIcon sx={{ fontSize: 20 }} />
+                {viewMode === 'list' ? (
+                  <GridViewIcon sx={{ fontSize: 20 }} />
+                ) : (
+                  <ViewListIcon sx={{ fontSize: 20 }} />
+                )}
               </IconButton>
             </Tooltip>
           </Box>

@@ -670,16 +670,31 @@ export default function DashboardPage({
   ]);
 
   const displayedItems = useMemo(() => {
+    let items = librarySourceItems;
+    
     if (isFavoritesView) {
-      return libraryItems.filter(item => favorites.has(item.id));
+      items = libraryItems.filter(item => favorites.has(item.id));
+    } else if (isDuplicatesView || isSharedView) {
+      items = libraryItems;
     }
-    if (isDuplicatesView || isSharedView) {
-      return libraryItems;
+
+    if (mediaTypeFilter !== 'all') {
+      items = items.filter(item => matchesMediaTypeFilter(item, mediaTypeFilter));
     }
-    if (!folderMedia && !sidebarSelection && !isProjectsView) {
-      return librarySourceItems;
+    if (dateRangeFilter !== 'all') {
+      items = items.filter(item => matchesDateRange(item.createdAt, dateRangeFilter));
     }
-    return librarySourceItems;
+    if (reviewStatusFilter !== 'all') {
+      items = items.filter(item => (item.customMetadata as any)?.reviewStatus === reviewStatusFilter);
+    }
+    if (selectedTags.size > 0) {
+      items = items.filter(item => {
+        const itemTags = item.tags || [];
+        return Array.from(selectedTags).every(t => itemTags.includes(t));
+      });
+    }
+
+    return items;
   }, [
     libraryView,
     libraryItems,
@@ -1169,27 +1184,19 @@ export default function DashboardPage({
                 </IconButton>
               </ToolbarTooltip>
 
-              <ToolbarTooltip title="List view">
+              <ToolbarTooltip title={viewMode === 'list' ? 'Grid view' : 'List view'}>
                 <IconButton
                   size="small"
-                  sx={viewMode === 'list' ? activeToolbarSx : toolbarIconSx}
-                  onClick={() => setViewMode('list')}
-                  aria-label="List view"
-                  aria-pressed={viewMode === 'list'}
+                  sx={['list', 'grid'].includes(viewMode) ? activeToolbarSx : toolbarIconSx}
+                  onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+                  aria-label={viewMode === 'list' ? 'Grid view' : 'List view'}
+                  aria-pressed={['list', 'grid'].includes(viewMode)}
                 >
-                  <ViewListIcon sx={{ fontSize: 20 }} />
-                </IconButton>
-              </ToolbarTooltip>
-
-              <ToolbarTooltip title="Grid view">
-                <IconButton
-                  size="small"
-                  sx={viewMode === 'grid' ? activeToolbarSx : toolbarIconSx}
-                  onClick={() => setViewMode('grid')}
-                  aria-label="Grid view"
-                  aria-pressed={viewMode === 'grid'}
-                >
-                  <GridViewIcon sx={{ fontSize: 20 }} />
+                  {viewMode === 'list' ? (
+                    <GridViewIcon sx={{ fontSize: 20 }} />
+                  ) : (
+                    <ViewListIcon sx={{ fontSize: 20 }} />
+                  )}
                 </IconButton>
               </ToolbarTooltip>
 

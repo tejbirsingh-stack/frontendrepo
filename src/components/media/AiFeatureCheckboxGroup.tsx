@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import {
   Box,
-  Button,
   Checkbox,
   FormControlLabel,
   Typography,
@@ -129,7 +128,7 @@ export type AiFeatureCheckboxGroupProps = {
   onSelectedChange: (next: Record<AiAnalyzeFeature, boolean>) => void;
   lockedFeatures?: AiAnalyzeFeature[];
   disabled?: boolean;
-  /** Show Select all / Clear controls */
+  /** Show Select all checkbox */
   showBulkActions?: boolean;
   /** Compact layout for inline forms (upload modal) */
   variant?: 'default' | 'compact';
@@ -175,26 +174,22 @@ export default function AiFeatureCheckboxGroup({
     onSelectedChange(toggleAiFeatureSelection(selected, key, checked, lockedSet));
   };
 
-  const selectAll = () => {
-    onSelectedChange(
-      visibleOptions.reduce(
-        (acc, opt) => {
-          if (!lockedSet.has(opt.key)) {
-            acc[opt.key] = true;
-          }
-          return acc;
-        },
-        { ...selected },
-      ),
-    );
-  };
+  const unlockedOptions = useMemo(
+    () => visibleOptions.filter((opt) => !lockedSet.has(opt.key)),
+    [visibleOptions, lockedSet],
+  );
 
-  const clearAll = () => {
+  const allSelected =
+    unlockedOptions.length > 0 && unlockedOptions.every((opt) => selected[opt.key]);
+  const someSelected =
+    unlockedOptions.some((opt) => selected[opt.key]) && !allSelected;
+
+  const handleSelectAll = (_: unknown, checked: boolean) => {
     onSelectedChange(
       visibleOptions.reduce(
         (acc, opt) => {
           if (!lockedSet.has(opt.key)) {
-            acc[opt.key] = false;
+            acc[opt.key] = checked;
           }
           return acc;
         },
@@ -208,26 +203,33 @@ export default function AiFeatureCheckboxGroup({
   return (
     <Box>
       {showBulkActions ? (
-        <Box sx={{ display: 'flex', gap: 1, mb: isCompact ? 1 : 1.5 }}>
-          <Button
-            type="button"
-            size="small"
-            onClick={selectAll}
-            disabled={disabled}
-            sx={{ textTransform: 'none', color: cv.brandBlue, minHeight: 44 }}
-          >
-            Select all
-          </Button>
-          <Button
-            type="button"
-            size="small"
-            onClick={clearAll}
-            disabled={disabled}
-            sx={{ textTransform: 'none', color: cv.textSecondary, minHeight: 44 }}
-          >
-            Clear
-          </Button>
-        </Box>
+        <FormControlLabel
+          sx={{
+            alignItems: 'center',
+            mx: 0,
+            mb: isCompact ? 0.5 : 1,
+            py: 0.25,
+            px: 1,
+            minHeight: 44,
+          }}
+          control={
+            <Checkbox
+              checked={allSelected}
+              indeterminate={someSelected}
+              onChange={handleSelectAll}
+              disabled={disabled || unlockedOptions.length === 0}
+              sx={{
+                color: cv.textSecondary,
+                '&.Mui-checked, &.MuiCheckbox-indeterminate': { color: cv.brandBlue },
+              }}
+            />
+          }
+          label={
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: cv.textPrimary }}>
+              Select all
+            </Typography>
+          }
+        />
       ) : null}
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: isCompact ? 0 : 0.5 }}>

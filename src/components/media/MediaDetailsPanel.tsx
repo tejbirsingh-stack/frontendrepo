@@ -28,6 +28,7 @@ import {
   calculateMegapixels,
   deriveOrientation,
 } from '../../utils/resolutionTier';
+import { formatVideoTimestamp } from '../../utils/formatVideoTimestamp';
 
 export type MediaDetailsSection = 'file' | 'technical' | 'tags';
 
@@ -447,15 +448,14 @@ export default function MediaDetailsPanel({
               <MatrixItem label="Genre" value={(technicalDetails as any)?.genre} />
               <MatrixItem label="Year" value={(technicalDetails as any)?.year} />
               <MatrixItem label="Duration" value={(() => {
-                const raw = technicalDetails?.duration || mediaItem.duration;
+                const raw = mediaItem.duration || technicalDetails?.duration;
                 if (!raw) return undefined;
-                const parsed = typeof raw === 'number' ? raw : (raw as any)?.includes(':') ? raw : Number(raw);
+                if (typeof raw === 'string' && raw.includes(':')) return raw;
+                const parsed = typeof raw === 'number' ? raw : Number(raw);
                 if (typeof parsed === 'number' && !isNaN(parsed)) {
-                  const m = Math.floor(parsed / 60);
-                  const s = Math.floor(parsed % 60);
-                  return `${m}:${s.toString().padStart(2, '0')}`;
+                  return formatVideoTimestamp(parsed);
                 }
-                return raw;
+                return String(raw);
               })()} />
               <MatrixItem label="Sample Rate" value={technicalDetails?.sampleRate || (technicalDetails as any)?.sampleRate || '44.1 kHz'} />
               <MatrixItem label="Channels" value={technicalDetails?.channels || (technicalDetails as any)?.channels || 'Stereo'} />
@@ -477,15 +477,14 @@ export default function MediaDetailsPanel({
               <MatrixItem label="Orientation" value={orientation} />
               <MatrixItem label="Megapixels" value={megapixels} />
               <MatrixItem label="Duration" value={(() => {
-                const raw = technicalDetails?.duration || mediaItem.duration;
+                const raw = mediaItem.duration || technicalDetails?.duration;
                 if (!raw) return undefined;
-                const parsed = typeof raw === 'number' ? raw : (raw as any)?.includes(':') ? raw : Number(raw);
+                if (typeof raw === 'string' && raw.includes(':')) return raw;
+                const parsed = typeof raw === 'number' ? raw : Number(raw);
                 if (typeof parsed === 'number' && !isNaN(parsed)) {
-                  const m = Math.floor(parsed / 60);
-                  const s = Math.floor(parsed % 60);
-                  return `${m}:${s.toString().padStart(2, '0')}`;
+                  return formatVideoTimestamp(parsed);
                 }
-                return raw;
+                return String(raw);
               })()} />
               <MatrixItem label="Frame Rate" value={technicalDetails?.frameRate || ((technicalDetails as any)?.fps !== undefined ? `${(technicalDetails as any).fps} fps` : undefined)} />
               <MatrixItem label="Scan Type" value={technicalDetails?.scanType || 'Progressive'} />

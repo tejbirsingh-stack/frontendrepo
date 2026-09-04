@@ -26,10 +26,10 @@ function presetSx(preset: NoahMascotPreset, side: 'left' | 'right'): SxProps<The
     return {
       display: { xs: 'none', md: 'block' },
       position: 'absolute',
-      right: 120,
-      top: { md: '18%' },
+      right: 0,
+      bottom: { md: '100%' },
       width: { md: 180, lg: 220 },
-      maxWidth: '22vw',
+      maxWidth: '20vw',
       zIndex: 0,
     };
   }
@@ -38,9 +38,10 @@ function presetSx(preset: NoahMascotPreset, side: 'left' | 'right'): SxProps<The
     return {
       display: 'block',
       position: 'absolute',
-      right: 0,
-      bottom: 16,
-      width: 110,
+      // Grip the rail’s outer (right) edge; body peeks left across the rail.
+      right: -38,
+      bottom: '100%',
+      width: 104,
       zIndex: 1,
     };
   }

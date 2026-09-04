@@ -23,6 +23,8 @@ import VpnKeyOutlinedIcon from '@mui/icons-material/VpnKeyOutlined';
 import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
+import PhonelinkLockOutlinedIcon from '@mui/icons-material/PhonelinkLockOutlined';
+import DnsOutlinedIcon from '@mui/icons-material/DnsOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import CheckIcon from '@mui/icons-material/Check';
@@ -34,14 +36,19 @@ import { fetchGlobalSecuritySettings, updateGlobalSecuritySettings } from '../ap
 
 export default function PlatformSecurityPage() {
   const [loading, setLoading] = useState(true);
-  
+
   // State for global security settings
   const [ssoConfigured, setSsoConfigured] = useState(false);
   const [ssoProvider, setSsoProvider] = useState('google, microsoft');
   const [ssoDomain, setSsoDomain] = useState('');
-  
+
   const [sessionTimeoutDays, setSessionTimeoutDays] = useState(30);
-  
+
+  // Platform Admin Security Settings
+  const [platformMfaRequired, setPlatformMfaRequired] = useState(true);
+  const [platformIpRestrictionEnabled, setPlatformIpRestrictionEnabled] = useState(false);
+  const [platformAllowedIps, setPlatformAllowedIps] = useState('127.0.0.1, ::1');
+
   // CSP Domains List (Todo-list style)
   const [cspDomains, setCspDomains] = useState<string[]>(['noahcloud.ai', 'localhost']);
   const [newDomainInput, setNewDomainInput] = useState('');
@@ -53,6 +60,8 @@ export default function PlatformSecurityPage() {
   // Modals state
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
   const [cspModalOpen, setCspModalOpen] = useState(false);
+  const [ipModalOpen, setIpModalOpen] = useState(false);
+  const [ipInputText, setIpInputText] = useState('');
 
   // Saving state
   const [saving, setSaving] = useState(false);
@@ -75,7 +84,10 @@ export default function PlatformSecurityPage() {
         setSsoProvider(res.settings.ssoProvider || 'google, microsoft');
         setSsoDomain(res.settings.ssoDomain || '');
         setSessionTimeoutDays(Number(res.settings.sessionTimeoutDays) || 30);
-        
+        setPlatformMfaRequired(res.settings.platformMfaRequired !== false);
+        setPlatformIpRestrictionEnabled(Boolean(res.settings.platformIpRestrictionEnabled));
+        setPlatformAllowedIps(res.settings.platformAllowedIps || '127.0.0.1, ::1');
+
         // Parse CSP domains string/JSON into array
         const rawCsp = res.settings.contentSecurityPolicy || '["noahcloud.ai", "localhost"]';
         let parsed: string[] = [];
@@ -114,6 +126,70 @@ export default function PlatformSecurityPage() {
     } catch (err: any) {
       console.error('Error saving SSO:', err);
       showToast('Failed to save SSO status in database.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTogglePlatformMfa = async () => {
+    const nextValue = !platformMfaRequired;
+    setSaving(true);
+    try {
+      const res = await updateGlobalSecuritySettings({
+        platformMfaRequired: nextValue,
+      });
+      if (res?.success) {
+        setPlatformMfaRequired(nextValue);
+        showToast(`Platform Admin MFA ${nextValue ? 'enforced' : 'disabled'}.`);
+      }
+    } catch (err: any) {
+      console.error('Error saving Platform MFA setting:', err);
+      showToast('Failed to update Platform Admin MFA setting.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTogglePlatformIpRestriction = async () => {
+    const nextValue = !platformIpRestrictionEnabled;
+    setSaving(true);
+    try {
+      const res = await updateGlobalSecuritySettings({
+        platformIpRestrictionEnabled: nextValue,
+      });
+      if (res?.success) {
+        setPlatformIpRestrictionEnabled(nextValue);
+        showToast(`Platform Admin IP restriction ${nextValue ? 'enabled' : 'disabled'}.`);
+      }
+    } catch (err: any) {
+      console.error('Error saving Platform IP restriction:', err);
+      showToast('Failed to update Platform IP restriction setting.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleOpenIpModal = () => {
+    setIpInputText(platformAllowedIps);
+    setIpModalOpen(true);
+  };
+
+  const handleSavePlatformIps = async () => {
+    setSaving(true);
+    try {
+      const res = await updateGlobalSecuritySettings({
+        platformAllowedIps: ipInputText,
+        platformIpRestrictionEnabled: true,
+      });
+      if (res?.success) {
+        setPlatformAllowedIps(ipInputText);
+        setPlatformIpRestrictionEnabled(true);
+        setIpModalOpen(false);
+        showToast('Platform Admin allowed IP list updated and enabled.');
+      }
+    } catch (err: any) {
+      console.error('Error saving allowed IPs:', err);
+      showToast('Failed to update allowed IPs.');
     } finally {
       setSaving(false);
     }
@@ -201,11 +277,16 @@ export default function PlatformSecurityPage() {
     }
   };
 
+  const parsedIpList = platformAllowedIps
+    .split(/[\n,;]+/)
+    .map((ip) => ip.trim())
+    .filter(Boolean);
+
   return (
     <Box>
       <PageHeader
         title="Security"
-        subtitle="Global security settings configured by Global Admin — applies platform-wide across all organizations"
+        subtitle="Global security settings configured by Global Admin — applies platform-wide across all organizations and operators"
       />
 
       <Panel>
@@ -216,7 +297,208 @@ export default function PlatformSecurityPage() {
           </Box>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            {/* 1. SSO Row */}
+            {/* 1. Platform Admin Multi-Factor Authentication (MFA) Row */}
+            <Box
+              sx={{
+                py: 2.5,
+                px: 1,
+                display: 'flex',
+                alignItems: { xs: 'flex-start', sm: 'center' },
+                justifyContent: 'space-between',
+                gap: 2,
+                flexDirection: { xs: 'column', sm: 'row' },
+              }}
+            >
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', minWidth: 0 }}>
+                <Box
+                  sx={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '6px',
+                    display: 'grid',
+                    placeItems: 'center',
+                    background: cv.purpleSurface,
+                    color: cv.brandOrchid,
+                    border: `1px solid ${cv.purpleChipBorder}`,
+                    flexShrink: 0,
+                    mt: 0.25,
+                  }}
+                >
+                  <PhonelinkLockOutlinedIcon sx={{ fontSize: 20 }} />
+                </Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontWeight: 600, fontSize: '0.95rem', color: cv.textPrimary }}>
+                    Platform Admin Multi-Factor Authentication (MFA)
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontSize: '0.8125rem',
+                      color: platformMfaRequired ? cv.successText : cv.textMuted,
+                      mt: 0.35,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {platformMfaRequired ? 'Required (Email OTP Enforced)' : 'Disabled'}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: cv.textSecondary, mt: 0.5 }}>
+                    Enforces 6-digit email OTP verification during Platform Admin login to protect operator access.
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={saving}
+                onClick={handleTogglePlatformMfa}
+                sx={{
+                  height: 36,
+                  minHeight: 36,
+                  px: 2,
+                  borderRadius: '6px',
+                  borderColor: platformMfaRequired ? cv.brandOrchid : cv.borderStrong,
+                  color: platformMfaRequired ? cv.brandOrchid : cv.textPrimary,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.8125rem',
+                  flexShrink: 0,
+                  '&:hover': {
+                    borderColor: cv.brandOrchid,
+                    background: cv.purpleSurface,
+                    color: cv.brandOrchid,
+                  },
+                }}
+              >
+                {saving ? 'Saving...' : platformMfaRequired ? 'Disable MFA' : 'Enforce MFA'}
+              </Button>
+            </Box>
+
+            <Divider sx={{ borderColor: cv.border }} />
+
+            {/* 2. Platform Admin IP Restrictions Row */}
+            <Box
+              sx={{
+                py: 2.5,
+                px: 1,
+                display: 'flex',
+                alignItems: { xs: 'flex-start', sm: 'center' },
+                justifyContent: 'space-between',
+                gap: 2,
+                flexDirection: { xs: 'column', sm: 'row' },
+              }}
+            >
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', minWidth: 0 }}>
+                <Box
+                  sx={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '6px',
+                    display: 'grid',
+                    placeItems: 'center',
+                    background: cv.purpleSurface,
+                    color: cv.brandOrchid,
+                    border: `1px solid ${cv.purpleChipBorder}`,
+                    flexShrink: 0,
+                    mt: 0.25,
+                  }}
+                >
+                  <DnsOutlinedIcon sx={{ fontSize: 20 }} />
+                </Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontWeight: 600, fontSize: '0.95rem', color: cv.textPrimary }}>
+                    Platform Admin IP Whitelisting & Restrictions
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', maxWidth: { xs: '100%', sm: 420, md: 440 }, mt: 0.75, mb: 0.5 }}>
+                    <Chip
+                      size="small"
+                      label={platformIpRestrictionEnabled ? 'IP Restriction Active' : 'IP Restriction Off'}
+                      sx={{
+                        height: 24,
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        borderRadius: '4px',
+                        background: platformIpRestrictionEnabled ? cv.purpleSurface : cv.surface,
+                        color: platformIpRestrictionEnabled ? cv.brandOrchid : cv.textMuted,
+                        border: `1px solid ${platformIpRestrictionEnabled ? cv.purpleChipBorder : cv.border}`,
+                      }}
+                    />
+                    {parsedIpList.map((ip) => (
+                      <Chip
+                        key={ip}
+                        size="small"
+                        label={ip}
+                        sx={{
+                          height: 24,
+                          fontSize: '0.75rem',
+                          fontWeight: 500,
+                          borderRadius: '4px',
+                          background: cv.surfaceHover,
+                          color: cv.textPrimary,
+                          border: `1px solid ${cv.border}`,
+                        }}
+                      />
+                    ))}
+                  </Box>
+                  <Typography sx={{ fontSize: '0.75rem', color: cv.textSecondary, mt: 0.5 }}>
+                    Restricts Platform Admin console authentication to specified IP addresses or CIDR ranges.
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  disabled={saving}
+                  onClick={handleTogglePlatformIpRestriction}
+                  sx={{
+                    height: 36,
+                    minHeight: 36,
+                    px: 2,
+                    borderRadius: '6px',
+                    borderColor: platformIpRestrictionEnabled ? cv.brandOrchid : cv.borderStrong,
+                    color: platformIpRestrictionEnabled ? cv.brandOrchid : cv.textPrimary,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.8125rem',
+                    '&:hover': {
+                      borderColor: cv.brandOrchid,
+                      background: cv.purpleSurface,
+                      color: cv.brandOrchid,
+                    },
+                  }}
+                >
+                  {saving ? 'Saving...' : platformIpRestrictionEnabled ? 'Turn Off' : 'Turn On'}
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleOpenIpModal}
+                  sx={{
+                    height: 36,
+                    minHeight: 36,
+                    px: 2,
+                    borderRadius: '6px',
+                    borderColor: cv.borderStrong,
+                    color: cv.textPrimary,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.8125rem',
+                    '&:hover': {
+                      borderColor: cv.brandOrchid,
+                      background: cv.purpleSurface,
+                      color: cv.brandOrchid,
+                    },
+                  }}
+                >
+                  Configure IPs
+                </Button>
+              </Box>
+            </Box>
+
+            <Divider sx={{ borderColor: cv.border }} />
+
+            {/* 3. SSO Row */}
             <Box
               sx={{
                 py: 2.5,
@@ -289,7 +571,7 @@ export default function PlatformSecurityPage() {
 
             <Divider sx={{ borderColor: cv.border }} />
 
-            {/* 2. Session Timeout Row */}
+            {/* 4. Session Timeout Row */}
             <Box
               sx={{
                 py: 2.5,
@@ -359,7 +641,7 @@ export default function PlatformSecurityPage() {
 
             <Divider sx={{ borderColor: cv.border }} />
 
-            {/* 3. Content Security Policy Row */}
+            {/* 5. Content Security Policy Row */}
             <Box
               sx={{
                 py: 2.5,
@@ -451,6 +733,60 @@ export default function PlatformSecurityPage() {
           </Box>
         )}
       </Panel>
+
+      {/* --- Platform Admin IP Restriction Dialog --- */}
+      <Dialog
+        open={ipModalOpen}
+        onClose={() => setIpModalOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              background: cv.drawerSurface,
+              border: `1px solid ${cv.border}`,
+              borderRadius: '8px',
+              color: cv.textPrimary,
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
+          Configure Allowed IP Addresses
+        </DialogTitle>
+        <DialogContent dividers sx={{ borderColor: cv.border, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography sx={{ fontSize: '0.875rem', color: cv.textSecondary, lineHeight: 1.5 }}>
+            Specify comma-separated IP addresses or wildcard subnets allowed to access the Platform Admin console (e.g. <code>127.0.0.1, ::1, 192.168.1.*</code>).
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            size="small"
+            label="Allowed IPs / Subnets"
+            value={ipInputText}
+            onChange={(e) => setIpInputText(e.target.value)}
+            placeholder="127.0.0.1, ::1, 192.168.1.*"
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setIpModalOpen(false)} sx={{ color: cv.textSecondary, textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disabled={saving}
+            onClick={handleSavePlatformIps}
+            sx={{
+              background: cv.brandGradient,
+              textTransform: 'none',
+              fontWeight: 600,
+            }}
+          >
+            {saving ? 'Saving...' : 'Save & Enable IP Restriction'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* --- Session Timeout Dialog --- */}
       <Dialog
