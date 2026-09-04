@@ -379,7 +379,13 @@ export default function DashboardPage({
   const helpButtonRef = useRef<HTMLButtonElement>(null);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [keyboardShortcutsOpen, setKeyboardShortcutsOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [viewMode, setViewModeRaw] = useState<ViewMode>(
+    () => (localStorage.getItem('noah_viewMode') as ViewMode | null) ?? 'grid'
+  );
+  const setViewMode = (v: ViewMode) => {
+    localStorage.setItem('noah_viewMode', v);
+    setViewModeRaw(v);
+  };
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   // Applied filter state — these drive the API call
@@ -394,8 +400,20 @@ export default function DashboardPage({
   const [pendingDateRange, setPendingDateRange] = useState<DateRangeFilter>('all');
   const [pendingTags, setPendingTags] = useState<Set<string>>(new Set());
   const [pendingAiTags, setPendingAiTags] = useState<Set<string>>(new Set());
-  const [sortBy, setSortBy] = useState<SortField>('date');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [sortBy, setSortByRaw] = useState<SortField>(
+    () => (localStorage.getItem('noah_sortBy') as SortField | null) ?? 'date'
+  );
+  const setSortBy = (v: SortField) => {
+    localStorage.setItem('noah_sortBy', v);
+    setSortByRaw(v);
+  };
+  const [sortDirection, setSortDirectionRaw] = useState<SortDirection>(
+    () => (localStorage.getItem('noah_sortDirection') as SortDirection | null) ?? 'desc'
+  );
+  const setSortDirection = (v: SortDirection) => {
+    localStorage.setItem('noah_sortDirection', v);
+    setSortDirectionRaw(v);
+  };
   const [linkNewItemsToProject, setLinkNewItemsToProject] = useState(true);
   const [newMenuAnchor, setNewMenuAnchor] = useState<null | HTMLElement>(null);
   const [newFolderModalOpen, setNewFolderModalOpen] = useState(false);
