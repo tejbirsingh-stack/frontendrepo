@@ -152,6 +152,9 @@ interface VideoAnnotationSurfaceProps {
   onAnnotationNeedsComment?: (request: AnnotationCommentPromptRequest) => void;
   annotationCommentPending?: boolean;
   onMoveLinkedComment?: (move: LinkedCommentMove) => void;
+  /** When true, empty-space Hand-tool drags pan the zoomed workspace. */
+  workspacePanEnabled?: boolean;
+  onWorkspacePanBy?: (delta: { dx: number; dy: number }) => void;
   selectedShapeId?: string | null;
   onSelectedShapeIdChange?: (id: string | null) => void;
   selectedStampId?: string | null;
@@ -179,6 +182,11 @@ type DrawingPointerInteraction = {
   strokeId: string;
   startPointer: PercentPoint;
   originPoints: string;
+};
+
+type WorkspacePanInteraction = {
+  lastClientX: number;
+  lastClientY: number;
 };
 
 function pointsToSvgPath(points: PercentPoint[]): string {
@@ -296,6 +304,8 @@ export default function VideoAnnotationSurface({
   onAnnotationNeedsComment,
   annotationCommentPending = false,
   onMoveLinkedComment,
+  workspacePanEnabled = false,
+  onWorkspacePanBy,
   selectedShapeId: externalSelectedShapeId,
   onSelectedShapeIdChange,
   selectedStampId: externalSelectedStampId,
@@ -307,6 +317,7 @@ export default function VideoAnnotationSurface({
   const containerRef = useRef<HTMLDivElement>(null);
   const stampInteractionRef = useRef<StampPointerInteraction | null>(null);
   const drawingInteractionRef = useRef<DrawingPointerInteraction | null>(null);
+  const workspacePanRef = useRef<WorkspacePanInteraction | null>(null);
   const drawingRef = useRef(false);
   const shapeInteractionRef = useRef<ShapePointerInteraction | null>(null);
   const erasingRef = useRef(false);
@@ -478,9 +489,18 @@ export default function VideoAnnotationSurface({
   useEffect(() => {
     if (activeTool !== 'pan') {
       drawingInteractionRef.current = null;
+      workspacePanRef.current = null;
       setPanCursor('default');
+    } else {
+      setPanCursor('grab');
     }
   }, [activeTool]);
+
+  useEffect(() => {
+    if (!workspacePanEnabled) {
+      workspacePanRef.current = null;
+    }
+  }, [workspacePanEnabled]);
 
   const selectedShape = useMemo(
     () => visibleShapes.find((shape) => shape.id === selectedShapeId) ?? null,
@@ -918,6 +938,16 @@ export default function VideoAnnotationSurface({
       setSelectedShapeId(null);
       setSelectedStampId(null);
       setInternalSelectedDrawingId(null);
+
+      if (activeTool === 'pan' && workspacePanEnabled) {
+        event.preventDefault();
+        workspacePanRef.current = {
+          lastClientX: event.clientX,
+          lastClientY: event.clientY,
+        };
+        setPanCursor('grabbing');
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
       return;
     }
 
@@ -1021,6 +1051,18 @@ export default function VideoAnnotationSurface({
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!enabled) return;
 
+    if (activeTool === 'pan' && workspacePanRef.current) {
+      const dx = event.clientX - workspacePanRef.current.lastClientX;
+      const dy = event.clientY - workspacePanRef.current.lastClientY;
+      workspacePanRef.current.lastClientX = event.clientX;
+      workspacePanRef.current.lastClientY = event.clientY;
+      if (dx !== 0 || dy !== 0) {
+        onWorkspacePanBy?.({ dx, dy });
+      }
+      setPanCursor('grabbing');
+      return;
+    }
+
     const point = getPercentPoint(event);
     if (!point) return;
 
@@ -1105,7 +1147,11 @@ export default function VideoAnnotationSurface({
         const hoverStamp = findTopStampAtPoint(point, visibleStamps, rect);
         const hoverShape = findTopShapeAtPoint(point, visibleShapes, rect);
         const hoverStroke = findTopStrokeAtPoint(point, visibleStrokes, rect);
-        setPanCursor(hoverStamp || hoverShape || hoverStroke ? 'grab' : 'default');
+        setPanCursor(
+          hoverStamp || hoverShape || hoverStroke || workspacePanEnabled
+            ? 'grab'
+            : 'default',
+        );
       }
 
       return;
@@ -1261,6 +1307,15 @@ export default function VideoAnnotationSurface({
         setPanCursor('grab');
         return;
       }
+
+      if (workspacePanRef.current) {
+        workspacePanRef.current = null;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        setPanCursor(workspacePanEnabled ? 'grab' : 'default');
+        return;
+      }
     }
 
     if (activeTool !== 'draw') return;
@@ -1295,9 +1350,9 @@ export default function VideoAnnotationSurface({
   };
 
   const interactive =
-    annotationsVisible &&
     enabled &&
-    ['draw', 'shape', 'stamp', 'pan'].includes(activeTool);
+    (activeTool === 'pan' ||
+      (annotationsVisible && ['draw', 'shape', 'stamp'].includes(activeTool)));
 
   const showGridOverlay =
     annotationsVisible && activeTool === 'draw' && drawTool === 'grid';

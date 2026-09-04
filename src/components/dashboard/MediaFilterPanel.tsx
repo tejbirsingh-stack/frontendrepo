@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -7,6 +8,7 @@ import {
   Collapse,
   FormControl,
   IconButton,
+  Link,
   MenuItem,
   Popover,
   Select,
@@ -145,7 +147,6 @@ interface MediaFilterPanelProps {
   onDateRangeChange: (value: DateRangeFilter) => void;
   onToggleTag: (tag: string) => void;
   onToggleAiTag: (tag: string) => void;
-  onClearAll: () => void;
   onApply: () => void;
 }
 
@@ -158,7 +159,6 @@ export default function MediaFilterPanel({
   onDateRangeChange,
   onToggleTag,
   onToggleAiTag,
-  onClearAll,
   onApply,
 }: MediaFilterPanelProps) {
   const { activeWorkspaceId, getAssignableTags, tagScopeColors } = useDashboard();
@@ -374,38 +374,12 @@ export default function MediaFilterPanel({
         backdropFilter: 'blur(12px)',
       }}
     >
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          mb: 2.5,
-        }}
+      <Typography
+        variant="subtitle1"
+        sx={{ fontWeight: 600, fontSize: '1rem', color: cv.textPrimary, mb: 2.5 }}
       >
-        <Typography
-          variant="subtitle1"
-          sx={{ fontWeight: 600, fontSize: '1rem', color: cv.textPrimary }}
-        >
-          Filters
-        </Typography>
-        <Typography
-          component="button"
-          type="button"
-          onClick={onClearAll}
-          sx={{
-            border: 'none',
-            background: 'none',
-            p: 0,
-            cursor: 'pointer',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            color: cv.brandPurple,
-            '&:hover': { color: cv.purpleLight },
-          }}
-        >
-          Clear All
-        </Typography>
-      </Box>
+        Filters
+      </Typography>
 
       <Box
         sx={{
@@ -467,6 +441,24 @@ export default function MediaFilterPanel({
         </FilterField>
 
         <FilterField label="Tags">
+          {assignableTags.length === 0 ? (
+            <Typography sx={{ fontSize: '0.8125rem', color: cv.textSecondary, lineHeight: 1.5 }}>
+              No tags yet.{' '}
+              <Link
+                component={RouterLink}
+                to="/home/tags"
+                sx={{
+                  color: cv.brandPurple,
+                  fontWeight: 600,
+                  textDecoration: 'underline',
+                  textUnderlineOffset: 2,
+                  '&:hover': { color: cv.purpleLight },
+                }}
+              >
+                Create one
+              </Link>
+            </Typography>
+          ) : (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
             {previewManagedTags.map((tag) => {
               const selected = selectedTags.has(tag.name);
@@ -508,6 +500,7 @@ export default function MediaFilterPanel({
               />
             )}
           </Box>
+          )}
 
           <Popover
             anchorEl={tagsMenuAnchor}
@@ -589,20 +582,6 @@ export default function MediaFilterPanel({
                   </Box>
                 );
               })}
-
-              {assignableTags.length === 0 && (
-                <Typography
-                  sx={{
-                    px: 1,
-                    py: 2,
-                    fontSize: '0.8125rem',
-                    color: cv.textSecondary,
-                    textAlign: 'center',
-                  }}
-                >
-                  No tags available
-                </Typography>
-              )}
             </Box>
           </Popover>
         </FilterField>
