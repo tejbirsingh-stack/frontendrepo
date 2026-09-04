@@ -45,7 +45,6 @@ export default function PlatformSecurityPage() {
   const [sessionTimeoutDays, setSessionTimeoutDays] = useState(30);
 
   // Platform Admin Security Settings
-  const [platformMfaRequired, setPlatformMfaRequired] = useState(true);
   const [platformIpRestrictionEnabled, setPlatformIpRestrictionEnabled] = useState(false);
   const [platformAllowedIps, setPlatformAllowedIps] = useState('127.0.0.1, ::1');
 
@@ -84,7 +83,6 @@ export default function PlatformSecurityPage() {
         setSsoProvider(res.settings.ssoProvider || 'google, microsoft');
         setSsoDomain(res.settings.ssoDomain || '');
         setSessionTimeoutDays(Number(res.settings.sessionTimeoutDays) || 30);
-        setPlatformMfaRequired(res.settings.platformMfaRequired !== false);
         setPlatformIpRestrictionEnabled(Boolean(res.settings.platformIpRestrictionEnabled));
         setPlatformAllowedIps(res.settings.platformAllowedIps || '127.0.0.1, ::1');
 
@@ -131,24 +129,7 @@ export default function PlatformSecurityPage() {
     }
   };
 
-  const handleTogglePlatformMfa = async () => {
-    const nextValue = !platformMfaRequired;
-    setSaving(true);
-    try {
-      const res = await updateGlobalSecuritySettings({
-        platformMfaRequired: nextValue,
-      });
-      if (res?.success) {
-        setPlatformMfaRequired(nextValue);
-        showToast(`Platform Admin MFA ${nextValue ? 'enforced' : 'disabled'}.`);
-      }
-    } catch (err: any) {
-      console.error('Error saving Platform MFA setting:', err);
-      showToast('Failed to update Platform Admin MFA setting.');
-    } finally {
-      setSaving(false);
-    }
-  };
+
 
   const handleTogglePlatformIpRestriction = async () => {
     const nextValue = !platformIpRestrictionEnabled;
@@ -297,83 +278,7 @@ export default function PlatformSecurityPage() {
           </Box>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            {/* 1. Platform Admin Multi-Factor Authentication (MFA) Row */}
-            <Box
-              sx={{
-                py: 2.5,
-                px: 1,
-                display: 'flex',
-                alignItems: { xs: 'flex-start', sm: 'center' },
-                justifyContent: 'space-between',
-                gap: 2,
-                flexDirection: { xs: 'column', sm: 'row' },
-              }}
-            >
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', minWidth: 0 }}>
-                <Box
-                  sx={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: '6px',
-                    display: 'grid',
-                    placeItems: 'center',
-                    background: cv.purpleSurface,
-                    color: cv.brandOrchid,
-                    border: `1px solid ${cv.purpleChipBorder}`,
-                    flexShrink: 0,
-                    mt: 0.25,
-                  }}
-                >
-                  <PhonelinkLockOutlinedIcon sx={{ fontSize: 20 }} />
-                </Box>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography sx={{ fontWeight: 600, fontSize: '0.95rem', color: cv.textPrimary }}>
-                    Platform Admin Multi-Factor Authentication (MFA)
-                  </Typography>
-                  <Typography
-                    sx={{
-                      fontSize: '0.8125rem',
-                      color: platformMfaRequired ? cv.successText : cv.textMuted,
-                      mt: 0.35,
-                      fontWeight: 500,
-                    }}
-                  >
-                    {platformMfaRequired ? 'Required (Email OTP Enforced)' : 'Disabled'}
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: cv.textSecondary, mt: 0.5 }}>
-                    Enforces 6-digit email OTP verification during Platform Admin login to protect operator access.
-                  </Typography>
-                </Box>
-              </Box>
 
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={saving}
-                onClick={handleTogglePlatformMfa}
-                sx={{
-                  height: 36,
-                  minHeight: 36,
-                  px: 2,
-                  borderRadius: '6px',
-                  borderColor: platformMfaRequired ? cv.brandOrchid : cv.borderStrong,
-                  color: platformMfaRequired ? cv.brandOrchid : cv.textPrimary,
-                  textTransform: 'none',
-                  fontWeight: 600,
-                  fontSize: '0.8125rem',
-                  flexShrink: 0,
-                  '&:hover': {
-                    borderColor: cv.brandOrchid,
-                    background: cv.purpleSurface,
-                    color: cv.brandOrchid,
-                  },
-                }}
-              >
-                {saving ? 'Saving...' : platformMfaRequired ? 'Disable MFA' : 'Enforce MFA'}
-              </Button>
-            </Box>
-
-            <Divider sx={{ borderColor: cv.border }} />
 
             {/* 2. Platform Admin IP Restrictions Row */}
             <Box
