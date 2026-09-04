@@ -33,6 +33,7 @@ import HelpOutlinedIcon from '@mui/icons-material/HelpOutlined';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import MediaFilterPanel from '../components/dashboard/MediaFilterPanel';
 import MediaItemCard from '../components/dashboard/MediaItemCard';
 import MediaListRow from '../components/dashboard/MediaListRow';
@@ -940,6 +941,35 @@ export default function DashboardPage({
     setSortDirection('desc');
   };
 
+  const handleRefresh = () => {
+    if (!activeWorkspaceId) return;
+    let view: LibraryViewParam = 'all';
+    if (folderMedia) {
+      view = folderMedia.isProject ? 'project' : 'folder';
+    } else if (libraryView === 'recent') view = 'all';
+    else if (libraryView === 'favorites') view = 'favorites';
+    else if (libraryView === 'duplicates') view = 'duplicates';
+    else if (libraryView === 'shared') view = 'shared';
+    else if (libraryView === 'projects') view = 'projects';
+    else if (libraryView === 'folder') view = 'folder';
+    else if (libraryView === 'project') view = 'project';
+
+    fetchLibraryFirstPage({
+      workspaceId: activeWorkspaceId,
+      view,
+      folderId: view === 'folder' && folderMedia ? folderMedia.id : undefined,
+      projectId: view === 'project' && folderMedia ? folderMedia.id : undefined,
+      mediaType: mediaTypeFilter,
+      dateRange: dateRangeFilter,
+      tagIds: Array.from(selectedTags),
+      aiTags: Array.from(selectedAiTags),
+      reviewStatus: reviewStatusFilter,
+      sortBy,
+      sortOrder: sortDirection,
+      pageSize: 48,
+    });
+  };
+
   const toggleFullscreen = async () => {
     if (!document.fullscreenElement) {
       await contentRef.current?.requestFullscreen();
@@ -1361,6 +1391,27 @@ export default function DashboardPage({
                   ) : (
                     <ArrowUpwardIcon sx={{ fontSize: 18 }} />
                   )}
+                </IconButton>
+              </ToolbarTooltip>
+
+              <ToolbarTooltip title="Refresh">
+                <IconButton
+                  id="toolbar-refresh-btn"
+                  size="small"
+                  aria-label="Refresh library"
+                  onClick={handleRefresh}
+                  disabled={libraryLoading}
+                  sx={getToolbarIconButtonSx()}
+                >
+                  <RefreshIcon
+                    sx={{
+                      fontSize: 18,
+                      ...(libraryLoading && {
+                        animation: 'spin 0.8s linear infinite',
+                        '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } },
+                      }),
+                    }}
+                  />
                 </IconButton>
               </ToolbarTooltip>
             </Box>
