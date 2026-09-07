@@ -870,9 +870,25 @@ export default function WorkspaceMembersDialog({
 
   const handleDraftVisibilityChange = (nextVisibility: ProjectVisibility) => {
     setDraftVisibility(nextVisibility);
+    if (nextVisibility === 'private') {
+      // Private links display the asset name (from DB), not the custom share link name.
+      // Set the input to the asset name so the user sees what private recipients will see.
+      setLinkNameInput(workspaceName);
+    } else {
+      // Switching back to public — restore the share link's custom editable name.
+      setLinkNameInput(activeShareLink?.name ?? '');
+    }
   };
 
   const handleShareLinkNameBlur = () => {
+    // Auto-save the name on blur only for public links — private links use the asset name (read-only)
+    if (showShareLinks && activeShareLinkId && draftVisibility === 'public') {
+      const trimmedName = linkNameInput.trim();
+      if (trimmedName && trimmedName !== activeShareLink?.name) {
+        onShareLinkNameChange?.(activeShareLinkId, trimmedName);
+        onShareLinkSettingsSaved?.();
+      }
+    }
     setIsEditingShareLink(false);
   };
 
@@ -892,8 +908,10 @@ export default function WorkspaceMembersDialog({
     let didSave = false;
 
     if (showShareLinks && activeShareLinkId) {
+      // Name is already auto-saved on blur — only save here if it wasn't saved yet.
+      // Private links use the asset name (read-only), so never save the name for them.
       const trimmedName = linkNameInput.trim();
-      if (trimmedName && trimmedName !== activeShareLink?.name) {
+      if (draftVisibility === 'public' && trimmedName && trimmedName !== activeShareLink?.name) {
         onShareLinkNameChange?.(activeShareLinkId, trimmedName);
         didSave = true;
       }
@@ -949,12 +967,19 @@ export default function WorkspaceMembersDialog({
           label="Link name"
           placeholder="e.g. client-review"
           value={linkNameInput}
+          disabled={draftVisibility === 'private'}
+          helperText={
+            draftVisibility === 'private'
+              ? 'Private links use the asset name and cannot be renamed.'
+              : undefined
+          }
           onChange={(event) => setLinkNameInput(event.target.value)}
           onBlur={handleShareLinkNameBlur}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
-              void handleShare();
+              // Save name immediately on Enter then blur to trigger auto-save
+              linkNameInputRef.current?.blur();
             }
             if (event.key === 'Escape') {
               handleCancelShareLinkEdit();

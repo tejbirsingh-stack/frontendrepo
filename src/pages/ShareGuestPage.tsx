@@ -45,6 +45,7 @@ export default function ShareGuestPage() {
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<string>('public');
   const [mode, setMode] = useState<string>('link');
+  const [linkName, setLinkName] = useState<string | null>(null);
 
   // Password unlock state
   const [password, setPassword] = useState('');
@@ -78,6 +79,8 @@ export default function ShareGuestPage() {
         setExpiresAt(res.expiresAt);
         if (res.visibility) setVisibility(res.visibility);
         if (res.mode) setMode(res.mode);
+        // linkName is only present for public link-mode shares (set by the owner)
+        if (res.linkName) setLinkName(res.linkName);
 
         if (res.requiresPassword) {
           setStatus('password');
@@ -160,13 +163,20 @@ export default function ShareGuestPage() {
   };
 
   if (status === 'unlocked' && token) {
+    // For public link-mode shares, override the displayed title with the share link's custom name
+    // (from share_links.name) instead of the asset's original filename (from assets table).
+    const guestAssetMetaWithName =
+      linkName && visibility === 'public' && mode === 'link'
+        ? { ...assetMeta, title: linkName }
+        : assetMeta;
+
     return (
       <VideoPlayerPage
         isGuestMode={true}
         shareToken={token}
         guestBranding={branding}
         guestPermissions={permissions}
-        guestAssetMeta={assetMeta}
+        guestAssetMeta={guestAssetMetaWithName}
         guestExpiresAt={expiresAt}
       />
     );
@@ -433,7 +443,9 @@ export default function ShareGuestPage() {
 
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
                 <Typography variant="h6" sx={{ fontWeight: 600, color: '#f8fafc' }}>
-                  {assetMeta?.title || 'Shared Media Asset'}
+                  {(visibility === 'public' && mode === 'link' && linkName)
+                    ? linkName
+                    : assetMeta?.title || 'Shared Media Asset'}
                 </Typography>
 
                 {(permissions.download || permissions.downloadProxy) && (
