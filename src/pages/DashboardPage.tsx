@@ -57,6 +57,7 @@ import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
 import { dropdownMenuPaperSx } from '../constants/dropdownMenu';
 import { UPLOAD_ACCEPT, getUploadableFiles } from '../utils/fileMediaType';
 import {
+  matchesCustomDateRange,
   matchesDateRange,
   matchesMediaTypeFilter,
   type DateRangeFilter,
@@ -396,9 +397,14 @@ export default function DashboardPage({
   const [selectedAiTags, setSelectedAiTags] = useState<Set<string>>(new Set());
   const [reviewStatusFilter, setReviewStatusFilter] = useState<ReviewStatusFilter>('all');
 
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+
   // Pending filter state — tracks what the user has selected but not yet submitted
   const [pendingMediaType, setPendingMediaType] = useState<MediaTypeFilter>('all');
   const [pendingDateRange, setPendingDateRange] = useState<DateRangeFilter>('all');
+  const [pendingCustomStartDate, setPendingCustomStartDate] = useState<string>('');
+  const [pendingCustomEndDate, setPendingCustomEndDate] = useState<string>('');
   const [pendingTags, setPendingTags] = useState<Set<string>>(new Set());
   const [pendingAiTags, setPendingAiTags] = useState<Set<string>>(new Set());
   const [sortBy, setSortByRaw] = useState<SortField>(
@@ -697,7 +703,11 @@ export default function DashboardPage({
       items = items.filter(item => matchesMediaTypeFilter(item, mediaTypeFilter));
     }
     if (dateRangeFilter !== 'all') {
-      items = items.filter(item => matchesDateRange(item.createdAt, dateRangeFilter));
+      if (dateRangeFilter === 'custom') {
+        items = items.filter(item => matchesCustomDateRange(item.createdAt, customStartDate, customEndDate));
+      } else {
+        items = items.filter(item => matchesDateRange(item.createdAt, dateRangeFilter));
+      }
     }
     if (reviewStatusFilter !== 'all') {
       items = items.filter(item => (item.customMetadata as any)?.reviewStatus === reviewStatusFilter);
@@ -917,6 +927,8 @@ export default function DashboardPage({
   const handleApplyFilters = () => {
     setMediaTypeFilter(pendingMediaType);
     setDateRangeFilter(pendingDateRange);
+    setCustomStartDate(pendingCustomStartDate);
+    setCustomEndDate(pendingCustomEndDate);
     setSelectedTags(new Set(pendingTags));
     setSelectedAiTags(new Set(pendingAiTags));
     setFilterPanelOpen(false);
@@ -926,10 +938,14 @@ export default function DashboardPage({
     // Reset both pending and applied together
     setPendingMediaType('all');
     setPendingDateRange('all');
+    setPendingCustomStartDate('');
+    setPendingCustomEndDate('');
     setPendingTags(new Set());
     setPendingAiTags(new Set());
     setMediaTypeFilter('all');
     setDateRangeFilter('all');
+    setCustomStartDate('');
+    setCustomEndDate('');
     setSelectedTags(new Set());
     setSelectedAiTags(new Set());
   };
@@ -1608,10 +1624,15 @@ export default function DashboardPage({
             <MediaFilterPanel
               mediaTypeFilter={pendingMediaType}
               dateRangeFilter={pendingDateRange}
+              customStartDate={pendingCustomStartDate}
+              customEndDate={pendingCustomEndDate}
               selectedTags={pendingTags}
               selectedAiTags={pendingAiTags}
+              hideProjectFilter={Boolean(folderMedia?.isProject)}
               onMediaTypeChange={setPendingMediaType}
               onDateRangeChange={setPendingDateRange}
+              onCustomStartDateChange={setPendingCustomStartDate}
+              onCustomEndDateChange={setPendingCustomEndDate}
               onToggleTag={toggleTag}
               onToggleAiTag={toggleAiTag}
               onApply={handleApplyFilters}

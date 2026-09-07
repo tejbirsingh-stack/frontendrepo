@@ -12,6 +12,7 @@ import {
   MenuItem,
   Popover,
   Select,
+  TextField,
   Typography,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
@@ -141,25 +142,35 @@ function FilterField({ label, children }: FilterFieldProps) {
 interface MediaFilterPanelProps {
   mediaTypeFilter: MediaTypeFilter;
   dateRangeFilter: DateRangeFilter;
+  customStartDate: string;
+  customEndDate: string;
   selectedTags: Set<string>;
   selectedAiTags: Set<string>;
   onMediaTypeChange: (value: MediaTypeFilter) => void;
   onDateRangeChange: (value: DateRangeFilter) => void;
+  onCustomStartDateChange: (value: string) => void;
+  onCustomEndDateChange: (value: string) => void;
   onToggleTag: (tag: string) => void;
   onToggleAiTag: (tag: string) => void;
   onApply: () => void;
+  hideProjectFilter?: boolean;
 }
 
 export default function MediaFilterPanel({
   mediaTypeFilter,
   dateRangeFilter,
+  customStartDate,
+  customEndDate,
   selectedTags,
   selectedAiTags,
   onMediaTypeChange,
   onDateRangeChange,
+  onCustomStartDateChange,
+  onCustomEndDateChange,
   onToggleTag,
   onToggleAiTag,
   onApply,
+  hideProjectFilter,
 }: MediaFilterPanelProps) {
   const { activeWorkspaceId, getAssignableTags, tagScopeColors } = useDashboard();
   const aiEntitled = useAiEntitled();
@@ -363,6 +374,7 @@ export default function MediaFilterPanel({
   };
 
   const selectedCountInMenu = assignableTags.filter((tag) => selectedTags.has(tag.name)).length;
+  const todayStr = new Date().toISOString().split('T')[0];
 
   return (
     <Box
@@ -403,7 +415,7 @@ export default function MediaFilterPanel({
                 slotProps: { paper: { sx: menuPaperSx } },
               }}
             >
-              {MEDIA_TYPE_FILTER_OPTIONS.map((option) => (
+              {MEDIA_TYPE_FILTER_OPTIONS.filter((option) => !hideProjectFilter || option.value !== 'project').map((option) => (
                 <MenuItem
                   key={option.value}
                   value={option.value}
@@ -438,6 +450,56 @@ export default function MediaFilterPanel({
               ))}
             </Select>
           </FormControl>
+
+          <Collapse in={dateRangeFilter === 'custom'}>
+            <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
+              <TextField
+                type="date"
+                size="small"
+                fullWidth
+                label="Start Date"
+                value={customStartDate}
+                onChange={(e) => onCustomStartDateChange(e.target.value)}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  htmlInput: { max: customEndDate ? (customEndDate < todayStr ? customEndDate : todayStr) : todayStr },
+                  input: {
+                    sx: {
+                      fontSize: '0.8125rem',
+                      height: 38,
+                      borderRadius: '8px',
+                      backgroundColor: cv.glassBackground,
+                      '& .MuiOutlinedInput-notchedOutline': { borderColor: cv.border },
+                    }
+                  }
+                }}
+              />
+              <TextField
+                type="date"
+                size="small"
+                fullWidth
+                label="End Date"
+                value={customEndDate}
+                onChange={(e) => onCustomEndDateChange(e.target.value)}
+                slotProps={{
+                  inputLabel: { shrink: true },
+                  htmlInput: { 
+                    min: customStartDate || undefined,
+                    max: todayStr 
+                  },
+                  input: {
+                    sx: {
+                      fontSize: '0.8125rem',
+                      height: 38,
+                      borderRadius: '8px',
+                      backgroundColor: cv.glassBackground,
+                      '& .MuiOutlinedInput-notchedOutline': { borderColor: cv.border },
+                    }
+                  }
+                }}
+              />
+            </Box>
+          </Collapse>
         </FilterField>
 
         <FilterField label="Tags">
