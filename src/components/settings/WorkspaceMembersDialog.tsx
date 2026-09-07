@@ -233,7 +233,7 @@ export default function WorkspaceMembersDialog({
   const [query, setQuery] = useState('');
   const [access, setAccess] = useState<WorkspaceMemberAccess>('Can view');
   const [error, setError] = useState('');
-  const [sendInviteEmail, setSendInviteEmail] = useState(true);
+
   const [typeaheadOpen, setTypeaheadOpen] = useState(false);
   // External email — single recipient for secure share
   const [pendingExternalEmail, setPendingExternalEmail] = useState<string | null>(null);
@@ -244,7 +244,7 @@ export default function WorkspaceMembersDialog({
   const [isSubmittingInvite, setIsSubmittingInvite] = useState(false);
   // Secure share dialog state
   const [secureShareOpen, setSecureShareOpen] = useState(false);
-  const [shareExpiry, setShareExpiry] = useState<'7' | '15' | '30' | 'custom'>('7');
+  const [shareExpiry, setShareExpiry] = useState<'7' | '14' | '15' | '30' | '90' | 'custom'>('7');
   const [shareCustomDate, setShareCustomDate] = useState('');
   const [sharePermComment, setSharePermComment] = useState(false);
   const [sharePermDownload, setSharePermDownload] = useState(false);
@@ -309,7 +309,7 @@ export default function WorkspaceMembersDialog({
             
             if (settings.defaultExpiryDays) {
               const daysStr = String(settings.defaultExpiryDays);
-              if (['7', '15', '30'].includes(daysStr)) {
+              if (['7', '14', '15', '30', '90'].includes(daysStr)) {
                 setShareExpiry(daysStr as any);
               } else {
                 setShareExpiry('custom');
@@ -493,7 +493,6 @@ export default function WorkspaceMembersDialog({
       setQuery('');
       setAccess('Can view');
       setError('');
-      setSendInviteEmail(false);
       setTypeaheadOpen(false);
       setPendingExternalEmail(null);
       setPendingExternalName(undefined);
@@ -633,7 +632,7 @@ export default function WorkspaceMembersDialog({
       groupName: group.name,
       memberType: 'Group',
       access,
-      sendInviteEmail,
+      sendInviteEmail: true,
     });
 
     if (success === 'ORG_MEMBER_IN_PUBLIC') {
@@ -659,7 +658,7 @@ export default function WorkspaceMembersDialog({
       name,
       memberType,
       access,
-      sendInviteEmail,
+      sendInviteEmail: true,
     });
 
     if (success === 'ORG_MEMBER_IN_PUBLIC') {
@@ -790,7 +789,7 @@ export default function WorkspaceMembersDialog({
         email,
         access,
         memberType,
-        sendInviteEmail,
+        sendInviteEmail: true,
       });
 
       if (result === 'NOT_FOUND') {
@@ -1751,10 +1750,9 @@ export default function WorkspaceMembersDialog({
               exclusive
               onChange={(_e, val) => { if (val) setShareExpiry(val as typeof shareExpiry); }}
               size="small"
-              disabled={Boolean(orgShareSettings?.defaultExpiryDays)}
               sx={{ flexWrap: 'wrap', gap: 0.5 }}
             >
-              {(['7', '15', '30', 'custom'] as const).map((opt) => (
+              {(['7', '14', '30', '90', 'custom'] as const).map((opt) => (
                 <ToggleButton
                   key={opt}
                   value={opt}
@@ -1783,8 +1781,10 @@ export default function WorkspaceMembersDialog({
                 label="Custom expiry date"
                 value={shareCustomDate}
                 onChange={(e) => setShareCustomDate(e.target.value)}
-                inputProps={{ min: new Date(Date.now() + 86400000).toISOString().split('T')[0] }}
-                slotProps={{ inputLabel: { shrink: true } }}
+                slotProps={{ 
+                  htmlInput: { min: new Date(Date.now() + 86400000).toISOString().split('T')[0] },
+                  inputLabel: { shrink: true } 
+                }}
                 sx={{ mt: 1.5 }}
               />
             </Collapse>
