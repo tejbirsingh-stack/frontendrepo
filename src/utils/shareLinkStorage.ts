@@ -25,6 +25,7 @@ export async function fetchShareLinks(mediaId: string): Promise<ShareLink[]> {
       expiresAt: item.expiresAt,
       permissions: item.permissions,
       hasPassword: item.hasPassword,
+      mode: item.mode,
       recipients: item.recipients,
     }));
   } catch (error) {
@@ -40,6 +41,7 @@ export async function createShareLinkAsync(
     visibility?: any;
     email?: string;
     password?: string;
+    requirePassword?: boolean;
     expiresInDays?: number;
     expiresAt?: string;
     permissions?: { view: boolean; comment: boolean; download: boolean; downloadProxy: boolean };
@@ -52,6 +54,7 @@ export async function createShareLinkAsync(
       visibility: options?.visibility,
       email: options?.email,
       password: options?.password,
+      requirePassword: options?.requirePassword,
       expiresInDays: options?.expiresInDays,
       expiresAt: options?.expiresAt,
       permissions: options?.permissions,
@@ -68,6 +71,7 @@ export async function createShareLinkAsync(
       expiresAt: item.expiresAt,
       permissions: item.permissions,
       hasPassword: item.hasPassword,
+      mode: item.mode,
     };
   } catch (error) {
     console.error('Failed to create share link:', error);

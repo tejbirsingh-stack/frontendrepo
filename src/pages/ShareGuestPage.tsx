@@ -33,7 +33,7 @@ import VideoPlayerPage from './VideoPlayerPage';
 
 export default function ShareGuestPage() {
   const { token } = useParams<{ token: string }>();
-  const streamUrl = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${token}/stream`;
+  const streamUrl = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/share/${token}/stream`;
   const { formatDate, formatTime } = useLocalizedDate();
 
   const [status, setStatus] = useState<'loading' | 'password' | 'unlocked' | 'expired' | 'error'>('loading');
@@ -432,9 +432,9 @@ export default function ShareGuestPage() {
                       userSelect: 'none',
                     }}
                   >
-                    <img 
-                      src={assetMeta.logoUrl} 
-                      alt={assetMeta.organizationName || 'Company Watermark'} 
+                    <img
+                      src={assetMeta.logoUrl}
+                      alt={assetMeta.organizationName || 'Company Watermark'}
                       style={{ maxHeight: '48px', maxWidth: '120px', objectFit: 'contain' }}
                     />
                   </Box>
@@ -457,7 +457,7 @@ export default function ShareGuestPage() {
                         startIcon={<DownloadOutlinedIcon />}
                         onClick={() => {
                           const a = document.createElement('a');
-                          a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${token}/stream?download=true`;
+                          a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/share/${token}/stream?download=true&original=true`;
                           a.download = '';
                           document.body.appendChild(a);
                           a.click();
@@ -481,7 +481,7 @@ export default function ShareGuestPage() {
                         startIcon={<DownloadOutlinedIcon />}
                         onClick={() => {
                           const a = document.createElement('a');
-                          a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${token}/stream?download=true`;
+                          a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/share/${token}/stream?download=true`;
                           a.download = '';
                           document.body.appendChild(a);
                           a.click();
