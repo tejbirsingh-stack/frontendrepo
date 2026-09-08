@@ -630,6 +630,30 @@ export default function VideoPlayerPage({
     return baseSrc ? `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}` : undefined;
   }, [fetchedItem, contextItem, videoSrcVersion]);
 
+  const [signedVideoSrc, setSignedVideoSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchSignedUrl = async () => {
+      const rawItem = fetchedItem || contextItem;
+      if (!rawItem?.id || isGuestMode) {
+        setSignedVideoSrc(null);
+        return;
+      }
+
+      try {
+        const { fetchSignedStreamUrl } = await import('../utils/signedStreamUrl');
+        // Use 60 minutes for video streaming to allow seeking in long videos
+        const signedUrl = await fetchSignedStreamUrl(rawItem.id, 60);
+        setSignedVideoSrc(signedUrl);
+      } catch (error) {
+        console.error('Failed to fetch signed URL:', error);
+        setSignedVideoSrc(null);
+      }
+    };
+
+    fetchSignedUrl();
+  }, [fetchedItem?.id, contextItem?.id, isGuestMode]);
+
   useEffect(() => {
     if (!mediaProbeUrl) return;
     fetch(mediaProbeUrl, { method: 'HEAD' })
@@ -3998,16 +4022,20 @@ export default function VideoPlayerPage({
 
   const baseSrc = isGuestMode && shareToken
     ? `/api/share/${shareToken}/stream`
-    : item.type === 'image'
-      ? (item.url || item.thumbnail || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
-      : item.type === 'audio'
-        ? (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
-        : (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : SAMPLE_VIDEO_SRC));
+    : signedVideoSrc
+      ? signedVideoSrc
+      : item.type === 'image'
+        ? (item.url || item.thumbnail || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
+        : item.type === 'audio'
+          ? (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : ''))
+          : (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : SAMPLE_VIDEO_SRC));
   // Audio/original is available immediately; only blank video while proxy is processing unless user explicitly plays original.
   const shouldBlockMediaSrc = isProcessing && !forcePlayOriginal && item.type === 'video';
   const videoSrc = shouldBlockMediaSrc || !baseSrc
     ? ''
-    : `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}${forcePlayOriginal ? '&original=true' : ''}`;
+    : signedVideoSrc
+      ? `${signedVideoSrc}${signedVideoSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}${forcePlayOriginal ? '&original=true' : ''}`
+      : `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}${forcePlayOriginal ? '&original=true' : ''}`;
   const mediaElementSrc = shouldBlockMediaSrc ? undefined : (videoSrc || undefined);
   const surfaceEnabled = SURFACE_TOOLS.includes(activeTool);
 
