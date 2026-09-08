@@ -778,10 +778,31 @@ export default function WorkspaceMembersDialog({
             setError(data.reason);
             return;
           }
-          openSecureShare(email, data?.user?.name, data?.user?.id);
+          if (data?.user?.id) {
+            const result = await onInvite({
+              userId: data.user.id,
+              name: data.user.name,
+              email,
+              access,
+              memberType: 'Guest',
+              sendInviteEmail: true,
+            });
+
+            if (result) {
+              setQuery('');
+              setError('');
+              setTypeaheadOpen(false);
+            } else {
+              setError('Failed to add user to workspace.');
+            }
+            return;
+          }
+
+          openSecureShare(email);
           return;
         } catch (err) {
           // Fallback below
+          console.error(err);
         }
       }
 
@@ -870,11 +891,8 @@ export default function WorkspaceMembersDialog({
   const handleDraftVisibilityChange = (nextVisibility: ProjectVisibility) => {
     setDraftVisibility(nextVisibility);
     if (nextVisibility === 'private') {
-      // Private links display the asset name (from DB), not the custom share link name.
-      // Set the input to the asset name so the user sees what private recipients will see.
       setLinkNameInput(workspaceName);
     } else {
-      // Switching back to public — restore the share link's custom editable name.
       setLinkNameInput(activeShareLink?.name ?? '');
     }
   };
@@ -915,11 +933,7 @@ export default function WorkspaceMembersDialog({
         didSave = true;
       }
 
-      const currentVisibility = activeShareLink?.visibility ?? visibility;
-      if (draftVisibility !== currentVisibility) {
-        onVisibilityChange?.(draftVisibility);
-        didSave = true;
-      }
+
 
       if (activeShareLink?.url) {
         const copied = await copyProjectShareLink(activeShareLink.url);
@@ -945,12 +959,10 @@ export default function WorkspaceMembersDialog({
     // they intended to use it for the NEW link they are creating.
     const isCustomName = Boolean(trimmed && trimmed !== activeShareLink?.name);
     
-    const nextVisibility = isCustomName ? draftVisibility : visibility;
-    
     setIsEditingShareLink(false);
     onNewShareLink({
       name: isCustomName ? trimmed : '',
-      visibility: nextVisibility,
+      visibility: draftVisibility,
     });
   };
 
@@ -1043,6 +1055,7 @@ export default function WorkspaceMembersDialog({
   const confirmShareLinkDelete = () => {
     if (!pendingShareLinkDelete || !onShareLinkDelete) return;
     onShareLinkDelete(pendingShareLinkDelete);
+    setApiShareLinks(current => current.filter(link => link.id !== pendingShareLinkDelete.id));
     setPendingShareLinkDelete(null);
   };
 
@@ -1936,7 +1949,7 @@ export default function WorkspaceMembersDialog({
               const config = {
                 mode: 'email' as const,
                 email: pendingExternalEmail,
-                visibility: shareRequirePassword ? ('private' as const) : ('public' as const),
+                visibility: 'private' as const,
                 expiresInDays: shareExpiry !== 'custom' ? Number(shareExpiry) : undefined,
                 expiresAt: shareExpiry === 'custom' ? shareCustomDate : undefined,
                 permissions: {
@@ -1946,6 +1959,7 @@ export default function WorkspaceMembersDialog({
                   downloadProxy: sharePermDownloadProxy,
                   watermark: sharePermWatermark,
                 },
+                requirePassword: shareRequirePassword,
                 password: shareRequirePassword ? sharePassword : undefined,
               };
 

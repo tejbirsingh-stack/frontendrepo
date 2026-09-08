@@ -1,5 +1,6 @@
 import { useMediaWebSocket, type WebSocketMessage } from '../hooks/useMediaWebSocket';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { env } from '../config/env';
 import { useLocalizedDate } from '../hooks/useLocalizedDate';
 import { cv } from '../theme/cssVars';
 import { Alert, Box, Button, Chip, CircularProgress, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Snackbar, Tooltip, Typography, useMediaQuery, useTheme } from '@mui/material';
@@ -577,11 +578,11 @@ export default function VideoPlayerPage({
             videoSrc: asset.url,
             compressionStatus: asset.compressionStatus || asset.status || 'completed',
             customMetadata: asset.customMetadata,
-            globalMedia: Boolean((asset as any).globalMedia),
+            globalMedia: Boolean((asset as any).globalMedia || (asset as any).global_media),
             visibility: (asset as any).visibility,
             duration: (techSpecs.duration as string) || (asset.customMetadata?.duration as string) || undefined,
-            globalMedia: Boolean((asset as any).globalMedia || (asset as any).global_media),
-          });
+            orgId: (asset as any).orgId || undefined,
+          } as any);
           // Store effective permissions from backend
           const perms = (asset as any).effectivePermissions;
           console.log('[MediaViewer] effectivePermissions from API:', perms);
@@ -609,19 +610,36 @@ export default function VideoPlayerPage({
   const [selectedStampId, setSelectedStampId] = useState<string | null>(null);
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
   const [internalLogoUrl, setInternalLogoUrl] = useState<string | null>(null);
+  const [internalShowWatermark, setInternalShowWatermark] = useState<boolean>(false);
 
   const isSharedWithUser = !isGuestMode && sharedMediaItems.some((m: MediaItem) => m.id === mediaId);
 
+  // After media loads, fetch the media's org settings to check watermark preference.
+  // Watermark is only shown when the media belongs to a DIFFERENT organization than the viewer.
   useEffect(() => {
-    if (!isGuestMode) {
-      getCompanyInfoRequest()
-        .then((res) => {
-          const meta = typeof res?.metadata === 'string' ? JSON.parse(res.metadata) : (res?.metadata || {});
-          setInternalLogoUrl(meta?.logoUrl || null);
-        })
-        .catch((err) => console.error('Failed to load company logo:', err));
+    if (isGuestMode) return;
+    const mediaOrgId = (fetchedItem as any)?.orgId;
+    if (!mediaOrgId) return;
+
+    // Same org → no watermark needed
+    if (mediaOrgId === user?.orgId) {
+      setInternalShowWatermark(false);
+      setInternalLogoUrl(null);
+      return;
     }
-  }, [isGuestMode]);
+
+    getCompanyInfoRequest(mediaOrgId)
+      .then((res) => {
+        const meta = typeof res?.metadata === 'string' ? JSON.parse(res.metadata) : (res?.metadata || {});
+        // Use proxy URL so it's always browser-accessible (no expiry)
+        const proxyLogoUrl = meta?.logoKey
+          ? `/api/public/branding/logo/${mediaOrgId}`
+          : (meta?.logoUrl || null);
+        setInternalLogoUrl(proxyLogoUrl);
+        setInternalShowWatermark(Boolean(res?.settings?.showCompanyWatermarkDefault ?? true));
+      })
+      .catch((err) => console.error('Failed to load company logo for org:', mediaOrgId, err));
+  }, [isGuestMode, (fetchedItem as any)?.orgId, user?.orgId]);
 
   const mediaProbeUrl = useMemo(() => {
     const rawItem = fetchedItem || contextItem;
@@ -639,10 +657,10 @@ export default function VideoPlayerPage({
             if (body.error === 'BandwidthCapExceeded' || body.message?.includes('bandwidth') || body.message?.includes('cap exceeded')) {
               setBandwidthCapError(true);
             }
-          }).catch(() => {});
+          }).catch(() => { });
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [mediaProbeUrl]);
 
   useEffect(() => {
@@ -757,7 +775,8 @@ export default function VideoPlayerPage({
     if (isGuestMode && shareToken) {
       // Guest: no auth token — use plain anchor (share stream route handles notification separately)
       const a = document.createElement('a');
-      a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${shareToken}/stream?download=true`;
+      const extraQuery = variant === 'original' ? '&original=true' : '';
+      a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/share/${shareToken}/stream?download=true${extraQuery}`;
       a.download = '';
       document.body.appendChild(a);
       a.click();
@@ -777,7 +796,7 @@ export default function VideoPlayerPage({
       const { getAccessToken } = await import('../auth/authTokenBridge');
       const token = getAccessToken();
       const finalUrl = token ? `${url}${url.includes('?') ? '&' : '?'}token=${token}` : url;
-      
+
       const anchor = document.createElement('a');
       anchor.href = finalUrl;
       anchor.download = '';
@@ -804,15 +823,18 @@ export default function VideoPlayerPage({
     return bytes > 0 ? formatFileSize(bytes) : '—';
   }, [item]);
 
-  const canDownloadProxy = isGuestMode
-    ? Boolean(guestPermissions?.downloadProxy || guestPermissions?.download)
-    : Boolean(
-        item?.type === 'video' || item?.type === 'audio'
-          ? item?.hasProxy ||
-            Number(item?.proxySizeBytes || (item?.customMetadata as any)?.proxySize || 0) > 0 ||
-            (item?.compressionStatus === 'completed' || item?.compressionStatus === 'active')
-          : false,
-      );
+  const itemSupportsProxy = useMemo(() => {
+    const isVideoOrAudio = item?.type === 'video' || item?.type === 'audio';
+    const hasProxyAsset = item?.hasProxy || Number(item?.proxySizeBytes || (item?.customMetadata as any)?.proxySize || 0) > 0 || (item?.compressionStatus === 'completed' || item?.compressionStatus === 'active');
+    return Boolean(isVideoOrAudio ? hasProxyAsset : false);
+  }, [item]);
+
+  const canDownloadProxy = (() => {
+    if (isGuestMode) {
+      return Boolean(guestPermissions?.downloadProxy);
+    }
+    return itemSupportsProxy;
+  })();
 
   const canEditReviewStatus = !isGuestMode && (isAssetAdmin || isAssetEditor || !isViewer);
 
@@ -866,12 +888,12 @@ export default function VideoPlayerPage({
       setFetchedItem((prev) =>
         prev && prev.id === item.id
           ? {
-              ...prev,
-              customMetadata: {
-                ...(prev.customMetadata || {}),
-                reviewStatus: next,
-              },
-            }
+            ...prev,
+            customMetadata: {
+              ...(prev.customMetadata || {}),
+              reviewStatus: next,
+            },
+          }
           : prev,
       );
       try {
@@ -990,13 +1012,13 @@ export default function VideoPlayerPage({
               videoTimestamp: vTime,
               parentId: anyC.parentId || null
             });
-            
+
             // Sync frontend status if it was New
             if (fileReviewStatus === 'New' || !fileReviewStatus) {
               setFileReviewStatus('In-Progress');
-              setFetchedItem((prev) => 
-                prev && prev.id === mediaId 
-                  ? { ...prev, customMetadata: { ...(prev.customMetadata || {}), reviewStatus: 'In-Progress' } } 
+              setFetchedItem((prev) =>
+                prev && prev.id === mediaId
+                  ? { ...prev, customMetadata: { ...(prev.customMetadata || {}), reviewStatus: 'In-Progress' } }
                   : prev
               );
             }
@@ -1759,9 +1781,9 @@ export default function VideoPlayerPage({
     const fpsValue = (item as any)?.fps || (item as any)?.metadata?.fps || 24;
     const fps = typeof fpsValue === 'string' ? parseFloat(fpsValue) : fpsValue;
     const formatted = formatVideoTimecode(time, fps);
-    
-    navigator.clipboard.writeText(formatted).catch(() => {});
-    
+
+    navigator.clipboard.writeText(formatted).catch(() => { });
+
     setStatusToast({
       open: true,
       message: `Timecode ${formatted} copied to clipboard`,
@@ -2200,9 +2222,9 @@ export default function VideoPlayerPage({
           let finalRole = u.role || u.roleRelation?.name;
           let hasAnyOverride = false;
 
-          if (override && override.accessLevel) {
+          if (override && override.accessLevelObj?.name) {
             hasAnyOverride = true;
-            finalRole = parseAccessLevelToRole(override.accessLevel);
+            finalRole = parseAccessLevelToRole(override.accessLevelObj.name);
           } else {
             // Check if user is in any shared groups and find the most permissive access level
             const userGroups = groupOverrides.filter((go: any) =>
@@ -2210,7 +2232,7 @@ export default function VideoPlayerPage({
             );
 
             if (userGroups.length > 0) {
-              const roles = userGroups.map((go: any) => parseAccessLevelToRole(go.accessLevel));
+              const roles = userGroups.map((go: any) => parseAccessLevelToRole(go.accessLevelObj?.name));
               if (roles.includes('Admin')) {
                 finalRole = 'Admin';
                 hasAnyOverride = true;
@@ -2243,7 +2265,7 @@ export default function VideoPlayerPage({
         // Map group overrides
         const groupCollaborators: MediaCollaborator[] = groupOverrides.map((go: any) => {
           const groupName = go.group?.name || 'Group';
-          const finalRole = parseAccessLevelToRole(go.accessLevel);
+          const finalRole = parseAccessLevelToRole(go.accessLevelObj?.name);
 
           return {
             id: go.group?.id || go.groupId,
@@ -3451,7 +3473,7 @@ export default function VideoPlayerPage({
         };
         setShareTeamMembers(current => [...current, newGroupMember]);
         setCollaborators(current => [...current, { ...newGroupMember, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' }]);
-        
+
         if (mediaId) {
           updateAssetAccessOverride(mediaId, newUserId, payload.access, payload.sendInviteEmail).catch(err => {
             console.error("Failed to add override for cross-org user", err);
@@ -3731,8 +3753,8 @@ export default function VideoPlayerPage({
       setHistory((current) =>
         current.map((item) =>
           item.id === entry.id ||
-          item.id === entryId ||
-          (targetCommentId && item.sourceCommentId === targetCommentId)
+            item.id === entryId ||
+            (targetCommentId && item.sourceCommentId === targetCommentId)
             ? { ...item, erasedAt: now, erasedBy }
             : item,
         ),
@@ -3850,8 +3872,8 @@ export default function VideoPlayerPage({
       setHistory((current) =>
         current.map((item) =>
           item.id === entry.id ||
-          item.id === entryId ||
-          (targetCommentId && item.sourceCommentId === targetCommentId)
+            item.id === entryId ||
+            (targetCommentId && item.sourceCommentId === targetCommentId)
             ? { ...item, erasedAt: undefined, erasedBy: undefined }
             : item,
         ),
@@ -4375,9 +4397,9 @@ export default function VideoPlayerPage({
                       },
                       '&:hover': canEditReviewStatus
                         ? {
-                            backgroundColor: cv.surfaceHover,
-                            borderColor: cv.borderStrong,
-                          }
+                          backgroundColor: cv.surfaceHover,
+                          borderColor: cv.borderStrong,
+                        }
                         : {},
                       '&.Mui-disabled': {
                         opacity: 0.6,
@@ -4470,7 +4492,7 @@ export default function VideoPlayerPage({
                     aria-expanded={downloadMenuOpen}
                     aria-controls={downloadMenuOpen ? 'header-download-menu' : undefined}
                     onClick={(e) => {
-                      if (!canDownloadOriginal) return;
+                      if (!canDownloadOriginal && !canDownloadProxy) return;
                       setDownloadMenuAnchor(e.currentTarget);
                     }}
                     sx={{
@@ -4480,14 +4502,14 @@ export default function VideoPlayerPage({
                       px: 0.75,
                       gap: 0.15,
                       borderRadius: '10px',
-                      color: canDownloadOriginal ? cv.textPrimary : cv.textMuted,
+                      color: (canDownloadOriginal || canDownloadProxy) ? cv.textPrimary : cv.textMuted,
                       border: `1px solid ${cv.border}`,
                       backgroundColor: cv.surface,
-                      '&:hover': canDownloadOriginal
+                      '&:hover': (canDownloadOriginal || canDownloadProxy)
                         ? {
-                            backgroundColor: cv.surfaceHover,
-                            borderColor: cv.borderStrong,
-                          }
+                          backgroundColor: cv.surfaceHover,
+                          borderColor: cv.borderStrong,
+                        }
                         : {},
                       '&.Mui-disabled': {
                         opacity: 0.5,
@@ -4523,74 +4545,78 @@ export default function VideoPlayerPage({
                   },
                 }}
               >
-                <MenuItem
-                  disabled={!canDownloadOriginal}
-                  onClick={() => {
-                    setDownloadMenuAnchor(null);
-                    triggerMediaDownload('original');
-                  }}
-                  sx={{
-                    fontSize: '0.875rem',
-                    py: 1.1,
-                    px: 1.75,
-                    gap: 1.25,
-                    minHeight: 44,
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
-                    <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Download Original"
-                    primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
-                  />
-                  <Typography
-                    component="span"
+                {(!isGuestMode || canDownloadOriginal) && (
+                  <MenuItem
+                    disabled={!canDownloadOriginal}
+                    onClick={() => {
+                      setDownloadMenuAnchor(null);
+                      triggerMediaDownload('original');
+                    }}
                     sx={{
-                      ml: 2,
-                      fontSize: '0.75rem',
-                      color: cv.textMuted,
-                      fontVariantNumeric: 'tabular-nums',
-                      whiteSpace: 'nowrap',
+                      fontSize: '0.875rem',
+                      py: 1.1,
+                      px: 1.75,
+                      gap: 1.25,
+                      minHeight: 44,
                     }}
                   >
-                    {originalDownloadSizeLabel}
-                  </Typography>
-                </MenuItem>
-                <MenuItem
-                  disabled={!canDownloadOriginal || !canDownloadProxy}
-                  onClick={() => {
-                    setDownloadMenuAnchor(null);
-                    triggerMediaDownload('proxy');
-                  }}
-                  sx={{
-                    fontSize: '0.875rem',
-                    py: 1.1,
-                    px: 1.75,
-                    gap: 1.25,
-                    minHeight: 44,
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
-                    <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="Download Proxy"
-                    primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
-                  />
-                  <Typography
-                    component="span"
+                    <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                      <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary="Download Original"
+                      primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                    />
+                    <Typography
+                      component="span"
+                      sx={{
+                        ml: 2,
+                        fontSize: '0.75rem',
+                        color: cv.textMuted,
+                        fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {originalDownloadSizeLabel}
+                    </Typography>
+                  </MenuItem>
+                )}
+                {(isGuestMode ? canDownloadProxy : itemSupportsProxy && canDownloadProxy) && (
+                  <MenuItem
+                    disabled={!canDownloadProxy}
+                    onClick={() => {
+                      setDownloadMenuAnchor(null);
+                      triggerMediaDownload('proxy');
+                    }}
                     sx={{
-                      ml: 2,
-                      fontSize: '0.75rem',
-                      color: cv.textMuted,
-                      fontVariantNumeric: 'tabular-nums',
-                      whiteSpace: 'nowrap',
+                      fontSize: '0.875rem',
+                      py: 1.1,
+                      px: 1.75,
+                      gap: 1.25,
+                      minHeight: 44,
                     }}
                   >
-                    {canDownloadProxy ? proxyDownloadSizeLabel : '—'}
-                  </Typography>
-                </MenuItem>
+                    <ListItemIcon sx={{ minWidth: 'auto', color: 'inherit' }}>
+                      <FileDownloadOutlinedIcon sx={{ fontSize: 18 }} />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary="Download Proxy"
+                      primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                    />
+                    <Typography
+                      component="span"
+                      sx={{
+                        ml: 2,
+                        fontSize: '0.75rem',
+                        color: cv.textMuted,
+                        fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {proxyDownloadSizeLabel}
+                    </Typography>
+                  </MenuItem>
+                )}
               </Menu>
             </>
           )}
@@ -4767,688 +4793,757 @@ export default function VideoPlayerPage({
             gap: { xs: 1.5, lg: 2 },
           }}
         >
-        <GlassCard
-          glow
-          sx={{
-            flex: 1,
-            minWidth: 0,
-            minHeight: 0,
-            height: { lg: '100%' },
-            display: 'flex',
-            flexDirection: 'column',
-            borderRadius: { xs: '16px', md: '20px' },
-          }}
-        >
-          <Box
-            ref={videoStageRef}
-            data-video-stage
+          <GlassCard
+            glow
             sx={{
               flex: 1,
+              minWidth: 0,
               minHeight: 0,
-              width: '100%',
+              height: { lg: '100%' },
               display: 'flex',
               flexDirection: 'column',
-              backgroundColor: cv.videoStage,
-              position: 'relative',
-              overflow: 'hidden',
+              borderRadius: { xs: '16px', md: '20px' },
             }}
           >
-            {item?.type === 'video' && liveAssetStatus !== 'completed' && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 24,
-                  right: 24,
-                  zIndex: 50,
-                  pointerEvents: 'auto'
-                }}
-              >
-                <Tooltip title={isProcessing ? (forcePlayOriginal ? "Click to return to compression overlay" : "Click to play original video") : ""} arrow placement="left">
-                  <Chip
-                    size="medium"
-                    color={liveAssetStatus === 'failed' ? 'error' : 'primary'}
-                    icon={
-                      isProcessing ? (
-                        <AutorenewIcon sx={{ animation: 'spin 2s linear infinite', fontSize: 18 }} />
-                      ) : (
-                        <AutorenewIcon sx={{ fontSize: 18 }} />
-                      )
-                    }
-                    label={
-                      isRetrying
-                        ? 'Queuing Compression...'
-                        : isProcessing
-                          ? (liveProgress && liveProgress !== 'processing'
-                              ? `Compressing: ${liveProgress}${forcePlayOriginal ? ' • Playing Original' : ''}`
-                              : `Preparing Video...${forcePlayOriginal ? ' • Playing Original' : ''}`)
-                          : liveAssetStatus === 'failed'
-                            ? 'Processing Failed'
-                            : 'Uncompressed'
-                    }
-                    onClick={() => {
-                      if (isProcessing) {
-                        setForcePlayOriginal((prev) => !prev);
-                      }
-                    }}
-                    sx={{
-                      backdropFilter: 'blur(8px)',
-                      backgroundColor: liveAssetStatus === 'failed'
-                        ? 'rgba(211, 47, 47, 0.85)'
-                        : 'rgba(25, 118, 210, 0.85)',
-                      fontWeight: 600,
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      px: 1,
-                      py: 2,
-                      cursor: isProcessing ? 'pointer' : 'default',
-                      pointerEvents: 'auto',
-                      '&:hover': isProcessing ? { opacity: 0.9, transform: 'scale(1.03)' } : undefined,
-                      transition: 'all 0.2s ease',
-                      '@keyframes spin': {
-                        '0%': { transform: 'rotate(0deg)' },
-                        '100%': { transform: 'rotate(360deg)' },
-                      },
-                    }}
-                  />
-                </Tooltip>
-              </Box>
-            )}
-            {(isBuffering || isPlaybackLoading) && item?.type !== 'image' && (
-              <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 40, pointerEvents: 'none' }}>
-                <CircularProgress size={48} sx={{ color: '#6366F1' }} />
-              </Box>
-            )}
             <Box
-              ref={workspaceStageRef}
+              ref={videoStageRef}
+              data-video-stage
               sx={{
-                position: 'relative',
                 flex: 1,
                 minHeight: 0,
                 width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: cv.videoStage,
+                position: 'relative',
                 overflow: 'hidden',
-                background: getPlayerBackgroundStyle(playerBackground),
               }}
             >
-              <Box
-                sx={{
-                  position: 'relative',
-                  width: '100%',
-                  height: '100%',
-                  transform: `translate(${workspacePan.x}px, ${workspacePan.y}px) scale(${workspaceZoom})`,
-                  transformOrigin: 'center center',
-                  willChange: workspacePanEnabled || !isWorkspacePanDefault(workspacePan) ? 'transform' : undefined,
-                }}
-              >
-                {item?.type === 'image' ? (
-                  <Box sx={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {isDecodingImage && (
-                      <Box sx={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, zIndex: 2 }}>
-                        <CircularProgress size={36} sx={{ color: '#6366F1' }} />
-                        <Typography variant="body2" sx={{ color: '#94A3B8', fontWeight: 500 }}>
-                          Loading preview...
-                        </Typography>
-                      </Box>
-                    )}
-                    <Box
-                      component="img"
-                      src={clientDecodedUrl || mediaElementSrc}
-                      alt={item?.title}
+              {item?.type === 'video' && liveAssetStatus !== 'completed' && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 24,
+                    right: 24,
+                    zIndex: 50,
+                    pointerEvents: 'auto'
+                  }}
+                >
+                  <Tooltip title={isProcessing ? (forcePlayOriginal ? "Click to return to compression overlay" : "Click to play original video") : ""} arrow placement="left">
+                    <Chip
+                      size="medium"
+                      color={liveAssetStatus === 'failed' ? 'error' : 'primary'}
+                      icon={
+                        isProcessing ? (
+                          <AutorenewIcon sx={{ animation: 'spin 2s linear infinite', fontSize: 18 }} />
+                        ) : (
+                          <AutorenewIcon sx={{ fontSize: 18 }} />
+                        )
+                      }
+                      label={
+                        isRetrying
+                          ? 'Queuing Compression...'
+                          : isProcessing
+                            ? (liveProgress && liveProgress !== 'processing'
+                              ? `Compressing: ${liveProgress}${forcePlayOriginal ? ' • Playing Original' : ''}`
+                              : `Preparing Video...${forcePlayOriginal ? ' • Playing Original' : ''}`)
+                            : liveAssetStatus === 'failed'
+                              ? 'Processing Failed'
+                              : 'Uncompressed'
+                      }
+                      onClick={() => {
+                        if (isProcessing) {
+                          setForcePlayOriginal((prev) => !prev);
+                        }
+                      }}
                       sx={{
-                        width: '100%',
-                        height: '100%',
-                        display: 'block',
-                        objectFit: playerActualMediaSize ? 'none' : 'contain',
-                        backgroundColor: 'transparent',
-                        opacity: isDecodingImage ? 0.3 : 1,
-                        transition: 'opacity 0.2s ease',
+                        backdropFilter: 'blur(8px)',
+                        backgroundColor: liveAssetStatus === 'failed'
+                          ? 'rgba(211, 47, 47, 0.85)'
+                          : 'rgba(25, 118, 210, 0.85)',
+                        fontWeight: 600,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        px: 1,
+                        py: 2,
+                        cursor: isProcessing ? 'pointer' : 'default',
+                        pointerEvents: 'auto',
+                        '&:hover': isProcessing ? { opacity: 0.9, transform: 'scale(1.03)' } : undefined,
+                        transition: 'all 0.2s ease',
+                        '@keyframes spin': {
+                          '0%': { transform: 'rotate(0deg)' },
+                          '100%': { transform: 'rotate(360deg)' },
+                        },
                       }}
                     />
-                  </Box>
-                ) : (
-                  <Box
-                    component="video"
-                    ref={videoRef}
-                    key={videoSrc || 'no-src'}
-                    src={mediaElementSrc}
-                    crossOrigin="anonymous"
-                    poster={item?.thumbnail}
-                    playsInline
-                    preload="metadata"
-                    onPlay={() => {
-                      setIsPlaying(true);
-                      setHasStartedPlayback(true);
-                    }}
-                    onPause={() => {
-                      setIsPlaying(false);
-                      setIsPlaybackLoading(false);
-                    }}
-                    onEnded={() => {
-                      setIsPlaying(false);
-                      setIsPlaybackLoading(false);
-                    }}
-                    onWaiting={() => setIsBuffering(true)}
-                    onPlaying={() => {
-                      setIsBuffering(false);
-                      setIsPlaybackLoading(false);
-                      setIsPlaying(true);
-                      setHasStartedPlayback(true);
-                    }}
-                    onCanPlay={() => setIsBuffering(false)}
-                    onLoadedData={() => setIsBuffering(false)}
-                    onError={async () => {
-                      setIsBuffering(false);
-                      setIsPlaybackLoading(false);
-                      if (mediaElementSrc) {
-                        try {
-                          const res = await fetch(mediaElementSrc, { method: 'GET', headers: { Range: 'bytes=0-10' } });
-                          if (res.status === 403 || res.status === 429) {
-                            const body = await res.json().catch(() => ({}));
-                            if (body.error === 'BandwidthCapExceeded' || res.status === 403 || body.message?.includes('bandwidth') || body.message?.includes('cap exceeded')) {
-                              setBandwidthCapError(true);
+                  </Tooltip>
+                </Box>
+              )}
+              {(isBuffering || isPlaybackLoading) && item?.type !== 'image' && (
+                <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 40, pointerEvents: 'none' }}>
+                  <CircularProgress size={48} sx={{ color: '#6366F1' }} />
+                </Box>
+              )}
+              <Box
+                ref={workspaceStageRef}
+                sx={{
+                  position: 'relative',
+                  flex: 1,
+                  minHeight: 0,
+                  width: '100%',
+                  overflow: 'hidden',
+                  background: getPlayerBackgroundStyle(playerBackground),
+                }}
+              >
+                <Box
+                  sx={{
+                    position: 'relative',
+                    width: '100%',
+                    height: '100%',
+                    transform: `translate(${workspacePan.x}px, ${workspacePan.y}px) scale(${workspaceZoom})`,
+                    transformOrigin: 'center center',
+                    willChange: workspacePanEnabled || !isWorkspacePanDefault(workspacePan) ? 'transform' : undefined,
+                  }}
+                >
+                  {item?.type === 'image' ? (
+                    <Box sx={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {isDecodingImage && (
+                        <Box sx={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, zIndex: 2 }}>
+                          <CircularProgress size={36} sx={{ color: '#6366F1' }} />
+                          <Typography variant="body2" sx={{ color: '#94A3B8', fontWeight: 500 }}>
+                            Loading preview...
+                          </Typography>
+                        </Box>
+                      )}
+                      <Box
+                        component="img"
+                        src={clientDecodedUrl || mediaElementSrc}
+                        alt={item?.title}
+                        sx={{
+                          width: '100%',
+                          height: '100%',
+                          display: 'block',
+                          objectFit: playerActualMediaSize ? 'none' : 'contain',
+                          backgroundColor: 'transparent',
+                          opacity: isDecodingImage ? 0.3 : 1,
+                          transition: 'opacity 0.2s ease',
+                        }}
+                      />
+                    </Box>
+                  ) : (
+                    <Box
+                      component="video"
+                      ref={videoRef}
+                      key={videoSrc || 'no-src'}
+                      src={mediaElementSrc}
+                      crossOrigin="anonymous"
+                      poster={item?.thumbnail}
+                      playsInline
+                      preload="metadata"
+                      onPlay={() => {
+                        setIsPlaying(true);
+                        setHasStartedPlayback(true);
+                      }}
+                      onPause={() => {
+                        setIsPlaying(false);
+                        setIsPlaybackLoading(false);
+                      }}
+                      onEnded={() => {
+                        setIsPlaying(false);
+                        setIsPlaybackLoading(false);
+                      }}
+                      onWaiting={() => setIsBuffering(true)}
+                      onPlaying={() => {
+                        setIsBuffering(false);
+                        setIsPlaybackLoading(false);
+                        setIsPlaying(true);
+                        setHasStartedPlayback(true);
+                      }}
+                      onCanPlay={() => setIsBuffering(false)}
+                      onLoadedData={() => setIsBuffering(false)}
+                      onError={async () => {
+                        setIsBuffering(false);
+                        setIsPlaybackLoading(false);
+                        if (mediaElementSrc) {
+                          try {
+                            const res = await fetch(mediaElementSrc, { method: 'GET', headers: { Range: 'bytes=0-10' } });
+                            if (res.status === 403 || res.status === 429) {
+                              const body = await res.json().catch(() => ({}));
+                              if (body.error === 'BandwidthCapExceeded' || res.status === 403 || body.message?.includes('bandwidth') || body.message?.includes('cap exceeded')) {
+                                setBandwidthCapError(true);
+                                setStatusToast({
+                                  open: true,
+                                  message: 'Storage Bandwidth Limit Exceeded: Backblaze B2 daily cap reached.',
+                                  variant: 'error',
+                                });
+                              }
+                            } else if (res.status === 404) {
                               setStatusToast({
                                 open: true,
-                                message: 'Storage Bandwidth Limit Exceeded: Backblaze B2 daily cap reached.',
+                                message: 'Video asset file not found in storage bucket. It may still be uploading or was removed.',
                                 variant: 'error',
                               });
                             }
-                          } else if (res.status === 404) {
-                            setStatusToast({
-                              open: true,
-                              message: 'Video asset file not found in storage bucket. It may still be uploading or was removed.',
-                              variant: 'error',
-                            });
+                          } catch {
+                            // ignore network errors
                           }
-                        } catch {
-                          // ignore network errors
                         }
-                      }
-                    }}
-                    sx={{
-                      width: '100%',
-                      height: '100%',
-                      display: item?.type === 'audio' ? 'none' : 'block',
-                      objectFit: playerActualMediaSize ? 'none' : 'contain',
-                      backgroundColor: 'transparent',
-                      transform: getVideoTransform(
-                        playerRotationSteps,
-                        playerFlipHorizontal,
-                        playerFlipVertical,
-                      ),
-                      transformOrigin: 'center center',
-                      pointerEvents:
-                        annotationsVisible && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
-                          ? 'none'
-                          : 'auto',
-                    }}
-                  >
-                    <track kind="captions" />
-                  </Box>
-                )}
-
-                {item?.type === 'audio' && (
-                  <AudioWaveformVisualizer
-                    isPlaying={isPlaying}
-                    audioTitle={item?.title}
-                    fileSizeText={item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : undefined}
-                  />
-                )}
-
-                {!hasStartedPlayback
-                  && !isPlaying
-                  && !isBuffering
-                  && !isPlaybackLoading
-                  && !bandwidthCapError
-                  && !(isProcessing && !forcePlayOriginal)
-                  && liveAssetStatus !== 'failed'
-                  && (item?.type === 'video' || item?.type === 'audio') ? (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      zIndex: 6,
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    <IconButton
-                      type="button"
-                      aria-label="Play"
-                      onClick={handleCenterPlayClick}
+                      }}
                       sx={{
+                        width: '100%',
+                        height: '100%',
+                        display: item?.type === 'audio' ? 'none' : 'block',
+                        objectFit: playerActualMediaSize ? 'none' : 'contain',
+                        backgroundColor: 'transparent',
+                        transform: getVideoTransform(
+                          playerRotationSteps,
+                          playerFlipHorizontal,
+                          playerFlipVertical,
+                        ),
+                        transformOrigin: 'center center',
                         pointerEvents:
-                          !isViewer && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
+                          annotationsVisible && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
                             ? 'none'
                             : 'auto',
-                        width: 80,
-                        height: 80,
-                        backgroundColor: 'rgba(0, 0, 0, 0.55)',
-                        border: '1px solid rgba(255, 255, 255, 0.22)',
-                        backdropFilter: 'blur(10px)',
-                        WebkitBackdropFilter: 'blur(10px)',
-                        color: '#FFFFFF',
-                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
-                        transition: 'transform 0.15s ease, background-color 0.15s ease',
-                        '&:hover': {
-                          backgroundColor: 'rgba(142, 68, 173, 0.9)',
-                          transform: 'scale(1.06)',
-                        },
                       }}
                     >
-                      <PlayArrowRoundedIcon sx={{ fontSize: 48, ml: '3px' }} />
-                    </IconButton>
-                  </Box>
-                ) : null}
-
-                {item?.type === 'document' && (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'radial-gradient(circle, rgba(30,30,42,1) 0%, rgba(12,12,18,1) 100%)',
-                      zIndex: 1,
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        width: 100,
-                        height: 100,
-                        borderRadius: '24px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                        mb: 3,
-                      }}
-                    >
-                      <InsertDriveFileOutlinedIcon sx={{ fontSize: 52, color: '#38BDF8' }} />
+                      <track kind="captions" />
                     </Box>
+                  )}
 
-                    <Typography variant="h6" sx={{ color: '#ffffff', fontWeight: 600, mb: 1 }}>
-                      {item?.title}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)', mb: 3 }}>
-                      Document Asset • {item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : 'File'}
-                    </Typography>
-                    <Button
-                      variant="contained"
-                      onClick={() => triggerMediaDownload('original')}
-                      startIcon={<FileDownloadOutlinedIcon />}
-                      sx={{
-                        backgroundColor: '#38BDF8',
-                        color: '#0F172A',
-                        fontWeight: 600,
-                        borderRadius: '12px',
-                        textTransform: 'none',
-                        px: 3,
-                        py: 1,
-                        '&:hover': { backgroundColor: '#0284C7' },
-                      }}
-                    >
-                      Download File
-                    </Button>
-                  </Box>
-                )}
-
-                {bandwidthCapError ? (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: 'rgba(15, 23, 42, 0.92)',
-                      backdropFilter: 'blur(12px)',
-                      zIndex: 60,
-                      p: 4,
-                      textAlign: 'center',
-                    }}
-                  >
-                    <ErrorOutlineOutlinedIcon sx={{ fontSize: 56, color: '#F59E0B', mb: 2 }} />
-                    <Typography variant="h6" sx={{ color: '#FFFFFF', fontWeight: 700, mb: 1 }}>
-                      Storage Bandwidth Limit Exceeded
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: '#94A3B8', maxWidth: 480, mb: 3, lineHeight: 1.6 }}>
-                      Your Backblaze B2 account daily download bandwidth limit has been reached.
-                      <span style={{ display: 'block', marginTop: 8, color: '#CBD5E1' }}>
-                        Please log into your <b>Backblaze B2 Console &gt; Caps &amp; Alerts</b> and increase your daily bandwidth limit.
-                      </span>
-                    </Typography>
-                  </Box>
-                ) : null}
-
-                {isProcessing && !forcePlayOriginal ? (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: 'rgba(0, 0, 0, 0.6)',
-                      backdropFilter: 'blur(8px)',
-                      zIndex: 10,
-                    }}
-                  >
-                    {liveProgress && liveProgress !== 'processing' ? (
-                      <CircularProgress
-                        variant="determinate"
-                        value={parseInt(liveProgress.replace('%', '')) || 0}
-                        size={48}
-                        sx={{
-                          color: cv.brandBlue,
-                          mb: 3,
-                          '& .MuiCircularProgress-circle': {
-                            transition: 'stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                          }
-                        }}
-                      />
-                    ) : (
-                      <CircularProgress size={48} sx={{ color: cv.brandBlue, mb: 3 }} />
-                    )}
-                    <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
-                      {liveProgress && liveProgress !== 'processing'
-                        ? 'Compressing Video'
-                        : 'Preparing Video...'}
-                    </Typography>
-                    {liveProgress && liveProgress !== 'processing' ? (
-                      <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em' }}>
-                        Encoding in progress — {liveProgress} complete
-                      </Typography>
-                    ) : (
-                      <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 300 }}>
-                        Noah is optimizing your video for smooth playback.
-                        <span style={{ display: 'block', marginTop: 4, opacity: 0.7 }}>Large files may take up to 30 minutes. You can leave and come back later.</span>
-                      </Typography>
-                    )}
-                    <Box sx={{ display: 'flex', gap: 1.5, mt: 3, zIndex: 11 }}>
-                      <Button
-                        variant="contained"
-                        onClick={handleRetryTranscode}
-                        disabled={isRetrying}
-                        startIcon={<AutorenewIcon />}
-                        sx={{
-                          borderRadius: '999px',
-                          px: 2.5,
-                          py: 1,
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          backgroundColor: cv.brandBlue,
-                          '&:hover': { backgroundColor: '#0284C7' },
-                        }}
-                      >
-                        {isRetrying ? 'Queuing...' : 'Retry Processing'}
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        onClick={() => setForcePlayOriginal(true)}
-                        startIcon={<PlayArrowOutlinedIcon />}
-                        sx={{
-                          borderRadius: '999px',
-                          px: 2.5,
-                          py: 1,
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          borderColor: 'rgba(255, 255, 255, 0.4)',
-                          color: '#FFFFFF',
-                          '&:hover': {
-                            borderColor: '#FFFFFF',
-                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                          },
-                        }}
-                      >
-                        Play Original Video
-                      </Button>
-                    </Box>
-                  </Box>
-                ) : liveAssetStatus === 'failed' ? (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                      backdropFilter: 'blur(8px)',
-                      zIndex: 10,
-                    }}
-                  >
-                    <ErrorOutlineOutlinedIcon sx={{ fontSize: 48, color: cv.destructiveBorder, mb: 2 }} />
-                    <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
-                      Processing Failed
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, mb: 3, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 320 }}>
-                      An error occurred while preparing this asset for playback. You can try processing it again.
-                    </Typography>
-                    <Button
-                      variant="contained"
-                      color="error"
-                      onClick={handleRetryTranscode}
-                      disabled={isRetrying}
-                      sx={{
-                        borderRadius: '999px',
-                        px: 3,
-                        py: 1,
-                        textTransform: 'none',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {isRetrying ? 'Retrying...' : 'Retry Processing'}
-                    </Button>
-                  </Box>
-                ) : null}
-
-                {playerShowAudioMeter ? (
-                  <AudioMeterOverlay videoRef={videoRef} />
-                ) : null}
-
-                {(isGuestMode && guestAssetMeta?.logoUrl) || (isSharedWithUser && internalLogoUrl) ? (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      top: 16,
-                      left: 16,
-                      zIndex: 10,
-                      opacity: 0.7,
-                      pointerEvents: 'none',
-                      userSelect: 'none',
-                    }}
-                  >
-                    <img
-                      src={(isGuestMode ? guestAssetMeta?.logoUrl : internalLogoUrl) || ''}
-                      alt="Company Watermark"
-                      style={{ maxHeight: '48px', maxWidth: '120px', objectFit: 'contain' }}
+                  {item?.type === 'audio' && (
+                    <AudioWaveformVisualizer
+                      isPlaying={isPlaying}
+                      audioTitle={item?.title}
+                      fileSizeText={item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : undefined}
                     />
-                  </Box>
-                ) : null}
+                  )}
 
-                {(!isGuestMode || guestPermissions?.comment) && (
-                  <>
-                    <VideoAnnotationSurface
-                  activeTool={isViewer ? 'select' : activeTool}
-                  enabled={surfaceEnabled && !isViewer}
-                  annotationsVisible={annotationsVisible}
-                  resolvedOverlayEntryIds={resolvedOverlayEntryIds}
-                  videoRef={videoRef}
-                  strokes={drawings}
-                  onStrokesChange={setDrawings}
-                  shapes={shapes}
-                  onShapesChange={setShapes}
-                  stamps={stamps}
-                  onStampsChange={setStamps}
-                  activeStamp={activeStamp}
-                  customStamp={customStamp}
-                  selectedShapeId={selectedShapeId}
-                  onSelectedShapeIdChange={setSelectedShapeId}
-                  selectedStampId={selectedStampId}
-                  onSelectedStampIdChange={setSelectedStampId}
-                  drawTool={activeDrawTool}
-                  drawStroke={activeDrawStroke}
-                  drawColor={activeDrawColor}
-                  shapeTool={activeShape}
-                  shapeStroke={activeShapeStroke}
-                  shapeColor={activeShapeColor}
-                  onRecord={handleAnnotationRecord}
-                  onAnnotationActionStart={handleAnnotationActionStart}
-                  onAnnotationNeedsComment={handleAnnotationNeedsComment}
-                  annotationCommentPending={annotationCommentPending}
-                  onMoveLinkedComment={handleMoveLinkedComment}
-                  workspacePanEnabled={workspacePanEnabled}
-                  onWorkspacePanBy={handleWorkspacePanBy}
-                />
-
-                <VideoCommentLayer
-                  active={activeTool === 'comment' && !isViewer}
-                  panActive={activeTool === 'pan'}
-                  annotationsVisible={annotationsVisible}
-                  videoRef={videoRef}
-                  comments={comments.map(c => {
-                    const entryId = c.linkedShapeId
-                      ? `shape-${c.linkedShapeId}`
-                      : c.linkedDrawingId
-                        ? `drawing-${c.linkedDrawingId}`
-                        : `comment-${c.id}`;
-                    const index = history.find(e => e.id === entryId)?.index;
-                    return { ...c, historyIndex: index };
-                  })}
-                  draftComment={draftComment}
-                  onPlaceDraft={handlePlaceDraft}
-                  onDraftTextChange={handleDraftTextChange}
-                  onDraftImageChange={handleDraftImageChange}
-                  onSubmitDraft={handleSubmitDraft}
-                  onCancelDraft={handleCancelDraft}
-                  onAddReply={handleAddReply}
-                  onToggleCommentResolved={handleToggleCommentResolved}
-                  onMarkCommentUnread={handleMarkCommentUnread}
-                  onCopyCommentLink={handleCopyCommentLink}
-                  onDeleteComment={handleDeleteComment}
-                  onEditComment={handleEditComment}
-                  onEditReply={handleEditReply}
-                  onThreadOpenChange={setCommentThreadOpen}
-                  openCommentId={openCommentId}
-                  onOpenCommentIdChange={setOpenCommentId}
-                  annotationGroups={annotationGroups}
-                  collaborators={allCollaboratorsForMentions}
-                  onCommentVisibilityChange={handleCommentVisibilityChange}
-                  onCreateAnnotationGroup={handleCreateAnnotationGroup}
-                  onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
-                  onAddCollaborator={handleAddCollaboratorForGroup}
-                  onMoveComment={handleMoveComment}
-                  onPanActionStart={handleAnnotationActionStart}
-                />
-                  </>
-                )}
-
-                {selectedFramePerson && supportsFramePeople ? (
-                  <FramePersonHighlight person={selectedFramePerson} />
-                ) : null}
-              </Box>
-            </Box>
-
-            <VideoPlayerControls
-              videoRef={videoRef}
-              fullscreenTargetRef={videoStageRef}
-              annotationCount={!isGuestMode || guestPermissions?.comment ? history.length : undefined}
-              annotationsVisible={annotationsVisible}
-              onToggleAnnotationsVisible={() => setAnnotationsVisible((visible) => !visible)}
-              timelineItems={!isGuestMode || guestPermissions?.comment ? timelineItems : []}
-              timelineFallbackDuration={timelineFallbackDuration}
-              onAnnotationRangeChange={handleAnnotationRangeChange}
-              onAnnotationClick={handleAnnotationClick}
-              frameRateLabel={
-                videoTechnicalDetails?.frameRate ||
-                item?.frameRate ||
-                undefined
-              }
-              mediaTitle={item?.title || item?.name}
-              inPoint={playerInPoint}
-              outPoint={playerOutPoint}
-              rangeEnabled={playerRangeEnabled}
-              isAudio={item?.type === 'audio'}
-              isImage={item?.type === 'image'}
-            />
-
-            <Box
-              component="footer"
-              ref={mobilePlayerFooterRef}
-              aria-label="Annotation tools"
-              sx={{
-                position: 'relative',
-                flexShrink: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                px: { xs: 1, md: 2 },
-                py: { xs: 0.75, md: 1 },
-                borderTop: '1px solid var(--noah-border)',
-                backgroundColor: 'var(--noah-footer-tint)',
-                '[data-theme="light"] &': {
-                  backgroundColor: 'transparent',
-                },
-                minHeight: { xs: 72, md: 72 },
-                overflow: 'visible',
-                zIndex: 12,
-                opacity: isFullscreen && isIdle ? 0 : 1,
-                pointerEvents: isFullscreen && isIdle ? 'none' : 'auto',
-                transition: 'opacity 0.3s ease-in-out',
-              }}
-            >
-              {isDesktopAnnotationToolbar ? (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    width: '100%',
-                    minWidth: 0,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
-                  }}
-                >
-                  {showClearIsland && !isViewer ? (
+                  {!hasStartedPlayback
+                    && !isPlaying
+                    && !isBuffering
+                    && !isPlaybackLoading
+                    && !bandwidthCapError
+                    && !(isProcessing && !forcePlayOriginal)
+                    && liveAssetStatus !== 'failed'
+                    && (item?.type === 'video' || item?.type === 'audio') ? (
                     <Box
                       sx={{
                         position: 'absolute',
-                        left: 16,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        zIndex: 2,
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 6,
+                        pointerEvents: 'none',
                       }}
                     >
-                      <AnnotationUndoIsland
-                        canClear={canClearAnnotations}
-                        onClear={handleOpenClearAnnotationsModal}
-                        disabled={isViewer}
+                      <IconButton
+                        type="button"
+                        aria-label="Play"
+                        onClick={handleCenterPlayClick}
+                        sx={{
+                          pointerEvents:
+                            !isViewer && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
+                              ? 'none'
+                              : 'auto',
+                          width: 80,
+                          height: 80,
+                          backgroundColor: 'rgba(0, 0, 0, 0.55)',
+                          border: '1px solid rgba(255, 255, 255, 0.22)',
+                          backdropFilter: 'blur(10px)',
+                          WebkitBackdropFilter: 'blur(10px)',
+                          color: '#FFFFFF',
+                          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
+                          transition: 'transform 0.15s ease, background-color 0.15s ease',
+                          '&:hover': {
+                            backgroundColor: 'rgba(142, 68, 173, 0.9)',
+                            transform: 'scale(1.06)',
+                          },
+                        }}
+                      >
+                        <PlayArrowRoundedIcon sx={{ fontSize: 48, ml: '3px' }} />
+                      </IconButton>
+                    </Box>
+                  ) : null}
+
+                  {item?.type === 'document' && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'radial-gradient(circle, rgba(30,30,42,1) 0%, rgba(12,12,18,1) 100%)',
+                        zIndex: 1,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: 100,
+                          height: 100,
+                          borderRadius: '24px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                          mb: 3,
+                        }}
+                      >
+                        <InsertDriveFileOutlinedIcon sx={{ fontSize: 52, color: '#38BDF8' }} />
+                      </Box>
+
+                      <Typography variant="h6" sx={{ color: '#ffffff', fontWeight: 600, mb: 1 }}>
+                        {item?.title}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)', mb: 3 }}>
+                        Document Asset • {item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : 'File'}
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => triggerMediaDownload('original')}
+                        startIcon={<FileDownloadOutlinedIcon />}
+                        sx={{
+                          backgroundColor: '#38BDF8',
+                          color: '#0F172A',
+                          fontWeight: 600,
+                          borderRadius: '12px',
+                          textTransform: 'none',
+                          px: 3,
+                          py: 1,
+                          '&:hover': { backgroundColor: '#0284C7' },
+                        }}
+                      >
+                        Download File
+                      </Button>
+                    </Box>
+                  )}
+
+                  {bandwidthCapError ? (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                        backdropFilter: 'blur(12px)',
+                        zIndex: 60,
+                        p: 4,
+                        textAlign: 'center',
+                      }}
+                    >
+                      <ErrorOutlineOutlinedIcon sx={{ fontSize: 56, color: '#F59E0B', mb: 2 }} />
+                      <Typography variant="h6" sx={{ color: '#FFFFFF', fontWeight: 700, mb: 1 }}>
+                        Storage Bandwidth Limit Exceeded
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#94A3B8', maxWidth: 480, mb: 3, lineHeight: 1.6 }}>
+                        Your Backblaze B2 account daily download bandwidth limit has been reached.
+                        <span style={{ display: 'block', marginTop: 8, color: '#CBD5E1' }}>
+                          Please log into your <b>Backblaze B2 Console &gt; Caps &amp; Alerts</b> and increase your daily bandwidth limit.
+                        </span>
+                      </Typography>
+                    </Box>
+                  ) : null}
+
+                  {isProcessing && !forcePlayOriginal ? (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                        backdropFilter: 'blur(8px)',
+                        zIndex: 10,
+                      }}
+                    >
+                      {liveProgress && liveProgress !== 'processing' ? (
+                        <CircularProgress
+                          variant="determinate"
+                          value={parseInt(liveProgress.replace('%', '')) || 0}
+                          size={48}
+                          sx={{
+                            color: cv.brandBlue,
+                            mb: 3,
+                            '& .MuiCircularProgress-circle': {
+                              transition: 'stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
+                            }
+                          }}
+                        />
+                      ) : (
+                        <CircularProgress size={48} sx={{ color: cv.brandBlue, mb: 3 }} />
+                      )}
+                      <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
+                        {liveProgress && liveProgress !== 'processing'
+                          ? 'Compressing Video'
+                          : 'Preparing Video...'}
+                      </Typography>
+                      {liveProgress && liveProgress !== 'processing' ? (
+                        <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em' }}>
+                          Encoding in progress — {liveProgress} complete
+                        </Typography>
+                      ) : (
+                        <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 300 }}>
+                          Noah is optimizing your video for smooth playback.
+                          <span style={{ display: 'block', marginTop: 4, opacity: 0.7 }}>Large files may take up to 30 minutes. You can leave and come back later.</span>
+                        </Typography>
+                      )}
+                      <Box sx={{ display: 'flex', gap: 1.5, mt: 3, zIndex: 11 }}>
+                        <Button
+                          variant="contained"
+                          onClick={handleRetryTranscode}
+                          disabled={isRetrying}
+                          startIcon={<AutorenewIcon />}
+                          sx={{
+                            borderRadius: '999px',
+                            px: 2.5,
+                            py: 1,
+                            textTransform: 'none',
+                            fontWeight: 600,
+                            backgroundColor: cv.brandBlue,
+                            '&:hover': { backgroundColor: '#0284C7' },
+                          }}
+                        >
+                          {isRetrying ? 'Queuing...' : 'Retry Processing'}
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          onClick={() => setForcePlayOriginal(true)}
+                          startIcon={<PlayArrowOutlinedIcon />}
+                          sx={{
+                            borderRadius: '999px',
+                            px: 2.5,
+                            py: 1,
+                            textTransform: 'none',
+                            fontWeight: 600,
+                            borderColor: 'rgba(255, 255, 255, 0.4)',
+                            color: '#FFFFFF',
+                            '&:hover': {
+                              borderColor: '#FFFFFF',
+                              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                            },
+                          }}
+                        >
+                          Play Original Video
+                        </Button>
+                      </Box>
+                    </Box>
+                  ) : liveAssetStatus === 'failed' ? (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                        backdropFilter: 'blur(8px)',
+                        zIndex: 10,
+                      }}
+                    >
+                      <ErrorOutlineOutlinedIcon sx={{ fontSize: 48, color: cv.destructiveBorder, mb: 2 }} />
+                      <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
+                        Processing Failed
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, mb: 3, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 320 }}>
+                        An error occurred while preparing this asset for playback. You can try processing it again.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        color="error"
+                        onClick={handleRetryTranscode}
+                        disabled={isRetrying}
+                        sx={{
+                          borderRadius: '999px',
+                          px: 3,
+                          py: 1,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {isRetrying ? 'Retrying...' : 'Retry Processing'}
+                      </Button>
+                    </Box>
+                  ) : null}
+
+                  {playerShowAudioMeter ? (
+                    <AudioMeterOverlay videoRef={videoRef} />
+                  ) : null}
+
+                  {(isGuestMode && guestPermissions?.watermark && guestAssetMeta?.logoUrl) || (!isGuestMode && internalShowWatermark && internalLogoUrl) ? (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: 16,
+                        left: 16,
+                        zIndex: 10,
+                        opacity: 0.7,
+                        pointerEvents: 'none',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <img
+                        src={(isGuestMode ? guestAssetMeta?.logoUrl : internalLogoUrl) || ''}
+                        alt=""
+                        style={{ maxHeight: '48px', maxWidth: '120px', objectFit: 'contain' }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
                       />
                     </Box>
                   ) : null}
 
-                  {!isViewer && (
-                    <Box
-                      sx={{
-                        width: '100%',
-                        minWidth: 0,
-                        boxSizing: 'border-box',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        pl: showClearIsland ? '88px' : 2,
-                        pr: '200px',
-                      }}
-                    >
+                  {(!isGuestMode || guestPermissions?.comment) && (
+                    <>
+                      <VideoAnnotationSurface
+                        activeTool={isViewer ? 'select' : activeTool}
+                        enabled={surfaceEnabled && !isViewer}
+                        annotationsVisible={annotationsVisible}
+                        resolvedOverlayEntryIds={resolvedOverlayEntryIds}
+                        videoRef={videoRef}
+                        strokes={drawings}
+                        onStrokesChange={setDrawings}
+                        shapes={shapes}
+                        onShapesChange={setShapes}
+                        stamps={stamps}
+                        onStampsChange={setStamps}
+                        activeStamp={activeStamp}
+                        customStamp={customStamp}
+                        selectedShapeId={selectedShapeId}
+                        onSelectedShapeIdChange={setSelectedShapeId}
+                        selectedStampId={selectedStampId}
+                        onSelectedStampIdChange={setSelectedStampId}
+                        drawTool={activeDrawTool}
+                        drawStroke={activeDrawStroke}
+                        drawColor={activeDrawColor}
+                        shapeTool={activeShape}
+                        shapeStroke={activeShapeStroke}
+                        shapeColor={activeShapeColor}
+                        onRecord={handleAnnotationRecord}
+                        onAnnotationActionStart={handleAnnotationActionStart}
+                        onAnnotationNeedsComment={handleAnnotationNeedsComment}
+                        annotationCommentPending={annotationCommentPending}
+                        onMoveLinkedComment={handleMoveLinkedComment}
+                        workspacePanEnabled={workspacePanEnabled}
+                        onWorkspacePanBy={handleWorkspacePanBy}
+                      />
+
+                      <VideoCommentLayer
+                        active={activeTool === 'comment' && !isViewer}
+                        panActive={activeTool === 'pan'}
+                        annotationsVisible={annotationsVisible}
+                        videoRef={videoRef}
+                        comments={comments.map(c => {
+                          const entryId = c.linkedShapeId
+                            ? `shape-${c.linkedShapeId}`
+                            : c.linkedDrawingId
+                              ? `drawing-${c.linkedDrawingId}`
+                              : `comment-${c.id}`;
+                          const index = history.find(e => e.id === entryId)?.index;
+                          return { ...c, historyIndex: index };
+                        })}
+                        draftComment={draftComment}
+                        onPlaceDraft={handlePlaceDraft}
+                        onDraftTextChange={handleDraftTextChange}
+                        onDraftImageChange={handleDraftImageChange}
+                        onSubmitDraft={handleSubmitDraft}
+                        onCancelDraft={handleCancelDraft}
+                        onAddReply={handleAddReply}
+                        onToggleCommentResolved={handleToggleCommentResolved}
+                        onMarkCommentUnread={handleMarkCommentUnread}
+                        onCopyCommentLink={handleCopyCommentLink}
+                        onDeleteComment={handleDeleteComment}
+                        onEditComment={handleEditComment}
+                        onEditReply={handleEditReply}
+                        onThreadOpenChange={setCommentThreadOpen}
+                        openCommentId={openCommentId}
+                        onOpenCommentIdChange={setOpenCommentId}
+                        annotationGroups={annotationGroups}
+                        collaborators={allCollaboratorsForMentions}
+                        onCommentVisibilityChange={handleCommentVisibilityChange}
+                        onCreateAnnotationGroup={handleCreateAnnotationGroup}
+                        onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
+                        onAddCollaborator={handleAddCollaboratorForGroup}
+                        onMoveComment={handleMoveComment}
+                        onPanActionStart={handleAnnotationActionStart}
+                      />
+                    </>
+                  )}
+
+                  {selectedFramePerson && supportsFramePeople ? (
+                    <FramePersonHighlight person={selectedFramePerson} />
+                  ) : null}
+                </Box>
+              </Box>
+
+              <VideoPlayerControls
+                videoRef={videoRef}
+                fullscreenTargetRef={videoStageRef}
+                annotationCount={!isGuestMode || guestPermissions?.comment ? history.length : undefined}
+                annotationsVisible={annotationsVisible}
+                onToggleAnnotationsVisible={() => setAnnotationsVisible((visible) => !visible)}
+                timelineItems={!isGuestMode || guestPermissions?.comment ? timelineItems : []}
+                timelineFallbackDuration={timelineFallbackDuration}
+                onAnnotationRangeChange={handleAnnotationRangeChange}
+                onAnnotationClick={handleAnnotationClick}
+                frameRateLabel={
+                  videoTechnicalDetails?.frameRate ||
+                  item?.frameRate ||
+                  undefined
+                }
+                mediaTitle={item?.title || item?.name}
+                inPoint={playerInPoint}
+                outPoint={playerOutPoint}
+                rangeEnabled={playerRangeEnabled}
+                isAudio={item?.type === 'audio'}
+                isImage={item?.type === 'image'}
+              />
+
+              <Box
+                component="footer"
+                ref={mobilePlayerFooterRef}
+                aria-label="Annotation tools"
+                sx={{
+                  position: 'relative',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  px: { xs: 1, md: 2 },
+                  py: { xs: 0.75, md: 1 },
+                  borderTop: '1px solid var(--noah-border)',
+                  backgroundColor: 'var(--noah-footer-tint)',
+                  '[data-theme="light"] &': {
+                    backgroundColor: 'transparent',
+                  },
+                  minHeight: { xs: 72, md: 72 },
+                  overflow: 'visible',
+                  zIndex: 12,
+                  opacity: isFullscreen && isIdle ? 0 : 1,
+                  pointerEvents: isFullscreen && isIdle ? 'none' : 'auto',
+                  transition: 'opacity 0.3s ease-in-out',
+                }}
+              >
+                {isDesktopAnnotationToolbar ? (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      width: '100%',
+                      minWidth: 0,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      position: 'relative',
+                    }}
+                  >
+                    {showClearIsland && !isViewer ? (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          left: 16,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          zIndex: 2,
+                        }}
+                      >
+                        <AnnotationUndoIsland
+                          canClear={canClearAnnotations}
+                          onClear={handleOpenClearAnnotationsModal}
+                          disabled={isViewer}
+                        />
+                      </Box>
+                    ) : null}
+
+                    {!isViewer && (
+                      <Box
+                        sx={{
+                          width: '100%',
+                          minWidth: 0,
+                          boxSizing: 'border-box',
+                          display: 'flex',
+                          justifyContent: 'center',
+                          pl: showClearIsland ? '88px' : 2,
+                          pr: '200px',
+                        }}
+                      >
+                        <AnnotationToolbar
+                          disabled={isViewer || (isProcessing && forcePlayOriginal)}
+                          disabledTooltip={isProcessing && forcePlayOriginal ? "Annotation tools are locked while background video compression is in progress. Tools will unlock automatically once compression finishes." : undefined}
+                          mediaType={item?.type}
+                          activeTool={activeTool}
+                          onToolChange={handleToolChange}
+                          activeDrawTool={activeDrawTool}
+                          onDrawToolChange={setActiveDrawTool}
+                          activeDrawStroke={activeDrawStroke}
+                          onDrawStrokeChange={setActiveDrawStroke}
+                          activeDrawColor={activeDrawColor}
+                          onDrawColorChange={setActiveDrawColor}
+                          activeShape={activeShape}
+                          onShapeChange={setActiveShape}
+                          activeColor={activeShapeColor}
+                          onColorChange={setActiveShapeColor}
+                          activeShapeStroke={activeShapeStroke}
+                          onShapeStrokeChange={setActiveShapeStroke}
+                          activeStamp={activeStamp}
+                          customStamp={customStamp}
+                          onStampSelect={setActiveStamp}
+                          onAddCustomStamp={handleAddCustomStamp}
+                          keyboardShortcutsDisabled={Boolean(draftComment) || commentThreadOpen}
+                          toolsDrawerOpen={toolsDrawerOpen}
+                          onMoreToolsClick={() => setToolsDrawerOpen((open) => !open)}
+                          onToolsDrawerClose={() => setToolsDrawerOpen(false)}
+                          moreToolsButtonRef={moreToolsButtonRef}
+                          moreToolsAnchorRef={moreToolsAnchorRef}
+                          pinnedPlayerTools={pinnedPlayerTools}
+                          playerToolsViewState={playerToolsViewState}
+                          playerToolHandlers={playerToolHandlers}
+                          canUndo={canUndo}
+                          canRedo={canRedo}
+                          onUndo={handleUndo}
+                          onRedo={handleRedo}
+                        />
+                      </Box>
+                    )}
+
+                    {item?.type !== 'audio' ? (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          right: 16,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          zIndex: 2,
+                        }}
+                      >
+                        <WorkspaceControlsIsland
+                          zoomLabel={workspaceZoomLabel}
+                          canZoomOut={canWorkspaceZoomOut}
+                          canZoomIn={canWorkspaceZoomIn}
+                          canResetZoom={canWorkspaceZoomReset}
+                          onZoomOut={handleWorkspaceZoomOut}
+                          onZoomIn={handleWorkspaceZoomIn}
+                          onZoomReset={handleWorkspaceZoomReset}
+                        />
+                      </Box>
+                    ) : null}
+                  </Box>
+                ) : (
+                  <Box sx={mobileIslandScrollSx}>
+                    <Box sx={mergedMobileIslandSx}>
                       <AnnotationToolbar
+                        compact
                         disabled={isViewer || (isProcessing && forcePlayOriginal)}
                         disabledTooltip={isProcessing && forcePlayOriginal ? "Annotation tools are locked while background video compression is in progress. Tools will unlock automatically once compression finishes." : undefined}
                         mediaType={item?.type}
+                        mobilePlayerFooterRef={mobilePlayerFooterRef}
                         activeTool={activeTool}
                         onToolChange={handleToolChange}
                         activeDrawTool={activeDrawTool}
@@ -5481,20 +5576,8 @@ export default function VideoPlayerPage({
                         onUndo={handleUndo}
                         onRedo={handleRedo}
                       />
-                    </Box>
-                  )}
-
-                  {item?.type !== 'audio' ? (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        right: 16,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        zIndex: 2,
-                      }}
-                    >
                       <WorkspaceControlsIsland
+                        compact
                         zoomLabel={workspaceZoomLabel}
                         canZoomOut={canWorkspaceZoomOut}
                         canZoomIn={canWorkspaceZoomIn}
@@ -5502,128 +5585,74 @@ export default function VideoPlayerPage({
                         onZoomOut={handleWorkspaceZoomOut}
                         onZoomIn={handleWorkspaceZoomIn}
                         onZoomReset={handleWorkspaceZoomReset}
+                        hideZoomControls={item?.type === 'audio'}
+                        trailingContent={
+                          showClearIsland && !isViewer ? (
+                            <AnnotationUndoIsland
+                              compact
+                              disabled={isViewer}
+                              canClear={canClearAnnotations}
+                              onClear={handleOpenClearAnnotationsModal}
+                            />
+                          ) : null
+                        }
                       />
                     </Box>
-                  ) : null}
-                </Box>
-              ) : (
-                <Box sx={mobileIslandScrollSx}>
-                  <Box sx={mergedMobileIslandSx}>
-                    <AnnotationToolbar
-                      compact
-                      disabled={isViewer || (isProcessing && forcePlayOriginal)}
-                      disabledTooltip={isProcessing && forcePlayOriginal ? "Annotation tools are locked while background video compression is in progress. Tools will unlock automatically once compression finishes." : undefined}
-                      mediaType={item?.type}
-                      mobilePlayerFooterRef={mobilePlayerFooterRef}
-                      activeTool={activeTool}
-                      onToolChange={handleToolChange}
-                      activeDrawTool={activeDrawTool}
-                      onDrawToolChange={setActiveDrawTool}
-                      activeDrawStroke={activeDrawStroke}
-                      onDrawStrokeChange={setActiveDrawStroke}
-                      activeDrawColor={activeDrawColor}
-                      onDrawColorChange={setActiveDrawColor}
-                      activeShape={activeShape}
-                      onShapeChange={setActiveShape}
-                      activeColor={activeShapeColor}
-                      onColorChange={setActiveShapeColor}
-                      activeShapeStroke={activeShapeStroke}
-                      onShapeStrokeChange={setActiveShapeStroke}
-                      activeStamp={activeStamp}
-                      customStamp={customStamp}
-                      onStampSelect={setActiveStamp}
-                      onAddCustomStamp={handleAddCustomStamp}
-                      keyboardShortcutsDisabled={Boolean(draftComment) || commentThreadOpen}
-                      toolsDrawerOpen={toolsDrawerOpen}
-                      onMoreToolsClick={() => setToolsDrawerOpen((open) => !open)}
-                      onToolsDrawerClose={() => setToolsDrawerOpen(false)}
-                      moreToolsButtonRef={moreToolsButtonRef}
-                      moreToolsAnchorRef={moreToolsAnchorRef}
-                      pinnedPlayerTools={pinnedPlayerTools}
-                      playerToolsViewState={playerToolsViewState}
-                      playerToolHandlers={playerToolHandlers}
-                      canUndo={canUndo}
-                      canRedo={canRedo}
-                      onUndo={handleUndo}
-                      onRedo={handleRedo}
-                    />
-                    <WorkspaceControlsIsland
-                      compact
-                      zoomLabel={workspaceZoomLabel}
-                      canZoomOut={canWorkspaceZoomOut}
-                      canZoomIn={canWorkspaceZoomIn}
-                      canResetZoom={canWorkspaceZoomReset}
-                      onZoomOut={handleWorkspaceZoomOut}
-                      onZoomIn={handleWorkspaceZoomIn}
-                      onZoomReset={handleWorkspaceZoomReset}
-                      hideZoomControls={item?.type === 'audio'}
-                      trailingContent={
-                        showClearIsland && !isViewer ? (
-                          <AnnotationUndoIsland
-                            compact
-                            disabled={isViewer}
-                            canClear={canClearAnnotations}
-                            onClear={handleOpenClearAnnotationsModal}
-                          />
-                        ) : null
-                      }
-                    />
                   </Box>
-                </Box>
-              )}
+                )}
+              </Box>
             </Box>
-          </Box>
-        </GlassCard>
+          </GlassCard>
 
-        {!isGlobalMediaAsset && (
-          <AnnotationHistoryDrawer
-            open={historyOpen}
-            availableTabs={
-              annotationsAllowed
-                ? (aiEntitled ? undefined : ['history', 'details'])
-                : ['details']
-            }
-            activeHistoryEntryId={activeHistoryEntryId}
-            entries={history}
-            comments={comments}
-            mediaItem={item}
-            technicalDetails={videoTechnicalDetails}
-            tags={item.tags ?? []}
-            onTagsChange={handleTagsChange}
-            activeTab={drawerTab}
-            onTabChange={setDrawerTab}
-            detailsSection={detailsSection}
-            onDetailsSectionChange={setDetailsSection}
-            selectedFramePersonId={selectedFramePerson?.id ?? null}
-            onFramePersonSelect={handleFramePersonSelect}
-            onTranscriptSeek={handleTranscriptSeek}
-            onAddAiFeatures={aiEntitled ? () => { void handleAddAiFeatures(); } : undefined}
-            videoRef={videoRef}
-            onClose={() => setHistoryOpen(false)}
-            onEntryClick={(entry) => {
-              handleSeekToTimestamp(entry.videoTimestamp, entry.id);
-              if (['comment', 'drawing', 'shape', 'stamp'].includes(entry.type)) {
-                handleAnnotationClick(entry.id, entry.type as any);
+          {!isGlobalMediaAsset && (
+            <AnnotationHistoryDrawer
+              open={historyOpen}
+              availableTabs={
+                annotationsAllowed
+                  ? (aiEntitled ? undefined : ['history', 'details'])
+                  : ['details']
               }
-            }}
-            onToggleResolved={handleToggleResolved}
-            onTogglePinned={handleTogglePinned}
-            onMarkUnread={handleMarkUnread}
-            onMarkRead={handleMarkRead}
-            onCopyLink={handleCopyLink}
-            onDeleteEntry={handleDeleteEntry}
-            onHardDeleteEntry={handleHardDeleteEntry}
-            onRestoreEntry={handleRestoreEntry}
-            onEditComment={handleEditComment}
-            annotationGroups={annotationGroups}
-            collaborators={allCollaboratorsForMentions}
-            onVisibilityChange={handleEntryVisibilityChange}
-            onCreateAnnotationGroup={handleCreateAnnotationGroup}
-            onDeleteAnnotationGroup={handleDeleteAnnotationGroup}
-            onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
-            onAddCollaborator={handleAddCollaboratorForGroup}
-          />
-        )}
+              activeHistoryEntryId={activeHistoryEntryId}
+              entries={history}
+              comments={comments}
+              mediaItem={item}
+              technicalDetails={videoTechnicalDetails}
+              tags={item.tags ?? []}
+              onTagsChange={handleTagsChange}
+              activeTab={drawerTab}
+              onTabChange={setDrawerTab}
+              detailsSection={detailsSection}
+              onDetailsSectionChange={setDetailsSection}
+              selectedFramePersonId={selectedFramePerson?.id ?? null}
+              onFramePersonSelect={handleFramePersonSelect}
+              onTranscriptSeek={handleTranscriptSeek}
+              onAddAiFeatures={aiEntitled ? () => { void handleAddAiFeatures(); } : undefined}
+              videoRef={videoRef}
+              onClose={() => setHistoryOpen(false)}
+              onEntryClick={(entry) => {
+                handleSeekToTimestamp(entry.videoTimestamp, entry.id);
+                if (['comment', 'drawing', 'shape', 'stamp'].includes(entry.type)) {
+                  handleAnnotationClick(entry.id, entry.type as any);
+                }
+              }}
+              onToggleResolved={handleToggleResolved}
+              onTogglePinned={handleTogglePinned}
+              onMarkUnread={handleMarkUnread}
+              onMarkRead={handleMarkRead}
+              onCopyLink={handleCopyLink}
+              onDeleteEntry={handleDeleteEntry}
+              onHardDeleteEntry={handleHardDeleteEntry}
+              onRestoreEntry={handleRestoreEntry}
+              onEditComment={handleEditComment}
+              annotationGroups={annotationGroups}
+              collaborators={allCollaboratorsForMentions}
+              onVisibilityChange={handleEntryVisibilityChange}
+              onCreateAnnotationGroup={handleCreateAnnotationGroup}
+              onDeleteAnnotationGroup={handleDeleteAnnotationGroup}
+              onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
+              onAddCollaborator={handleAddCollaboratorForGroup}
+            />
+          )}
         </Box>
 
         {!isGlobalMediaAsset && (
