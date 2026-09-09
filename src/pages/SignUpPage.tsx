@@ -36,6 +36,8 @@ import {
   sendSignupOtpRequest,
   verifySignupOtpRequest,
   completeSignupRequest,
+  googleSignupInitRequest,
+  microsoftSignupInitRequest,
   fetchCurrentUserRequest,
   mapAuthUserDtoToSessionUser,
 } from '../api/auth.service';
@@ -643,6 +645,9 @@ export default function SignUpPage() {
               }
               if (googleUser.given_name) setFirstName(googleUser.given_name);
               if (googleUser.family_name) setLastName(googleUser.family_name);
+              
+              // Backend initialization for Google Signup
+              await googleSignupInitRequest(tokenResponse.access_token);
             }
             setPhase('workspace');
           } catch (submitError: any) {
@@ -717,8 +722,11 @@ export default function SignUpPage() {
               setLastName(claims.family_name || '');
             } else if (msName) {
               const nameParts = msName.trim().split(' ');
-              setFirstName(nameParts[0] || '');
-              setLastName(nameParts.slice(1).join(' ') || '');
+              setFirstName(nameParts[0]);
+              setLastName(nameParts.length > 1 ? nameParts[nameParts.length - 1] : '');
+              
+              // Backend initialization for Microsoft Signup
+              await microsoftSignupInitRequest(response.idToken);
             }
 
             setPhase('workspace');
