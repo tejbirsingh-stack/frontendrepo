@@ -412,56 +412,51 @@ export default function VideoAnnotationSurface({
   );
 
   useEffect(() => {
-    const video = videoRef?.current;
-    if (!video) return;
-
-    let rafId: number;
-    let isVideoPlaying = false;
+    let activeVideo: HTMLVideoElement | null = null;
 
     const handleTimeUpdate = () => {
-      setCurrentVideoTime(video.currentTime);
-    };
-
-    const tick = () => {
-      handleTimeUpdate();
-      if (isVideoPlaying) {
-        rafId = requestAnimationFrame(tick);
+      if (activeVideo) {
+        setCurrentVideoTime(activeVideo.currentTime);
       }
     };
 
-    const handlePlay = () => {
-      isVideoPlaying = true;
-      tick();
-    };
-
-    const handlePause = () => {
-      isVideoPlaying = false;
-      cancelAnimationFrame(rafId);
+    const attachVideo = (video: HTMLVideoElement) => {
+      if (activeVideo === video) return;
+      if (activeVideo) {
+        activeVideo.removeEventListener('play', handleTimeUpdate);
+        activeVideo.removeEventListener('pause', handleTimeUpdate);
+        activeVideo.removeEventListener('seeked', handleTimeUpdate);
+        activeVideo.removeEventListener('timeupdate', handleTimeUpdate);
+      }
+      activeVideo = video;
+      video.addEventListener('play', handleTimeUpdate);
+      video.addEventListener('pause', handleTimeUpdate);
+      video.addEventListener('seeked', handleTimeUpdate);
+      video.addEventListener('timeupdate', handleTimeUpdate);
       handleTimeUpdate();
     };
 
-    const handleSeek = () => {
-      handleTimeUpdate();
+    const syncTime = () => {
+      const video = videoRef?.current;
+      if (video) {
+        if (video !== activeVideo) {
+          attachVideo(video);
+        }
+        setCurrentVideoTime(video.currentTime);
+      }
     };
 
-    video.addEventListener('play', handlePlay);
-    video.addEventListener('pause', handlePause);
-    video.addEventListener('seeked', handleSeek);
-    video.addEventListener('timeupdate', handleSeek);
-
-    if (!video.paused && !video.ended) {
-      handlePlay();
-    } else {
-      handleTimeUpdate();
-    }
+    const interval = setInterval(syncTime, 100);
+    syncTime();
 
     return () => {
-      isVideoPlaying = false;
-      cancelAnimationFrame(rafId);
-      video.removeEventListener('play', handlePlay);
-      video.removeEventListener('pause', handlePause);
-      video.removeEventListener('seeked', handleSeek);
-      video.removeEventListener('timeupdate', handleSeek);
+      clearInterval(interval);
+      if (activeVideo) {
+        activeVideo.removeEventListener('play', handleTimeUpdate);
+        activeVideo.removeEventListener('pause', handleTimeUpdate);
+        activeVideo.removeEventListener('seeked', handleTimeUpdate);
+        activeVideo.removeEventListener('timeupdate', handleTimeUpdate);
+      }
     };
   }, [videoRef]);
 
