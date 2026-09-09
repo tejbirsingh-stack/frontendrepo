@@ -142,7 +142,7 @@ export default function PeopleCollaboratorsPopover({
           People
         </Typography>
 
-        <Button
+        {/* <Button
           fullWidth
           onClick={() => {
             setInviteModalOpen(true);
@@ -165,7 +165,7 @@ export default function PeopleCollaboratorsPopover({
           }}
         >
           Add people
-        </Button>
+        </Button> */}
 
         <Box
           sx={{

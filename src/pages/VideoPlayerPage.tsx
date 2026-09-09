@@ -4675,19 +4675,26 @@ export default function VideoPlayerPage({
             </Tooltip>
           )}
 
-          {canShare && (
-            <PeopleCollaboratorsPopover
-              collaborators={collaborators}
-              onCollaboratorsChange={setCollaborators}
-              onInvited={(name) =>
+          {canShare && (() => {
+            const activeCollaborators = collaborators.filter(c => c.hasOverride || c.isCurrentUser);
+            return (
+              <PeopleCollaboratorsPopover
+                collaborators={activeCollaborators}
+                onCollaboratorsChange={(newActive) => {
+                  const newGuys = newActive.filter(na => !activeCollaborators.some(ac => ac.email === na.email));
+                  if (newGuys.length > 0) {
+                    setCollaborators(prev => [...prev, ...newGuys.map(g => ({ ...g, hasOverride: true }))]);
+                  }
+                }}
+                onInvited={(name) =>
                 setStatusToast({
                   open: true,
                   message: `Invite sent to ${name}`,
-                  variant: 'resolved',
                 })
-              }
-            />
-          )}
+                }
+              />
+            );
+          })()}
 
           {headerPermissions.canShare && (() => {
             const assetMediaType = item?.type || 'video';
