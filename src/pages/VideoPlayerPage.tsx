@@ -1310,6 +1310,141 @@ export default function VideoPlayerPage({
     variant: 'resolved' | 'reopen' | 'error' | 'failed';
   }>({ open: false, message: '', variant: 'resolved' });
 
+  const [intrinsicMediaSize, setIntrinsicMediaSize] = useState<{ width: number; height: number } | null>(null);
+  const [stageSize, setStageSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const stageResizeObserverRef = useRef<ResizeObserver | null>(null);
+
+  // Keep annotation and comment overlays aspect-ratio-locked to the active video frame across responsive viewports
+  const workspaceStageCallbackRef = useCallback((el: HTMLDivElement | null) => {
+    (workspaceStageRef as any).current = el;
+    if (stageResizeObserverRef.current) {
+      stageResizeObserverRef.current.disconnect();
+      stageResizeObserverRef.current = null;
+    }
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setStageSize({ width: rect.width, height: rect.height });
+    }
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setStageSize({ width, height });
+        }
+      }
+    });
+
+    ro.observe(el);
+    stageResizeObserverRef.current = ro;
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const el = workspaceStageRef.current;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          setStageSize({ width: rect.width, height: rect.height });
+        }
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isFetching, item?.id]);
+
+  useEffect(() => {
+    const checkVideo = () => {
+      const video = videoRef.current;
+      if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+        setIntrinsicMediaSize((prev) => {
+          if (prev?.width === video.videoWidth && prev?.height === video.videoHeight) return prev;
+          return { width: video.videoWidth, height: video.videoHeight };
+        });
+      }
+    };
+
+    checkVideo();
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.addEventListener('loadedmetadata', checkVideo);
+    video.addEventListener('loadeddata', checkVideo);
+    video.addEventListener('canplay', checkVideo);
+    video.addEventListener('resize', checkVideo);
+
+    const interval = setInterval(checkVideo, 400);
+    return () => {
+      video.removeEventListener('loadedmetadata', checkVideo);
+      video.removeEventListener('loadeddata', checkVideo);
+      video.removeEventListener('canplay', checkVideo);
+      video.removeEventListener('resize', checkVideo);
+      clearInterval(interval);
+    };
+  }, [item?.id, item?.url, isFetching]);
+
+  const isRotated90or270 = playerRotationSteps % 2 === 1;
+  const rawMediaWidth = intrinsicMediaSize?.width || videoTechnicalDetails?.width || (item as any)?.width;
+  const rawMediaHeight = intrinsicMediaSize?.height || videoTechnicalDetails?.height || (item as any)?.height;
+
+  const effectiveMediaWidth = isRotated90or270 ? rawMediaHeight : rawMediaWidth;
+  const effectiveMediaHeight = isRotated90or270 ? rawMediaWidth : rawMediaHeight;
+
+  const mediaBoxStyle = useMemo<React.CSSProperties>(() => {
+    if (item?.type === 'audio') {
+      return { width: '100%', height: '100%' };
+    }
+
+    const wMedia = effectiveMediaWidth || (item?.type === 'video' ? 16 : undefined);
+    const hMedia = effectiveMediaHeight || (item?.type === 'video' ? 9 : undefined);
+
+    let stageW = stageSize.width;
+    let stageH = stageSize.height;
+
+    if ((!stageW || !stageH) && workspaceStageRef.current) {
+      const rect = workspaceStageRef.current.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        stageW = rect.width;
+        stageH = rect.height;
+      }
+    }
+
+    if (!wMedia || !hMedia || !stageW || !stageH) {
+      return { width: '100%', height: '100%' };
+    }
+
+    if (playerActualMediaSize && effectiveMediaWidth && effectiveMediaHeight) {
+      return {
+        width: `${effectiveMediaWidth}px`,
+        height: `${effectiveMediaHeight}px`,
+        flexShrink: 0,
+      };
+    }
+
+    const mediaRatio = wMedia / hMedia;
+    const stageRatio = stageW / stageH;
+
+    let w: number;
+    let h: number;
+
+    if (stageRatio > mediaRatio) {
+      h = stageH;
+      w = h * mediaRatio;
+    } else {
+      w = stageW;
+      h = w / mediaRatio;
+    }
+
+    return {
+      width: `${Math.round(w)}px`,
+      height: `${Math.round(h)}px`,
+      flexShrink: 0,
+    };
+  }, [effectiveMediaWidth, effectiveMediaHeight, stageSize, playerActualMediaSize, item?.type]);
+
   const { getShortcut } = useResolvedKeyboardShortcuts();
 
   const playerToolShortcuts = useMemo(() => {
@@ -2406,6 +2541,9 @@ export default function VideoPlayerPage({
     if (!video) return;
 
     const syncMetadata = () => {
+      if (video.videoWidth && video.videoHeight) {
+        setIntrinsicMediaSize({ width: video.videoWidth, height: video.videoHeight });
+      }
       const stream = extractVideoStreamMetadata(video, item);
       const quality = extractPlaybackQualityMetadata(video);
 
@@ -4920,7 +5058,7 @@ export default function VideoPlayerPage({
                 </Box>
               )}
               <Box
-                ref={workspaceStageRef}
+                ref={workspaceStageCallbackRef}
                 sx={{
                   position: 'relative',
                   flex: 1,
@@ -4938,64 +5076,90 @@ export default function VideoPlayerPage({
                     transform: `translate(${workspacePan.x}px, ${workspacePan.y}px) scale(${workspaceZoom})`,
                     transformOrigin: 'center center',
                     willChange: workspacePanEnabled || !isWorkspacePanDefault(workspacePan) ? 'transform' : undefined,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
                 >
-                  {item?.type === 'image' ? (
-                    <Box sx={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {isDecodingImage && (
-                        <Box sx={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, zIndex: 2 }}>
-                          <CircularProgress size={36} sx={{ color: '#6366F1' }} />
-                          <Typography variant="body2" sx={{ color: '#94A3B8', fontWeight: 500 }}>
-                            Loading preview...
-                          </Typography>
-                        </Box>
-                      )}
+                  <Box
+                    sx={{
+                      position: 'relative',
+                      ...mediaBoxStyle,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'visible',
+                    }}
+                  >
+                    {item?.type === 'image' ? (
+                      <Box sx={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {isDecodingImage && (
+                          <Box sx={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, zIndex: 2 }}>
+                            <CircularProgress size={36} sx={{ color: '#6366F1' }} />
+                            <Typography variant="body2" sx={{ color: '#94A3B8', fontWeight: 500 }}>
+                              Loading preview...
+                            </Typography>
+                          </Box>
+                        )}
+                        <Box
+                          component="img"
+                          src={clientDecodedUrl || mediaElementSrc}
+                          alt={item?.title}
+                          onLoad={(e) => {
+                            const el = e.currentTarget as HTMLImageElement;
+                            if (el.naturalWidth && el.naturalHeight) {
+                              setIntrinsicMediaSize({ width: el.naturalWidth, height: el.naturalHeight });
+                            }
+                          }}
+                          sx={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'block',
+                            objectFit: playerActualMediaSize ? 'none' : 'contain',
+                            backgroundColor: 'transparent',
+                            opacity: isDecodingImage ? 0.3 : 1,
+                            transition: 'opacity 0.2s ease',
+                          }}
+                        />
+                      </Box>
+                    ) : (
                       <Box
-                        component="img"
-                        src={clientDecodedUrl || mediaElementSrc}
-                        alt={item?.title}
-                        sx={{
-                          width: '100%',
-                          height: '100%',
-                          display: 'block',
-                          objectFit: playerActualMediaSize ? 'none' : 'contain',
-                          backgroundColor: 'transparent',
-                          opacity: isDecodingImage ? 0.3 : 1,
-                          transition: 'opacity 0.2s ease',
+                        component="video"
+                        ref={videoRef}
+                        key={videoSrc || 'no-src'}
+                        src={mediaElementSrc}
+                        crossOrigin="anonymous"
+                        poster={item?.thumbnail}
+                        playsInline
+                        preload="metadata"
+                        onPlay={() => {
+                          setIsPlaying(true);
+                          setHasStartedPlayback(true);
                         }}
-                      />
-                    </Box>
-                  ) : (
-                    <Box
-                      component="video"
-                      ref={videoRef}
-                      key={videoSrc || 'no-src'}
-                      src={mediaElementSrc}
-                      crossOrigin="anonymous"
-                      poster={item?.thumbnail}
-                      playsInline
-                      preload="metadata"
-                      onPlay={() => {
-                        setIsPlaying(true);
-                        setHasStartedPlayback(true);
-                      }}
-                      onPause={() => {
-                        setIsPlaying(false);
-                        setIsPlaybackLoading(false);
-                      }}
-                      onEnded={() => {
-                        setIsPlaying(false);
-                        setIsPlaybackLoading(false);
-                      }}
-                      onWaiting={() => setIsBuffering(true)}
-                      onPlaying={() => {
-                        setIsBuffering(false);
-                        setIsPlaybackLoading(false);
-                        setIsPlaying(true);
-                        setHasStartedPlayback(true);
-                      }}
-                      onCanPlay={() => setIsBuffering(false)}
-                      onLoadedData={() => setIsBuffering(false)}
+                        onPause={() => {
+                          setIsPlaying(false);
+                          setIsPlaybackLoading(false);
+                        }}
+                        onEnded={() => {
+                          setIsPlaying(false);
+                          setIsPlaybackLoading(false);
+                        }}
+                        onWaiting={() => setIsBuffering(true)}
+                        onPlaying={() => {
+                          setIsBuffering(false);
+                          setIsPlaybackLoading(false);
+                          setIsPlaying(true);
+                          setHasStartedPlayback(true);
+                        }}
+                        onCanPlay={() => setIsBuffering(false)}
+                        onLoadedData={() => setIsBuffering(false)}
+                        onLoadedMetadata={(e) => {
+                          setIsBuffering(false);
+                          const el = e.currentTarget;
+                          if (el.videoWidth && el.videoHeight) {
+                            setIntrinsicMediaSize({ width: el.videoWidth, height: el.videoHeight });
+                          }
+                        }}
                       onError={async () => {
                         setIsBuffering(false);
                         setIsPlaybackLoading(false);
@@ -5418,6 +5582,7 @@ export default function VideoPlayerPage({
                   {selectedFramePerson && supportsFramePeople ? (
                     <FramePersonHighlight person={selectedFramePerson} />
                   ) : null}
+                  </Box>
                 </Box>
               </Box>
 
