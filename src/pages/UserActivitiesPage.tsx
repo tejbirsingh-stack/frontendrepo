@@ -48,7 +48,7 @@ type ActionTone = 'danger' | 'purple' | 'success' | 'neutral' | 'info';
 type SortField = 'user' | 'role' | 'activityName' | 'type' | 'time';
 type SortDirection = 'asc' | 'desc';
 
-const ACTIVITY_TYPES = ['INFO', 'ERROR'] as const;
+const ACTIVITY_TYPES = ['INFO', 'ERROR', 'WARNING'] as const;
 
 function getOneYearAgo(): string {
   const d = new Date();
@@ -597,190 +597,190 @@ export default function UserActivitiesPage() {
         >
           <TableContainer sx={{ overflowX: 'auto' }}>
             <Table sx={{ minWidth: 960 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={headerCellSx} sortDirection={sortBy === 'user' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'user'}
-                    direction={sortBy === 'user' ? sortDirection : 'asc'}
-                    onClick={() => handleSort('user')}
-                    sx={sortLabelSx}
-                  >
-                    User
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={headerCellSx} sortDirection={sortBy === 'role' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'role'}
-                    direction={sortBy === 'role' ? sortDirection : 'asc'}
-                    onClick={() => handleSort('role')}
-                    sx={sortLabelSx}
-                  >
-                    Role
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell
-                  sx={headerCellSx}
-                  sortDirection={sortBy === 'activityName' ? sortDirection : false}
-                >
-                  <TableSortLabel
-                    active={sortBy === 'activityName'}
-                    direction={sortBy === 'activityName' ? sortDirection : 'asc'}
-                    onClick={() => handleSort('activityName')}
-                    sx={sortLabelSx}
-                  >
-                    Activity Name
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={headerCellSx}>Activity Details</TableCell>
-                <TableCell sx={headerCellSx} sortDirection={sortBy === 'type' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'type'}
-                    direction={sortBy === 'type' ? sortDirection : 'asc'}
-                    onClick={() => handleSort('type')}
-                    sx={sortLabelSx}
-                  >
-                    Type
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell sx={headerCellSx} sortDirection={sortBy === 'time' ? sortDirection : false}>
-                  <TableSortLabel
-                    active={sortBy === 'time'}
-                    direction={sortBy === 'time' ? sortDirection : 'asc'}
-                    onClick={() => handleSort('time')}
-                    sx={sortLabelSx}
-                  >
-                    Time
-                  </TableSortLabel>
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sortedActivities.length === 0 ? (
+              <TableHead>
                 <TableRow>
+                  <TableCell sx={headerCellSx} sortDirection={sortBy === 'user' ? sortDirection : false}>
+                    <TableSortLabel
+                      active={sortBy === 'user'}
+                      direction={sortBy === 'user' ? sortDirection : 'asc'}
+                      onClick={() => handleSort('user')}
+                      sx={sortLabelSx}
+                    >
+                      User
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell sx={headerCellSx} sortDirection={sortBy === 'role' ? sortDirection : false}>
+                    <TableSortLabel
+                      active={sortBy === 'role'}
+                      direction={sortBy === 'role' ? sortDirection : 'asc'}
+                      onClick={() => handleSort('role')}
+                      sx={sortLabelSx}
+                    >
+                      Role
+                    </TableSortLabel>
+                  </TableCell>
                   <TableCell
-                    colSpan={6}
-                    align="center"
-                    sx={{ ...bodyCellSx, py: 8, color: cv.textMuted }}
+                    sx={headerCellSx}
+                    sortDirection={sortBy === 'activityName' ? sortDirection : false}
                   >
-                    No activities found.
+                    <TableSortLabel
+                      active={sortBy === 'activityName'}
+                      direction={sortBy === 'activityName' ? sortDirection : 'asc'}
+                      onClick={() => handleSort('activityName')}
+                      sx={sortLabelSx}
+                    >
+                      Activity Name
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell sx={headerCellSx}>Activity Details</TableCell>
+                  <TableCell sx={headerCellSx} sortDirection={sortBy === 'type' ? sortDirection : false}>
+                    <TableSortLabel
+                      active={sortBy === 'type'}
+                      direction={sortBy === 'type' ? sortDirection : 'asc'}
+                      onClick={() => handleSort('type')}
+                      sx={sortLabelSx}
+                    >
+                      Type
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell sx={headerCellSx} sortDirection={sortBy === 'time' ? sortDirection : false}>
+                    <TableSortLabel
+                      active={sortBy === 'time'}
+                      direction={sortBy === 'time' ? sortDirection : 'asc'}
+                      onClick={() => handleSort('time')}
+                      sx={sortLabelSx}
+                    >
+                      Time
+                    </TableSortLabel>
                   </TableCell>
                 </TableRow>
-              ) : (
-                paginatedActivities.map((activity) => {
-                  const actionLabel = normalizeActionLabel(activity);
-                  const typeLabel = (activity.activityType || 'INFO').toUpperCase();
-                  const typeTone = typeLabel === 'ERROR' ? 'danger' : getActionTone(actionLabel);
-                  const toneStyles = actionToneSx[typeTone];
-                  const details = activity.description?.trim() || '—';
-
-                  return (
-                    <TableRow
-                      key={activity.id}
-                      sx={{
-                        '&:last-child td': { borderBottom: 0 },
-                        '&:hover td': { backgroundColor: cv.surfaceHover },
-                      }}
+              </TableHead>
+              <TableBody>
+                {sortedActivities.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={6}
+                      align="center"
+                      sx={{ ...bodyCellSx, py: 8, color: cv.textMuted }}
                     >
-                      <TableCell sx={{ ...bodyCellSx, minWidth: 180 }}>
-                        <Typography
-                          sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary }}
-                        >
-                          {activity.userName || 'System'}
-                        </Typography>
-                        {activity.userEmail ? (
-                          <Typography sx={{ mt: 0.25, fontSize: '0.75rem', color: cv.textMuted }}>
-                            {activity.userEmail}
+                      No activities found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedActivities.map((activity) => {
+                    const actionLabel = normalizeActionLabel(activity);
+                    const typeLabel = (activity.activityType || 'INFO').toUpperCase();
+                    const typeTone = typeLabel === 'ERROR' ? 'danger' : getActionTone(actionLabel);
+                    const toneStyles = actionToneSx[typeTone];
+                    const details = activity.description?.trim() || '—';
+
+                    return (
+                      <TableRow
+                        key={activity.id}
+                        sx={{
+                          '&:last-child td': { borderBottom: 0 },
+                          '&:hover td': { backgroundColor: cv.surfaceHover },
+                        }}
+                      >
+                        <TableCell sx={{ ...bodyCellSx, minWidth: 180 }}>
+                          <Typography
+                            sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary }}
+                          >
+                            {activity.userName || 'System'}
                           </Typography>
-                        ) : null}
-                      </TableCell>
+                          {activity.userEmail ? (
+                            <Typography sx={{ mt: 0.25, fontSize: '0.75rem', color: cv.textMuted }}>
+                              {activity.userEmail}
+                            </Typography>
+                          ) : null}
+                        </TableCell>
 
-                      <TableCell sx={{ ...bodyCellSx, minWidth: 120 }}>
-                        <Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
-                          {activity.userRole || '—'}
-                        </Typography>
-                      </TableCell>
+                        <TableCell sx={{ ...bodyCellSx, minWidth: 120 }}>
+                          <Typography sx={{ fontSize: '0.875rem', color: cv.textPrimary }}>
+                            {activity.userRole || '—'}
+                          </Typography>
+                        </TableCell>
 
-                      <TableCell sx={{ ...bodyCellSx, minWidth: 160 }}>
-                        <Typography
-                          sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary }}
-                        >
-                          {activity.activityName || actionLabel}
-                        </Typography>
-                      </TableCell>
+                        <TableCell sx={{ ...bodyCellSx, minWidth: 160 }}>
+                          <Typography
+                            sx={{ fontSize: '0.875rem', fontWeight: 500, color: cv.textPrimary }}
+                          >
+                            {activity.activityName || actionLabel}
+                          </Typography>
+                        </TableCell>
 
-                      <TableCell sx={{ ...bodyCellSx, minWidth: 220, maxWidth: 400 }}>
-                        <Typography
-                          sx={{
-                            fontSize: '0.875rem',
-                            color: details === '—' ? cv.textMuted : cv.textSecondary,
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          {details}
-                        </Typography>
-                      </TableCell>
+                        <TableCell sx={{ ...bodyCellSx, minWidth: 220, maxWidth: 400 }}>
+                          <Typography
+                            sx={{
+                              fontSize: '0.875rem',
+                              color: details === '—' ? cv.textMuted : cv.textSecondary,
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            {details}
+                          </Typography>
+                        </TableCell>
 
-                      <TableCell sx={{ ...bodyCellSx, minWidth: 100 }}>
-                        <Box
-                          component="span"
-                          sx={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            px: 1,
-                            py: 0.35,
-                            borderRadius: '999px',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            lineHeight: 1.2,
-                            whiteSpace: 'nowrap',
-                            ...toneStyles,
-                          }}
-                        >
-                          {typeLabel}
-                        </Box>
-                      </TableCell>
+                        <TableCell sx={{ ...bodyCellSx, minWidth: 100 }}>
+                          <Box
+                            component="span"
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              px: 1,
+                              py: 0.35,
+                              borderRadius: '999px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              lineHeight: 1.2,
+                              whiteSpace: 'nowrap',
+                              ...toneStyles,
+                            }}
+                          >
+                            {typeLabel}
+                          </Box>
+                        </TableCell>
 
-                      <TableCell sx={{ ...bodyCellSx, whiteSpace: 'nowrap', minWidth: 150 }}>
-                        <Typography sx={{ fontSize: '0.875rem', color: cv.textSecondary }}>
-                          {formatActivityTime(activity.createdAt, timeZone)}
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          component="div"
-          count={sortedActivities.length}
-          page={page}
-          onPageChange={(_, newPage) => setPage(newPage)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(e) => {
-            setRowsPerPage(parseInt(e.target.value, 10));
-            setPage(0);
-          }}
-          rowsPerPageOptions={[10, 25, 50, 100]}
-          sx={{
-            borderTop: `1px solid ${cv.border}`,
-            '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-              color: cv.textSecondary,
-            },
-            '.MuiTablePagination-select': {
-              color: cv.textPrimary,
-            },
-            '.MuiTablePagination-actions button': {
-              color: cv.textPrimary,
-            },
-          }}
-        />
-      </Box>
+                        <TableCell sx={{ ...bodyCellSx, whiteSpace: 'nowrap', minWidth: 150 }}>
+                          <Typography sx={{ fontSize: '0.875rem', color: cv.textSecondary }}>
+                            {formatActivityTime(activity.createdAt, timeZone)}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <TablePagination
+            component="div"
+            count={sortedActivities.length}
+            page={page}
+            onPageChange={(_, newPage) => setPage(newPage)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
+            }}
+            rowsPerPageOptions={[10, 25, 50, 100]}
+            sx={{
+              borderTop: `1px solid ${cv.border}`,
+              '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+                color: cv.textSecondary,
+              },
+              '.MuiTablePagination-select': {
+                color: cv.textPrimary,
+              },
+              '.MuiTablePagination-actions button': {
+                color: cv.textPrimary,
+              },
+            }}
+          />
+        </Box>
       )}
     </Box>
   );

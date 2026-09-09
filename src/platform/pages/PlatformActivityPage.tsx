@@ -63,6 +63,7 @@ const TYPE_OPTIONS: ReadonlyArray<FilterOption> = [
   { value: '', label: 'All types' },
   { value: 'INFO', label: 'INFO' },
   { value: 'ERROR', label: 'ERROR' },
+  { value: 'WARNING', label: 'WARNING' },
 ];
 
 const ACTOR_OPTIONS: ReadonlyArray<FilterOption> = [
@@ -535,15 +536,15 @@ export default function PlatformActivityPage() {
                                   textTransform: 'uppercase',
                                   ...(isError
                                     ? {
-                                        backgroundColor: cv.destructiveSurface,
-                                        color: cv.destructive,
-                                        border: `1px solid ${cv.destructiveSurface}`,
-                                      }
+                                      backgroundColor: cv.destructiveSurface,
+                                      color: cv.destructive,
+                                      border: `1px solid ${cv.destructiveSurface}`,
+                                    }
                                     : {
-                                        backgroundColor: cv.blueGlow18,
-                                        color: cv.brandBlue,
-                                        border: `1px solid ${cv.border}`,
-                                      }),
+                                      backgroundColor: cv.blueGlow18,
+                                      color: cv.brandBlue,
+                                      border: `1px solid ${cv.border}`,
+                                    }),
                                 }}
                               >
                                 {rawType}
