@@ -398,6 +398,7 @@ export default function VideoPlayerPage({
       size: formatFileSize((guestAssetMeta as any).file_size || guestAssetMeta.fileSize || 0),
       sizeBytes: (guestAssetMeta as any).file_size || guestAssetMeta.fileSize || 0,
       updatedAt: guestExpiresAt ? `Expires: ${formatDate(guestExpiresAt)}` : '',
+      compressionStatus: 'completed',
       tags: [],
     };
   }, [isGuestMode, guestAssetMeta, shareToken, guestExpiresAt, formatDate]);
