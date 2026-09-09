@@ -6,6 +6,7 @@ export interface CreateSharePayload {
   visibility?: string;
   email?: string;
   password?: string;
+  requirePassword?: boolean;
   expiresInDays?: number;
   expiresAt?: string;
   permissions?: {

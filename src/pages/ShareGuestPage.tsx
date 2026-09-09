@@ -33,7 +33,7 @@ import VideoPlayerPage from './VideoPlayerPage';
 
 export default function ShareGuestPage() {
   const { token } = useParams<{ token: string }>();
-  const streamUrl = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${token}/stream`;
+  const streamUrl = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/share/${token}/stream`;
   const { formatDate, formatTime } = useLocalizedDate();
 
   const [status, setStatus] = useState<'loading' | 'password' | 'unlocked' | 'expired' | 'error'>('loading');
@@ -45,6 +45,7 @@ export default function ShareGuestPage() {
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<string>('public');
   const [mode, setMode] = useState<string>('link');
+  const [linkName, setLinkName] = useState<string | null>(null);
 
   // Password unlock state
   const [password, setPassword] = useState('');
@@ -78,6 +79,8 @@ export default function ShareGuestPage() {
         setExpiresAt(res.expiresAt);
         if (res.visibility) setVisibility(res.visibility);
         if (res.mode) setMode(res.mode);
+        // linkName is only present for public link-mode shares (set by the owner)
+        if (res.linkName) setLinkName(res.linkName);
 
         if (res.requiresPassword) {
           setStatus('password');
@@ -160,13 +163,20 @@ export default function ShareGuestPage() {
   };
 
   if (status === 'unlocked' && token) {
+    // For public link-mode shares, override the displayed title with the share link's custom name
+    // (from share_links.name) instead of the asset's original filename (from assets table).
+    const guestAssetMetaWithName =
+      linkName && visibility === 'public' && mode === 'link'
+        ? { ...assetMeta, title: linkName }
+        : assetMeta;
+
     return (
       <VideoPlayerPage
         isGuestMode={true}
         shareToken={token}
         guestBranding={branding}
         guestPermissions={permissions}
-        guestAssetMeta={assetMeta}
+        guestAssetMeta={guestAssetMetaWithName}
         guestExpiresAt={expiresAt}
       />
     );
@@ -422,9 +432,9 @@ export default function ShareGuestPage() {
                       userSelect: 'none',
                     }}
                   >
-                    <img 
-                      src={assetMeta.logoUrl} 
-                      alt={assetMeta.organizationName || 'Company Watermark'} 
+                    <img
+                      src={assetMeta.logoUrl}
+                      alt={assetMeta.organizationName || 'Company Watermark'}
                       style={{ maxHeight: '48px', maxWidth: '120px', objectFit: 'contain' }}
                     />
                   </Box>
@@ -433,7 +443,9 @@ export default function ShareGuestPage() {
 
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
                 <Typography variant="h6" sx={{ fontWeight: 600, color: '#f8fafc' }}>
-                  {assetMeta?.title || 'Shared Media Asset'}
+                  {(visibility === 'public' && mode === 'link' && linkName)
+                    ? linkName
+                    : assetMeta?.title || 'Shared Media Asset'}
                 </Typography>
 
                 {(permissions.download || permissions.downloadProxy) && (
@@ -445,7 +457,7 @@ export default function ShareGuestPage() {
                         startIcon={<DownloadOutlinedIcon />}
                         onClick={() => {
                           const a = document.createElement('a');
-                          a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${token}/stream?download=true`;
+                          a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/share/${token}/stream?download=true&original=true`;
                           a.download = '';
                           document.body.appendChild(a);
                           a.click();
@@ -469,7 +481,7 @@ export default function ShareGuestPage() {
                         startIcon={<DownloadOutlinedIcon />}
                         onClick={() => {
                           const a = document.createElement('a');
-                          a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/api/share/${token}/stream?download=true`;
+                          a.href = `${env.apiBaseUrl?.replace(/\/$/, '') || 'http://localhost:3002'}/share/${token}/stream?download=true`;
                           a.download = '';
                           document.body.appendChild(a);
                           a.click();

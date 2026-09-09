@@ -233,7 +233,7 @@ export default function WorkspaceMembersDialog({
   const [query, setQuery] = useState('');
   const [access, setAccess] = useState<WorkspaceMemberAccess>('Can view');
   const [error, setError] = useState('');
-  const [sendInviteEmail, setSendInviteEmail] = useState(true);
+
   const [typeaheadOpen, setTypeaheadOpen] = useState(false);
   // External email — single recipient for secure share
   const [pendingExternalEmail, setPendingExternalEmail] = useState<string | null>(null);
@@ -244,7 +244,7 @@ export default function WorkspaceMembersDialog({
   const [isSubmittingInvite, setIsSubmittingInvite] = useState(false);
   // Secure share dialog state
   const [secureShareOpen, setSecureShareOpen] = useState(false);
-  const [shareExpiry, setShareExpiry] = useState<'7' | '15' | '30' | 'custom'>('7');
+  const [shareExpiry, setShareExpiry] = useState<'7' | '14' | '15' | '30' | '90' | 'custom'>('7');
   const [shareCustomDate, setShareCustomDate] = useState('');
   const [sharePermComment, setSharePermComment] = useState(false);
   const [sharePermDownload, setSharePermDownload] = useState(false);
@@ -309,7 +309,7 @@ export default function WorkspaceMembersDialog({
             
             if (settings.defaultExpiryDays) {
               const daysStr = String(settings.defaultExpiryDays);
-              if (['7', '15', '30'].includes(daysStr)) {
+              if (['7', '14', '15', '30', '90'].includes(daysStr)) {
                 setShareExpiry(daysStr as any);
               } else {
                 setShareExpiry('custom');
@@ -493,7 +493,6 @@ export default function WorkspaceMembersDialog({
       setQuery('');
       setAccess('Can view');
       setError('');
-      setSendInviteEmail(false);
       setTypeaheadOpen(false);
       setPendingExternalEmail(null);
       setPendingExternalName(undefined);
@@ -633,7 +632,7 @@ export default function WorkspaceMembersDialog({
       groupName: group.name,
       memberType: 'Group',
       access,
-      sendInviteEmail,
+      sendInviteEmail: true,
     });
 
     if (success === 'ORG_MEMBER_IN_PUBLIC') {
@@ -659,7 +658,7 @@ export default function WorkspaceMembersDialog({
       name,
       memberType,
       access,
-      sendInviteEmail,
+      sendInviteEmail: true,
     });
 
     if (success === 'ORG_MEMBER_IN_PUBLIC') {
@@ -779,10 +778,31 @@ export default function WorkspaceMembersDialog({
             setError(data.reason);
             return;
           }
-          openSecureShare(email, data?.user?.name, data?.user?.id);
+          if (data?.user?.id) {
+            const result = await onInvite({
+              userId: data.user.id,
+              name: data.user.name,
+              email,
+              access,
+              memberType: 'Guest',
+              sendInviteEmail: true,
+            });
+
+            if (result) {
+              setQuery('');
+              setError('');
+              setTypeaheadOpen(false);
+            } else {
+              setError('Failed to add user to workspace.');
+            }
+            return;
+          }
+
+          openSecureShare(email);
           return;
         } catch (err) {
           // Fallback below
+          console.error(err);
         }
       }
 
@@ -790,7 +810,7 @@ export default function WorkspaceMembersDialog({
         email,
         access,
         memberType,
-        sendInviteEmail,
+        sendInviteEmail: true,
       });
 
       if (result === 'NOT_FOUND') {
@@ -870,9 +890,22 @@ export default function WorkspaceMembersDialog({
 
   const handleDraftVisibilityChange = (nextVisibility: ProjectVisibility) => {
     setDraftVisibility(nextVisibility);
+    if (nextVisibility === 'private') {
+      setLinkNameInput(workspaceName);
+    } else {
+      setLinkNameInput(activeShareLink?.name ?? '');
+    }
   };
 
   const handleShareLinkNameBlur = () => {
+    // Auto-save the name on blur only for public links — private links use the asset name (read-only)
+    if (showShareLinks && activeShareLinkId && draftVisibility === 'public') {
+      const trimmedName = linkNameInput.trim();
+      if (trimmedName && trimmedName !== activeShareLink?.name) {
+        onShareLinkNameChange?.(activeShareLinkId, trimmedName);
+        onShareLinkSettingsSaved?.();
+      }
+    }
     setIsEditingShareLink(false);
   };
 
@@ -892,17 +925,15 @@ export default function WorkspaceMembersDialog({
     let didSave = false;
 
     if (showShareLinks && activeShareLinkId) {
+      // Name is already auto-saved on blur — only save here if it wasn't saved yet.
+      // Private links use the asset name (read-only), so never save the name for them.
       const trimmedName = linkNameInput.trim();
-      if (trimmedName && trimmedName !== activeShareLink?.name) {
+      if (draftVisibility === 'public' && trimmedName && trimmedName !== activeShareLink?.name) {
         onShareLinkNameChange?.(activeShareLinkId, trimmedName);
         didSave = true;
       }
 
-      const currentVisibility = activeShareLink?.visibility ?? visibility;
-      if (draftVisibility !== currentVisibility) {
-        onVisibilityChange?.(draftVisibility);
-        didSave = true;
-      }
+
 
       if (activeShareLink?.url) {
         const copied = await copyProjectShareLink(activeShareLink.url);
@@ -928,12 +959,10 @@ export default function WorkspaceMembersDialog({
     // they intended to use it for the NEW link they are creating.
     const isCustomName = Boolean(trimmed && trimmed !== activeShareLink?.name);
     
-    const nextVisibility = isCustomName ? draftVisibility : visibility;
-    
     setIsEditingShareLink(false);
     onNewShareLink({
       name: isCustomName ? trimmed : '',
-      visibility: nextVisibility,
+      visibility: draftVisibility,
     });
   };
 
@@ -949,12 +978,19 @@ export default function WorkspaceMembersDialog({
           label="Link name"
           placeholder="e.g. client-review"
           value={linkNameInput}
+          disabled={draftVisibility === 'private'}
+          helperText={
+            draftVisibility === 'private'
+              ? 'Private links use the asset name and cannot be renamed.'
+              : undefined
+          }
           onChange={(event) => setLinkNameInput(event.target.value)}
           onBlur={handleShareLinkNameBlur}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
-              void handleShare();
+              // Save name immediately on Enter then blur to trigger auto-save
+              linkNameInputRef.current?.blur();
             }
             if (event.key === 'Escape') {
               handleCancelShareLinkEdit();
@@ -1019,6 +1055,7 @@ export default function WorkspaceMembersDialog({
   const confirmShareLinkDelete = () => {
     if (!pendingShareLinkDelete || !onShareLinkDelete) return;
     onShareLinkDelete(pendingShareLinkDelete);
+    setApiShareLinks(current => current.filter(link => link.id !== pendingShareLinkDelete.id));
     setPendingShareLinkDelete(null);
   };
 
@@ -1726,10 +1763,9 @@ export default function WorkspaceMembersDialog({
               exclusive
               onChange={(_e, val) => { if (val) setShareExpiry(val as typeof shareExpiry); }}
               size="small"
-              disabled={Boolean(orgShareSettings?.defaultExpiryDays)}
               sx={{ flexWrap: 'wrap', gap: 0.5 }}
             >
-              {(['7', '15', '30', 'custom'] as const).map((opt) => (
+              {(['7', '14', '30', '90', 'custom'] as const).map((opt) => (
                 <ToggleButton
                   key={opt}
                   value={opt}
@@ -1758,8 +1794,10 @@ export default function WorkspaceMembersDialog({
                 label="Custom expiry date"
                 value={shareCustomDate}
                 onChange={(e) => setShareCustomDate(e.target.value)}
-                inputProps={{ min: new Date(Date.now() + 86400000).toISOString().split('T')[0] }}
-                slotProps={{ inputLabel: { shrink: true } }}
+                slotProps={{ 
+                  htmlInput: { min: new Date(Date.now() + 86400000).toISOString().split('T')[0] },
+                  inputLabel: { shrink: true } 
+                }}
                 sx={{ mt: 1.5 }}
               />
             </Collapse>
@@ -1911,7 +1949,7 @@ export default function WorkspaceMembersDialog({
               const config = {
                 mode: 'email' as const,
                 email: pendingExternalEmail,
-                visibility: shareRequirePassword ? ('private' as const) : ('public' as const),
+                visibility: 'private' as const,
                 expiresInDays: shareExpiry !== 'custom' ? Number(shareExpiry) : undefined,
                 expiresAt: shareExpiry === 'custom' ? shareCustomDate : undefined,
                 permissions: {
@@ -1921,6 +1959,7 @@ export default function WorkspaceMembersDialog({
                   downloadProxy: sharePermDownloadProxy,
                   watermark: sharePermWatermark,
                 },
+                requirePassword: shareRequirePassword,
                 password: shareRequirePassword ? sharePassword : undefined,
               };
 

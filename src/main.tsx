@@ -12,7 +12,7 @@ import { MsalProvider } from '@azure/msal-react';
 import { msalConfig } from './config/msalConfig';
 
 const msalInstance = new PublicClientApplication(msalConfig);
-
+ 
 msalInstance
   .initialize()
   .then(() => {

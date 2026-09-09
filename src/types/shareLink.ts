@@ -10,5 +10,6 @@ export interface ShareLink {
   expiresAt?: string;
   permissions?: { view: boolean; comment: boolean; download: boolean; downloadProxy: boolean };
   hasPassword?: boolean;
+  mode?: string;
   recipients?: Array<{ id: string; email: string; accessCount: number; lastAccessedAt?: string; sentAt: string }>;
 }
