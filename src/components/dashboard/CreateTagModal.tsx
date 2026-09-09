@@ -20,6 +20,7 @@ import type { SelectChangeEvent } from '@mui/material';
 import { dropdownMenuProps } from '../../constants/dropdownMenu';
 import type { ManagedTag, TagScope } from '../../types/managedTag';
 import type { Workspace } from '../../data/workspaces';
+import toast from 'react-hot-toast';
 
 interface CreateTagModalProps {
   open: boolean;
@@ -133,6 +134,7 @@ export default function CreateTagModal({
       return;
     }
 
+    toast.success(mode === 'edit' ? 'Tag updated successfully' : 'Tag created successfully');
     onClose();
   };
 
