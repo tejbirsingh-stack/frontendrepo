@@ -390,58 +390,34 @@ export async function uploadSingleChunk(
   baseUrl: string,
   onProgress?: (loaded: number) => void,
 ): Promise<string> {
-  if (presignedUrl) {
-    try {
-      const etag = await new Promise<string>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('PUT', presignedUrl);
-        if (xhr.upload && onProgress) {
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) onProgress(e.loaded);
-          };
-        }
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            const rawEtag = xhr.getResponseHeader('ETag') || `"${partNumber}"`;
-            resolve(rawEtag.replace(/"/g, ''));
-          } else {
-            reject(new Error(`Direct B2 PUT failed status ${xhr.status}`));
-          }
-        };
-        xhr.onerror = () => reject(new Error('Direct B2 network error'));
-        xhr.send(chunkBlob);
-      });
-      return etag;
-    } catch (e) {
-      console.warn(`[ChunkUpload] Direct B2 PUT failed for part ${partNumber}, using backend fallback:`, e);
-    }
+  if (!presignedUrl) {
+    throw new Error(`No presigned URL provided for chunk ${partNumber}`);
   }
 
   return new Promise<string>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const chunkApiUrl = `${baseUrl}/media/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&partNumber=${partNumber}`;
-    xhr.open('PUT', chunkApiUrl);
-    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-
+    xhr.open('PUT', presignedUrl);
     if (xhr.upload && onProgress) {
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onProgress(e.loaded);
       };
     }
-
     xhr.onload = () => {
-      let data: any = {};
-      try {
-        data = JSON.parse(xhr.responseText);
-      } catch (err) {}
-      if (xhr.status >= 200 && xhr.status < 300 && data.etag) {
-        resolve(String(data.etag).replace(/"/g, ''));
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const rawEtag =
+          xhr.getResponseHeader('ETag') ||
+          xhr.getResponseHeader('etag') ||
+          xhr.getResponseHeader('x-amz-meta-etag');
+        if (!rawEtag) {
+          reject(new Error(`Chunk ${partNumber} uploaded to B2, but ETag header was blocked by CORS. Verify B2 ExposeHeaders.`));
+          return;
+        }
+        resolve(rawEtag.replace(/"/g, ''));
       } else {
-        reject(new Error(data.message || `Chunk upload failed status ${xhr.status}`));
+        reject(new Error(`Direct B2 PUT failed status ${xhr.status}`));
       }
     };
-    xhr.onerror = () => reject(new Error('Backend chunk upload network error'));
+    xhr.onerror = () => reject(new Error(`Direct storage upload failed for chunk ${partNumber} (CORS or network error). Please verify B2 CORS settings.`));
     xhr.send(chunkBlob);
   });
 }

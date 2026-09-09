@@ -1,5 +1,3 @@
-import { getAccessToken, handleUnauthorized } from '../auth/authTokenBridge';
-import { env } from '../config/env';
 import { apiClient } from './client';
 import type { AiAnalyzeFeature } from './ai.service';
 
@@ -33,8 +31,9 @@ const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB chunks for Backblaze B2 / AWS S3 mul
 async function uploadChunkDirectToB2(
   url: string,
   chunkBlob: Blob,
+  partNumber: number,
   onProgress?: (loaded: number) => void,
-): Promise<string | null> {
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url, true);
@@ -52,101 +51,21 @@ async function uploadChunkDirectToB2(
           xhr.getResponseHeader('etag') ||
           xhr.getResponseHeader('x-amz-meta-etag');
         if (!etag) {
-          // If CORS policy blocks reading ETag header, resolve as null to trigger backend fallback
-          resolve(null);
+          reject(new Error(`Direct B2 upload succeeded for chunk ${partNumber}, but 'ETag' header was blocked by CORS. Ensure B2 bucket exposes 'ETag'.`));
           return;
         }
-        resolve(etag);
+        resolve(etag.replace(/"/g, ''));
       } else {
-        reject(new Error(`Direct B2 upload failed with status ${xhr.status}`));
+        reject(new Error(`Direct B2 upload failed for chunk ${partNumber} with status ${xhr.status}`));
       }
     };
 
     xhr.onerror = () => {
-      reject(new Error('Network error during direct B2 upload'));
+      reject(new Error(`Direct storage upload failed for chunk ${partNumber} (CORS or network error). Please verify Backblaze B2 Bucket CORS settings for this domain.`));
     };
 
     xhr.send(chunkBlob);
   });
-}
-
-async function uploadChunkViaServer(
-  sessionId: string,
-  partNumber: number,
-  chunkBlob: Blob,
-  onProgress?: (loaded: number) => void,
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const token = getAccessToken();
-    const base = (env.apiBaseUrl || '/api').replace(/\/$/, '');
-    const url = `${base}/media/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&partNumber=${partNumber}`;
-
-    const xhr = new XMLHttpRequest();
-    xhr.open('PUT', url, true);
-    xhr.withCredentials = true;
-    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-
-    if (token) {
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    }
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && onProgress) {
-        onProgress(event.loaded);
-      }
-    };
-
-    xhr.onload = () => {
-      if (xhr.status === 401) {
-        handleUnauthorized();
-        reject(new Error('Unauthorized'));
-        return;
-      }
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const res = JSON.parse(xhr.responseText);
-          if (res.success && res.etag) {
-            resolve(res.etag);
-          } else {
-            reject(new Error(res.message || 'Server did not return ETag for chunk'));
-          }
-        } catch {
-          reject(new Error('Failed to parse server response for chunk upload'));
-        }
-      } else {
-        reject(new Error(`Server chunk upload failed with status ${xhr.status}`));
-      }
-    };
-
-    xhr.onerror = () => {
-      reject(new Error('Network error during server chunk upload'));
-    };
-
-    xhr.send(chunkBlob);
-  });
-}
-
-async function uploadSingleChunkWithFallback(
-  sessionId: string,
-  partNumber: number,
-  chunkBlob: Blob,
-  presignedUrl: string | null,
-  onProgress?: (loaded: number) => void,
-  onDirectB2Fail?: () => void,
-): Promise<string> {
-  if (presignedUrl) {
-    try {
-      const etag = await uploadChunkDirectToB2(presignedUrl, chunkBlob, onProgress);
-      if (etag) {
-        return etag;
-      }
-      if (onDirectB2Fail) onDirectB2Fail();
-    } catch (err) {
-      console.warn(`Direct B2 upload failed for chunk ${partNumber}, falling back to server upload...`, err);
-      if (onDirectB2Fail) onDirectB2Fail();
-    }
-  }
-  return await uploadChunkViaServer(sessionId, partNumber, chunkBlob, onProgress);
 }
 
 export interface UploadMediaMetadataOptions {
@@ -190,7 +109,6 @@ async function uploadResumableChunkedFile(
   const totalParts = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
   const parts: { PartNumber: number; ETag: string }[] = [];
   const partLoadedBytes = new Array(totalParts + 1).fill(0);
-  let directB2Failed = false; // Once direct B2 fails (CORS/network), skip trying it for remaining chunks to avoid delay!
 
   const reportProgress = () => {
     if (!progressCallback) return;
@@ -199,7 +117,7 @@ async function uploadResumableChunkedFile(
   };
 
   const uploadTasks = Array.from({ length: totalParts }, (_, i) => i + 1);
-  const CONCURRENCY = 3; // Upload up to 3 chunks in parallel for maximum speed!
+  const CONCURRENCY = 3; // Upload up to 3 chunks in parallel directly to B2
 
   try {
     const runWorker = async () => {
@@ -209,30 +127,21 @@ async function uploadResumableChunkedFile(
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunkBlob = file.slice(start, end);
 
-        let presignedUrl: string | null = null;
-        if (!directB2Failed) {
-          try {
-            const urlRes = await apiClient.get<{ success: boolean; partNumber: number; presignedUrl: string }>(
-              `/media/upload/chunk-url?sessionId=${encodeURIComponent(sessionId)}&partNumber=${partNumber}`,
-            );
-            presignedUrl = urlRes.presignedUrl;
-          } catch (err) {
-            console.warn(`Could not get presigned B2 URL for chunk ${partNumber}`, err);
-            directB2Failed = true;
-          }
+        const urlRes = await apiClient.get<{ success: boolean; partNumber: number; presignedUrl: string }>(
+          `/media/upload/chunk-url?sessionId=${encodeURIComponent(sessionId)}&partNumber=${partNumber}`,
+        );
+
+        if (!urlRes?.presignedUrl) {
+          throw new Error(`Failed to generate direct B2 upload URL for chunk ${partNumber}`);
         }
 
-        const etag = await uploadSingleChunkWithFallback(
-          sessionId,
-          partNumber,
+        const etag = await uploadChunkDirectToB2(
+          urlRes.presignedUrl,
           chunkBlob,
-          presignedUrl,
+          partNumber,
           (chunkLoaded) => {
             partLoadedBytes[partNumber] = chunkLoaded;
             reportProgress();
-          },
-          () => {
-            directB2Failed = true;
           },
         );
 
