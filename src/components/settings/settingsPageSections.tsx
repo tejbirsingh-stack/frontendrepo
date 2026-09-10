@@ -483,6 +483,7 @@ export function PersonalSettingsSection() {
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [nameError, setNameError] = useState('');
   const [saveProfileConfirmOpen, setSaveProfileConfirmOpen] = useState(false);
   const [logoutAllConfirmOpen, setLogoutAllConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -494,14 +495,33 @@ export function PersonalSettingsSection() {
         timezone: resolveProfileTimezoneOption(user.timezone),
         avatarUrl: user.avatarUrl || ''
       });
+      setNameError('');
     }
   }, [user]);
 
+  const handleOpenConfirm = () => {
+    const trimmed = profile.fullName.trim();
+    if (!trimmed) {
+      setNameError('Full name cannot be empty');
+      toast.error('Full name cannot be empty');
+      return;
+    }
+    setNameError('');
+    setSaveProfileConfirmOpen(true);
+  };
+
   const handleSave = async () => {
+    const trimmed = profile.fullName.trim();
+    if (!trimmed) {
+      setNameError('Full name cannot be empty');
+      toast.error('Full name cannot be empty');
+      setSaveProfileConfirmOpen(false);
+      return;
+    }
     setIsSaving(true);
     setSaveProfileConfirmOpen(false);
     try {
-      await updateProfileRequest({ name: profile.fullName, timezone: profile.timezone });
+      await updateProfileRequest({ name: trimmed, timezone: profile.timezone });
       await refreshUser();
       toast.success('Personal info saved successfully');
     } catch (err: any) {
@@ -529,6 +549,27 @@ export function PersonalSettingsSection() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    const allowedMimeTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+    const allowedExtensions = ['.png', '.jpg', '.jpeg'];
+    const fileExtension = '.' + (file.name.split('.').pop() || '').toLowerCase();
+
+    if (!allowedMimeTypes.includes(file.type.toLowerCase()) || !allowedExtensions.includes(fileExtension)) {
+      toast.error('Invalid file type. Only PNG and JPG images are allowed as profile photo.');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    const maxSize = 5 * 1024 * 1024; // 5MB limit
+    if (file.size > maxSize) {
+      toast.error('Image size exceeds 5MB limit.');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
     try {
       toast.loading('Uploading photo...', { id: 'upload-photo' });
       const res = await uploadProfilePhotoRequest(file);
@@ -552,23 +593,58 @@ export function PersonalSettingsSection() {
       >
         <Box sx={{ px: 2, py: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-            <Avatar
-              src={profile.avatarUrl}
-              alt={profile.fullName}
-              sx={{
-                width: 72,
-                height: 72,
-                fontSize: '1.25rem',
-                fontWeight: 700,
-                background: profile.avatarUrl ? undefined : cv.brandGradient,
-              }}
-            >
-              {!profile.avatarUrl ? (profile.fullName || user?.email || 'U').charAt(0).toUpperCase() : null}
-            </Avatar>
+            <Tooltip title="Click to upload photo" arrow>
+              <Box
+                onClick={() => fileInputRef.current?.click()}
+                sx={{
+                  position: 'relative',
+                  width: 72,
+                  height: 72,
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                  '&:hover .avatar-overlay': {
+                    opacity: 1,
+                  },
+                }}
+              >
+                <Avatar
+                  src={profile.avatarUrl}
+                  alt={profile.fullName}
+                  sx={{
+                    width: 72,
+                    height: 72,
+                    fontSize: '1.25rem',
+                    fontWeight: 700,
+                    background: profile.avatarUrl ? undefined : cv.brandGradient,
+                  }}
+                >
+                  {!profile.avatarUrl ? (profile.fullName || user?.email || 'U').charAt(0).toUpperCase() : null}
+                </Avatar>
+                <Box
+                  className="avatar-overlay"
+                  sx={{
+                    position: 'absolute',
+                    inset: 0,
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: 0,
+                    transition: 'opacity 0.2s ease-in-out',
+                    color: '#fff',
+                  }}
+                >
+                  <UploadOutlinedIcon sx={{ fontSize: '1.5rem' }} />
+                </Box>
+              </Box>
+            </Tooltip>
             <Box>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,.png,.jpg,.jpeg"
                 style={{ display: 'none' }}
                 ref={fileInputRef}
                 onChange={handleFileUpload}
@@ -590,7 +666,14 @@ export function PersonalSettingsSection() {
           <TextField
             label="Full name"
             value={profile.fullName}
-            onChange={(event) => setProfile((current) => ({ ...current, fullName: event.target.value }))}
+            onChange={(event) => {
+              setProfile((current) => ({ ...current, fullName: event.target.value }));
+              if (nameError && event.target.value.trim()) {
+                setNameError('');
+              }
+            }}
+            error={Boolean(nameError)}
+            helperText={nameError}
             fullWidth
             size="small"
             slotProps={{ inputLabel: { shrink: true } }}
@@ -622,7 +705,7 @@ export function PersonalSettingsSection() {
             System detected by default; user configurable.
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button variant="contained" sx={containedButtonSx} onClick={() => setSaveProfileConfirmOpen(true)} disabled={isSaving}>
+            <Button variant="contained" sx={containedButtonSx} onClick={handleOpenConfirm} disabled={isSaving}>
               {isSaving ? 'Saving...' : 'Save personal info'}
             </Button>
           </Box>
