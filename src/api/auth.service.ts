@@ -62,6 +62,16 @@ export const completeSignupRequest = async (payload: CompleteSignupPayload) => {
   return response.data;
 };
 
+export const googleSignupInitRequest = async (idToken: string) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/google-signup-init`, { idToken });
+  return response.data;
+};
+
+export const microsoftSignupInitRequest = async (idToken: string) => {
+  const response = await axios.post(`${API_BASE_URL}/auth/microsoft-signup-init`, { idToken });
+  return response.data;
+};
+
 export const registerUser = async (data: RegisterData) => {
   const response = await axios.post(
     `${API_BASE_URL}/auth/register`,

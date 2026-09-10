@@ -24,6 +24,7 @@ import TrashConfirmModal from '../components/dashboard/TrashConfirmModal';
 import { useDashboard } from '../context/DashboardContext';
 import type { ManagedTag, TagScope } from '../types/managedTag';
 import { dropdownMenuProps } from '../constants/dropdownMenu';
+import toast from 'react-hot-toast';
 
 type ScopeFilter = 'all' | TagScope;
 
@@ -203,9 +204,10 @@ export default function TagsManagementPage() {
   const handleUpdateTag = async (id: string, updates: { name?: string; parentId?: string | null }) =>
     await updateManagedTag(id, updates);
 
-  const confirmDeleteTag = () => {
+  const confirmDeleteTag = async () => {
     if (!deleteTarget) return;
-    deleteManagedTag(deleteTarget.id);
+    await deleteManagedTag(deleteTarget.id);
+    toast.success('Tag deleted successfully');
     setDeleteTarget(null);
   };
 
