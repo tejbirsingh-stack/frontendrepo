@@ -323,7 +323,26 @@ export default function VideoPlayerControls({
     if (!element) return;
 
     if (element.paused || element.ended) {
-      void element.play().catch(() => undefined);
+      console.log(
+        '[VideoControls] play clicked |',
+        `src=${element.src ? 'set' : 'EMPTY'} readyState=${element.readyState} error=${element.error?.code ?? 'none'}`
+      );
+      fetch('/api/server', { method: 'GET' }).catch(() => { });
+
+      if (!element.src || element.src === window.location.href) {
+        console.error('[VideoControls] ❌ no src');
+        return;
+      }
+      if (element.error) {
+        console.error('[VideoControls] ❌ video error code', element.error.code, '—', element.error.message);
+        return;
+      }
+
+      void element.play().then(() => {
+        console.log('[VideoControls] ✅ playing');
+      }).catch((err) => {
+        console.error('[VideoControls] ❌ play() failed:', err?.name, '—', err?.message);
+      });
     } else {
       element.pause();
     }

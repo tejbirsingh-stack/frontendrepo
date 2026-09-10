@@ -656,9 +656,15 @@ export default function VideoPlayerPage({
   useEffect(() => {
     const fetchSignedUrl = async () => {
       const rawItem = fetchedItem || contextItem;
-      if (!rawItem?.id || isGuestMode) {
+      if (isGuestMode) {
+        // Guest mode — no signed URL needed, unblock immediately
         setSignedVideoSrc(null);
         setIsSignedUrlLoading(false);
+        return;
+      }
+      if (!rawItem?.id) {
+        // Item not loaded yet — keep blocked (isSignedUrlLoading stays true)
+        // to prevent premature unauthenticated /stream requests
         return;
       }
 
@@ -1962,16 +1968,41 @@ export default function VideoPlayerPage({
 
   const handleCenterPlayClick = useCallback(() => {
     const element = videoRef.current;
+
+    // Debug: single-line summary visible in Console on UAT
+    console.log(
+      '[VideoPlayer] play clicked |',
+      element
+        ? `src=${element.src ? 'set' : 'EMPTY'} readyState=${element.readyState} error=${element.error?.code ?? 'none'} signingDone=${!isSignedUrlLoading}`
+        : 'videoRef is NULL'
+    );
+
+    // Network tab marker — confirms click handler fired on UAT
+    fetch('/api/server', { method: 'GET' }).catch(() => { });
+
     if (!element || (!element.paused && !element.ended) || isPlaybackLoading) return;
+
+    if (!element.src || element.src === window.location.href) {
+      console.error('[VideoPlayer] ❌ no src — signed URL still loading');
+      return;
+    }
+
+    if (element.error) {
+      console.error('[VideoPlayer] ❌ video error code', element.error.code, '—', element.error.message);
+      return;
+    }
 
     setHasStartedPlayback(true);
     setIsPlaybackLoading(true);
 
-    void element.play().catch(() => {
+    void element.play().then(() => {
+      console.log('[VideoPlayer] ✅ playing');
+    }).catch((err) => {
+      console.error('[VideoPlayer] ❌ play() failed:', err?.name, '—', err?.message);
       setIsPlaybackLoading(false);
       setHasStartedPlayback(false);
     });
-  }, [isPlaybackLoading]);
+  }, [isPlaybackLoading, isSignedUrlLoading, signedVideoSrc]);
 
   const resolvedOverlayEntryIds = useMemo(
     () => buildResolvedOverlayEntryIds(history),
