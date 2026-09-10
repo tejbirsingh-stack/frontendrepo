@@ -650,15 +650,19 @@ export default function VideoPlayerPage({
   }, [fetchedItem, contextItem, videoSrcVersion]);
 
   const [signedVideoSrc, setSignedVideoSrc] = useState<string | null>(null);
+  // true while we are fetching the signed URL — prevents premature unauthenticated /stream requests
+  const [isSignedUrlLoading, setIsSignedUrlLoading] = useState<boolean>(!isGuestMode);
 
   useEffect(() => {
     const fetchSignedUrl = async () => {
       const rawItem = fetchedItem || contextItem;
       if (!rawItem?.id || isGuestMode) {
         setSignedVideoSrc(null);
+        setIsSignedUrlLoading(false);
         return;
       }
 
+      setIsSignedUrlLoading(true);
       try {
         const { fetchSignedStreamUrl } = await import('../utils/signedStreamUrl');
         // Use 60 minutes for video streaming to allow seeking in long videos
@@ -667,15 +671,20 @@ export default function VideoPlayerPage({
       } catch (error) {
         console.error('Failed to fetch signed URL:', error);
         setSignedVideoSrc(null);
+      } finally {
+        setIsSignedUrlLoading(false);
       }
     };
 
     fetchSignedUrl();
   }, [fetchedItem?.id, contextItem?.id, isGuestMode]);
 
+  // Only probe bandwidth/availability once signed URL is ready (to avoid 401 on plain /stream)
+  const mediaProbeUrlReady = isGuestMode ? mediaProbeUrl : (isSignedUrlLoading ? undefined : (signedVideoSrc ?? mediaProbeUrl));
+
   useEffect(() => {
-    if (!mediaProbeUrl) return;
-    fetch(mediaProbeUrl, { method: 'HEAD' })
+    if (!mediaProbeUrlReady) return;
+    fetch(mediaProbeUrlReady, { method: 'HEAD' })
       .then((res) => {
         if (res.status === 403 || res.status === 429) {
           return res.json().then((body) => {
@@ -686,7 +695,7 @@ export default function VideoPlayerPage({
         }
       })
       .catch(() => { });
-  }, [mediaProbeUrl]);
+  }, [mediaProbeUrlReady]);
 
   useEffect(() => {
     const processing = (liveAssetStatus === 'processing' || liveAssetStatus === 'queued' || liveAssetStatus === 'in_progress') && liveProgress !== '100%';
@@ -4192,12 +4201,14 @@ export default function VideoPlayerPage({
           : (item.videoSrc || item.url || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : SAMPLE_VIDEO_SRC));
   // Audio/original is available immediately; only blank video while proxy is processing unless user explicitly plays original.
   const shouldBlockMediaSrc = isProcessing && !forcePlayOriginal && item.type === 'video';
-  const videoSrc = shouldBlockMediaSrc || !baseSrc
+  // Also block the video element src while the signed URL is still loading to prevent
+  // the browser from making unauthenticated /stream requests (which return 401 on UAT).
+  const videoSrc = shouldBlockMediaSrc || !baseSrc || (!isGuestMode && isSignedUrlLoading)
     ? ''
     : signedVideoSrc
       ? `${signedVideoSrc}${signedVideoSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}${forcePlayOriginal ? '&original=true' : ''}`
       : `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${videoSrcVersion}${forcePlayOriginal ? '&original=true' : ''}`;
-  const mediaElementSrc = shouldBlockMediaSrc ? undefined : (videoSrc || undefined);
+  const mediaElementSrc = (shouldBlockMediaSrc || (!isGuestMode && isSignedUrlLoading)) ? undefined : (videoSrc || undefined);
   const surfaceEnabled = SURFACE_TOOLS.includes(activeTool);
 
   return (
