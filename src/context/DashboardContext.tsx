@@ -473,6 +473,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             compressionStatus: a.compressionStatus || a.transcodingStatus || a.status || 'completed',
             visibility: a.visibility,
             globalMedia: Boolean(a.globalMedia),
+            canDelete: a.canDelete === true,
             customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
             status: a.status === 'duplicate' ? 'duplicate' : 'active',
           };
@@ -642,6 +643,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             compressionStatus: a.compressionStatus || a.transcodingStatus || a.status || 'completed',
             visibility: a.visibility,
             globalMedia: Boolean(a.globalMedia),
+            canDelete: a.canDelete === true,
             customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
             status: a.status === 'duplicate' ? 'duplicate' : 'active',
           };
@@ -747,6 +749,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             compressionStatus: a.compressionStatus || a.transcodingStatus || a.status || 'completed',
             visibility: a.visibility,
             globalMedia: Boolean(a.globalMedia),
+            canDelete: a.canDelete === true,
             customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
             status: a.status === 'duplicate' ? 'duplicate' : 'active',
           };
@@ -923,8 +926,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
                 linkedProjectIds: a.sources?.map((s: any) => s.projectId) || [],
                 projectLocations: a.sources?.map((s: any) => ({ folderId: s.projectId })) || [],
                 compressionStatus: a.compressionStatus || a.transcodingStatus || a.status || 'completed',
-            visibility: a.visibility,
+                visibility: a.visibility,
                 globalMedia: Boolean(a.globalMedia),
+                canDelete: a.canDelete === true,
                 customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
                 status: a.status === 'duplicate' ? 'duplicate' : 'active',
               });
@@ -1014,8 +1018,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
               linkedProjectIds: [],
               projectLocations: [],
               compressionStatus: a.compressionStatus || a.transcodingStatus || a.status || 'completed',
-            visibility: a.visibility,
+              visibility: a.visibility,
               globalMedia: Boolean(a.globalMedia),
+              canDelete: a.canDelete === true,
               customMetadata: a.customMetadata || (a.metadata?.customProperties ? (typeof a.metadata.customProperties === 'string' ? JSON.parse(a.metadata.customProperties) : a.metadata.customProperties) : undefined),
               status: 'active',
             };

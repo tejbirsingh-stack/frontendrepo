@@ -51,7 +51,7 @@ import DashboardKeyboardShortcutsDialog from '../components/dashboard/DashboardK
 import HelpMenuDrawer, { getHelpMenuShortcutLabel } from '../components/media/HelpMenuDrawer';
 import { useAuth } from '../auth/AuthContext';
 import { ROLE_IDS } from '../constants/userRoles';
-import { PERMISSIONS, hasPermission, canDeleteFolder } from '../constants/permissions';
+import { PERMISSIONS, canDeleteFolder } from '../constants/permissions';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
 import { dropdownMenuPaperSx } from '../constants/dropdownMenu';
@@ -1642,12 +1642,12 @@ export default function DashboardPage({
       </Box>
 
       {(() => {
-        const selectedHasFolder = mediaItems.some(
-          (item) => selectedMediaIds.has(item.id) && item.type === 'folder',
-        );
+        const selectedItems = displayedItems.filter((item) => selectedMediaIds.has(item.id));
+        const selectedHasFolder = selectedItems.some((item) => item.type === 'folder');
+        const selectedFiles = selectedItems.filter((item) => item.type !== 'folder');
         const isBulkDeleteDisabled = selectedHasFolder
           ? !canDeleteFolder(user)
-          : !hasPermission(user, PERMISSIONS.MANAGE_TRASH);
+          : selectedFiles.length === 0 || selectedFiles.some((item) => item.canDelete !== true);
         return (
           <MediaSelectionBar
             selectedCount={selectedMediaIds.size}

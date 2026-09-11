@@ -515,12 +515,14 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
           </MenuItem>
         ) : null}
         {(() => {
+          // Files: gated by the server-resolved `canDelete` flag (manage_trash in the
+          // asset's context) so the button and the API agree. Folders/projects unchanged.
           const isDeleteDisabled = isPlatformMedia
             || (isProject
               ? !canDeleteFolder(user)
               : isFolder
                 ? (!canDeleteFolder(user) || isRestoreFolder)
-                : !hasPermission(user, PERMISSIONS.DELETE_MEDIA));
+                : item.canDelete !== true);
           return (
             <MenuItem
               disabled={Boolean(isDeleteDisabled)}
