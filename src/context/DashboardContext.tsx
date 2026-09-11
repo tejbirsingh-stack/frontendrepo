@@ -1593,11 +1593,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           .catch((err) => console.error(`Failed to move media ${mediaId} to trash:`, err));
       });
 
-      setTrashedIds((prev) => {
-        const next = new Set(prev);
-        safeUniqueIds.forEach((id) => next.add(id));
-        return next;
-      });
 
       setMediaItems((prev) => {
         const nextMedia = prev.map((item) => {

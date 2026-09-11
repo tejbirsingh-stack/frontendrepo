@@ -53,6 +53,8 @@ const menuPaperSx = {
   boxShadow: cv.dropdownShadow,
 };
 
+
+
 const consumeMenuPointerEvent = (event: MouseEvent) => {
   event.stopPropagation();
   event.preventDefault();
@@ -518,7 +520,7 @@ export default function MediaItemActionsMenu({ item, buttonSx }: MediaItemAction
               ? !canDeleteFolder(user)
               : isFolder
                 ? (!canDeleteFolder(user) || isRestoreFolder)
-                : !hasPermission(user, PERMISSIONS.MANAGE_TRASH));
+                : !hasPermission(user, PERMISSIONS.DELETE_MEDIA));
           return (
             <MenuItem
               disabled={Boolean(isDeleteDisabled)}
