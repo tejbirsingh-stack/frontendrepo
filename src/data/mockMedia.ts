@@ -28,6 +28,8 @@ export interface MediaItem {
   itemCount?: number;
   tags?: string[];
   aiTags?: string[];
+  /** True when any AI insights exist (summary/tags, transcript, people & scenes). */
+  hasAiInsights?: boolean;
   location?: MediaLocation | null;
   linkedProjectIds?: string[];
   /** Placement in the Projects sidebar (separate from files & folders location). */

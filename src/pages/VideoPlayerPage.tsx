@@ -260,6 +260,12 @@ function slugifyShareLinkName(value: string): string {
     .replace(/[^a-z0-9-_]/g, '');
 }
 
+/** Stable empty array so AiFeatureSelectDialog does not reset selection on parent re-render. */
+const EMPTY_LOCKED_FEATURES: AiAnalyzeFeature[] = [];
+
+/** Re-enable when Phase 2a ships real VI face rectangles (placeholder boxes are off for now). */
+const ENABLE_FRAME_PERSON_HIGHLIGHT = false;
+
 const ANNOTATION_OVERLAY_TOOLS: AnnotationTool[] = [
   'comment',
   'draw',
@@ -5621,7 +5627,9 @@ export default function VideoPlayerPage({
                     </>
                   )}
 
-                  {selectedFramePerson && supportsFramePeople ? (
+                  {ENABLE_FRAME_PERSON_HIGHLIGHT &&
+                  selectedFramePerson &&
+                  supportsFramePeople ? (
                     <FramePersonHighlight person={selectedFramePerson} />
                   ) : null}
                   </Box>
@@ -5871,6 +5879,7 @@ export default function VideoPlayerPage({
               onTranscriptSeek={handleTranscriptSeek}
               onAddAiFeatures={aiEntitled ? () => { void handleAddAiFeatures(); } : undefined}
               videoRef={videoRef}
+              videoSrc={mediaElementSrc}
               onClose={() => setHistoryOpen(false)}
               onEntryClick={(entry) => {
                 handleSeekToTimestamp(entry.videoTimestamp, entry.id);
@@ -6005,7 +6014,7 @@ export default function VideoPlayerPage({
         open={aiFeatureDialogOpen}
         mediaType={item?.type}
         mode={aiFeatureDialogMode}
-        lockedFeatures={aiFeatureDialogMode === 'add' ? aiLockedFeatures : []}
+        lockedFeatures={aiFeatureDialogMode === 'add' ? aiLockedFeatures : EMPTY_LOCKED_FEATURES}
         submitting={aiFeatureSubmitting}
         onClose={() => {
           if (!aiFeatureSubmitting) setAiFeatureDialogOpen(false);

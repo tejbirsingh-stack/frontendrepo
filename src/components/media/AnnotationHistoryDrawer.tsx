@@ -61,6 +61,7 @@ import { formatVideoTimestamp } from '../../utils/formatVideoTimestamp';
 import { getHistoryTypeLabel } from '../../utils/annotationHistoryLabels';
 import { historyEntryBodyScrollSx, longFormTextSx } from '../../constants/overlayScroll';
 import { formatAnnotationDisplayText } from '../../utils/textContent';
+import { captureVideoThumbnail } from '../../utils/videoThumbnail';
 import { SIDEBAR_DESKTOP_BREAKPOINT } from '../../constants/layout';
 import {
   DATE_RANGE_OPTIONS,
@@ -198,6 +199,8 @@ interface AnnotationHistoryDrawerProps {
   onAddAiFeatures?: () => void;
   /** Media element the transcript follows to highlight the line being spoken. */
   videoRef?: React.RefObject<HTMLVideoElement | null>;
+  /** Playable media URL used to capture scene keyframe thumbnails. */
+  videoSrc?: string;
   onClose: () => void;
   onEntryClick?: (entry: AnnotationHistoryEntry) => void;
   onToggleResolved: (entryId: string) => void;
@@ -942,6 +945,7 @@ function mapPeopleToFramePeople(people: AiPersonDto[]): FramePerson[] {
     name: p.displayLabel,
     initials: initialsFromLabel(p.displayLabel),
     detail: `${formatTimecode(p.startMs)}–${formatTimecode(p.endMs)}`,
+    thumbnailUrl: p.thumbnailUrl,
     // Placeholder box until VI supplies face rectangles (Phase 2a).
     box: {
       xPercent: 40 + (index % 3) * 5,
@@ -956,17 +960,61 @@ function SceneInsightChips({
   scenes,
   query,
   onSeekMs,
+  videoSrc,
 }: Readonly<{
   scenes: AiSceneDto[];
   query: string;
   onSeekMs?: (startMs: number) => void;
+  videoSrc?: string;
 }>) {
   const normalizedQuery = query.trim().toLowerCase();
-  const filtered = normalizedQuery
-    ? scenes.filter((s) =>
-        `${s.label} ${s.description || ''}`.toLowerCase().includes(normalizedQuery),
-      )
-    : scenes;
+  const filtered = useMemo(
+    () =>
+      normalizedQuery
+        ? scenes.filter((s) =>
+            `${s.label} ${s.description || ''}`.toLowerCase().includes(normalizedQuery),
+          )
+        : scenes,
+    [scenes, normalizedQuery],
+  );
+  const visibleScenes = useMemo(() => filtered.slice(0, 24), [filtered]);
+  const sceneKey = useMemo(
+    () => visibleScenes.map((s) => `${s.id}:${s.startMs}`).join('|'),
+    [visibleScenes],
+  );
+
+  /** data URL when ready; null when capture failed; missing while pending */
+  const [thumbs, setThumbs] = useState<Record<string, string | null>>({});
+
+  useEffect(() => {
+    setThumbs({});
+    if (!videoSrc || visibleScenes.length === 0) return;
+
+    let cancelled = false;
+
+    const run = async () => {
+      for (const scene of visibleScenes) {
+        if (cancelled) return;
+        try {
+          const { thumbnail } = await captureVideoThumbnail(videoSrc, {
+            seekSeconds: Math.max(0, scene.startMs / 1000),
+          });
+          if (!cancelled) {
+            setThumbs((prev) => ({ ...prev, [scene.id]: thumbnail }));
+          }
+        } catch {
+          if (!cancelled) {
+            setThumbs((prev) => ({ ...prev, [scene.id]: null }));
+          }
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [videoSrc, sceneKey, visibleScenes]);
 
   if (filtered.length === 0) {
     return (
@@ -985,36 +1033,119 @@ function SceneInsightChips({
       }}
       aria-label="Scenes detected in this video"
     >
-      {filtered.slice(0, 24).map((scene) => (
-        <Box
-          key={scene.id}
-          component="button"
-          type="button"
-          onClick={() => onSeekMs?.(scene.startMs)}
-          sx={{
-            border: `1px solid ${cv.purpleChipBorder}`,
-            backgroundColor: cv.purpleSurface,
-            borderRadius: '999px',
-            px: 1,
-            py: 0.375,
-            cursor: onSeekMs ? 'pointer' : 'default',
-            color: cv.brandPurpleLight,
-            fontSize: '0.6875rem',
-            fontWeight: 600,
-            lineHeight: 1.3,
-            '&:hover': { backgroundColor: cv.purpleSelectionHover },
-            '&:focus-visible': {
-              outline: `2px solid ${cv.purpleFocusBorder}`,
-              outlineOffset: 2,
-            },
-          }}
-        >
-          {scene.label}
-          <Box component="span" sx={{ opacity: 0.75, ml: 0.5 }}>
-            {formatTimecode(scene.startMs)}
+      {visibleScenes.map((scene) => {
+        const thumb = thumbs[scene.id];
+        const showImage = typeof thumb === 'string';
+        const showTextFallback = !videoSrc || thumb === null;
+        const label = `${scene.label} ${formatTimecode(scene.startMs)}`;
+
+        if (showImage) {
+          return (
+            <Tooltip key={scene.id} title={label} arrow placement="top">
+              <Box
+                component="button"
+                type="button"
+                aria-label={label}
+                onClick={() => onSeekMs?.(scene.startMs)}
+                sx={{
+                  width: 80,
+                  p: 0,
+                  border: `1px solid ${cv.purpleChipBorder}`,
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  cursor: onSeekMs ? 'pointer' : 'default',
+                  backgroundColor: cv.purpleSurface,
+                  textAlign: 'left',
+                  '&:hover': { backgroundColor: cv.purpleSelectionHover },
+                  '&:focus-visible': {
+                    outline: `2px solid ${cv.purpleFocusBorder}`,
+                    outlineOffset: 2,
+                  },
+                }}
+              >
+                <Box
+                  component="img"
+                  src={thumb}
+                  alt=""
+                  sx={{
+                    display: 'block',
+                    width: '100%',
+                    aspectRatio: '16 / 9',
+                    objectFit: 'cover',
+                  }}
+                />
+                <Typography
+                  component="span"
+                  sx={{
+                    display: 'block',
+                    px: 0.5,
+                    py: 0.25,
+                    fontSize: '0.625rem',
+                    fontWeight: 600,
+                    color: cv.brandPurpleLight,
+                    lineHeight: 1.3,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {scene.label}
+                  <Box component="span" sx={{ opacity: 0.75, ml: 0.5 }}>
+                    {formatTimecode(scene.startMs)}
+                  </Box>
+                </Typography>
+              </Box>
+            </Tooltip>
+          );
+        }
+
+        if (!showTextFallback) {
+          return (
+            <Box
+              key={scene.id}
+              aria-label={`Loading thumbnail for ${label}`}
+              sx={{
+                width: 80,
+                aspectRatio: '16 / 9',
+                borderRadius: '8px',
+                border: `1px solid ${cv.borderStrong}`,
+                backgroundColor: cv.surfaceHover,
+              }}
+            />
+          );
+        }
+
+        return (
+          <Box
+            key={scene.id}
+            component="button"
+            type="button"
+            onClick={() => onSeekMs?.(scene.startMs)}
+            sx={{
+              border: `1px solid ${cv.purpleChipBorder}`,
+              backgroundColor: cv.purpleSurface,
+              borderRadius: '999px',
+              px: 1,
+              py: 0.375,
+              cursor: onSeekMs ? 'pointer' : 'default',
+              color: cv.brandPurpleLight,
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              lineHeight: 1.3,
+              '&:hover': { backgroundColor: cv.purpleSelectionHover },
+              '&:focus-visible': {
+                outline: `2px solid ${cv.purpleFocusBorder}`,
+                outlineOffset: 2,
+              },
+            }}
+          >
+            {scene.label}
+            <Box component="span" sx={{ opacity: 0.75, ml: 0.5 }}>
+              {formatTimecode(scene.startMs)}
+            </Box>
           </Box>
-        </Box>
-      ))}
+        );
+      })}
     </Box>
   );
 }
@@ -1031,6 +1162,7 @@ function FramePeopleHeadshots({
   onSelectPerson?: (person: FramePerson) => void;
 }>) {
   const [showAll, setShowAll] = useState(false);
+  const [brokenThumbIds, setBrokenThumbIds] = useState<ReadonlySet<string>>(() => new Set());
   const hiddenCount = Math.max(people.length - AI_FRAME_PEOPLE_PREVIEW_COUNT, 0);
   const visiblePeople =
     showAll || hiddenCount === 0 ? people : people.slice(0, AI_FRAME_PEOPLE_PREVIEW_COUNT);
@@ -1071,22 +1203,33 @@ function FramePeopleHeadshots({
           >
             {visiblePeople.map((person) => {
               const isSelected = person.id === selectedPersonId;
+              const thumbSrc =
+                person.thumbnailUrl && !brokenThumbIds.has(person.id)
+                  ? person.thumbnailUrl
+                  : undefined;
 
               return (
                 <Box component="li" key={person.id} sx={{ display: 'flex', flexShrink: 0 }}>
                   <Tooltip
-                    title={`${
-                      isSelected ? 'Hide' : 'Show'
-                    } ${person.name} on the frame · ${person.detail}`}
+                    title={`Jump to ${person.name} · ${person.detail}`}
                     arrow
                     placement="top"
                   >
                     <Avatar
                       component="button"
                       type="button"
+                      src={thumbSrc}
+                      alt={person.name}
                       aria-pressed={isSelected}
                       aria-label={`${person.name}, ${person.detail}`}
                       onClick={() => onSelectPerson?.(person)}
+                      slotProps={{
+                        img: {
+                          onError: () => {
+                            setBrokenThumbIds((prev) => new Set(prev).add(person.id));
+                          },
+                        },
+                      }}
                       sx={{
                         width: AI_FRAME_HEADSHOT_SIZE,
                         height: AI_FRAME_HEADSHOT_SIZE,
@@ -1168,6 +1311,7 @@ export default function AnnotationHistoryDrawer({
   onTranscriptSeek,
   onAddAiFeatures,
   videoRef,
+  videoSrc,
   onClose,
   onEntryClick,
   onToggleResolved,
@@ -1424,7 +1568,9 @@ export default function AnnotationHistoryDrawer({
     return () => {
       cancelled = true;
     };
-  }, [activeTab, aiEntitled, mediaItem?.id, mediaItem?.type]);
+    // Re-fetch when people_scenes finishes so the People tab does not stay empty
+    // after the drawer was opened while analysis was still running.
+  }, [activeTab, aiEntitled, mediaItem?.id, mediaItem?.type, aiStatus?.steps?.people_scenes]);
 
   const handlePersonSelect = (person: FramePerson) => {
     onFramePersonSelect?.(person);
@@ -2038,6 +2184,7 @@ export default function AnnotationHistoryDrawer({
                       scenes={assetScenes}
                       query={aiQuery}
                       onSeekMs={onTranscriptSeek}
+                      videoSrc={videoSrc}
                     />
                   ) : null}
                 </>

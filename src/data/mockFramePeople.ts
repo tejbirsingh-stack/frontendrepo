@@ -11,5 +11,7 @@ export interface FramePerson {
   name: string;
   initials: string;
   detail: string;
+  /** Face crop from AI analysis when available. */
+  thumbnailUrl?: string | null;
   box: FramePersonBox;
 }
