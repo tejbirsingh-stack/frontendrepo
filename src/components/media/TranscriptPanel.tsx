@@ -13,6 +13,7 @@ interface TranscriptPanelProps {
   filterQuery?: string;
   onSeekMs?: (startMs: number) => void;
   videoRef?: React.RefObject<HTMLVideoElement | null>;
+  insightSeekMs?: number | null;
 }
 
 function formatTimecode(ms: number): string {
@@ -39,6 +40,18 @@ function findActiveIndex(segments: TranscriptSegmentDto[], ms: number): number {
 function segmentTextColor(isActive: boolean, isRead: boolean): string {
   if (isActive) return cv.brandPurpleLight;
   return isRead ? cv.textMuted : cv.textPrimary;
+}
+
+/** Drive transcript UX off the ASR step, not the overall AI job status. */
+function isAsrInProgress(status: string, asr?: string): boolean {
+  if (asr === 'skipped' || asr === 'completed' || asr === 'failed' || asr === 'idle') {
+    return false;
+  }
+  if (asr === 'queued' || asr === 'processing' || asr === 'transcribing') {
+    return true;
+  }
+  // Legacy / missing asr: fall back to overall status
+  return status === 'queued' || status === 'processing';
 }
 
 /**
@@ -73,16 +86,25 @@ interface TranscriptRowProps {
   segment: TranscriptSegmentDto;
   isActive: boolean;
   isRead: boolean;
+  isSeeking: boolean;
   rowRef?: React.Ref<HTMLDivElement>;
   onSeekMs?: (startMs: number) => void;
 }
 
-function TranscriptRow({ segment, isActive, isRead, rowRef, onSeekMs }: Readonly<TranscriptRowProps>) {
+function TranscriptRow({
+  segment,
+  isActive,
+  isRead,
+  isSeeking,
+  rowRef,
+  onSeekMs,
+}: Readonly<TranscriptRowProps>) {
   return (
     <ListItemButton
       ref={rowRef}
       onClick={() => onSeekMs?.(segment.startMs)}
       aria-current={isActive ? 'true' : undefined}
+      aria-busy={isSeeking}
       sx={{
         alignItems: 'flex-start',
         gap: 1,
@@ -91,8 +113,8 @@ function TranscriptRow({ segment, isActive, isRead, rowRef, onSeekMs }: Readonly
         minHeight: 44,
         borderRadius: '6px',
         borderLeft: '2px solid',
-        borderLeftColor: isActive ? cv.brandPurpleLight : 'transparent',
-        backgroundColor: isActive ? cv.purpleSurface : 'transparent',
+        borderLeftColor: isActive || isSeeking ? cv.brandPurpleLight : 'transparent',
+        backgroundColor: isActive || isSeeking ? cv.purpleSurface : 'transparent',
       }}
     >
       <Typography
@@ -103,7 +125,7 @@ function TranscriptRow({ segment, isActive, isRead, rowRef, onSeekMs }: Readonly
           pt: '0.1rem',
           fontSize: '0.7rem',
           fontVariantNumeric: 'tabular-nums',
-          color: isActive ? cv.brandPurpleLight : cv.textMuted,
+          color: isActive || isSeeking ? cv.brandPurpleLight : cv.textMuted,
         }}
       >
         {formatTimecode(segment.startMs)}
@@ -111,13 +133,18 @@ function TranscriptRow({ segment, isActive, isRead, rowRef, onSeekMs }: Readonly
       <Typography
         component="span"
         sx={{
+          flex: 1,
+          minWidth: 0,
           fontSize: '0.8125rem',
-          fontWeight: isActive ? 600 : 400,
-          color: segmentTextColor(isActive, isRead),
+          fontWeight: isActive || isSeeking ? 600 : 400,
+          color: segmentTextColor(isActive || isSeeking, isRead),
         }}
       >
         {segment.text}
       </Typography>
+      {isSeeking ? (
+        <CircularProgress size={14} sx={{ flexShrink: 0, mt: 0.35, color: cv.brandPurpleLight }} />
+      ) : null}
     </ListItemButton>
   );
 }
@@ -127,6 +154,7 @@ export default function TranscriptPanel({
   filterQuery = '',
   onSeekMs,
   videoRef,
+  insightSeekMs = null,
 }: Readonly<TranscriptPanelProps>) {
   const [segments, setSegments] = useState<TranscriptSegmentDto[]>([]);
   const [status, setStatus] = useState('idle');
@@ -161,8 +189,7 @@ export default function TranscriptPanel({
 
   useEffect(() => {
     if (!assetId) return;
-    const processing = status === 'queued' || status === 'processing' || asr === 'queued';
-    if (!processing) return;
+    if (!isAsrInProgress(status, asr)) return;
     const timer = window.setInterval(() => {
       void loadTranscript();
     }, 4000);
@@ -187,7 +214,7 @@ export default function TranscriptPanel({
     setRetrying(true);
     setError(null);
     try {
-      await retryAiAnalyzeRequest(assetId, true);
+      await retryAiAnalyzeRequest(assetId, { force: true, features: ['asr'] });
       setStatus('queued');
       setAsr('queued');
       setJobError(null);
@@ -227,7 +254,7 @@ export default function TranscriptPanel({
     );
   }
 
-  if (status === 'queued' || status === 'processing' || asr === 'queued') {
+  if (isAsrInProgress(status, asr)) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
         <CircularProgress size={14} />
@@ -238,7 +265,7 @@ export default function TranscriptPanel({
     );
   }
 
-  if (status === 'failed' || asr === 'failed') {
+  if (asr === 'failed' || (status === 'failed' && asr !== 'skipped' && asr !== 'completed' && asr !== 'idle')) {
     return (
       <Box sx={{ py: 1.5 }}>
         <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>{failureInfo.message}</Typography>
@@ -252,13 +279,17 @@ export default function TranscriptPanel({
   }
 
   if (filtered.length === 0) {
+    let emptyMessage = 'No transcript lines match this search.';
+    if (segments.length === 0) {
+      if (asr === 'skipped') {
+        emptyMessage = 'Transcript was not run for this analysis.';
+      } else {
+        emptyMessage = 'No spoken dialogue was found for this file yet.';
+      }
+    }
     return (
       <Box sx={{ py: 1.5 }}>
-        <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
-          {segments.length === 0
-            ? 'No spoken dialogue was found for this file yet.'
-            : 'No transcript lines match this search.'}
-        </Typography>
+        <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>{emptyMessage}</Typography>
         {segments.length === 0 ? (
           <Button size="small" onClick={() => void handleRetry()} disabled={retrying} sx={{ mt: 0.5, minHeight: 44 }}>
             {retrying ? 'Starting…' : 'Generate transcript'}
@@ -276,6 +307,7 @@ export default function TranscriptPanel({
           segment={segment}
           isActive={index === activeIndex}
           isRead={index < activeIndex}
+          isSeeking={insightSeekMs != null && segment.startMs === insightSeekMs}
           rowRef={index === activeIndex ? activeRowRef : undefined}
           onSeekMs={onSeekMs}
         />

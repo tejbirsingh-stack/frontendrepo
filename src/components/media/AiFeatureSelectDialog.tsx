@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Dialog,
@@ -52,14 +52,23 @@ export default function AiFeatureSelectDialog({
   onClose,
   onConfirm,
 }: AiFeatureSelectDialogProps) {
-  const lockedSet = useMemo(() => new Set(lockedFeatures), [lockedFeatures]);
+  // Stabilize Set identity across parent re-renders that pass a fresh array with the same keys
+  const lockedKey = lockedFeatures.join(',');
+  const lockedSet = useMemo(
+    () => new Set(lockedKey ? (lockedKey.split(',') as AiAnalyzeFeature[]) : []),
+    [lockedKey],
+  );
 
   const [selected, setSelected] = useState<Record<AiAnalyzeFeature, boolean>>(() =>
     defaultSelection(mediaType, mode, lockedSet),
   );
 
+  // Reset selection only when the dialog opens (not on submitting re-renders)
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (open) {
+    const justOpened = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (justOpened) {
       setSelected(defaultSelection(mediaType, mode, lockedSet));
     }
   }, [open, mediaType, mode, lockedSet]);
