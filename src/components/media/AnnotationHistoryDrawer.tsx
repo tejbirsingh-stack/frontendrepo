@@ -22,6 +22,7 @@ import {
   DialogContentText,
   DialogActions,
   Button,
+  CircularProgress,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
@@ -196,6 +197,8 @@ interface AnnotationHistoryDrawerProps {
   onFramePersonSelect?: (person: FramePerson) => void;
   /** Seek player to a transcript segment (milliseconds). */
   onTranscriptSeek?: (startMs: number) => void;
+  /** Active AI insights seek target (ms); shows busy hints on matching items. */
+  insightSeekMs?: number | null;
   /** Open the add-features dialog for AI tools not selected on first run. */
   onAddAiFeatures?: () => void;
   /** Media element the transcript follows to highlight the line being spoken. */
@@ -946,6 +949,7 @@ function mapPeopleToFramePeople(people: AiPersonDto[]): FramePerson[] {
     initials: initialsFromLabel(p.displayLabel),
     detail: `${formatTimecode(p.startMs)}–${formatTimecode(p.endMs)}`,
     thumbnailUrl: p.thumbnailUrl,
+    startMs: p.startMs,
     // Placeholder box until VI supplies face rectangles (Phase 2a).
     box: {
       xPercent: 40 + (index % 3) * 5,
@@ -961,11 +965,13 @@ function SceneInsightChips({
   query,
   onSeekMs,
   videoSrc,
+  insightSeekMs,
 }: Readonly<{
   scenes: AiSceneDto[];
   query: string;
   onSeekMs?: (startMs: number) => void;
   videoSrc?: string;
+  insightSeekMs?: number | null;
 }>) {
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = useMemo(
@@ -1038,6 +1044,7 @@ function SceneInsightChips({
         const showImage = typeof thumb === 'string';
         const showTextFallback = !videoSrc || thumb === null;
         const label = `${scene.label} ${formatTimecode(scene.startMs)}`;
+        const isSeekingHere = insightSeekMs != null && scene.startMs === insightSeekMs;
 
         if (showImage) {
           return (
@@ -1046,11 +1053,13 @@ function SceneInsightChips({
                 component="button"
                 type="button"
                 aria-label={label}
+                aria-busy={isSeekingHere}
                 onClick={() => onSeekMs?.(scene.startMs)}
                 sx={{
+                  position: 'relative',
                   width: 80,
                   p: 0,
-                  border: `1px solid ${cv.purpleChipBorder}`,
+                  border: `1px solid ${isSeekingHere ? cv.purpleFocusBorder : cv.purpleChipBorder}`,
                   borderRadius: '8px',
                   overflow: 'hidden',
                   cursor: onSeekMs ? 'pointer' : 'default',
@@ -1072,8 +1081,23 @@ function SceneInsightChips({
                     width: '100%',
                     aspectRatio: '16 / 9',
                     objectFit: 'cover',
+                    opacity: isSeekingHere ? 0.55 : 1,
                   }}
                 />
+                {isSeekingHere ? (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <CircularProgress size={18} sx={{ color: cv.brandPurpleLight }} />
+                  </Box>
+                ) : null}
                 <Typography
                   component="span"
                   sx={{
@@ -1120,13 +1144,16 @@ function SceneInsightChips({
             key={scene.id}
             component="button"
             type="button"
+            aria-busy={isSeekingHere}
             onClick={() => onSeekMs?.(scene.startMs)}
             sx={{
-              border: `1px solid ${cv.purpleChipBorder}`,
+              position: 'relative',
+              border: `1px solid ${isSeekingHere ? cv.purpleFocusBorder : cv.purpleChipBorder}`,
               backgroundColor: cv.purpleSurface,
               borderRadius: '999px',
               px: 1,
               py: 0.375,
+              pr: isSeekingHere ? 2.5 : 1,
               cursor: onSeekMs ? 'pointer' : 'default',
               color: cv.brandPurpleLight,
               fontSize: '0.6875rem',
@@ -1143,6 +1170,18 @@ function SceneInsightChips({
             <Box component="span" sx={{ opacity: 0.75, ml: 0.5 }}>
               {formatTimecode(scene.startMs)}
             </Box>
+            {isSeekingHere ? (
+              <CircularProgress
+                size={12}
+                sx={{
+                  position: 'absolute',
+                  right: 6,
+                  top: '50%',
+                  mt: '-6px',
+                  color: cv.brandPurpleLight,
+                }}
+              />
+            ) : null}
           </Box>
         );
       })}
@@ -1155,11 +1194,13 @@ function FramePeopleHeadshots({
   query,
   selectedPersonId,
   onSelectPerson,
+  insightSeekMs,
 }: Readonly<{
   people: FramePerson[];
   query: string;
   selectedPersonId?: string | null;
   onSelectPerson?: (person: FramePerson) => void;
+  insightSeekMs?: number | null;
 }>) {
   const [brokenThumbIds, setBrokenThumbIds] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -1191,6 +1232,10 @@ function FramePeopleHeadshots({
         >
           {people.map((person) => {
             const isSelected = person.id === selectedPersonId;
+            const isSeekingHere =
+              insightSeekMs != null &&
+              typeof person.startMs === 'number' &&
+              person.startMs === insightSeekMs;
             const thumbSrc =
               person.thumbnailUrl && !brokenThumbIds.has(person.id)
                 ? person.thumbnailUrl
@@ -1213,43 +1258,61 @@ function FramePeopleHeadshots({
                   arrow
                   placement="top"
                 >
-                  <Avatar
-                    component="button"
-                    type="button"
-                    src={thumbSrc}
-                    alt={person.name}
-                    aria-pressed={isSelected}
-                    aria-label={`${person.name}, ${person.detail}`}
-                    onClick={() => onSelectPerson?.(person)}
-                    slotProps={{
-                      img: {
-                        onError: () => {
-                          setBrokenThumbIds((prev) => new Set(prev).add(person.id));
+                  <Box sx={{ position: 'relative', width: AI_FRAME_HEADSHOT_SIZE, height: AI_FRAME_HEADSHOT_SIZE }}>
+                    <Avatar
+                      component="button"
+                      type="button"
+                      src={thumbSrc}
+                      alt={person.name}
+                      aria-pressed={isSelected}
+                      aria-busy={isSeekingHere}
+                      aria-label={`${person.name}, ${person.detail}`}
+                      onClick={() => onSelectPerson?.(person)}
+                      slotProps={{
+                        img: {
+                          onError: () => {
+                            setBrokenThumbIds((prev) => new Set(prev).add(person.id));
+                          },
                         },
-                      },
-                    }}
-                    sx={{
-                      width: AI_FRAME_HEADSHOT_SIZE,
-                      height: AI_FRAME_HEADSHOT_SIZE,
-                      p: 0,
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      color: cv.textPrimary,
-                      background: cv.brandGradient,
-                      border: 'none',
-                      cursor: onSelectPerson ? 'pointer' : 'default',
-                      outline: isSelected ? `2px solid ${cv.purpleLight}` : 'none',
-                      outlineOffset: '2px',
-                      transition: 'transform 0.15s ease',
-                      '&:hover': { transform: onSelectPerson ? 'scale(1.06)' : 'none' },
-                      '&:focus-visible': {
-                        outline: `2px solid ${cv.purpleFocusBorder}`,
+                      }}
+                      sx={{
+                        width: AI_FRAME_HEADSHOT_SIZE,
+                        height: AI_FRAME_HEADSHOT_SIZE,
+                        p: 0,
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: cv.textPrimary,
+                        background: cv.brandGradient,
+                        border: 'none',
+                        cursor: onSelectPerson ? 'pointer' : 'default',
+                        outline: isSelected || isSeekingHere ? `2px solid ${cv.purpleLight}` : 'none',
                         outlineOffset: '2px',
-                      },
-                    }}
-                  >
-                    {person.initials}
-                  </Avatar>
+                        opacity: isSeekingHere ? 0.65 : 1,
+                        transition: 'transform 0.15s ease',
+                        '&:hover': { transform: onSelectPerson ? 'scale(1.06)' : 'none' },
+                        '&:focus-visible': {
+                          outline: `2px solid ${cv.purpleFocusBorder}`,
+                          outlineOffset: '2px',
+                        },
+                      }}
+                    >
+                      {person.initials}
+                    </Avatar>
+                    {isSeekingHere ? (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          pointerEvents: 'none',
+                        }}
+                      >
+                        <CircularProgress size={20} sx={{ color: cv.brandPurpleLight }} />
+                      </Box>
+                    ) : null}
+                  </Box>
                 </Tooltip>
                 <Typography
                   sx={{
@@ -1257,7 +1320,7 @@ function FramePeopleHeadshots({
                     fontSize: '0.6875rem',
                     fontWeight: 600,
                     lineHeight: 1.25,
-                    color: isSelected ? cv.brandPurpleLight : cv.textSecondary,
+                    color: isSelected || isSeekingHere ? cv.brandPurpleLight : cv.textSecondary,
                     textAlign: 'center',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -1308,6 +1371,7 @@ export default function AnnotationHistoryDrawer({
   selectedFramePersonId,
   onFramePersonSelect,
   onTranscriptSeek,
+  insightSeekMs = null,
   onAddAiFeatures,
   videoRef,
   videoSrc,
@@ -2185,6 +2249,7 @@ export default function AnnotationHistoryDrawer({
                   query={aiQuery}
                   selectedPersonId={selectedFramePersonId}
                   onSelectPerson={handlePersonSelect}
+                  insightSeekMs={insightSeekMs}
                 />
               )}
             </Box>
@@ -2209,6 +2274,7 @@ export default function AnnotationHistoryDrawer({
                   query={aiQuery}
                   onSeekMs={onTranscriptSeek}
                   videoSrc={videoSrc}
+                  insightSeekMs={insightSeekMs}
                 />
               )}
             </Box>
@@ -2219,6 +2285,7 @@ export default function AnnotationHistoryDrawer({
                 filterQuery={aiQuery}
                 onSeekMs={onTranscriptSeek}
                 videoRef={videoRef}
+                insightSeekMs={insightSeekMs}
               />
             </Box>
           )

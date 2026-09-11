@@ -13,6 +13,7 @@ interface TranscriptPanelProps {
   filterQuery?: string;
   onSeekMs?: (startMs: number) => void;
   videoRef?: React.RefObject<HTMLVideoElement | null>;
+  insightSeekMs?: number | null;
 }
 
 function formatTimecode(ms: number): string {
@@ -85,16 +86,25 @@ interface TranscriptRowProps {
   segment: TranscriptSegmentDto;
   isActive: boolean;
   isRead: boolean;
+  isSeeking: boolean;
   rowRef?: React.Ref<HTMLDivElement>;
   onSeekMs?: (startMs: number) => void;
 }
 
-function TranscriptRow({ segment, isActive, isRead, rowRef, onSeekMs }: Readonly<TranscriptRowProps>) {
+function TranscriptRow({
+  segment,
+  isActive,
+  isRead,
+  isSeeking,
+  rowRef,
+  onSeekMs,
+}: Readonly<TranscriptRowProps>) {
   return (
     <ListItemButton
       ref={rowRef}
       onClick={() => onSeekMs?.(segment.startMs)}
       aria-current={isActive ? 'true' : undefined}
+      aria-busy={isSeeking}
       sx={{
         alignItems: 'flex-start',
         gap: 1,
@@ -103,8 +113,8 @@ function TranscriptRow({ segment, isActive, isRead, rowRef, onSeekMs }: Readonly
         minHeight: 44,
         borderRadius: '6px',
         borderLeft: '2px solid',
-        borderLeftColor: isActive ? cv.brandPurpleLight : 'transparent',
-        backgroundColor: isActive ? cv.purpleSurface : 'transparent',
+        borderLeftColor: isActive || isSeeking ? cv.brandPurpleLight : 'transparent',
+        backgroundColor: isActive || isSeeking ? cv.purpleSurface : 'transparent',
       }}
     >
       <Typography
@@ -115,7 +125,7 @@ function TranscriptRow({ segment, isActive, isRead, rowRef, onSeekMs }: Readonly
           pt: '0.1rem',
           fontSize: '0.7rem',
           fontVariantNumeric: 'tabular-nums',
-          color: isActive ? cv.brandPurpleLight : cv.textMuted,
+          color: isActive || isSeeking ? cv.brandPurpleLight : cv.textMuted,
         }}
       >
         {formatTimecode(segment.startMs)}
@@ -123,13 +133,18 @@ function TranscriptRow({ segment, isActive, isRead, rowRef, onSeekMs }: Readonly
       <Typography
         component="span"
         sx={{
+          flex: 1,
+          minWidth: 0,
           fontSize: '0.8125rem',
-          fontWeight: isActive ? 600 : 400,
-          color: segmentTextColor(isActive, isRead),
+          fontWeight: isActive || isSeeking ? 600 : 400,
+          color: segmentTextColor(isActive || isSeeking, isRead),
         }}
       >
         {segment.text}
       </Typography>
+      {isSeeking ? (
+        <CircularProgress size={14} sx={{ flexShrink: 0, mt: 0.35, color: cv.brandPurpleLight }} />
+      ) : null}
     </ListItemButton>
   );
 }
@@ -139,6 +154,7 @@ export default function TranscriptPanel({
   filterQuery = '',
   onSeekMs,
   videoRef,
+  insightSeekMs = null,
 }: Readonly<TranscriptPanelProps>) {
   const [segments, setSegments] = useState<TranscriptSegmentDto[]>([]);
   const [status, setStatus] = useState('idle');
@@ -291,6 +307,7 @@ export default function TranscriptPanel({
           segment={segment}
           isActive={index === activeIndex}
           isRead={index < activeIndex}
+          isSeeking={insightSeekMs != null && segment.startMs === insightSeekMs}
           rowRef={index === activeIndex ? activeRowRef : undefined}
           onSeekMs={onSeekMs}
         />
