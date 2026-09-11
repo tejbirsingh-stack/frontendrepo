@@ -297,7 +297,8 @@ export default function ResetPasswordPage() {
                 fullWidth
                 label="New Password"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="New Password (min 8 chars, 1 upper, 1 lower, 1 number)"
+                placeholder="Enter new password"
+                helperText="Must be at least 8 characters with 1 uppercase, 1 lowercase, and 1 number"
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
@@ -305,7 +306,15 @@ export default function ResetPasswordPage() {
                 }}
                 autoComplete="new-password"
                 disabled={submitting}
-                sx={{ mb: 2.5 }}
+                sx={{
+                  mb: 2.5,
+                  '& .MuiFormHelperText-root': {
+                    color: cv.textSecondary,
+                    fontSize: '0.75rem',
+                    mt: 0.75,
+                    lineHeight: 1.4,
+                  },
+                }}
                 slotProps={{
                   inputLabel: { shrink: true },
                   input: {
