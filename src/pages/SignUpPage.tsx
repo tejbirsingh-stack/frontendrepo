@@ -1032,7 +1032,8 @@ export default function SignUpPage() {
                     fullWidth
                     label="Password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Enter password (min 8 chars)"
+                    placeholder="Enter password"
+                    helperText="Must be at least 8 characters with 1 uppercase, 1 lowercase, and 1 number"
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
@@ -1040,7 +1041,15 @@ export default function SignUpPage() {
                     }}
                     autoComplete="new-password"
                     disabled={isChecking}
-                    sx={{ mb: 2.5 }}
+                    sx={{
+                      mb: 2.5,
+                      '& .MuiFormHelperText-root': {
+                        color: cv.textSecondary,
+                        fontSize: '0.75rem',
+                        mt: 0.75,
+                        lineHeight: 1.4,
+                      },
+                    }}
                     slotProps={{
                       inputLabel: { shrink: true },
                       htmlInput: { maxLength: 255 },
@@ -1348,6 +1357,7 @@ export default function SignUpPage() {
           ) : phase === 'workspace' ? (
             <Box
               component="form"
+              noValidate
               onSubmit={handleWorkspaceContinue}
               sx={{
                 p: { xs: 3, sm: 4 },
@@ -1412,14 +1422,21 @@ export default function SignUpPage() {
               <TextField
                 fullWidth
                 label="Company website (optional)"
-                type="url"
+                type="text"
                 placeholder="www.noahcloud.com"
                 value={companyWebsite}
-                onChange={(e) => setCompanyWebsite(e.target.value)}
+                onChange={(e) => {
+                  setCompanyWebsite(e.target.value);
+                  if (error) setError('');
+                }}
                 sx={{ mb: 3 }}
                 slotProps={{
                   inputLabel: { shrink: true },
-                  htmlInput: { maxLength: 255 },
+                  htmlInput: {
+                    inputMode: 'url',
+                    maxLength: 255,
+                    'aria-label': 'Company website (optional)',
+                  },
                 }}
               />
 

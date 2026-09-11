@@ -260,6 +260,12 @@ function slugifyShareLinkName(value: string): string {
     .replace(/[^a-z0-9-_]/g, '');
 }
 
+/** Stable empty array so AiFeatureSelectDialog does not reset selection on parent re-render. */
+const EMPTY_LOCKED_FEATURES: AiAnalyzeFeature[] = [];
+
+/** Re-enable when Phase 2a ships real VI face rectangles (placeholder boxes are off for now). */
+const ENABLE_FRAME_PERSON_HIGHLIGHT = false;
+
 const ANNOTATION_OVERLAY_TOOLS: AnnotationTool[] = [
   'comment',
   'draw',
@@ -455,6 +461,9 @@ export default function VideoPlayerPage({
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
   const [isPlaybackLoading, setIsPlaybackLoading] = useState(false);
+  /** AI insights seek target (ms); drives player overlay + list item busy hints. */
+  const [insightSeekMs, setInsightSeekMs] = useState<number | null>(null);
+  const insightSeekClearTimeoutRef = useRef<number | null>(null);
 
   const [liveAssetStatus, setLiveAssetStatus] = useState<string | null>(null);
   const [liveProgress, setLiveProgress] = useState<string | null>(null);
@@ -3128,12 +3137,36 @@ export default function VideoPlayerPage({
 
   // Transcript clicks keep the current play state, unlike handleSeekToTimestamp which
   // pauses so an annotation can be inspected on a still frame.
+  const clearInsightSeek = useCallback(() => {
+    setInsightSeekMs(null);
+    if (insightSeekClearTimeoutRef.current != null) {
+      window.clearTimeout(insightSeekClearTimeoutRef.current);
+      insightSeekClearTimeoutRef.current = null;
+    }
+  }, []);
+
   const handleTranscriptSeek = useCallback((startMs: number) => {
     const element = videoRef.current;
     if (!element) return;
+    setInsightSeekMs(startMs);
+    if (insightSeekClearTimeoutRef.current != null) {
+      window.clearTimeout(insightSeekClearTimeoutRef.current);
+    }
+    insightSeekClearTimeoutRef.current = window.setTimeout(() => {
+      setInsightSeekMs(null);
+      insightSeekClearTimeoutRef.current = null;
+    }, 4000);
     const wasPlaying = !element.paused && !element.ended;
     element.currentTime = Math.max(0, startMs / 1000);
     if (wasPlaying) void element.play().catch(() => { });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (insightSeekClearTimeoutRef.current != null) {
+        window.clearTimeout(insightSeekClearTimeoutRef.current);
+      }
+    };
   }, []);
 
   const handleTagsChange = useCallback(
@@ -5094,9 +5127,36 @@ export default function VideoPlayerPage({
                   </Tooltip>
                 </Box>
               )}
-              {(isBuffering || isPlaybackLoading) && item?.type !== 'image' && (
-                <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 40, pointerEvents: 'none' }}>
+              {(isBuffering || isPlaybackLoading || insightSeekMs != null) && item?.type !== 'image' && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 1.25,
+                    zIndex: 40,
+                    pointerEvents: 'none',
+                    backgroundColor: insightSeekMs != null ? 'rgba(0,0,0,0.28)' : 'transparent',
+                  }}
+                  aria-live="polite"
+                  aria-busy={insightSeekMs != null}
+                >
                   <CircularProgress size={48} sx={{ color: '#6366F1' }} />
+                  {insightSeekMs != null ? (
+                    <Typography
+                      sx={{
+                        fontSize: '0.875rem',
+                        fontWeight: 600,
+                        color: cv.textInverse,
+                        textShadow: '0 1px 4px rgba(0,0,0,0.55)',
+                      }}
+                    >
+                      {`Navigating to ${formatVideoTimestamp(insightSeekMs / 1000)}…`}
+                    </Typography>
+                  ) : null}
                 </Box>
               )}
               <Box
@@ -5187,6 +5247,9 @@ export default function VideoPlayerPage({
                           setIsPlaybackLoading(false);
                         }}
                         onWaiting={() => setIsBuffering(true)}
+                        onSeeked={() => {
+                          clearInsightSeek();
+                        }}
                         onPlaying={() => {
                           setIsBuffering(false);
                           setIsPlaybackLoading(false);
@@ -5621,7 +5684,9 @@ export default function VideoPlayerPage({
                     </>
                   )}
 
-                  {selectedFramePerson && supportsFramePeople ? (
+                  {ENABLE_FRAME_PERSON_HIGHLIGHT &&
+                  selectedFramePerson &&
+                  supportsFramePeople ? (
                     <FramePersonHighlight person={selectedFramePerson} />
                   ) : null}
                   </Box>
@@ -5869,8 +5934,10 @@ export default function VideoPlayerPage({
               selectedFramePersonId={selectedFramePerson?.id ?? null}
               onFramePersonSelect={handleFramePersonSelect}
               onTranscriptSeek={handleTranscriptSeek}
+              insightSeekMs={insightSeekMs}
               onAddAiFeatures={aiEntitled ? () => { void handleAddAiFeatures(); } : undefined}
               videoRef={videoRef}
+              videoSrc={mediaElementSrc}
               onClose={() => setHistoryOpen(false)}
               onEntryClick={(entry) => {
                 handleSeekToTimestamp(entry.videoTimestamp, entry.id);
@@ -6005,7 +6072,7 @@ export default function VideoPlayerPage({
         open={aiFeatureDialogOpen}
         mediaType={item?.type}
         mode={aiFeatureDialogMode}
-        lockedFeatures={aiFeatureDialogMode === 'add' ? aiLockedFeatures : []}
+        lockedFeatures={aiFeatureDialogMode === 'add' ? aiLockedFeatures : EMPTY_LOCKED_FEATURES}
         submitting={aiFeatureSubmitting}
         onClose={() => {
           if (!aiFeatureSubmitting) setAiFeatureDialogOpen(false);

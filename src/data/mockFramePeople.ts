@@ -11,5 +11,9 @@ export interface FramePerson {
   name: string;
   initials: string;
   detail: string;
+  /** Face crop from AI analysis when available. */
+  thumbnailUrl?: string | null;
+  /** Appearance start time used for seek + busy matching. */
+  startMs?: number;
   box: FramePersonBox;
 }

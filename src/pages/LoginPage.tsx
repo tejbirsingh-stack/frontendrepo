@@ -318,7 +318,7 @@ export default function LoginPage() {
               fullWidth
               label="Password"
               type={showPassword ? 'text' : 'password'}
-              placeholder="Password 8–16 characters"
+              placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"

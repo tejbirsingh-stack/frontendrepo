@@ -582,9 +582,10 @@ export default function MediaItemCard({
   const aiTagList = Array.isArray(item.aiTags)
     ? item.aiTags.filter((t) => typeof t === 'string' && t.trim().length > 0)
     : [];
-  const showAiSummaryIcon =
+  const hasSummaryContent = Boolean(fullSummary) || aiTagList.length > 0;
+  const showAiInsightsIcon =
     (item.type === 'video' || item.type === 'audio') &&
-    (Boolean(fullSummary) || aiTagList.length > 0);
+    (hasSummaryContent || Boolean(item.hasAiInsights));
   const summaryPopoverOpen = Boolean(summaryAnchor);
 
   const handleOpen = () => {
@@ -691,12 +692,12 @@ export default function MediaItemCard({
           <VisibilityBadge item={item} />
           <TypeBadge type={item.type} isProject={item.isProject} />
           <SearchMatchBadge matchType={item.searchMatch?.matchType} />
-          {showAiSummaryIcon ? (
-            <Tooltip title="AI summary" arrow placement="top">
+          {showAiInsightsIcon ? (
+            <Tooltip title="AI insights" arrow placement="top">
               <IconButton
                 type="button"
                 size="small"
-                aria-label="AI summary"
+                aria-label="AI insights"
                 aria-haspopup="dialog"
                 aria-expanded={summaryPopoverOpen}
                 onClick={(event) => {
@@ -873,9 +874,15 @@ export default function MediaItemCard({
           letterSpacing: '0.04em',
         }}
       >
-        Summary
+        {hasSummaryContent ? 'Summary' : 'AI insights'}
       </Typography>
-      <AiSummaryBlock compact summary={fullSummary} tags={aiTagList} />
+      {hasSummaryContent ? (
+        <AiSummaryBlock compact summary={fullSummary} tags={aiTagList} />
+      ) : (
+        <Typography sx={{ fontSize: '0.8125rem', color: cv.textPrimary, lineHeight: 1.45 }}>
+          People & scenes available—open the video to view.
+        </Typography>
+      )}
     </Popover>
     </>
   );
