@@ -9,7 +9,7 @@ export interface TranscriptSegmentDto {
 }
 
 export interface TranscriptResponseDto {
-  success: boolean;
+  success: boolean; 
   assetId: string;
   status: string;
   asr?: string;
