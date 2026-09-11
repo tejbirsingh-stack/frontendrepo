@@ -72,13 +72,14 @@ import {
 import { dropdownMenuPaperSx } from '../../constants/dropdownMenu';
 
 type DrawerTab = 'history' | 'details' | 'ai';
-type AiSubTab = 'summary' | 'transcript' | 'people';
+type AiSubTab = 'summary' | 'transcript' | 'people' | 'scenes';
 type StatusFilter = 'all' | 'unread' | 'resolved' | 'archive';
 
 const AI_SUB_TABS: { value: AiSubTab; label: string }[] = [
   { value: 'summary', label: 'Summary' },
   { value: 'transcript', label: 'Transcript' },
   { value: 'people', label: 'People' },
+  { value: 'scenes', label: 'Scenes' },
 ];
 
 function getCommentIdForEntry(entry: AnnotationHistoryEntry): string | null {
@@ -252,8 +253,7 @@ const TYPE_FILTER_OPTIONS: { value: 'all' | AnnotationHistoryType; label: string
   { value: 'stamp', label: 'Stamps' },
 ];
 
-const AI_FRAME_PEOPLE_PREVIEW_COUNT = 8;
-const AI_FRAME_HEADSHOT_SIZE = 34;
+const AI_FRAME_HEADSHOT_SIZE = 56;
 
 const drawerSurface = 'var(--noah-drawer-surface)';
 
@@ -1161,11 +1161,7 @@ function FramePeopleHeadshots({
   selectedPersonId?: string | null;
   onSelectPerson?: (person: FramePerson) => void;
 }>) {
-  const [showAll, setShowAll] = useState(false);
   const [brokenThumbIds, setBrokenThumbIds] = useState<ReadonlySet<string>>(() => new Set());
-  const hiddenCount = Math.max(people.length - AI_FRAME_PEOPLE_PREVIEW_COUNT, 0);
-  const visiblePeople =
-    showAll || hiddenCount === 0 ? people : people.slice(0, AI_FRAME_PEOPLE_PREVIEW_COUNT);
 
   return (
     <Box
@@ -1181,111 +1177,114 @@ function FramePeopleHeadshots({
           {query.trim() ? `No people match "${query.trim()}".` : 'No people detected yet.'}
         </Typography>
       ) : (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box
-            component="ul"
-            aria-label="People detected in this frame"
-            sx={{
-              listStyle: 'none',
-              m: 0,
-              // Keeps the selected headshot's focus ring from being clipped by the scroller
-              p: 0.5,
-              flex: 1,
-              minWidth: 0,
-              display: 'flex',
-              flexWrap: 'nowrap',
-              gap: 1,
-              overflowX: 'auto',
-              overflowY: 'hidden',
-              overscrollBehavior: 'contain',
-              WebkitOverflowScrolling: 'touch',
-            }}
-          >
-            {visiblePeople.map((person) => {
-              const isSelected = person.id === selectedPersonId;
-              const thumbSrc =
-                person.thumbnailUrl && !brokenThumbIds.has(person.id)
-                  ? person.thumbnailUrl
-                  : undefined;
+        <Box
+          component="ul"
+          aria-label="People detected in this video"
+          sx={{
+            listStyle: 'none',
+            m: 0,
+            p: 0.5,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))',
+            gap: 1.25,
+          }}
+        >
+          {people.map((person) => {
+            const isSelected = person.id === selectedPersonId;
+            const thumbSrc =
+              person.thumbnailUrl && !brokenThumbIds.has(person.id)
+                ? person.thumbnailUrl
+                : undefined;
 
-              return (
-                <Box component="li" key={person.id} sx={{ display: 'flex', flexShrink: 0 }}>
-                  <Tooltip
-                    title={`Jump to ${person.name} · ${person.detail}`}
-                    arrow
-                    placement="top"
-                  >
-                    <Avatar
-                      component="button"
-                      type="button"
-                      src={thumbSrc}
-                      alt={person.name}
-                      aria-pressed={isSelected}
-                      aria-label={`${person.name}, ${person.detail}`}
-                      onClick={() => onSelectPerson?.(person)}
-                      slotProps={{
-                        img: {
-                          onError: () => {
-                            setBrokenThumbIds((prev) => new Set(prev).add(person.id));
-                          },
-                        },
-                      }}
-                      sx={{
-                        width: AI_FRAME_HEADSHOT_SIZE,
-                        height: AI_FRAME_HEADSHOT_SIZE,
-                        p: 0,
-                        fontSize: '0.625rem',
-                        fontWeight: 600,
-                        color: cv.textPrimary,
-                        background: cv.brandGradient,
-                        border: 'none',
-                        cursor: onSelectPerson ? 'pointer' : 'default',
-                        outline: isSelected ? `2px solid ${cv.purpleLight}` : 'none',
-                        outlineOffset: '2px',
-                        transition: 'transform 0.15s ease',
-                        '&:hover': { transform: onSelectPerson ? 'scale(1.08)' : 'none' },
-                        '&:focus-visible': {
-                          outline: `2px solid ${cv.purpleFocusBorder}`,
-                          outlineOffset: '2px',
-                        },
-                      }}
-                    >
-                      {person.initials}
-                    </Avatar>
-                  </Tooltip>
-                </Box>
-              );
-            })}
-          </Box>
-
-          {hiddenCount > 0 && !showAll ? (
-            <Tooltip title={`Show ${hiddenCount} more`} arrow placement="top">
+            return (
               <Box
-                component="button"
-                type="button"
-                aria-label={`Show ${hiddenCount} more people in this frame`}
-                onClick={() => setShowAll(true)}
+                component="li"
+                key={person.id}
                 sx={{
-                  flexShrink: 0,
-                  width: AI_FRAME_HEADSHOT_SIZE,
-                  height: AI_FRAME_HEADSHOT_SIZE,
-                  borderRadius: '50%',
-                  border: `1px solid ${cv.borderStrong}`,
-                  backgroundColor: cv.glassBackground,
-                  color: cv.textSecondary,
-                  fontSize: '0.625rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  '&:hover': {
-                    color: cv.textPrimary,
-                    backgroundColor: cv.surfaceHover,
-                  },
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  minWidth: 0,
                 }}
               >
-                +{hiddenCount}
+                <Tooltip
+                  title={`Jump to ${person.name} · ${person.detail}`}
+                  arrow
+                  placement="top"
+                >
+                  <Avatar
+                    component="button"
+                    type="button"
+                    src={thumbSrc}
+                    alt={person.name}
+                    aria-pressed={isSelected}
+                    aria-label={`${person.name}, ${person.detail}`}
+                    onClick={() => onSelectPerson?.(person)}
+                    slotProps={{
+                      img: {
+                        onError: () => {
+                          setBrokenThumbIds((prev) => new Set(prev).add(person.id));
+                        },
+                      },
+                    }}
+                    sx={{
+                      width: AI_FRAME_HEADSHOT_SIZE,
+                      height: AI_FRAME_HEADSHOT_SIZE,
+                      p: 0,
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      color: cv.textPrimary,
+                      background: cv.brandGradient,
+                      border: 'none',
+                      cursor: onSelectPerson ? 'pointer' : 'default',
+                      outline: isSelected ? `2px solid ${cv.purpleLight}` : 'none',
+                      outlineOffset: '2px',
+                      transition: 'transform 0.15s ease',
+                      '&:hover': { transform: onSelectPerson ? 'scale(1.06)' : 'none' },
+                      '&:focus-visible': {
+                        outline: `2px solid ${cv.purpleFocusBorder}`,
+                        outlineOffset: '2px',
+                      },
+                    }}
+                  >
+                    {person.initials}
+                  </Avatar>
+                </Tooltip>
+                <Typography
+                  sx={{
+                    width: '100%',
+                    fontSize: '0.6875rem',
+                    fontWeight: 600,
+                    lineHeight: 1.25,
+                    color: isSelected ? cv.brandPurpleLight : cv.textSecondary,
+                    textAlign: 'center',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={person.name}
+                >
+                  {person.name}
+                </Typography>
+                <Typography
+                  sx={{
+                    width: '100%',
+                    fontSize: '0.625rem',
+                    lineHeight: 1.2,
+                    color: cv.textMuted,
+                    textAlign: 'center',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={person.detail}
+                >
+                  {person.detail}
+                </Typography>
               </Box>
-            </Tooltip>
-          ) : null}
+            );
+          })}
         </Box>
       )}
     </Box>
@@ -1458,16 +1457,20 @@ export default function AnnotationHistoryDrawer({
 
   // People detection runs on frames, so audio and documents have no faces to list.
   const supportsFramePeople = mediaItem?.type === 'video' || mediaItem?.type === 'image';
+  const supportsScenes = mediaItem?.type === 'video';
 
   useEffect(() => {
     setAiSubTab('summary');
   }, [mediaItem?.id]);
 
   useEffect(() => {
-    if (!supportsFramePeople && aiSubTab === 'people') {
+    if (
+      (!supportsFramePeople && aiSubTab === 'people') ||
+      (!supportsScenes && aiSubTab === 'scenes')
+    ) {
       setAiSubTab('summary');
     }
-  }, [supportsFramePeople, aiSubTab]);
+  }, [supportsFramePeople, supportsScenes, aiSubTab]);
 
   useEffect(() => {
     if (activeTab !== 'ai' || !aiEntitled || !mediaItem?.id) {
@@ -1749,10 +1752,11 @@ export default function AnnotationHistoryDrawer({
               backgroundColor: cv.surface,
             }}
           >
-            {(supportsFramePeople
-              ? AI_SUB_TABS
-              : AI_SUB_TABS.filter((tab) => tab.value !== 'people')
-            ).map((tab) => {
+            {AI_SUB_TABS.filter((tab) => {
+              if (tab.value === 'people') return supportsFramePeople;
+              if (tab.value === 'scenes') return supportsScenes;
+              return true;
+            }).map((tab) => {
               const isActive = aiSubTab === tab.value;
               return (
                 <Box
@@ -1790,21 +1794,25 @@ export default function AnnotationHistoryDrawer({
             })}
           </Box>
 
-          {aiSubTab === 'transcript' || aiSubTab === 'people' ? (
+          {aiSubTab === 'transcript' || aiSubTab === 'people' || aiSubTab === 'scenes' ? (
             <TextField
               fullWidth
               size="small"
               placeholder={
                 aiSubTab === 'people'
-                  ? 'Search people, objects or moments'
-                  : 'Search transcript'
+                  ? 'Search people'
+                  : aiSubTab === 'scenes'
+                    ? 'Search scenes'
+                    : 'Search transcript'
               }
               value={aiQuery}
               onChange={(event) => setAiQuery(event.target.value)}
               aria-label={
                 aiSubTab === 'people'
-                  ? 'Search people, objects or moments'
-                  : 'Search transcript'
+                  ? 'Search people'
+                  : aiSubTab === 'scenes'
+                    ? 'Search scenes'
+                    : 'Search transcript'
               }
               sx={{
                 '& .MuiOutlinedInput-root': {
@@ -2169,25 +2177,39 @@ export default function AnnotationHistoryDrawer({
             >
               {peopleScenesLoading ? (
                 <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
-                  Loading people and scenes…
+                  Loading people…
                 </Typography>
               ) : (
-                <>
-                  <FramePeopleHeadshots
-                    people={filteredFramePeople}
-                    query={aiQuery}
-                    selectedPersonId={selectedFramePersonId}
-                    onSelectPerson={handlePersonSelect}
-                  />
-                  {mediaItem?.type === 'video' ? (
-                    <SceneInsightChips
-                      scenes={assetScenes}
-                      query={aiQuery}
-                      onSeekMs={onTranscriptSeek}
-                      videoSrc={videoSrc}
-                    />
-                  ) : null}
-                </>
+                <FramePeopleHeadshots
+                  people={filteredFramePeople}
+                  query={aiQuery}
+                  selectedPersonId={selectedFramePersonId}
+                  onSelectPerson={handlePersonSelect}
+                />
+              )}
+            </Box>
+          ) : aiSubTab === 'scenes' ? (
+            <Box
+              role="tabpanel"
+              aria-label="Scenes"
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1.25,
+                py: 1,
+              }}
+            >
+              {peopleScenesLoading ? (
+                <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
+                  Loading scenes…
+                </Typography>
+              ) : (
+                <SceneInsightChips
+                  scenes={assetScenes}
+                  query={aiQuery}
+                  onSeekMs={onTranscriptSeek}
+                  videoSrc={videoSrc}
+                />
               )}
             </Box>
           ) : (
