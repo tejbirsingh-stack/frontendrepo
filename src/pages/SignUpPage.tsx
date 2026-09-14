@@ -1064,9 +1064,9 @@ export default function SignUpPage() {
                               sx={{ color: cv.textSecondary }}
                             >
                               {showPassword ? (
-                                <VisibilityOff sx={{ fontSize: 20 }} />
-                              ) : (
                                 <Visibility sx={{ fontSize: 20 }} />
+                              ) : (
+                                <VisibilityOff sx={{ fontSize: 20 }} />
                               )}
                             </IconButton>
                           </InputAdornment>
@@ -1102,9 +1102,9 @@ export default function SignUpPage() {
                               sx={{ color: cv.textSecondary }}
                             >
                               {showConfirmPassword ? (
-                                <VisibilityOff sx={{ fontSize: 20 }} />
-                              ) : (
                                 <Visibility sx={{ fontSize: 20 }} />
+                              ) : (
+                                <VisibilityOff sx={{ fontSize: 20 }} />
                               )}
                             </IconButton>
                           </InputAdornment>

@@ -326,7 +326,7 @@ export default function ResetPasswordPage() {
                           edge="end"
                           sx={{ color: cv.textMuted }}
                         >
-                          {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                          {showPassword ? <Visibility fontSize="small" /> : <VisibilityOff fontSize="small" />}
                         </IconButton>
                       </InputAdornment>
                     ),
@@ -359,9 +359,9 @@ export default function ResetPasswordPage() {
                           sx={{ color: cv.textMuted }}
                         >
                           {showConfirmPassword ? (
-                            <VisibilityOff fontSize="small" />
-                          ) : (
                             <Visibility fontSize="small" />
+                          ) : (
+                            <VisibilityOff fontSize="small" />
                           )}
                         </IconButton>
                       </InputAdornment>

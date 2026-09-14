@@ -1900,8 +1900,8 @@ export default function WorkspaceMembersDialog({
                     onClick={() => setSharePasswordVisible((v) => !v)}
                   >
                     {sharePasswordVisible
-                      ? <VisibilityOffOutlinedIcon sx={{ fontSize: 18 }} />
-                      : <VisibilityOutlinedIcon sx={{ fontSize: 18 }} />}
+                      ? <VisibilityOutlinedIcon sx={{ fontSize: 18 }} />
+                      : <VisibilityOffOutlinedIcon sx={{ fontSize: 18 }} />}
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="Generate random password">

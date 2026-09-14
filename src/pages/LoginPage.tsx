@@ -334,7 +334,7 @@ export default function LoginPage() {
                         edge="end"
                         sx={{ color: cv.textMuted }}
                       >
-                        {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                        {showPassword ? <Visibility fontSize="small" /> : <VisibilityOff fontSize="small" />}
                       </IconButton>
                     </InputAdornment>
                   ),

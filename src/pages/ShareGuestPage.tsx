@@ -360,7 +360,7 @@ export default function ShareGuestPage() {
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton onClick={() => setShowPassword((v) => !v)} edge="end">
-                        {showPassword ? <VisibilityOffOutlinedIcon /> : <VisibilityOutlinedIcon />}
+                        {showPassword ? <VisibilityOutlinedIcon /> : <VisibilityOffOutlinedIcon />}
                       </IconButton>
                     </InputAdornment>
                   ),
