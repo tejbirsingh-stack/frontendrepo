@@ -3636,21 +3636,21 @@ export default function VideoPlayerPage({
 
         if (existingGroup) {
           if (existingGroup.hasOverride) return false;
-          setShareTeamMembers(current => current.map(m => m.groupId === groupId ? { ...m, hasOverride: true, access: payload.access } : m));
-          setCollaborators(current => current.map(c => c.groupId === groupId ? { ...c, hasOverride: true, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' } : c));
+          setShareTeamMembers(current => current.map(m => m.groupId === groupId ? { ...m, hasOverride: true, access: parseAccessLevelToTitle(payload.access) } : m));
+          setCollaborators(current => current.map(c => c.groupId === groupId ? { ...c, hasOverride: true, role: parseAccessLevelToRole(payload.access) } : c));
         } else {
           const newGroupMember = {
             id: groupId,
             name: payload.groupName || 'Group',
             initials: (payload.groupName || 'Gr').substring(0, 2).toUpperCase(),
-            access: payload.access,
+            access: parseAccessLevelToTitle(payload.access),
             memberType: 'Group' as WorkspaceMemberType,
             groupId: groupId,
             isCurrentUser: false,
             hasOverride: true
           };
           setShareTeamMembers(current => [...current, newGroupMember]);
-          setCollaborators(current => [...current, { ...newGroupMember, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' }]);
+          setCollaborators(current => [...current, { ...newGroupMember, role: parseAccessLevelToRole(payload.access) }]);
         }
 
         if (mediaId) {
@@ -3673,12 +3673,12 @@ export default function VideoPlayerPage({
 
         // Update in state
         setShareTeamMembers(current =>
-          current.map(m => m.id === existingMember.id ? { ...m, hasOverride: true, access: payload.access } : m)
+          current.map(m => m.id === existingMember.id ? { ...m, hasOverride: true, access: parseAccessLevelToTitle(payload.access) } : m)
         );
 
         // Update collaborators state to match
         setCollaborators(current =>
-          current.map(c => c.id === existingMember.id ? { ...c, hasOverride: true, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' } : c)
+          current.map(c => c.id === existingMember.id ? { ...c, hasOverride: true, role: parseAccessLevelToRole(payload.access) } : c)
         );
 
         // Call backend
@@ -3701,14 +3701,14 @@ export default function VideoPlayerPage({
           id: newUserId,
           name: payload.name || email,
           initials: (payload.name || email).substring(0, 2).toUpperCase(),
-          access: payload.access,
+          access: parseAccessLevelToTitle(payload.access),
           memberType: payload.memberType,
           email: payload.email,
           isCurrentUser: false,
           hasOverride: true
         };
         setShareTeamMembers(current => [...current, newGroupMember]);
-        setCollaborators(current => [...current, { ...newGroupMember, role: payload.access === 'Can edit' ? 'Editor' : 'Viewer' }]);
+        setCollaborators(current => [...current, { ...newGroupMember, role: parseAccessLevelToRole(payload.access) }]);
 
         if (mediaId) {
           updateAssetAccessOverride(mediaId, newUserId, payload.access, payload.sendInviteEmail).catch(err => {
