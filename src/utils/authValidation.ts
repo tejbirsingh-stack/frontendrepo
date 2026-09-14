@@ -78,3 +78,37 @@ export function validateEmail(email: string): string | null {
   }
   return null;
 }
+
+export function validateWebsiteUrl(url: string, required: boolean = false): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    if (required) return 'Website URL is required.';
+    return null;
+  }
+
+  if (trimmed.length > 255) {
+    return 'Website URL cannot exceed 255 characters.';
+  }
+
+  if (/\s/.test(trimmed)) {
+    return 'Please enter a valid website URL without spaces.';
+  }
+
+  const urlPattern = /^(https?:\/\/)?([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(:\d{1,5})?(\/.*)?$/i;
+  if (!urlPattern.test(trimmed)) {
+    return 'Please enter a valid website URL (e.g. https://example.com or example.com).';
+  }
+
+  try {
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const parsed = new URL(withProtocol);
+    if (!parsed.hostname || !parsed.hostname.includes('.')) {
+      return 'Please enter a valid website URL (e.g. https://example.com or example.com).';
+    }
+  } catch {
+    return 'Please enter a valid website URL (e.g. https://example.com or example.com).';
+  }
+
+  return null;
+}
+

@@ -29,7 +29,7 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '../auth/AuthContext';
 import { persistSession } from '../auth/authStorage';
 import { cv } from '../theme/cssVars';
-import { validateBusinessEmail, validatePassword } from '../utils/authValidation';
+import { validateBusinessEmail, validatePassword, validateWebsiteUrl } from '../utils/authValidation';
 import { mockAuthEmailExists } from '../constants/mockAuthCredentials';
 import {
   checkEmailRequest,
@@ -544,8 +544,9 @@ export default function SignUpPage() {
       return;
     }
 
-    if (companyWebsite.trim().length > 255) {
-      setError('Company website URL cannot exceed 255 characters.');
+    const websiteValidationErr = validateWebsiteUrl(companyWebsite);
+    if (websiteValidationErr) {
+      setError(websiteValidationErr);
       return;
     }
 

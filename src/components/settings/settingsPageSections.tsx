@@ -18,6 +18,7 @@ import { logoutAllSessions, fetchOrganizationUsers } from '../../api/auth.servic
 import { fetchUserGroups } from '../../api/userGroups.service';
 import { useAuth } from '../../auth/AuthContext';
 import { useLocalizedDate } from '../../hooks/useLocalizedDate';
+import { validateWebsiteUrl } from '../../utils/authValidation';
 import { cv } from '../../theme/cssVars';
 import { billingService } from '../../api/billing.service';
 import ChoosePlanScreen from '../onboarding/ChoosePlanScreen';
@@ -869,6 +870,7 @@ export function CompanySettingsSection() {
   const [website, setWebsite] = useState('https://mtxb2b.com');
   const [industry, setIndustry] = useState('Media & Technology');
   const [logoUrl, setLogoUrl] = useState('');
+  const [websiteError, setWebsiteError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -883,6 +885,7 @@ export function CompanySettingsSection() {
         setWebsite(meta.website || '');
         setIndustry(meta.industry || '');
         setLogoUrl(meta.logoUrl || '');
+        setWebsiteError('');
       } catch (err) {
         toast.error('Failed to load company info');
       } finally {
@@ -893,9 +896,16 @@ export function CompanySettingsSection() {
   }, []);
 
   const handleSave = async () => {
+    const errorMsg = validateWebsiteUrl(website);
+    if (errorMsg) {
+      setWebsiteError(errorMsg);
+      toast.error(errorMsg);
+      return;
+    }
+    setWebsiteError('');
     setIsSaving(true);
     try {
-      await updateCompanyInfoRequest({ name, website, industry, logoUrl });
+      await updateCompanyInfoRequest({ name, website: website.trim(), industry, logoUrl });
       toast.success('Company info saved');
     } catch (err: any) {
       toast.error(err.message || 'Failed to save company info');
@@ -907,6 +917,27 @@ export function CompanySettingsSection() {
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/svg+xml'];
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.svg'];
+    const fileExtension = '.' + (file.name.split('.').pop() || '').toLowerCase();
+
+    if (!allowedMimeTypes.includes(file.type.toLowerCase()) || !allowedExtensions.includes(fileExtension)) {
+      toast.error('Invalid file type. Only PNG, JPG, and SVG files are allowed as company photo.');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    const maxSize = 5 * 1024 * 1024; // 5MB limit
+    if (file.size > maxSize) {
+      toast.error('Image size exceeds 5MB limit.');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
 
     try {
       toast.loading('Uploading logo...', { id: 'upload-logo' });
@@ -939,7 +970,7 @@ export function CompanySettingsSection() {
             <Box>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg"
                 style={{ display: 'none' }}
                 ref={fileInputRef}
                 onChange={handleFileUpload}
@@ -968,8 +999,15 @@ export function CompanySettingsSection() {
           <TextField
             label="Company website"
             value={website}
-            onChange={(e) => setWebsite(e.target.value)}
-            fullWidth size="small"
+            onChange={(e) => {
+              setWebsite(e.target.value);
+              if (websiteError) setWebsiteError('');
+            }}
+            error={Boolean(websiteError)}
+            helperText={websiteError}
+            placeholder="https://example.com"
+            fullWidth
+            size="small"
           />
           <TextField
             label="Industry"
@@ -1318,6 +1356,28 @@ export function BrandingSettingsSection() {
   const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/svg+xml'];
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.svg'];
+    const fileExtension = '.' + (file.name.split('.').pop() || '').toLowerCase();
+
+    if (!allowedMimeTypes.includes(file.type.toLowerCase()) || !allowedExtensions.includes(fileExtension)) {
+      toast.error('Invalid file type. Only PNG, JPG, and SVG files are allowed as company photo.');
+      if (logoInputRef.current) {
+        logoInputRef.current.value = '';
+      }
+      return;
+    }
+
+    const maxSize = 5 * 1024 * 1024; // 5MB limit
+    if (file.size > maxSize) {
+      toast.error('Image size exceeds 5MB limit.');
+      if (logoInputRef.current) {
+        logoInputRef.current.value = '';
+      }
+      return;
+    }
+
     setIsUploadingLogo(true);
     try {
       const res = await uploadCompanyLogoRequest(file);
@@ -1338,8 +1398,24 @@ export function BrandingSettingsSection() {
   const handleHeaderFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const allowedHeaderMimeTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    const allowedHeaderExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+    const headerExtension = '.' + (file.name.split('.').pop() || '').toLowerCase();
+
+    if (!allowedHeaderMimeTypes.includes(file.type.toLowerCase()) || !allowedHeaderExtensions.includes(headerExtension)) {
+      toast.error('Invalid file type. Only PNG, JPG, and WebP images are allowed for header banner.');
+      if (headerInputRef.current) {
+        headerInputRef.current.value = '';
+      }
+      return;
+    }
+
     if (file.size > 25 * 1024 * 1024) {
       toast.error('Header image exceeds maximum 25 MB size limit.');
+      if (headerInputRef.current) {
+        headerInputRef.current.value = '';
+      }
       return;
     }
     setIsUploadingHeader(true);
@@ -1377,14 +1453,14 @@ export function BrandingSettingsSection() {
       <input
         type="file"
         ref={logoInputRef}
-        accept="image/*"
+        accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg"
         style={{ display: 'none' }}
         onChange={handleLogoFileChange}
       />
       <input
         type="file"
         ref={headerInputRef}
-        accept="image/*"
+        accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
         style={{ display: 'none' }}
         onChange={handleHeaderFileChange}
       />
