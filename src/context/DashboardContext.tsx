@@ -1776,10 +1776,40 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    uniqueIds.forEach((id) => {
-      apiClient.post(`/media/${id}/restore`)
-        .then(() => { void fetchTrashItems(); })
-        .catch(err => console.error('Failed to sync restore with backend', err));
+    void Promise.allSettled(
+      uniqueIds.map((id) => apiClient.post(`/media/${id}/restore`).then(() => id)),
+    ).then((results) => {
+      const failedIds: string[] = [];
+      let firstErrorMessage = '';
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          failedIds.push(uniqueIds[index]);
+          if (!firstErrorMessage) {
+            firstErrorMessage = result.reason?.message || 'Failed to restore file';
+          }
+          console.error('Failed to sync restore with backend', result.reason);
+        }
+      });
+
+      // Roll back the optimistic update for anything the backend rejected
+      if (failedIds.length > 0) {
+        setMediaItems((prev) =>
+          prev.map((item) =>
+            failedIds.includes(item.id) ? { ...item, status: 'trash' as const } : item,
+          ),
+        );
+      }
+
+      const restoredCount = uniqueIds.length - failedIds.length;
+      if (failedIds.length === 0) {
+        toast.success(restoredCount === 1 ? 'File restored successfully' : `${restoredCount} files restored successfully`);
+      } else if (restoredCount === 0) {
+        toast.error(failedIds.length === 1 ? firstErrorMessage : `Failed to restore ${failedIds.length} files: ${firstErrorMessage}`);
+      } else {
+        toast.error(`${restoredCount} restored, ${failedIds.length} failed: ${firstErrorMessage}`);
+      }
+
+      void fetchTrashItems();
     });
 
     // Restore to active in local state
