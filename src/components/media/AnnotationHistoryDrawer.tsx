@@ -1688,6 +1688,21 @@ export default function AnnotationHistoryDrawer({
     assetScenes.length,
   ]);
 
+  const peopleScenesStep = aiStatus?.steps?.people_scenes;
+  const peopleScenesInProgress =
+    peopleScenesStep === 'queued' || peopleScenesStep === 'processing';
+  const peopleScenesFailed = peopleScenesStep === 'failed';
+
+  const highlightsStep = aiStatus?.steps?.highlights;
+  const summaryInProgress =
+    highlightsStep === 'queued' ||
+    highlightsStep === 'processing' ||
+    (highlightLoading && !insightsSummary && insightsTags.length === 0);
+
+  const asrStep = aiStatus?.steps?.asr;
+  const transcriptInProgress =
+    asrStep === 'queued' || asrStep === 'processing' || asrStep === 'transcribing';
+
   const panelBody = (
     <>
       <Box
@@ -1822,6 +1837,10 @@ export default function AnnotationHistoryDrawer({
               return true;
             }).map((tab) => {
               const isActive = aiSubTab === tab.value;
+              const showStepProgress =
+                (tab.value === 'summary' && summaryInProgress) ||
+                (tab.value === 'transcript' && transcriptInProgress) ||
+                (peopleScenesInProgress && (tab.value === 'people' || tab.value === 'scenes'));
               return (
                 <Box
                   key={tab.value}
@@ -1829,6 +1848,7 @@ export default function AnnotationHistoryDrawer({
                   type="button"
                   role="tab"
                   aria-selected={isActive}
+                  aria-busy={showStepProgress || undefined}
                   onClick={() => setAiSubTab(tab.value)}
                   sx={{
                     flex: 1,
@@ -1844,6 +1864,10 @@ export default function AnnotationHistoryDrawer({
                     backgroundColor: isActive ? cv.purpleSelectionHover : 'transparent',
                     boxShadow: isActive ? `inset 0 0 0 1px ${cv.purpleSelectionStrong}` : 'none',
                     transition: 'background-color 0.15s ease, color 0.15s ease',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 0.5,
                     '&:hover': {
                       color: cv.textPrimary,
                       backgroundColor: isActive
@@ -1853,6 +1877,9 @@ export default function AnnotationHistoryDrawer({
                   }}
                 >
                   {tab.label}
+                  {showStepProgress ? (
+                    <CircularProgress size={10} sx={{ color: 'inherit', opacity: 0.85 }} />
+                  ) : null}
                 </Box>
               );
             })}
@@ -2239,10 +2266,32 @@ export default function AnnotationHistoryDrawer({
                 py: 1,
               }}
             >
-              {peopleScenesLoading ? (
-                <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
-                  Loading people…
+              {peopleScenesInProgress && filteredFramePeople.length > 0 ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CircularProgress size={14} sx={{ color: cv.brandPurpleLight }} />
+                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                    Updating people…
+                  </Typography>
+                </Box>
+              ) : null}
+              {peopleScenesInProgress && filteredFramePeople.length === 0 ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
+                  <CircularProgress size={14} sx={{ color: cv.brandPurpleLight }} />
+                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                    Detecting people. This can take a few minutes.
+                  </Typography>
+                </Box>
+              ) : peopleScenesFailed && filteredFramePeople.length === 0 && !peopleScenesLoading ? (
+                <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted, py: 1.5 }}>
+                  People detection failed. Use Add AI features to try again.
                 </Typography>
+              ) : peopleScenesLoading && filteredFramePeople.length === 0 ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
+                  <CircularProgress size={14} sx={{ color: cv.brandPurpleLight }} />
+                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                    Loading people…
+                  </Typography>
+                </Box>
               ) : (
                 <FramePeopleHeadshots
                   people={filteredFramePeople}
@@ -2264,10 +2313,32 @@ export default function AnnotationHistoryDrawer({
                 py: 1,
               }}
             >
-              {peopleScenesLoading ? (
-                <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
-                  Loading scenes…
+              {peopleScenesInProgress && assetScenes.length > 0 ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CircularProgress size={14} sx={{ color: cv.brandPurpleLight }} />
+                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                    Updating scenes…
+                  </Typography>
+                </Box>
+              ) : null}
+              {peopleScenesInProgress && assetScenes.length === 0 ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
+                  <CircularProgress size={14} sx={{ color: cv.brandPurpleLight }} />
+                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                    Detecting scenes. This can take a few minutes.
+                  </Typography>
+                </Box>
+              ) : peopleScenesFailed && assetScenes.length === 0 && !peopleScenesLoading ? (
+                <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted, py: 1.5 }}>
+                  Scene detection failed. Use Add AI features to try again.
                 </Typography>
+              ) : peopleScenesLoading && assetScenes.length === 0 ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
+                  <CircularProgress size={14} sx={{ color: cv.brandPurpleLight }} />
+                  <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
+                    Loading scenes…
+                  </Typography>
+                </Box>
               ) : (
                 <SceneInsightChips
                   scenes={assetScenes}
