@@ -1,7 +1,5 @@
 import { useMemo } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
-import PageSuspense from '../components/loading/PageSuspense';
-import SettingsContentSkeleton from '../components/loading/SettingsContentSkeleton';
+import { Outlet, useParams } from 'react-router-dom';
 import { cv } from '../theme/cssVars';
 import { Box, Typography } from '@mui/material';
 import PlanBadge from '../components/dashboard/PlanBadge';
@@ -10,11 +8,11 @@ import { useAuth } from '../auth/AuthContext';
 import { getDynamicPlanDetails } from '../utils/planHelper';
 
 export default function SettingsLayout() {
-  const location = useLocation();
+  const { group, section } = useParams();
   const { user } = useAuth();
   const planDetails = useMemo(() => getDynamicPlanDetails(user), [user]);
   const isFreePlan = planDetails.planId === 'free';
-  const pathSuffix = location.pathname.replace('/home/settings/', '').replace(/\/$/, '');
+  const pathSuffix = [group, section].filter(Boolean).join('/');
   const sectionMeta = getSettingsSectionMeta(pathSuffix);
   const displayPlan = (planDetails.planId || 'free').toUpperCase();
 
@@ -63,9 +61,7 @@ export default function SettingsLayout() {
       </Box>
 
       <Box sx={{ width: '100%', minWidth: 0 }}>
-        <PageSuspense fallback={<SettingsContentSkeleton />}>
-          <Outlet />
-        </PageSuspense>
+        <Outlet />
       </Box>
     </Box>
   );

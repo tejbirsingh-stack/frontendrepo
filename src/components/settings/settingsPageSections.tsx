@@ -64,6 +64,8 @@ import PauseCircleOutlinedIcon from '@mui/icons-material/PauseCircleOutlined';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
 import SettingsAdminToolbar from './SettingsAdminToolbar';
 import SettingsTableFilterPanel from './SettingsTableFilterPanel';
 import WorkspaceTeamMembersCell from './WorkspaceTeamMembersCell';
@@ -142,8 +144,43 @@ function tableText(value: string) {
   return <TruncatedText text={value} sx={tableTextSx} />;
 }
 
-function ProjectNameCell({ name }: { name: string }) {
-  return <TruncatedText text={name} sx={{ fontSize: '0.875rem', color: cv.textPrimary }} />;
+function VisibilityNameCell({
+  name,
+  visibility,
+  kind,
+}: {
+  name: string;
+  visibility?: ProjectVisibility;
+  kind: 'workspace' | 'project';
+}) {
+  const isPrivate = visibility === 'private';
+  const label = isPrivate ? 'Private' : 'Public';
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+      <TruncatedText text={name} sx={tableTextSx} />
+      {visibility ? (
+        <Tooltip title={label} arrow>
+          <Box
+            component="span"
+            sx={{
+              display: 'inline-flex',
+              color: cv.textMuted,
+              flexShrink: 0,
+              lineHeight: 0,
+            }}
+            aria-label={`${label} ${kind}`}
+          >
+            {isPrivate ? (
+              <LockOutlinedIcon sx={{ fontSize: 16 }} />
+            ) : (
+              <PublicOutlinedIcon sx={{ fontSize: 16 }} />
+            )}
+          </Box>
+        </Tooltip>
+      ) : null}
+    </Box>
+  );
 }
 
 const containedButtonSx = {
@@ -1820,7 +1857,7 @@ function ProjectWorkspaceTable({
           label: 'Project',
           width: showTeamMembersColumn ? '14%' : '18%',
           render: (row: SettingsProjectRow) => (
-            <ProjectNameCell name={row.project} />
+            <VisibilityNameCell name={row.project} visibility={row.visibility} kind="project" />
           ),
         },
       ]
@@ -1835,7 +1872,12 @@ function ProjectWorkspaceTable({
         : showTeamMembersColumn
           ? '16%'
           : '22%',
-      render: (row) => tableText(row.workspace),
+      render: (row) =>
+        showProjectColumn ? (
+          tableText(row.workspace)
+        ) : (
+          <VisibilityNameCell name={row.workspace} visibility={row.visibility} kind="workspace" />
+        ),
     },
     {
       id: 'status',
@@ -3131,7 +3173,13 @@ export function WorkspacesAdminSettingsSection() {
     // Optimistic UI update
     setWorkspaces((current) =>
       current.map((workspace) =>
-        workspace.id === inviteWorkspaceId ? { ...workspace, isRestricted: restricted } : workspace,
+        workspace.id === inviteWorkspaceId
+          ? {
+              ...workspace,
+              isRestricted: restricted,
+              visibility: restricted ? 'private' : 'public',
+            }
+          : workspace,
       ),
     );
 

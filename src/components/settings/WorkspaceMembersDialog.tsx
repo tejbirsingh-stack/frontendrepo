@@ -170,11 +170,19 @@ interface WorkspaceMembersDialogProps {
   resourceId?: string;
   onCopyLink?: () => void;
   onClose: () => void;
-  onInvite: (payload: WorkspaceInvitePayload) => boolean | Promise<boolean | string>;
+  onInvite: (payload: WorkspaceInvitePayload) => boolean | string | Promise<boolean | string>;
   onUpdateMemberAccess: (memberId: string, access: WorkspaceMemberAccess) => void;
   onRemoveMember?: (memberId: string) => void;
   onRestrictedChange: (restricted: boolean) => void;
   onVisibilityChange?: (visibility: ProjectVisibility) => void;
+  /** Public workspace + public media: org members already inherit access. */
+  blockOrgMemberInvites?: boolean;
+  /** Private workspace + public media: workspace members/groups already inherit access. */
+  blockWorkspaceMemberInvites?: boolean;
+  inheritedAccessUserIds?: string[];
+  inheritedAccessGroupIds?: string[];
+  /** Workspace id used for member search (media share passes the asset's workspace). */
+  memberSearchWorkspaceId?: string;
 }
 
 function MemberAvatar({
@@ -228,6 +236,11 @@ export default function WorkspaceMembersDialog({
   onRemoveMember,
   onRestrictedChange,
   onVisibilityChange,
+  blockOrgMemberInvites = false,
+  blockWorkspaceMemberInvites = false,
+  inheritedAccessUserIds = [],
+  inheritedAccessGroupIds = [],
+  memberSearchWorkspaceId,
 }: WorkspaceMembersDialogProps) {
   const { formatDateTime } = useLocalizedDate();
   const [query, setQuery] = useState('');
@@ -352,6 +365,13 @@ export default function WorkspaceMembersDialog({
   const effectiveVisibility = showShareLinks ? draftVisibility : visibility;
   const isPublicProject = isProject && effectiveVisibility === 'public';
   const dialogTitle = isPublicProject ? `Share ${workspaceName}` : `Add to ${workspaceName}`;
+  const orgMemberBlockedMessage = showShareLinks
+    ? 'Organization members already have access to this public media.'
+    : 'Organization members already have access to this public workspace.';
+  const workspaceMemberBlockedMessage =
+    'Workspace members already have access to this public media.';
+  const hideOrgMemberRecommendations =
+    blockOrgMemberInvites || (!isRestricted && effectiveVisibility !== 'private');
 
   const showMemberInvitePanel = !isPublicProject;
   const hasShareLinks = (shareLinks?.length ?? 0) > 0 || (apiShareLinks?.length ?? 0) > 0;
@@ -528,6 +548,42 @@ export default function WorkspaceMembersDialog({
     [suggestedUsers],
   );
 
+  const inheritedUserIdSet = useMemo(
+    () => new Set(inheritedAccessUserIds.filter(Boolean)),
+    [inheritedAccessUserIds],
+  );
+  const inheritedGroupIdSet = useMemo(
+    () => new Set(inheritedAccessGroupIds.filter(Boolean)),
+    [inheritedAccessGroupIds],
+  );
+  const inheritedEmailSet = useMemo(() => {
+    const emails = new Set<string>();
+    organizationUsers.forEach((user) => {
+      if (inheritedUserIdSet.has(user.id) && user.email) {
+        emails.add(user.email.toLowerCase());
+      }
+    });
+    members.forEach((member) => {
+      if (member.email && inheritedUserIdSet.has(member.id)) {
+        emails.add(member.email.toLowerCase());
+      }
+    });
+    return emails;
+  }, [organizationUsers, members, inheritedUserIdSet]);
+
+  const isInheritedWorkspaceMember = (userId?: string, email?: string) => {
+    if (!blockWorkspaceMemberInvites) return false;
+    const normalizedId = userId?.replace(/^user-/, '');
+    if (normalizedId && inheritedUserIdSet.has(normalizedId)) return true;
+    if (email && inheritedEmailSet.has(email.toLowerCase())) return true;
+    return false;
+  };
+
+  const isInheritedWorkspaceGroup = (groupId?: string) => {
+    if (!blockWorkspaceMemberInvites || !groupId) return false;
+    return inheritedGroupIdSet.has(groupId);
+  };
+
   const guestUsers = useMemo(() => {
     const externalFromDirectory = suggestedUsers.filter((user) => !isOrganizationUser(user));
     const seen = new Set<string>();
@@ -543,21 +599,82 @@ export default function WorkspaceMembersDialog({
   const [searchResults, setSearchResults] = useState<InviteTypeaheadOption[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // resourceId is the workspaceId passed in — used for the search API
-  const workspaceSearchId = resourceId;
+  // Media share passes resourceId as the asset id — search must use the workspace id.
+  const workspaceSearchId = memberSearchWorkspaceId || (showShareLinks ? undefined : resourceId);
 
-  // Debounced live search — only fires for private workspaces
+  const toUserOption = (u: {
+    id: string;
+    name: string;
+    email: string;
+    initials?: string;
+    isOrganizationMember?: boolean;
+  }): InviteTypeaheadOption => ({
+    kind: 'user',
+    id: `user-${u.id}`,
+    user: {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      initials:
+        u.initials ||
+        (u.name || u.email)
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((p) => p[0]?.toUpperCase() ?? '')
+          .join('') ||
+        u.email[0]?.toUpperCase() ||
+        'U',
+      lastActive: '',
+      joinedDate: '',
+      role: 'Collaborator' as SettingsUserRow['role'],
+      status: 'Active',
+      isOrganizationMember: u.isOrganizationMember !== false,
+    },
+  });
+
+  // Debounced live search — org members/groups when inviting to private resources
   useEffect(() => {
     const trimmed = query.trim();
 
-    // Public workspace: no recommendations at all
-    if (!isRestricted && effectiveVisibility !== 'private') {
+    if (hideOrgMemberRecommendations) {
       setSearchResults([]);
       return;
     }
 
-    if (!trimmed || !workspaceSearchId) {
+    if (!trimmed) {
       setSearchResults([]);
+      return;
+    }
+
+    const q = trimmed.toLowerCase();
+    const localUsers = organizationUsers
+      .filter(
+        (u) =>
+          !memberEmails.has(u.email.toLowerCase()) &&
+          !isInheritedWorkspaceMember(u.id, u.email) &&
+          (u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)),
+      )
+      .slice(0, 5)
+      .map((u) => toUserOption({ ...u, isOrganizationMember: true }));
+
+    const localGroups: InviteTypeaheadOption[] = suggestedGroups
+      .filter(
+        (g) =>
+          !memberGroupIds.has(g.id) &&
+          !isInheritedWorkspaceGroup(g.id) &&
+          g.name.toLowerCase().includes(q),
+      )
+      .slice(0, 3)
+      .map((g) => ({
+        kind: 'group' as const,
+        id: `group-${g.id}`,
+        group: g,
+      }));
+
+    setSearchResults([...localUsers, ...localGroups]);
+
+    if (!workspaceSearchId) {
       return;
     }
 
@@ -573,29 +690,23 @@ export default function WorkspaceMembersDialog({
         const data = res?.data ?? res;
 
         const userOptions: InviteTypeaheadOption[] = (data.users || [])
-          .filter((u: any) => !memberEmails.has(u.email?.toLowerCase()))
+          .filter(
+            (u: any) =>
+              !memberEmails.has(u.email?.toLowerCase()) &&
+              !isInheritedWorkspaceMember(u.id, u.email),
+          )
           .slice(0, 5)
-          .map((u: any) => ({
-            kind: 'user' as const,
-            id: `user-${u.id}`,
-            user: {
+          .map((u: any) =>
+            toUserOption({
               id: u.id,
               name: u.name,
               email: u.email,
-              initials: (u.name || u.email)
-                .split(/\s+/).filter(Boolean).slice(0, 2)
-                .map((p: string) => p[0]?.toUpperCase() ?? '')
-                .join('') || u.email[0]?.toUpperCase() || 'U',
-              lastActive: '',
-              joinedDate: '',
-              role: 'Collaborator' as any,
-              status: 'Active' as any,
               isOrganizationMember: true,
-            }
-          }));
+            }),
+          );
 
         const groupOptions: InviteTypeaheadOption[] = (data.groups || [])
-          .filter((g: any) => !memberGroupIds.has(g.id))
+          .filter((g: any) => !memberGroupIds.has(g.id) && !isInheritedWorkspaceGroup(g.id))
           .slice(0, 3)
           .map((g: any) => ({
             kind: 'group' as const,
@@ -603,10 +714,19 @@ export default function WorkspaceMembersDialog({
             group: { id: g.id, name: g.name, description: g.description || '', memberIds: [] }
           }));
 
-        setSearchResults([...userOptions, ...groupOptions]);
+        const seen = new Set(
+          [...userOptions, ...groupOptions].map((option) => option.id),
+        );
+        const merged = [
+          ...userOptions,
+          ...groupOptions,
+          ...localUsers.filter((option) => !seen.has(option.id)),
+          ...localGroups.filter((option) => !seen.has(option.id)),
+        ];
+        setSearchResults(merged);
       } catch (err) {
         console.error('Member search failed:', err);
-        setSearchResults([]);
+        setSearchResults([...localUsers, ...localGroups]);
       } finally {
         setIsSearching(false);
       }
@@ -614,7 +734,7 @@ export default function WorkspaceMembersDialog({
 
     return () => window.clearTimeout(delay);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, workspaceSearchId, isRestricted, effectiveVisibility]);
+  }, [query, workspaceSearchId, hideOrgMemberRecommendations, organizationUsers, suggestedGroups, memberEmails, memberGroupIds, blockWorkspaceMemberInvites, inheritedUserIdSet, inheritedGroupIdSet, inheritedEmailSet]);
 
   // Clear results when dialog closes
   useEffect(() => {
@@ -627,6 +747,15 @@ export default function WorkspaceMembersDialog({
 
 
   const inviteGroup = async (group: SettingsUserGroup) => {
+    if (blockOrgMemberInvites) {
+      setError(orgMemberBlockedMessage);
+      return false;
+    }
+    if (isInheritedWorkspaceGroup(group.id)) {
+      setError(workspaceMemberBlockedMessage);
+      return false;
+    }
+
     const success = await onInvite({
       groupId: group.id,
       groupName: group.name,
@@ -636,7 +765,11 @@ export default function WorkspaceMembersDialog({
     });
 
     if (success === 'ORG_MEMBER_IN_PUBLIC') {
-      setError('Organization members already have access to this public workspace.');
+      setError(orgMemberBlockedMessage);
+      return false;
+    }
+    if (success === 'WORKSPACE_MEMBER_IN_PUBLIC') {
+      setError(workspaceMemberBlockedMessage);
       return false;
     }
 
@@ -652,6 +785,15 @@ export default function WorkspaceMembersDialog({
   };
 
   const inviteUser = async (email: string, name: string | undefined, memberType: WorkspaceMemberType, userId?: string) => {
+    if (blockOrgMemberInvites && memberType === 'Member') {
+      setError(orgMemberBlockedMessage);
+      return false;
+    }
+    if (isInheritedWorkspaceMember(userId, email)) {
+      setError(workspaceMemberBlockedMessage);
+      return false;
+    }
+
     const success = await onInvite({
       userId,
       email,
@@ -662,7 +804,11 @@ export default function WorkspaceMembersDialog({
     });
 
     if (success === 'ORG_MEMBER_IN_PUBLIC') {
-      setError('Organization members already have access to this public workspace.');
+      setError(orgMemberBlockedMessage);
+      return false;
+    }
+    if (success === 'WORKSPACE_MEMBER_IN_PUBLIC') {
+      setError(workspaceMemberBlockedMessage);
       return false;
     }
 
@@ -739,8 +885,12 @@ export default function WorkspaceMembersDialog({
 
     if (targetUser) {
       const memberType: WorkspaceMemberType = targetUser.isOrgMember ? 'Member' : 'Guest';
-      if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
-        setError('Organization members already have access to this public workspace.');
+      if ((blockOrgMemberInvites || !(isRestricted || effectiveVisibility === 'private')) && memberType === 'Member') {
+        setError(orgMemberBlockedMessage);
+        return;
+      }
+      if (isInheritedWorkspaceMember(targetUser.id, targetUser.email)) {
+        setError(workspaceMemberBlockedMessage);
         return;
       }
       if (memberType === 'Guest') {
@@ -759,8 +909,12 @@ export default function WorkspaceMembersDialog({
     const email = trimmed.toLowerCase();
     const memberType: WorkspaceMemberType = isOrganizationEmail(email) ? 'Member' : 'Guest';
 
-    if (!(isRestricted || effectiveVisibility === 'private') && memberType === 'Member') {
-      setError('Organization members already have access to this public workspace.');
+    if ((blockOrgMemberInvites || !(isRestricted || effectiveVisibility === 'private')) && memberType === 'Member') {
+      setError(orgMemberBlockedMessage);
+      return;
+    }
+    if (isInheritedWorkspaceMember(undefined, email)) {
+      setError(workspaceMemberBlockedMessage);
       return;
     }
 
@@ -779,6 +933,10 @@ export default function WorkspaceMembersDialog({
             return;
           }
           if (data?.user?.id) {
+            if (isInheritedWorkspaceMember(data.user.id, email)) {
+              setError(workspaceMemberBlockedMessage);
+              return;
+            }
             const result = await onInvite({
               userId: data.user.id,
               name: data.user.name,
@@ -788,7 +946,11 @@ export default function WorkspaceMembersDialog({
               sendInviteEmail: true,
             });
 
-            if (result) {
+            if (result === 'ORG_MEMBER_IN_PUBLIC') {
+              setError(orgMemberBlockedMessage);
+            } else if (result === 'WORKSPACE_MEMBER_IN_PUBLIC') {
+              setError(workspaceMemberBlockedMessage);
+            } else if (result) {
               setQuery('');
               setError('');
               setTypeaheadOpen(false);
@@ -816,7 +978,9 @@ export default function WorkspaceMembersDialog({
       if (result === 'NOT_FOUND') {
         setError('No user found with this email address.');
       } else if (result === 'ORG_MEMBER_IN_PUBLIC') {
-        setError('Organization members already have access to this public workspace.');
+        setError(orgMemberBlockedMessage);
+      } else if (result === 'WORKSPACE_MEMBER_IN_PUBLIC') {
+        setError(workspaceMemberBlockedMessage);
       } else if (result) {
         setQuery('');
         setError('');
@@ -1105,9 +1269,13 @@ export default function WorkspaceMembersDialog({
             helperText={
               error
                 ? error
-                : (!isRestricted && effectiveVisibility !== 'private')
-                  ? 'This is a public workspace — enter an external email address to invite someone from outside your organization.'
-                  : 'Type to search org members and groups, or enter an email to invite.'
+                : hideOrgMemberRecommendations
+                  ? blockOrgMemberInvites
+                    ? 'Organization members already have access to this public media — enter an external email to invite someone from outside your organization.'
+                    : 'This is a public workspace — enter an external email address to invite someone from outside your organization.'
+                  : blockWorkspaceMemberInvites
+                    ? 'Workspace members already have access to this public media — search for someone who is not on this workspace, or enter an external email.'
+                    : 'Type to search org members and groups, or enter an email to invite.'
             }
             autoFocus={!showShareLinks}
             slotProps={{

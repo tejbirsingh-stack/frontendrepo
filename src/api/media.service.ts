@@ -24,6 +24,8 @@ export interface MediaAssetResponseDto {
   folderId?: string | null;
   folderName?: string | null;
   workspaceId?: string;
+  visibility?: 'public' | 'private' | string | null;
+  workspaceVisibility?: 'public' | 'private' | string | null;
 }
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB chunks for Backblaze B2 / AWS S3 multipart upload
@@ -281,11 +283,27 @@ export async function retryTranscodeRequest(id: string): Promise<void> {
 /**
  * Fetch asset-specific role overrides (direct access users).
  */
-export async function getAssetAccessOverrides(id: string): Promise<{ overrides: any[], groupOverrides: any[] }> {
-  const res = await apiClient.get<{ success: boolean; overrides: any[]; groupOverrides?: any[] }>(
+export async function getAssetAccessOverrides(id: string): Promise<{
+  overrides: any[];
+  groupOverrides: any[];
+  inheritedWorkspaceAccess?: { userIds: string[]; groupIds: string[] };
+}> {
+  const res = await apiClient.get<{
+    success: boolean;
+    overrides: any[];
+    groupOverrides?: any[];
+    inheritedWorkspaceAccess?: { userIds: string[]; groupIds: string[] };
+  }>(
     `/media/${encodeURIComponent(id)}/access`,
   );
-  return { overrides: res.overrides || [], groupOverrides: res.groupOverrides || [] };
+  return {
+    overrides: res.overrides || [],
+    groupOverrides: res.groupOverrides || [],
+    inheritedWorkspaceAccess: {
+      userIds: res.inheritedWorkspaceAccess?.userIds || [],
+      groupIds: res.inheritedWorkspaceAccess?.groupIds || [],
+    },
+  };
 }
 
 /**

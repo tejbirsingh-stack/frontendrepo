@@ -1,5 +1,4 @@
-import { useMemo } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useParams } from 'react-router-dom';
 import KeyboardShortcutsSettings from '../../components/settings/KeyboardShortcutsSettings';
 import BillingSettingsSection from '../../components/settings/BillingSettingsSection';
 import UserAdminSettingsSection from '../../components/settings/UserAdminSettingsSection';
@@ -23,12 +22,9 @@ import { useAuth } from '../../auth/AuthContext';
 
 
 export default function SettingsSectionPage() {
-  const location = useLocation();
+  const { group, section } = useParams();
   const { user } = useAuth();
-
-  const sectionKey = useMemo(() => {
-    return location.pathname.replace('/home/settings/', '').replace(/\/$/, '');
-  }, [location.pathname]);
+  const sectionKey = [group, section].filter(Boolean).join('/');
 
   const hasManageSubscription = user?.permissions?.includes('manage_subscription_billing');
   const hasManageUsers = user?.permissions?.includes('manage_users_permissions');

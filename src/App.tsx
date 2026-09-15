@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import RouteLoadingFallback from './components/loading/RouteLoadingFallback';
 import RouteErrorBoundary from './components/errors/RouteErrorBoundary';
 import StampStickerFilterDefs from './components/media/StampStickerFilterDefs';
@@ -33,10 +33,15 @@ import {
 
 import { UploadManagerProvider } from './context/UploadManagerContext';
 
+function SettingsSectionRoute() {
+  const { group, section } = useParams();
+  return <SettingsSectionPage key={`${group}/${section}`} />;
+}
+
 function App() {
   return (
     <UploadManagerProvider>
-      <BrowserRouter>
+      <BrowserRouter useTransitions={false}>
         <StampStickerFilterDefs />
         <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
@@ -117,7 +122,7 @@ function App() {
             <Route path="deletion-requests" element={<DeletionRequestsPage />} />
             <Route path="settings" element={<SettingsLayout />}>
               <Route index element={<Navigate to="profile/personal" replace />} />
-              <Route path=":group/:section" element={<SettingsSectionPage />} />
+              <Route path=":group/:section" element={<SettingsSectionRoute />} />
             </Route>
           </Route>
           <Route

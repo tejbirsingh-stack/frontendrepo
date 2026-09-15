@@ -200,7 +200,7 @@ import {
 } from '../utils/playerToolUtils';
 import { useResolvedKeyboardShortcuts } from '../hooks/useResolvedKeyboardShortcuts';
 import { matchesKeyboardShortcut } from '../utils/matchKeyboardShortcut';
-import { getMediaAssetByIdRequest, updateAssetTagsRequest, updateAssetReviewStatusRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride, updateAssetGroupAccessOverride, removeAssetGroupAccessOverride, getCompanyInfoRequest } from '../api';
+import { getMediaAssetByIdRequest, updateAssetTagsRequest, updateAssetReviewStatusRequest, retryTranscodeRequest, getAssetAccessOverrides, updateAssetAccessOverride, removeAssetAccessOverride, updateAssetGroupAccessOverride, removeAssetGroupAccessOverride, getCompanyInfoRequest, ApiError } from '../api';
 import { fetchUserGroups } from '../api/userGroups.service';
 import type { MediaItem, MediaType } from '../data/mockMedia';
 
@@ -233,6 +233,22 @@ function parseAccessLevelToTitle(val?: string): WorkspaceMemberAccess {
   if (role === 'Admin') return 'Full Access';
   if (role === 'Editor') return 'Can edit';
   return 'Can view';
+}
+
+function shareInviteBlockedCode(err: unknown): 'ORG_MEMBER_IN_PUBLIC' | 'WORKSPACE_MEMBER_IN_PUBLIC' | null {
+  const details =
+    err instanceof ApiError
+      ? err.details
+      : err && typeof err === 'object' && 'details' in err
+        ? (err as { details?: unknown }).details
+        : err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: unknown } }).response?.data
+          : null;
+  if (!details || typeof details !== 'object') return null;
+  const payload = details as { orgMemberInPublic?: boolean; workspaceMemberInPublic?: boolean };
+  if (payload.orgMemberInPublic) return 'ORG_MEMBER_IN_PUBLIC';
+  if (payload.workspaceMemberInPublic) return 'WORKSPACE_MEMBER_IN_PUBLIC';
+  return null;
 }
 
 function collaboratorsToTeamMembers(collaborators: MediaCollaborator[]): WorkspaceTeamMember[] {
@@ -437,6 +453,8 @@ export default function VideoPlayerPage({
         proxySizeBytes: fetchedItem.proxySizeBytes ?? contextItem.proxySizeBytes,
         hasProxy: fetchedItem.hasProxy ?? contextItem.hasProxy,
         visibility: (fetchedItem as any).visibility || (contextItem as any).visibility,
+        workspaceVisibility: (fetchedItem as any).workspaceVisibility || (contextItem as any).workspaceVisibility,
+        workspaceId: (fetchedItem as any).workspaceId || (contextItem as any).workspaceId,
         globalMedia: fetchedItem.globalMedia ?? contextItem.globalMedia,
       }
       : contextItem || fetchedItem;
@@ -575,7 +593,7 @@ export default function VideoPlayerPage({
               ? (asset as any).aiTags.filter((t: unknown) => typeof t === 'string')
               : undefined,
             type: (asset.type.split('/')[0] as MediaType) || 'document',
-            workspaceId: 'default',
+            workspaceId: (asset as any).workspaceId || contextItem?.workspaceId || 'default',
             createdAt: asset.uploadDate || new Date().toISOString(),
             sizeBytes: asset.size,
             proxySizeBytes: Number((asset as any).proxySize || (asset.customMetadata as any)?.proxySize || 0) || undefined,
@@ -591,6 +609,7 @@ export default function VideoPlayerPage({
             customMetadata: asset.customMetadata,
             globalMedia: Boolean((asset as any).globalMedia || (asset as any).global_media),
             visibility: (asset as any).visibility,
+            workspaceVisibility: (asset as any).workspaceVisibility,
             duration: (techSpecs.duration as string) || (asset.customMetadata?.duration as string) || undefined,
             orgId: (asset as any).orgId || undefined,
           } as any);
@@ -1171,6 +1190,10 @@ export default function VideoPlayerPage({
   const [focusLinkNameCounter, setFocusLinkNameCounter] = useState(0);
   const [shareTeamMembers, setShareTeamMembers] = useState<WorkspaceTeamMember[]>([]);
   const [availableGroups, setAvailableGroups] = useState<SettingsUserGroup[]>([]);
+  const [inheritedWorkspaceAccess, setInheritedWorkspaceAccess] = useState<{
+    userIds: string[];
+    groupIds: string[];
+  }>({ userIds: [], groupIds: [] });
   const [drawerTab, setDrawerTab] = useState<MediaRailPanel>('history');
   const [aiFeatureDialogOpen, setAiFeatureDialogOpen] = useState(false);
   const [aiFeatureSubmitting, setAiFeatureSubmitting] = useState(false);
@@ -2380,17 +2403,34 @@ export default function VideoPlayerPage({
   useEffect(() => {
     if (!mediaId) {
       setCollaborators([]);
+      setInheritedWorkspaceAccess({ userIds: [], groupIds: [] });
       return;
     }
     const fetchOrgUsers = async () => {
       try {
         const [usersResult, overridesData] = await Promise.all([
           fetchOrganizationUsers().catch(() => []),
-          getAssetAccessOverrides(mediaId).catch(() => ({ overrides: [], groupOverrides: [] }))
+          getAssetAccessOverrides(mediaId).catch(() => ({
+            overrides: [],
+            groupOverrides: [],
+            inheritedWorkspaceAccess: { userIds: [], groupIds: [] },
+          }))
         ]);
 
         const users = Array.isArray(usersResult) ? usersResult : [];
-        const { overrides = [], groupOverrides = [] } = (overridesData || {}) as { overrides: any[], groupOverrides: any[] };
+        const {
+          overrides = [],
+          groupOverrides = [],
+          inheritedWorkspaceAccess: inheritedAccess,
+        } = (overridesData || {}) as {
+          overrides: any[];
+          groupOverrides: any[];
+          inheritedWorkspaceAccess?: { userIds: string[]; groupIds: string[] };
+        };
+        setInheritedWorkspaceAccess({
+          userIds: inheritedAccess?.userIds || [],
+          groupIds: inheritedAccess?.groupIds || [],
+        });
 
         // Ensure current user is in baseUsers list even if fetchOrganizationUsers didn't return them
         let baseUsers = [...users];
@@ -3629,14 +3669,67 @@ export default function VideoPlayerPage({
     [collaborators],
   );
 
+  const blockOrgMemberInvitesOnPublicMedia = useMemo(() => {
+    const mediaPublic = String((item as { visibility?: string } | null)?.visibility || '').toLowerCase() === 'public';
+    const workspacePublic =
+      String((item as { workspaceVisibility?: string } | null)?.workspaceVisibility || '').toLowerCase() === 'public';
+    return mediaPublic && workspacePublic;
+  }, [item]);
+
+  const blockWorkspaceMemberInvitesOnPublicMedia = useMemo(() => {
+    const mediaPublic = String((item as { visibility?: string } | null)?.visibility || '').toLowerCase() === 'public';
+    const workspacePrivate =
+      String((item as { workspaceVisibility?: string } | null)?.workspaceVisibility || '').toLowerCase() === 'private';
+    return mediaPublic && workspacePrivate;
+  }, [item]);
+
   const handleShareInviteMember = useCallback(
-    (payload: WorkspaceInvitePayload) => {
+    async (payload: WorkspaceInvitePayload) => {
+      if (
+        blockOrgMemberInvitesOnPublicMedia &&
+        (payload.memberType === 'Member' || payload.memberType === 'Group')
+      ) {
+        return 'ORG_MEMBER_IN_PUBLIC';
+      }
+
+      if (blockWorkspaceMemberInvitesOnPublicMedia) {
+        if (payload.memberType === 'Group' && payload.groupId && inheritedWorkspaceAccess.groupIds.includes(payload.groupId)) {
+          return 'WORKSPACE_MEMBER_IN_PUBLIC';
+        }
+        if (payload.userId && inheritedWorkspaceAccess.userIds.includes(payload.userId)) {
+          return 'WORKSPACE_MEMBER_IN_PUBLIC';
+        }
+        const payloadEmail = payload.email?.toLowerCase();
+        if (payloadEmail) {
+          const matchedOrgUser = orgUsersList.find(
+            (u) => u.email?.toLowerCase() === payloadEmail && inheritedWorkspaceAccess.userIds.includes(u.id),
+          );
+          if (matchedOrgUser) {
+            return 'WORKSPACE_MEMBER_IN_PUBLIC';
+          }
+        }
+      }
+
       if (payload.memberType === 'Group' && payload.groupId) {
         const groupId = payload.groupId;
         const existingGroup = shareTeamMembers.find(m => m.groupId === groupId);
 
         if (existingGroup) {
           if (existingGroup.hasOverride) return false;
+        }
+
+        if (mediaId) {
+          try {
+            await updateAssetGroupAccessOverride(mediaId, groupId, payload.access);
+          } catch (err) {
+            const blocked = shareInviteBlockedCode(err);
+            if (blocked) return blocked;
+            console.error("Failed to add group override", err);
+            return false;
+          }
+        }
+
+        if (existingGroup) {
           setShareTeamMembers(current => current.map(m => m.groupId === groupId ? { ...m, hasOverride: true, access: parseAccessLevelToTitle(payload.access) } : m));
           setCollaborators(current => current.map(c => c.groupId === groupId ? { ...c, hasOverride: true, role: parseAccessLevelToRole(payload.access) } : c));
         } else {
@@ -3654,10 +3747,6 @@ export default function VideoPlayerPage({
           setCollaborators(current => [...current, { ...newGroupMember, role: parseAccessLevelToRole(payload.access) }]);
         }
 
-        if (mediaId) {
-          updateAssetGroupAccessOverride(mediaId, groupId, payload.access).catch(console.error);
-        }
-
         setStatusToast({ open: true, message: `${payload.groupName || 'Group'} added`, variant: 'resolved' });
         return true;
       }
@@ -3672,22 +3761,23 @@ export default function VideoPlayerPage({
           return false; // Already a member with direct access
         }
 
-        // Update in state
+        if (mediaId) {
+          try {
+            await updateAssetAccessOverride(mediaId, existingMember.id, payload.access, payload.sendInviteEmail);
+          } catch (err) {
+            const blocked = shareInviteBlockedCode(err);
+            if (blocked) return blocked;
+            console.error("Failed to add override", err);
+            return false;
+          }
+        }
+
         setShareTeamMembers(current =>
           current.map(m => m.id === existingMember.id ? { ...m, hasOverride: true, access: parseAccessLevelToTitle(payload.access) } : m)
         );
-
-        // Update collaborators state to match
         setCollaborators(current =>
           current.map(c => c.id === existingMember.id ? { ...c, hasOverride: true, role: parseAccessLevelToRole(payload.access) } : c)
         );
-
-        // Call backend
-        if (mediaId) {
-          updateAssetAccessOverride(mediaId, existingMember.id, payload.access, payload.sendInviteEmail).catch(err => {
-            console.error("Failed to add override", err);
-          });
-        }
 
         setStatusToast({
           open: true,
@@ -3696,8 +3786,19 @@ export default function VideoPlayerPage({
         });
         return true;
       } else if (payload.userId) {
-        // It's a cross-org user or known user who wasn't in shareTeamMembers yet!
         const newUserId = payload.userId;
+
+        if (mediaId) {
+          try {
+            await updateAssetAccessOverride(mediaId, newUserId, payload.access, payload.sendInviteEmail);
+          } catch (err) {
+            const blocked = shareInviteBlockedCode(err);
+            if (blocked) return blocked;
+            console.error("Failed to add override for cross-org user", err);
+            return false;
+          }
+        }
+
         const newGroupMember = {
           id: newUserId,
           name: payload.name || email,
@@ -3710,12 +3811,6 @@ export default function VideoPlayerPage({
         };
         setShareTeamMembers(current => [...current, newGroupMember]);
         setCollaborators(current => [...current, { ...newGroupMember, role: parseAccessLevelToRole(payload.access) }]);
-
-        if (mediaId) {
-          updateAssetAccessOverride(mediaId, newUserId, payload.access, payload.sendInviteEmail).catch(err => {
-            console.error("Failed to add override for cross-org user", err);
-          });
-        }
 
         setStatusToast({
           open: true,
@@ -3747,7 +3842,15 @@ export default function VideoPlayerPage({
       });
       return true;
     },
-    [shareTeamMembers, mediaId],
+    [
+      shareTeamMembers,
+      mediaId,
+      blockOrgMemberInvitesOnPublicMedia,
+      blockWorkspaceMemberInvitesOnPublicMedia,
+      inheritedWorkspaceAccess.groupIds,
+      inheritedWorkspaceAccess.userIds,
+      orgUsersList,
+    ],
   );
 
   const handleShareUpdateMemberAccess = useCallback(
@@ -5003,6 +5106,13 @@ export default function VideoPlayerPage({
           onUpdateMemberAccess={handleShareUpdateMemberAccess}
           onRemoveMember={handleShareRemoveMember}
           onRestrictedChange={() => { }}
+          blockOrgMemberInvites={blockOrgMemberInvitesOnPublicMedia}
+          blockWorkspaceMemberInvites={blockWorkspaceMemberInvitesOnPublicMedia}
+          inheritedAccessUserIds={inheritedWorkspaceAccess.userIds}
+          inheritedAccessGroupIds={inheritedWorkspaceAccess.groupIds}
+          memberSearchWorkspaceId={
+            item.workspaceId && item.workspaceId !== 'default' ? item.workspaceId : undefined
+          }
           onVisibilityChange={(visibility) => {
             handleShareVisibilityChange(visibility);
             if (activeShareLinkId) {

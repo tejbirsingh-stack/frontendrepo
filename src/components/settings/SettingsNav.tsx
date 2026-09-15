@@ -1,13 +1,12 @@
 import { List, ListItemButton, ListItemIcon, ListItemText, Typography, Box } from '@mui/material';
 import { cv } from '../../theme/cssVars';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { SETTINGS_BASE_PATH, SETTINGS_NAV_GROUPS } from '../../constants/settingsNav';
 import { getSettingsNavIcon } from './settingsNavIcons';
 import { useAuth } from '../../auth/AuthContext';
 
 export default function SettingsNav({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
-  const navigate = useNavigate();
   const { user } = useAuth();
 
   return (
@@ -56,70 +55,82 @@ export default function SettingsNav({ onNavigate }: { onNavigate?: () => void })
 
             const isDisabled = isBillingDisabled || isPlanDisabled || isCompanyDisabled || isSecurityDisabled || isUserDisabled || isUsageDisabled || isProjectsWorkspacesDisabled || isWorkspacesDisabled || isBrandingDisabled;
 
-            const buttonContent = (
-              <ListItemButton
-                selected={active && !isDisabled}
-                disabled={isDisabled}
-                onClick={(e) => {
-                  if (isDisabled) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return;
-                  }
-                  navigate(href);
-                  onNavigate?.();
-                }}
-                sx={{
-                  py: 0.75,
-                  px: 1.5,
-                  mx: 1,
-                  mb: 0.25,
-                  borderRadius: '10px',
-                  color: isDisabled ? cv.textMuted : active ? cv.textPrimary : cv.textSecondary,
-                  backgroundColor: active && !isDisabled ? cv.surfaceRaised : 'transparent',
-                  cursor: isDisabled ? 'not-allowed' : 'pointer',
-                  opacity: isDisabled ? 0.6 : 1,
-                  '&.Mui-selected': {
-                    backgroundColor: cv.surfaceRaised,
-                    '&:hover': {
-                      backgroundColor: cv.surfaceActive,
-                    },
-                  },
-                  '&:hover': {
-                    backgroundColor: isDisabled ? 'transparent' : active ? cv.surfaceActive : cv.surfaceHover,
-                  },
-                }}
-              >
-                <ListItemIcon
-                  sx={{
-                    minWidth: 32,
-                    color: isDisabled ? cv.textMuted : 'inherit',
-                    '& .MuiSvgIcon-root': { fontSize: 20 },
-                  }}
-                >
-                  {getSettingsNavIcon(item.id)}
-                </ListItemIcon>
-                <ListItemText
-                  primary={item.label}
-                  slotProps={{
-                    primary: {
-                      sx: {
-                        fontSize: '0.875rem',
-                        fontWeight: active && !isDisabled ? 500 : 400,
-                      },
-                    },
-                  }}
-                />
-              </ListItemButton>
+            const itemButtonSx = {
+              py: 0.75,
+              px: 1.5,
+              mx: 1,
+              mb: 0.25,
+              borderRadius: '10px',
+              color: isDisabled ? cv.textMuted : active ? cv.textPrimary : cv.textSecondary,
+              backgroundColor: active && !isDisabled ? cv.surfaceRaised : 'transparent',
+              cursor: isDisabled ? 'not-allowed' : 'pointer',
+              opacity: isDisabled ? 0.6 : 1,
+              textDecoration: 'none',
+              '&.Mui-selected': {
+                backgroundColor: cv.surfaceRaised,
+                '&:hover': {
+                  backgroundColor: cv.surfaceActive,
+                },
+              },
+              '&:hover': {
+                backgroundColor: isDisabled ? 'transparent' : active ? cv.surfaceActive : cv.surfaceHover,
+              },
+            } as const;
+
+            return (
+              <Box key={item.id} sx={{ display: 'block' }}>
+                {isDisabled ? (
+                  <ListItemButton selected={false} disabled sx={itemButtonSx}>
+                    <ListItemIcon
+                      sx={{
+                        minWidth: 32,
+                        color: cv.textMuted,
+                        '& .MuiSvgIcon-root': { fontSize: 20 },
+                      }}
+                    >
+                      {getSettingsNavIcon(item.id)}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.label}
+                      slotProps={{
+                        primary: {
+                          sx: { fontSize: '0.875rem', fontWeight: 400 },
+                        },
+                      }}
+                    />
+                  </ListItemButton>
+                ) : (
+                  <ListItemButton
+                    component={NavLink}
+                    to={href}
+                    selected={active}
+                    onClick={() => onNavigate?.()}
+                    sx={itemButtonSx}
+                  >
+                    <ListItemIcon
+                      sx={{
+                        minWidth: 32,
+                        color: 'inherit',
+                        '& .MuiSvgIcon-root': { fontSize: 20 },
+                      }}
+                    >
+                      {getSettingsNavIcon(item.id)}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.label}
+                      slotProps={{
+                        primary: {
+                          sx: {
+                            fontSize: '0.875rem',
+                            fontWeight: active ? 500 : 400,
+                          },
+                        },
+                      }}
+                    />
+                  </ListItemButton>
+                )}
+              </Box>
             );
-
-            if (isDisabled) {
-              return (
-                <Box key={item.id} sx={{ display: 'block' }}>{buttonContent}</Box>
-              );
-            }
-
-            return <Box key={item.id} sx={{ display: 'contents' }}>{buttonContent}</Box>;
           })}
         </List>
       ))}
