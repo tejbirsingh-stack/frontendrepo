@@ -43,29 +43,29 @@ function DashboardLayoutContent() {
   }, [location.pathname]);
 
   // Handle Stripe redirect after signup/checkout to manually sync plan
-  // useEffect(() => {
-  //   const params = new URLSearchParams(window.location.search);
-  //   const sessionId = params.get('session_id');
-  //   const paymentSuccess = params.get('payment_success');
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    const paymentSuccess = params.get('payment_success');
 
-  //   if (paymentSuccess === 'true' && sessionId) {
-  //     toast.loading('Confirming your payment...', { id: 'stripe-sync-dashboard' });
-  //     billingService
-  //       .syncSession(sessionId)
-  //       .then(async (res) => {
-  //         toast.success(res?.message || 'Subscription successfully updated!', { id: 'stripe-sync-dashboard' });
-  //         // Clear query params to prevent re-syncing on refresh
-  //         window.history.replaceState({}, document.title, window.location.pathname);
-  //         // Reload to refresh the user session with updated plan
-  //         window.location.reload();
-  //       })
-  //       .catch((err) => {
-  //         console.error('[Stripe Sync Error]', err);
-  //         toast.error(err?.message || 'Failed to sync subscription status', { id: 'stripe-sync-dashboard' });
-  //         window.history.replaceState({}, document.title, window.location.pathname);
-  //       });
-  //   }
-  // }, []);
+    if (paymentSuccess === 'true' && sessionId) {
+      toast.loading('Confirming your payment...', { id: 'stripe-sync-dashboard' });
+      billingService
+        .syncSession(sessionId)
+        .then(async (res) => {
+          toast.success(res?.message || 'Subscription successfully updated!', { id: 'stripe-sync-dashboard' });
+          // Clear query params to prevent re-syncing on refresh
+          window.history.replaceState({}, document.title, window.location.pathname);
+          // Reload to refresh the user session with updated plan
+          window.location.reload();
+        })
+        .catch((err) => {
+          console.error('[Stripe Sync Error]', err);
+          toast.error(err?.message || 'Failed to sync subscription status', { id: 'stripe-sync-dashboard' });
+          window.history.replaceState({}, document.title, window.location.pathname);
+        });
+    }
+  }, []);
 
   const handleCompleteMediaUpload = async (
     details: MediaUploadDetails,

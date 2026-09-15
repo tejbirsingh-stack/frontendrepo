@@ -48,9 +48,9 @@ export default function PaymentSuccessModal({
 }: Readonly<PaymentSuccessModalProps>) {
   if (!details) return null;
 
-  const formattedAmount = (details.amountPaidCents / 100).toLocaleString('en-US', {
+  const formattedAmount = (((details.amountPaidCents ?? 0)) / 100).toLocaleString('en-US', {
     style: 'currency',
-    currency: details.currency.toUpperCase() || 'USD',
+    currency: (details.currency || 'USD').toUpperCase(),
   });
 
   const invoiceLink = details.invoicePdf || details.invoiceUrl;

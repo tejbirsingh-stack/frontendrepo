@@ -100,6 +100,7 @@ import { useActiveUser } from '../hooks/useActiveUser';
 import VideoPlayerControls from '../components/media/VideoPlayerControls';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../auth/AuthContext';
+import { appendAuthTokenToUrl } from '../auth/authTokenBridge';
 
 import { SAMPLE_VIDEO_SRC } from '../constants/sampleVideos';
 import { DASHBOARD_TOP_BAR_BORDER, DASHBOARD_TOP_BAR_HEIGHT, HEADER_LOGO_BOX_HEIGHT_DESKTOP, HEADER_LOGO_BOX_HEIGHT_MOBILE, HEADER_LOGO_BOX_WIDTH_DESKTOP, HEADER_LOGO_BOX_WIDTH_MOBILE, SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
@@ -584,7 +585,7 @@ export default function VideoPlayerPage({
             uploadedByUserId: (asset as any).uploadedBy?.id || (asset as any).uploadedByUserId || undefined,
             tags: tagList,
             location: null,
-            thumbnail: asset.thumbnail || undefined,
+            thumbnail: asset.thumbnail || (asset.id ? `/api/media/${encodeURIComponent(asset.id)}/thumbnail` : undefined),
             videoSrc: asset.url,
             compressionStatus: asset.compressionStatus || asset.status || 'completed',
             customMetadata: asset.customMetadata,
@@ -5231,7 +5232,7 @@ export default function VideoPlayerPage({
                         key={videoSrc || 'no-src'}
                         src={mediaElementSrc}
                         crossOrigin="anonymous"
-                        poster={item?.thumbnail}
+                        poster={item?.thumbnail ? appendAuthTokenToUrl(item.thumbnail) : (item?.id ? appendAuthTokenToUrl(`/api/media/${encodeURIComponent(item.id)}/thumbnail`) : undefined)}
                         playsInline
                         preload="metadata"
                         onPlay={() => {

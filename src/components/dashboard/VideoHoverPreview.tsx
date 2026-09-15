@@ -5,6 +5,7 @@ import { Box, Typography } from '@mui/material';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import CircularProgress from '@mui/material/CircularProgress';
+import { appendAuthTokenToUrl } from '../../auth/authTokenBridge';
 
 const PREVIEW_DURATION_SEC = 5;
 
@@ -112,7 +113,7 @@ export default function VideoHoverPreview({
           )}
           <Box
             component="img"
-            src={thumbnail}
+            src={appendAuthTokenToUrl(thumbnail)}
             alt=""
             loading="lazy"
             onLoad={() => setThumbnailLoaded(true)}

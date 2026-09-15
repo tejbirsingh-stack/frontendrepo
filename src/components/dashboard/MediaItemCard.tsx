@@ -42,6 +42,7 @@ import {
 import { formatFolderItemCount, getFolderChildCount } from '../../utils/folderItemCount';
 import { useDashboard } from '../../context/DashboardContext';
 import { decodeClientImageToDataUrl } from '../../utils/clientImageDecoder';
+import { appendAuthTokenToUrl } from '../../auth/authTokenBridge';
 import { parseFileReviewStatus, getFileReviewStatusColor } from '../../constants/fileReviewStatus';
 
 interface MediaItemCardProps {
@@ -392,7 +393,8 @@ function ImagePreview({ item }: { item: MediaItem }) {
     };
   }, [item.title, item.videoSrc, item.thumbnail, item.id]);
 
-  const displaySrc = clientDecodedUrl || item.thumbnail || (item.id ? `/api/media/${encodeURIComponent(item.id)}/thumbnail` : undefined);
+  const rawSrc = clientDecodedUrl || item.thumbnail || (item.id ? `/api/media/${encodeURIComponent(item.id)}/thumbnail` : undefined);
+  const displaySrc = clientDecodedUrl ? clientDecodedUrl : appendAuthTokenToUrl(rawSrc);
 
   if (imageError && !clientDecodedUrl) {
     const ext = item.title?.split('.').pop()?.toUpperCase() || 'IMG';

@@ -22,6 +22,7 @@ import TruncatedText from '../TruncatedText';
 import VideoHoverPreview from './VideoHoverPreview';
 import { formatFolderItemCount, getFolderChildCount } from '../../utils/folderItemCount';
 import { useDashboard } from '../../context/DashboardContext';
+import { appendAuthTokenToUrl } from '../../auth/authTokenBridge';
 
 interface MediaListRowProps {
   item: MediaItem;
@@ -244,7 +245,7 @@ export default function MediaListRow({
         ) : item.thumbnail && !rowImageError ? (
           <Box
             component="img"
-            src={item.thumbnail}
+            src={appendAuthTokenToUrl(item.thumbnail)}
             alt=""
             onError={() => setRowImageError(true)}
             sx={{ width: '100%', height: '100%', objectFit: 'cover' }}

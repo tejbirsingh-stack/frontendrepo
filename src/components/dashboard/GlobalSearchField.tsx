@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cv } from '../../theme/cssVars';
+import { appendAuthTokenToUrl } from '../../auth/authTokenBridge';
 import {
   Box,
   CircularProgress,
@@ -119,7 +120,7 @@ function SearchResultThumbnail({ item }: Readonly<{ item: MediaItem }>) {
     return (
       <Box
         component="img"
-        src={item.thumbnail}
+        src={appendAuthTokenToUrl(item.thumbnail)}
         alt=""
         sx={{
           width: 44,
