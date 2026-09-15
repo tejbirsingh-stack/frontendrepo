@@ -249,7 +249,7 @@ export default function PlatformLayout() {
               PLATFORM ADMIN
             </Typography>
             <Typography sx={{ fontSize: '0.7rem', color: cv.textMuted, mt: 0.35, lineHeight: 1.35 }}>
-              Global console for Super Admin & Admin
+            Admin Console for Super Admin & Admins
             </Typography>
           </Box>
         </Box>

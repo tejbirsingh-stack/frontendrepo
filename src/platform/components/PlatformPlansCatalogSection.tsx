@@ -245,7 +245,19 @@ function PlansListView({
             <TableRow key={plan.id}>
               <TableCell>
                 <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }}>{plan.name}</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>{plan.id}</Typography>
+                <Typography
+                  sx={{
+                    fontSize: '0.75rem',
+                    color: cv.textMuted,
+                    maxWidth: 360,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={plan.description || undefined}
+                >
+                  {plan.description || 'No description'}
+                </Typography>
               </TableCell>
               <TableCell>{formatMoneyCents(plan.monthlyPriceCents)}</TableCell>
               <TableCell>{plan.isPublic ? 'Yes' : 'No'}</TableCell>
