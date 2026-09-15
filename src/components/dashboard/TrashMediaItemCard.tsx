@@ -19,6 +19,7 @@ import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import TruncatedText from '../TruncatedText';
 import { formatFolderItemCount, getFolderChildCount } from '../../utils/folderItemCount';
 import { useDashboard } from '../../context/DashboardContext';
+import { appendAuthTokenToUrl } from '../../auth/authTokenBridge';
 
 interface TrashMediaItemCardProps {
   item: MediaItem;
@@ -59,7 +60,7 @@ function TrashImagePreview({ item }: { item: MediaItem }) {
   return (
     <Box
       component="img"
-      src={item.thumbnail}
+      src={appendAuthTokenToUrl(item.thumbnail)}
       alt={item.title}
       loading="lazy"
       onError={() => setImageError(true)}
@@ -106,7 +107,7 @@ function MediaPreview({ item, childCount }: { item: MediaItem; childCount?: numb
     return (
       <Box
         component="img"
-        src={item.thumbnail}
+        src={appendAuthTokenToUrl(item.thumbnail)}
         alt={item.title}
         loading="lazy"
         sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}

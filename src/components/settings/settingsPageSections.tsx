@@ -449,7 +449,8 @@ function AddProjectDialog({
               try {
                 const { apiClient } = await import('../../api/client');
                 const res = await apiClient.get<any>(`/workspaces/search-guests?q=${encodeURIComponent(query)}`);
-                return Array.isArray(res) ? res : [];
+                const data = (res as any)?.data ?? res;
+                return Array.isArray(data) ? data : [];
               } catch {
                 return [];
               }

@@ -32,3 +32,13 @@ export function getAccessToken(): string | null {
 export function handleUnauthorized(): void {
   unauthorizedHandler?.();
 }
+
+export function appendAuthTokenToUrl(url?: string): string | undefined {
+  if (!url) return url;
+  if (!url.startsWith('/api/') && !url.includes('/api/media/')) return url;
+  if (url.includes('token=') || url.includes('streamToken=') || url.includes('t=')) return url;
+  const token = getAccessToken();
+  if (!token) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}token=${encodeURIComponent(token)}`;
+}
