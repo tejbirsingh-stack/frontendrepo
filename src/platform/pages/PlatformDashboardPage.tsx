@@ -270,46 +270,58 @@ export default function PlatformDashboardPage() {
           title="Needs attention"
           subtitle="Suspended orgs and storage hotspots"
           tooltip="Organizations that are suspended or approaching storage limits."
+          action={
+            <Button
+              component={RouterLink}
+              to="/platform/organizations"
+              size="small"
+              sx={{ textTransform: 'none' }}
+            >
+              Organizations
+            </Button>
+          }
         >
           {attentionOrgs.length === 0 ? (
             <EmptyState message="No orgs currently need attention" />
           ) : (
-            attentionOrgs.map((org) => {
-              const pct = formatPercent(
-                org.storageUsedBytes as string,
-                org.storageQuotaBytes as string,
-              );
-              return (
-                <Box
-                  key={String(org.id)}
-                  component={RouterLink}
-                  to={`/platform/organizations/${org.id}`}
-                  title={`${String(org.name)} — ${pct}% storage used`}
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 1,
-                    py: 1.1,
-                    textDecoration: 'none',
-                    color: cv.textPrimary,
-                    borderBottom: `1px solid ${cv.border}`,
-                    '&:last-child': { borderBottom: 'none' },
-                    '&:hover': { color: cv.brandOrchid },
-                  }}
-                >
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
-                      {String(org.name)}
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.7rem', color: cv.textMuted }}>
-                      {pct}% storage · {String(org.planType)}
-                    </Typography>
+            <Box sx={{ maxHeight: 235, overflowY: 'auto', pr: 0.5 }}>
+              {attentionOrgs.map((org) => {
+                const pct = formatPercent(
+                  org.storageUsedBytes as string,
+                  org.storageQuotaBytes as string,
+                );
+                return (
+                  <Box
+                    key={String(org.id)}
+                    component={RouterLink}
+                    to={`/platform/organizations/${org.id}`}
+                    title={`${String(org.name)} — ${pct}% storage used`}
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 1,
+                      py: 1.1,
+                      textDecoration: 'none',
+                      color: cv.textPrimary,
+                      borderBottom: `1px solid ${cv.border}`,
+                      '&:last-child': { borderBottom: 'none' },
+                      '&:hover': { color: cv.brandOrchid },
+                    }}
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
+                        {String(org.name)}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.7rem', color: cv.textMuted }}>
+                        {pct}% storage · {String(org.planType).toLowerCase().endsWith('plan') ? String(org.planType) : `${String(org.planType)} plan`}
+                      </Typography>
+                    </Box>
+                    <StatusChip status={String(org.status || 'active')} />
                   </Box>
-                  <StatusChip status={String(org.status || 'active')} />
-                </Box>
-              );
-            })
+                );
+              })}
+            </Box>
           )}
         </Panel>
       </Box>
