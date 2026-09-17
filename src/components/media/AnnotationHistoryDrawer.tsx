@@ -37,7 +37,13 @@ import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 import { useActiveUser } from '../../hooks/useActiveUser';
 import type { MediaItem } from '../../data/mockMedia';
-import { getAiHighlightsRequest, getAiPeopleRequest, getAiScenesRequest, getAiStatusRequest } from '../../api/ai.service';
+import {
+  getAiHighlightsRequest,
+  getAiPeopleRequest,
+  getAiScenesRequest,
+  getAiStatusRequest,
+  retryAiAnalyzeRequest,
+} from '../../api/ai.service';
 import type { AiPersonDto, AiSceneDto, AiStatusResponseDto } from '../../api/ai.service';
 import { useAiEntitled } from '../../hooks/useAiEntitled';
 import type { FramePerson } from '../../data/mockFramePeople';
@@ -1317,22 +1323,6 @@ function FramePeopleHeadshots({
                 <Typography
                   sx={{
                     width: '100%',
-                    fontSize: '0.6875rem',
-                    fontWeight: 600,
-                    lineHeight: 1.25,
-                    color: isSelected || isSeekingHere ? cv.brandPurpleLight : cv.textSecondary,
-                    textAlign: 'center',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                  title={person.name}
-                >
-                  {person.name}
-                </Typography>
-                <Typography
-                  sx={{
-                    width: '100%',
                     fontSize: '0.625rem',
                     lineHeight: 1.2,
                     color: cv.textMuted,
@@ -1436,6 +1426,8 @@ export default function AnnotationHistoryDrawer({
   const [assetPeople, setAssetPeople] = useState<AiPersonDto[]>([]);
   const [assetScenes, setAssetScenes] = useState<AiSceneDto[]>([]);
   const [peopleScenesLoading, setPeopleScenesLoading] = useState(false);
+  const [peopleScenesRetrying, setPeopleScenesRetrying] = useState(false);
+  const [peopleScenesRetryError, setPeopleScenesRetryError] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatusResponseDto | null>(null);
 
   const commentById = useMemo(
@@ -1510,21 +1502,13 @@ export default function AnnotationHistoryDrawer({
 
   const framePeople = useMemo(() => mapPeopleToFramePeople(assetPeople), [assetPeople]);
 
-  const filteredFramePeople = useMemo(() => {
-    const normalizedQuery = aiQuery.trim().toLowerCase();
-    if (!normalizedQuery) return framePeople;
-
-    return framePeople.filter((person) =>
-      `${person.name} ${person.detail}`.toLowerCase().includes(normalizedQuery),
-    );
-  }, [aiQuery, framePeople]);
-
   // People detection runs on frames, so audio and documents have no faces to list.
   const supportsFramePeople = mediaItem?.type === 'video' || mediaItem?.type === 'image';
   const supportsScenes = mediaItem?.type === 'video';
 
   useEffect(() => {
     setAiSubTab('summary');
+    setPeopleScenesRetryError(null);
   }, [mediaItem?.id]);
 
   useEffect(() => {
@@ -1647,6 +1631,29 @@ export default function AnnotationHistoryDrawer({
     }
   };
 
+  const handleRetryPeopleScenes = async () => {
+    if (!mediaItem?.id || mediaItem.type !== 'video') return;
+    setPeopleScenesRetrying(true);
+    setPeopleScenesRetryError(null);
+    try {
+      await retryAiAnalyzeRequest(mediaItem.id, { force: true, features: ['people_scenes'] });
+      setAiStatus((prev) => ({
+        success: true,
+        assetId: mediaItem.id,
+        status: 'queued',
+        steps: { ...(prev?.steps || {}), people_scenes: 'queued' },
+        error: null,
+        aiEnabled: prev?.aiEnabled ?? true,
+      }));
+    } catch (err) {
+      setPeopleScenesRetryError(
+        err instanceof Error ? err.message : 'Failed to retry people & scenes detection',
+      );
+    } finally {
+      setPeopleScenesRetrying(false);
+    }
+  };
+
   const insightsSummary = useMemo(() => {
     if (highlightSummary?.trim()) return highlightSummary.trim();
     const userSummary =
@@ -1692,6 +1699,12 @@ export default function AnnotationHistoryDrawer({
   const peopleScenesInProgress =
     peopleScenesStep === 'queued' || peopleScenesStep === 'processing';
   const peopleScenesFailed = peopleScenesStep === 'failed';
+  const canRetryPeopleScenes =
+    aiEntitled &&
+    mediaItem?.type === 'video' &&
+    !peopleScenesInProgress &&
+    !peopleScenesLoading;
+  const showPeopleScenesRerun = canRetryPeopleScenes && !peopleScenesFailed;
 
   const highlightsStep = aiStatus?.steps?.highlights;
   const summaryInProgress =
@@ -1885,26 +1898,14 @@ export default function AnnotationHistoryDrawer({
             })}
           </Box>
 
-          {aiSubTab === 'transcript' || aiSubTab === 'people' || aiSubTab === 'scenes' ? (
+          {aiSubTab === 'transcript' || aiSubTab === 'scenes' ? (
             <TextField
               fullWidth
               size="small"
-              placeholder={
-                aiSubTab === 'people'
-                  ? 'Search people'
-                  : aiSubTab === 'scenes'
-                    ? 'Search scenes'
-                    : 'Search transcript'
-              }
+              placeholder={aiSubTab === 'scenes' ? 'Search scenes' : 'Search transcript'}
               value={aiQuery}
               onChange={(event) => setAiQuery(event.target.value)}
-              aria-label={
-                aiSubTab === 'people'
-                  ? 'Search people'
-                  : aiSubTab === 'scenes'
-                    ? 'Search scenes'
-                    : 'Search transcript'
-              }
+              aria-label={aiSubTab === 'scenes' ? 'Search scenes' : 'Search transcript'}
               sx={{
                 '& .MuiOutlinedInput-root': {
                   borderRadius: '999px',
@@ -2266,7 +2267,25 @@ export default function AnnotationHistoryDrawer({
                 py: 1,
               }}
             >
-              {peopleScenesInProgress && filteredFramePeople.length > 0 ? (
+              {showPeopleScenesRerun ? (
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button
+                    type="button"
+                    size="small"
+                    onClick={() => void handleRetryPeopleScenes()}
+                    disabled={peopleScenesRetrying}
+                    sx={{ textTransform: 'none', minHeight: 44 }}
+                  >
+                    {peopleScenesRetrying ? 'Re-running…' : 'Re-run people & scenes'}
+                  </Button>
+                </Box>
+              ) : null}
+              {peopleScenesRetryError ? (
+                <Typography sx={{ fontSize: '0.75rem', color: cv.errorText }}>
+                  {peopleScenesRetryError}
+                </Typography>
+              ) : null}
+              {peopleScenesInProgress && framePeople.length > 0 ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <CircularProgress size={14} sx={{ color: cv.brandPurpleLight }} />
                   <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
@@ -2274,18 +2293,29 @@ export default function AnnotationHistoryDrawer({
                   </Typography>
                 </Box>
               ) : null}
-              {peopleScenesInProgress && filteredFramePeople.length === 0 ? (
+              {peopleScenesInProgress && framePeople.length === 0 ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
                   <CircularProgress size={14} sx={{ color: cv.brandPurpleLight }} />
                   <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
                     Detecting people. This can take a few minutes.
                   </Typography>
                 </Box>
-              ) : peopleScenesFailed && filteredFramePeople.length === 0 && !peopleScenesLoading ? (
-                <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted, py: 1.5 }}>
-                  People detection failed. Use Add AI features to try again.
-                </Typography>
-              ) : peopleScenesLoading && filteredFramePeople.length === 0 ? (
+              ) : peopleScenesFailed && framePeople.length === 0 && !peopleScenesLoading ? (
+                <Box sx={{ py: 1.5 }}>
+                  <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
+                    People detection failed.
+                  </Typography>
+                  <Button
+                    type="button"
+                    size="small"
+                    onClick={() => void handleRetryPeopleScenes()}
+                    disabled={peopleScenesRetrying}
+                    sx={{ mt: 0.5, minHeight: 44, textTransform: 'none' }}
+                  >
+                    {peopleScenesRetrying ? 'Retrying…' : 'Retry detection'}
+                  </Button>
+                </Box>
+              ) : peopleScenesLoading && framePeople.length === 0 ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
                   <CircularProgress size={14} sx={{ color: cv.brandPurpleLight }} />
                   <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted }}>
@@ -2294,8 +2324,8 @@ export default function AnnotationHistoryDrawer({
                 </Box>
               ) : (
                 <FramePeopleHeadshots
-                  people={filteredFramePeople}
-                  query={aiQuery}
+                  people={framePeople}
+                  query=""
                   selectedPersonId={selectedFramePersonId}
                   onSelectPerson={handlePersonSelect}
                   insightSeekMs={insightSeekMs}
@@ -2313,6 +2343,24 @@ export default function AnnotationHistoryDrawer({
                 py: 1,
               }}
             >
+              {showPeopleScenesRerun ? (
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button
+                    type="button"
+                    size="small"
+                    onClick={() => void handleRetryPeopleScenes()}
+                    disabled={peopleScenesRetrying}
+                    sx={{ textTransform: 'none', minHeight: 44 }}
+                  >
+                    {peopleScenesRetrying ? 'Re-running…' : 'Re-run people & scenes'}
+                  </Button>
+                </Box>
+              ) : null}
+              {peopleScenesRetryError ? (
+                <Typography sx={{ fontSize: '0.75rem', color: cv.errorText }}>
+                  {peopleScenesRetryError}
+                </Typography>
+              ) : null}
               {peopleScenesInProgress && assetScenes.length > 0 ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <CircularProgress size={14} sx={{ color: cv.brandPurpleLight }} />
@@ -2329,9 +2377,20 @@ export default function AnnotationHistoryDrawer({
                   </Typography>
                 </Box>
               ) : peopleScenesFailed && assetScenes.length === 0 && !peopleScenesLoading ? (
-                <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted, py: 1.5 }}>
-                  Scene detection failed. Use Add AI features to try again.
-                </Typography>
+                <Box sx={{ py: 1.5 }}>
+                  <Typography sx={{ fontSize: '0.8125rem', color: cv.textMuted }}>
+                    Scene detection failed.
+                  </Typography>
+                  <Button
+                    type="button"
+                    size="small"
+                    onClick={() => void handleRetryPeopleScenes()}
+                    disabled={peopleScenesRetrying}
+                    sx={{ mt: 0.5, minHeight: 44, textTransform: 'none' }}
+                  >
+                    {peopleScenesRetrying ? 'Retrying…' : 'Retry detection'}
+                  </Button>
+                </Box>
               ) : peopleScenesLoading && assetScenes.length === 0 ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
                   <CircularProgress size={14} sx={{ color: cv.brandPurpleLight }} />

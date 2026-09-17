@@ -58,10 +58,10 @@ export function defaultSelection(
     };
   }
   return {
-    asr: true,
-    highlights: true,
-    embeddings: true,
-    people_scenes: isVideo,
+    asr: false,
+    highlights: false,
+    embeddings: false,
+    people_scenes: false,
   };
 }
 

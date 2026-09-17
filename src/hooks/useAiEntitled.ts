@@ -6,8 +6,6 @@ import { env } from '../config/env';
 export function useAiEntitled(): boolean {
   const { user } = useAuth();
   return useMemo(() => {
-    if (!env.aiEnabled) return false;
-    if (user?.organization?.aiEnabled === false) return false;
-    return true;
+    return Boolean(env.aiEnabled && user?.organization?.aiEnabled === true);
   }, [user?.organization?.aiEnabled]);
 }
