@@ -1,14 +1,18 @@
 type TokenGetter = () => string | null;
+type TokenSetter = (token: string) => void;
 type UnauthorizedHandler = () => void;
 
 let tokenGetter: TokenGetter | null = null;
+let tokenSetter: TokenSetter | null = null;
 let unauthorizedHandler: UnauthorizedHandler | null = null;
 
 export function registerAuthTokenBridge(
   getToken: TokenGetter,
+  setToken: TokenSetter,
   onUnauthorized: UnauthorizedHandler,
 ): void {
   tokenGetter = getToken;
+  tokenSetter = setToken;
   unauthorizedHandler = onUnauthorized;
 }
 
@@ -27,6 +31,10 @@ export function getAccessToken(): string | null {
     localStorage.getItem('noah_session_token') ||
     null
   );
+}
+
+export function setAccessToken(token: string): void {
+  tokenSetter?.(token);
 }
 
 export function handleUnauthorized(): void {
