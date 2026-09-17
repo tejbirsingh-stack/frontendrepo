@@ -5004,10 +5004,10 @@ export default function VideoPlayerPage({
                   }
                 }}
                 onInvited={(name) =>
-                setStatusToast({
-                  open: true,
-                  message: `Invite sent to ${name}`,
-                })
+                  setStatusToast({
+                    open: true,
+                    message: `Invite sent to ${name}`,
+                  })
                 }
               />
             );
@@ -5281,6 +5281,28 @@ export default function VideoPlayerPage({
                   background: getPlayerBackgroundStyle(playerBackground),
                 }}
               >
+                {(isGuestMode && guestPermissions?.watermark && guestAssetMeta?.logoUrl) || (!isGuestMode && internalShowWatermark && internalLogoUrl) ? (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 16,
+                      left: 16,
+                      zIndex: 10,
+                      opacity: 0.7,
+                      pointerEvents: 'none',
+                      userSelect: 'none',
+                    }}
+                  >
+                    <img
+                      src={(isGuestMode ? guestAssetMeta?.logoUrl : internalLogoUrl) || ''}
+                      alt=""
+                      style={{ maxHeight: '48px', maxWidth: '120px', objectFit: 'contain' }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  </Box>
+                ) : null}
                 <Box
                   sx={{
                     position: 'relative',
@@ -5376,430 +5398,409 @@ export default function VideoPlayerPage({
                             setIntrinsicMediaSize({ width: el.videoWidth, height: el.videoHeight });
                           }
                         }}
-                      onError={async () => {
-                        setIsBuffering(false);
-                        setIsPlaybackLoading(false);
-                        if (mediaElementSrc) {
-                          try {
-                            const res = await fetch(mediaElementSrc, { method: 'GET', headers: { Range: 'bytes=0-10' } });
-                            if (res.status === 403 || res.status === 429) {
-                              const body = await res.json().catch(() => ({}));
-                              if (body.error === 'BandwidthCapExceeded' || res.status === 403 || body.message?.includes('bandwidth') || body.message?.includes('cap exceeded')) {
-                                setBandwidthCapError(true);
+                        onError={async () => {
+                          setIsBuffering(false);
+                          setIsPlaybackLoading(false);
+                          if (mediaElementSrc) {
+                            try {
+                              const res = await fetch(mediaElementSrc, { method: 'GET', headers: { Range: 'bytes=0-10' } });
+                              if (res.status === 403 || res.status === 429) {
+                                const body = await res.json().catch(() => ({}));
+                                if (body.error === 'BandwidthCapExceeded' || res.status === 403 || body.message?.includes('bandwidth') || body.message?.includes('cap exceeded')) {
+                                  setBandwidthCapError(true);
+                                  setStatusToast({
+                                    open: true,
+                                    message: 'Storage Bandwidth Limit Exceeded: Backblaze B2 daily cap reached.',
+                                    variant: 'error',
+                                  });
+                                }
+                              } else if (res.status === 404) {
                                 setStatusToast({
                                   open: true,
-                                  message: 'Storage Bandwidth Limit Exceeded: Backblaze B2 daily cap reached.',
+                                  message: 'Video asset file not found in storage bucket. It may still be uploading or was removed.',
                                   variant: 'error',
                                 });
                               }
-                            } else if (res.status === 404) {
-                              setStatusToast({
-                                open: true,
-                                message: 'Video asset file not found in storage bucket. It may still be uploading or was removed.',
-                                variant: 'error',
-                              });
+                            } catch {
+                              // ignore network errors
                             }
-                          } catch {
-                            // ignore network errors
                           }
-                        }
-                      }}
-                      sx={{
-                        width: '100%',
-                        height: '100%',
-                        display: item?.type === 'audio' ? 'none' : 'block',
-                        objectFit: playerActualMediaSize ? 'none' : 'contain',
-                        backgroundColor: 'transparent',
-                        transform: getVideoTransform(
-                          playerRotationSteps,
-                          playerFlipHorizontal,
-                          playerFlipVertical,
-                        ),
-                        transformOrigin: 'center center',
-                        pointerEvents:
-                          annotationsVisible && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
-                            ? 'none'
-                            : 'auto',
-                      }}
-                    >
-                      <track kind="captions" />
-                    </Box>
-                  )}
-
-                  {item?.type === 'audio' && (
-                    <AudioWaveformVisualizer
-                      isPlaying={isPlaying}
-                      audioTitle={item?.title}
-                      fileSizeText={item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : undefined}
-                    />
-                  )}
-
-                  {!hasStartedPlayback
-                    && !isPlaying
-                    && !isBuffering
-                    && !isPlaybackLoading
-                    && !bandwidthCapError
-                    && !(isProcessing && !forcePlayOriginal)
-                    && liveAssetStatus !== 'failed'
-                    && (item?.type === 'video' || item?.type === 'audio') ? (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 6,
-                        pointerEvents: 'none',
-                      }}
-                    >
-                      <IconButton
-                        type="button"
-                        aria-label="Play"
-                        onClick={handleCenterPlayClick}
+                        }}
                         sx={{
+                          width: '100%',
+                          height: '100%',
+                          display: item?.type === 'audio' ? 'none' : 'block',
+                          objectFit: playerActualMediaSize ? 'none' : 'contain',
+                          backgroundColor: 'transparent',
+                          transform: getVideoTransform(
+                            playerRotationSteps,
+                            playerFlipHorizontal,
+                            playerFlipVertical,
+                          ),
+                          transformOrigin: 'center center',
                           pointerEvents:
-                            !isViewer && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
+                            annotationsVisible && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
                               ? 'none'
                               : 'auto',
-                          width: 80,
-                          height: 80,
-                          backgroundColor: 'rgba(0, 0, 0, 0.55)',
-                          border: '1px solid rgba(255, 255, 255, 0.22)',
-                          backdropFilter: 'blur(10px)',
-                          WebkitBackdropFilter: 'blur(10px)',
-                          color: '#FFFFFF',
-                          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
-                          transition: 'transform 0.15s ease, background-color 0.15s ease',
-                          '&:hover': {
-                            backgroundColor: 'rgba(142, 68, 173, 0.9)',
-                            transform: 'scale(1.06)',
-                          },
                         }}
                       >
-                        <PlayArrowRoundedIcon sx={{ fontSize: 48, ml: '3px' }} />
-                      </IconButton>
-                    </Box>
-                  ) : null}
+                        <track kind="captions" />
+                      </Box>
+                    )}
 
-                  {item?.type === 'document' && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: 'radial-gradient(circle, rgba(30,30,42,1) 0%, rgba(12,12,18,1) 100%)',
-                        zIndex: 1,
-                      }}
-                    >
+                    {item?.type === 'audio' && (
+                      <AudioWaveformVisualizer
+                        isPlaying={isPlaying}
+                        audioTitle={item?.title}
+                        fileSizeText={item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : undefined}
+                      />
+                    )}
+
+                    {!hasStartedPlayback
+                      && !isPlaying
+                      && !isBuffering
+                      && !isPlaybackLoading
+                      && !bandwidthCapError
+                      && !(isProcessing && !forcePlayOriginal)
+                      && liveAssetStatus !== 'failed'
+                      && (item?.type === 'video' || item?.type === 'audio') ? (
                       <Box
                         sx={{
-                          width: 100,
-                          height: 100,
-                          borderRadius: '24px',
+                          position: 'absolute',
+                          inset: 0,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          backgroundColor: 'rgba(255,255,255,0.03)',
-                          border: '1px solid rgba(255,255,255,0.08)',
-                          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                          mb: 3,
+                          zIndex: 6,
+                          pointerEvents: 'none',
                         }}
                       >
-                        <InsertDriveFileOutlinedIcon sx={{ fontSize: 52, color: '#38BDF8' }} />
-                      </Box>
-
-                      <Typography variant="h6" sx={{ color: '#ffffff', fontWeight: 600, mb: 1 }}>
-                        {item?.title}
-                      </Typography>
-                      <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)', mb: 3 }}>
-                        Document Asset • {item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : 'File'}
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        onClick={() => triggerMediaDownload('original')}
-                        startIcon={<FileDownloadOutlinedIcon />}
-                        sx={{
-                          backgroundColor: '#38BDF8',
-                          color: '#0F172A',
-                          fontWeight: 600,
-                          borderRadius: '12px',
-                          textTransform: 'none',
-                          px: 3,
-                          py: 1,
-                          '&:hover': { backgroundColor: '#0284C7' },
-                        }}
-                      >
-                        Download File
-                      </Button>
-                    </Box>
-                  )}
-
-                  {bandwidthCapError ? (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'rgba(15, 23, 42, 0.92)',
-                        backdropFilter: 'blur(12px)',
-                        zIndex: 60,
-                        p: 4,
-                        textAlign: 'center',
-                      }}
-                    >
-                      <ErrorOutlineOutlinedIcon sx={{ fontSize: 56, color: '#F59E0B', mb: 2 }} />
-                      <Typography variant="h6" sx={{ color: '#FFFFFF', fontWeight: 700, mb: 1 }}>
-                        Storage Bandwidth Limit Exceeded
-                      </Typography>
-                      <Typography variant="body2" sx={{ color: '#94A3B8', maxWidth: 480, mb: 3, lineHeight: 1.6 }}>
-                        Your Backblaze B2 account daily download bandwidth limit has been reached.
-                        <span style={{ display: 'block', marginTop: 8, color: '#CBD5E1' }}>
-                          Please log into your <b>Backblaze B2 Console &gt; Caps &amp; Alerts</b> and increase your daily bandwidth limit.
-                        </span>
-                      </Typography>
-                    </Box>
-                  ) : null}
-
-                  {isProcessing && !forcePlayOriginal ? (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-                        backdropFilter: 'blur(8px)',
-                        zIndex: 10,
-                      }}
-                    >
-                      {liveProgress && liveProgress !== 'processing' ? (
-                        <CircularProgress
-                          variant="determinate"
-                          value={parseInt(liveProgress.replace('%', '')) || 0}
-                          size={48}
+                        <IconButton
+                          type="button"
+                          aria-label="Play"
+                          onClick={handleCenterPlayClick}
                           sx={{
-                            color: cv.brandBlue,
-                            mb: 3,
-                            '& .MuiCircularProgress-circle': {
-                              transition: 'stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                            }
-                          }}
-                        />
-                      ) : (
-                        <CircularProgress size={48} sx={{ color: cv.brandBlue, mb: 3 }} />
-                      )}
-                      <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
-                        {liveProgress && liveProgress !== 'processing'
-                          ? 'Compressing Video'
-                          : 'Preparing Video...'}
-                      </Typography>
-                      {liveProgress && liveProgress !== 'processing' ? (
-                        <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em' }}>
-                          Encoding in progress — {liveProgress} complete
-                        </Typography>
-                      ) : (
-                        <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 300 }}>
-                          Noah is optimizing your video for smooth playback.
-                          <span style={{ display: 'block', marginTop: 4, opacity: 0.7 }}>Large files may take up to 30 minutes. You can leave and come back later.</span>
-                        </Typography>
-                      )}
-                      <Box sx={{ display: 'flex', gap: 1.5, mt: 3, zIndex: 11 }}>
-                        <Button
-                          variant="contained"
-                          onClick={handleRetryTranscode}
-                          disabled={isRetrying}
-                          startIcon={<AutorenewIcon />}
-                          sx={{
-                            borderRadius: '999px',
-                            px: 2.5,
-                            py: 1,
-                            textTransform: 'none',
-                            fontWeight: 600,
-                            backgroundColor: cv.brandBlue,
-                            '&:hover': { backgroundColor: '#0284C7' },
-                          }}
-                        >
-                          {isRetrying ? 'Queuing...' : 'Retry Processing'}
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          onClick={() => setForcePlayOriginal(true)}
-                          startIcon={<PlayArrowOutlinedIcon />}
-                          sx={{
-                            borderRadius: '999px',
-                            px: 2.5,
-                            py: 1,
-                            textTransform: 'none',
-                            fontWeight: 600,
-                            borderColor: 'rgba(255, 255, 255, 0.4)',
+                            pointerEvents:
+                              !isViewer && ANNOTATION_OVERLAY_TOOLS.includes(activeTool)
+                                ? 'none'
+                                : 'auto',
+                            width: 80,
+                            height: 80,
+                            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+                            border: '1px solid rgba(255, 255, 255, 0.22)',
+                            backdropFilter: 'blur(10px)',
+                            WebkitBackdropFilter: 'blur(10px)',
                             color: '#FFFFFF',
+                            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
+                            transition: 'transform 0.15s ease, background-color 0.15s ease',
                             '&:hover': {
-                              borderColor: '#FFFFFF',
-                              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                              backgroundColor: 'rgba(142, 68, 173, 0.9)',
+                              transform: 'scale(1.06)',
                             },
                           }}
                         >
-                          Play Original Video
-                        </Button>
+                          <PlayArrowRoundedIcon sx={{ fontSize: 48, ml: '3px' }} />
+                        </IconButton>
                       </Box>
-                    </Box>
-                  ) : liveAssetStatus === 'failed' ? (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                        backdropFilter: 'blur(8px)',
-                        zIndex: 10,
-                      }}
-                    >
-                      <ErrorOutlineOutlinedIcon sx={{ fontSize: 48, color: cv.destructiveBorder, mb: 2 }} />
-                      <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
-                        Processing Failed
-                      </Typography>
-                      <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, mb: 3, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 320 }}>
-                        An error occurred while preparing this asset for playback. You can try processing it again.
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        color="error"
-                        onClick={handleRetryTranscode}
-                        disabled={isRetrying}
+                    ) : null}
+
+                    {item?.type === 'document' && (
+                      <Box
                         sx={{
-                          borderRadius: '999px',
-                          px: 3,
-                          py: 1,
-                          textTransform: 'none',
-                          fontWeight: 600,
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'radial-gradient(circle, rgba(30,30,42,1) 0%, rgba(12,12,18,1) 100%)',
+                          zIndex: 1,
                         }}
                       >
-                        {isRetrying ? 'Retrying...' : 'Retry Processing'}
-                      </Button>
-                    </Box>
-                  ) : null}
+                        <Box
+                          sx={{
+                            width: 100,
+                            height: 100,
+                            borderRadius: '24px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: 'rgba(255,255,255,0.03)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                            mb: 3,
+                          }}
+                        >
+                          <InsertDriveFileOutlinedIcon sx={{ fontSize: 52, color: '#38BDF8' }} />
+                        </Box>
 
-                  {playerShowAudioMeter ? (
-                    <AudioMeterOverlay videoRef={videoRef} />
-                  ) : null}
+                        <Typography variant="h6" sx={{ color: '#ffffff', fontWeight: 600, mb: 1 }}>
+                          {item?.title}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)', mb: 3 }}>
+                          Document Asset • {item?.sizeBytes ? `${(item?.sizeBytes / (1024 * 1024)).toFixed(2)} MB` : 'File'}
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          onClick={() => triggerMediaDownload('original')}
+                          startIcon={<FileDownloadOutlinedIcon />}
+                          sx={{
+                            backgroundColor: '#38BDF8',
+                            color: '#0F172A',
+                            fontWeight: 600,
+                            borderRadius: '12px',
+                            textTransform: 'none',
+                            px: 3,
+                            py: 1,
+                            '&:hover': { backgroundColor: '#0284C7' },
+                          }}
+                        >
+                          Download File
+                        </Button>
+                      </Box>
+                    )}
 
-                  {(isGuestMode && guestPermissions?.watermark && guestAssetMeta?.logoUrl) || (!isGuestMode && internalShowWatermark && internalLogoUrl) ? (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        top: 16,
-                        left: 16,
-                        zIndex: 10,
-                        opacity: 0.7,
-                        pointerEvents: 'none',
-                        userSelect: 'none',
-                      }}
-                    >
-                      <img
-                        src={(isGuestMode ? guestAssetMeta?.logoUrl : internalLogoUrl) || ''}
-                        alt=""
-                        style={{ maxHeight: '48px', maxWidth: '120px', objectFit: 'contain' }}
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
+                    {bandwidthCapError ? (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                          backdropFilter: 'blur(12px)',
+                          zIndex: 60,
+                          p: 4,
+                          textAlign: 'center',
                         }}
-                      />
-                    </Box>
-                  ) : null}
+                      >
+                        <ErrorOutlineOutlinedIcon sx={{ fontSize: 56, color: '#F59E0B', mb: 2 }} />
+                        <Typography variant="h6" sx={{ color: '#FFFFFF', fontWeight: 700, mb: 1 }}>
+                          Storage Bandwidth Limit Exceeded
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#94A3B8', maxWidth: 480, mb: 3, lineHeight: 1.6 }}>
+                          Your Backblaze B2 account daily download bandwidth limit has been reached.
+                          <span style={{ display: 'block', marginTop: 8, color: '#CBD5E1' }}>
+                            Please log into your <b>Backblaze B2 Console &gt; Caps &amp; Alerts</b> and increase your daily bandwidth limit.
+                          </span>
+                        </Typography>
+                      </Box>
+                    ) : null}
 
-                  {(!isGuestMode || guestPermissions?.comment) && (
-                    <>
-                      <VideoAnnotationSurface
-                        activeTool={isViewer ? 'select' : activeTool}
-                        enabled={surfaceEnabled && !isViewer}
-                        annotationsVisible={annotationsVisible}
-                        resolvedOverlayEntryIds={resolvedOverlayEntryIds}
-                        videoRef={videoRef}
-                        strokes={drawings}
-                        onStrokesChange={setDrawings}
-                        shapes={shapes}
-                        onShapesChange={setShapes}
-                        stamps={stamps}
-                        onStampsChange={setStamps}
-                        activeStamp={activeStamp}
-                        customStamp={customStamp}
-                        selectedShapeId={selectedShapeId}
-                        onSelectedShapeIdChange={setSelectedShapeId}
-                        selectedStampId={selectedStampId}
-                        onSelectedStampIdChange={setSelectedStampId}
-                        drawTool={activeDrawTool}
-                        drawStroke={activeDrawStroke}
-                        drawColor={activeDrawColor}
-                        shapeTool={activeShape}
-                        shapeStroke={activeShapeStroke}
-                        shapeColor={activeShapeColor}
-                        onRecord={handleAnnotationRecord}
-                        onAnnotationActionStart={handleAnnotationActionStart}
-                        onAnnotationNeedsComment={handleAnnotationNeedsComment}
-                        annotationCommentPending={annotationCommentPending}
-                        onMoveLinkedComment={handleMoveLinkedComment}
-                        workspacePanEnabled={workspacePanEnabled}
-                        onWorkspacePanBy={handleWorkspacePanBy}
-                      />
+                    {isProcessing && !forcePlayOriginal ? (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                          backdropFilter: 'blur(8px)',
+                          zIndex: 10,
+                        }}
+                      >
+                        {liveProgress && liveProgress !== 'processing' ? (
+                          <CircularProgress
+                            variant="determinate"
+                            value={parseInt(liveProgress.replace('%', '')) || 0}
+                            size={48}
+                            sx={{
+                              color: cv.brandBlue,
+                              mb: 3,
+                              '& .MuiCircularProgress-circle': {
+                                transition: 'stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
+                              }
+                            }}
+                          />
+                        ) : (
+                          <CircularProgress size={48} sx={{ color: cv.brandBlue, mb: 3 }} />
+                        )}
+                        <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
+                          {liveProgress && liveProgress !== 'processing'
+                            ? 'Compressing Video'
+                            : 'Preparing Video...'}
+                        </Typography>
+                        {liveProgress && liveProgress !== 'processing' ? (
+                          <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em' }}>
+                            Encoding in progress — {liveProgress} complete
+                          </Typography>
+                        ) : (
+                          <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 300 }}>
+                            Noah is optimizing your video for smooth playback.
+                            <span style={{ display: 'block', marginTop: 4, opacity: 0.7 }}>Large files may take up to 30 minutes. You can leave and come back later.</span>
+                          </Typography>
+                        )}
+                        <Box sx={{ display: 'flex', gap: 1.5, mt: 3, zIndex: 11 }}>
+                          <Button
+                            variant="contained"
+                            onClick={handleRetryTranscode}
+                            disabled={isRetrying}
+                            startIcon={<AutorenewIcon />}
+                            sx={{
+                              borderRadius: '999px',
+                              px: 2.5,
+                              py: 1,
+                              textTransform: 'none',
+                              fontWeight: 600,
+                              backgroundColor: cv.brandBlue,
+                              '&:hover': { backgroundColor: '#0284C7' },
+                            }}
+                          >
+                            {isRetrying ? 'Queuing...' : 'Retry Processing'}
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            onClick={() => setForcePlayOriginal(true)}
+                            startIcon={<PlayArrowOutlinedIcon />}
+                            sx={{
+                              borderRadius: '999px',
+                              px: 2.5,
+                              py: 1,
+                              textTransform: 'none',
+                              fontWeight: 600,
+                              borderColor: 'rgba(255, 255, 255, 0.4)',
+                              color: '#FFFFFF',
+                              '&:hover': {
+                                borderColor: '#FFFFFF',
+                                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                              },
+                            }}
+                          >
+                            Play Original Video
+                          </Button>
+                        </Box>
+                      </Box>
+                    ) : liveAssetStatus === 'failed' ? (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          inset: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                          backdropFilter: 'blur(8px)',
+                          zIndex: 10,
+                        }}
+                      >
+                        <ErrorOutlineOutlinedIcon sx={{ fontSize: 48, color: cv.destructiveBorder, mb: 2 }} />
+                        <Typography variant="h6" sx={{ color: cv.textInverse, fontWeight: 600 }}>
+                          Processing Failed
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: cv.textMuted, mt: 1, mb: 3, letterSpacing: '0.04em', textAlign: 'center', maxWidth: 320 }}>
+                          An error occurred while preparing this asset for playback. You can try processing it again.
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          color="error"
+                          onClick={handleRetryTranscode}
+                          disabled={isRetrying}
+                          sx={{
+                            borderRadius: '999px',
+                            px: 3,
+                            py: 1,
+                            textTransform: 'none',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {isRetrying ? 'Retrying...' : 'Retry Processing'}
+                        </Button>
+                      </Box>
+                    ) : null}
 
-                      <VideoCommentLayer
-                        active={activeTool === 'comment' && !isViewer}
-                        panActive={activeTool === 'pan'}
-                        annotationsVisible={annotationsVisible}
-                        videoRef={videoRef}
-                        comments={comments.map(c => {
-                          const entryId = c.linkedShapeId
-                            ? `shape-${c.linkedShapeId}`
-                            : c.linkedDrawingId
-                              ? `drawing-${c.linkedDrawingId}`
-                              : `comment-${c.id}`;
-                          const index = history.find(e => e.id === entryId)?.index;
-                          return { ...c, historyIndex: index };
-                        })}
-                        draftComment={draftComment}
-                        onPlaceDraft={handlePlaceDraft}
-                        onDraftTextChange={handleDraftTextChange}
-                        onDraftImageChange={handleDraftImageChange}
-                        onSubmitDraft={handleSubmitDraft}
-                        onCancelDraft={handleCancelDraft}
-                        onAddReply={handleAddReply}
-                        onToggleCommentResolved={handleToggleCommentResolved}
-                        onMarkCommentUnread={handleMarkCommentUnread}
-                        onCopyCommentLink={handleCopyCommentLink}
-                        onDeleteComment={handleDeleteComment}
-                        onEditComment={handleEditComment}
-                        onEditReply={handleEditReply}
-                        onThreadOpenChange={setCommentThreadOpen}
-                        openCommentId={openCommentId}
-                        onOpenCommentIdChange={setOpenCommentId}
-                        annotationGroups={annotationGroups}
-                        collaborators={allCollaboratorsForMentions}
-                        onCommentVisibilityChange={handleCommentVisibilityChange}
-                        onCreateAnnotationGroup={handleCreateAnnotationGroup}
-                        onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
-                        onAddCollaborator={handleAddCollaboratorForGroup}
-                        onMoveComment={handleMoveComment}
-                        onPanActionStart={handleAnnotationActionStart}
-                      />
-                    </>
-                  )}
+                    {playerShowAudioMeter ? (
+                      <AudioMeterOverlay videoRef={videoRef} />
+                    ) : null}
 
-                  {ENABLE_FRAME_PERSON_HIGHLIGHT &&
-                  selectedFramePerson &&
-                  supportsFramePeople ? (
-                    <FramePersonHighlight person={selectedFramePerson} />
-                  ) : null}
+
+
+                    {(!isGuestMode || guestPermissions?.comment) && (
+                      <>
+                        <VideoAnnotationSurface
+                          activeTool={isViewer ? 'select' : activeTool}
+                          enabled={surfaceEnabled && !isViewer}
+                          annotationsVisible={annotationsVisible}
+                          resolvedOverlayEntryIds={resolvedOverlayEntryIds}
+                          videoRef={videoRef}
+                          strokes={drawings}
+                          onStrokesChange={setDrawings}
+                          shapes={shapes}
+                          onShapesChange={setShapes}
+                          stamps={stamps}
+                          onStampsChange={setStamps}
+                          activeStamp={activeStamp}
+                          customStamp={customStamp}
+                          selectedShapeId={selectedShapeId}
+                          onSelectedShapeIdChange={setSelectedShapeId}
+                          selectedStampId={selectedStampId}
+                          onSelectedStampIdChange={setSelectedStampId}
+                          drawTool={activeDrawTool}
+                          drawStroke={activeDrawStroke}
+                          drawColor={activeDrawColor}
+                          shapeTool={activeShape}
+                          shapeStroke={activeShapeStroke}
+                          shapeColor={activeShapeColor}
+                          onRecord={handleAnnotationRecord}
+                          onAnnotationActionStart={handleAnnotationActionStart}
+                          onAnnotationNeedsComment={handleAnnotationNeedsComment}
+                          annotationCommentPending={annotationCommentPending}
+                          onMoveLinkedComment={handleMoveLinkedComment}
+                          workspacePanEnabled={workspacePanEnabled}
+                          onWorkspacePanBy={handleWorkspacePanBy}
+                        />
+
+                        <VideoCommentLayer
+                          active={activeTool === 'comment' && !isViewer}
+                          panActive={activeTool === 'pan'}
+                          annotationsVisible={annotationsVisible}
+                          videoRef={videoRef}
+                          comments={comments.map(c => {
+                            const entryId = c.linkedShapeId
+                              ? `shape-${c.linkedShapeId}`
+                              : c.linkedDrawingId
+                                ? `drawing-${c.linkedDrawingId}`
+                                : `comment-${c.id}`;
+                            const index = history.find(e => e.id === entryId)?.index;
+                            return { ...c, historyIndex: index };
+                          })}
+                          draftComment={draftComment}
+                          onPlaceDraft={handlePlaceDraft}
+                          onDraftTextChange={handleDraftTextChange}
+                          onDraftImageChange={handleDraftImageChange}
+                          onSubmitDraft={handleSubmitDraft}
+                          onCancelDraft={handleCancelDraft}
+                          onAddReply={handleAddReply}
+                          onToggleCommentResolved={handleToggleCommentResolved}
+                          onMarkCommentUnread={handleMarkCommentUnread}
+                          onCopyCommentLink={handleCopyCommentLink}
+                          onDeleteComment={handleDeleteComment}
+                          onEditComment={handleEditComment}
+                          onEditReply={handleEditReply}
+                          onThreadOpenChange={setCommentThreadOpen}
+                          openCommentId={openCommentId}
+                          onOpenCommentIdChange={setOpenCommentId}
+                          annotationGroups={annotationGroups}
+                          collaborators={allCollaboratorsForMentions}
+                          onCommentVisibilityChange={handleCommentVisibilityChange}
+                          onCreateAnnotationGroup={handleCreateAnnotationGroup}
+                          onUpdateAnnotationGroup={handleUpdateAnnotationGroup}
+                          onAddCollaborator={handleAddCollaboratorForGroup}
+                          onMoveComment={handleMoveComment}
+                          onPanActionStart={handleAnnotationActionStart}
+                        />
+                      </>
+                    )}
+
+                    {ENABLE_FRAME_PERSON_HIGHLIGHT &&
+                      selectedFramePerson &&
+                      supportsFramePeople ? (
+                      <FramePersonHighlight person={selectedFramePerson} />
+                    ) : null}
                   </Box>
                 </Box>
               </Box>
