@@ -107,6 +107,7 @@ export function PlatformBillingTransactionsSection({ defaultOrgId }: { defaultOr
   const [failed30Days, setFailed30Days] = useState(0);
   const [loadedKey, setLoadedKey] = useState('');
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState(false);
   const pagination = usePlatformTablePagination();
   const sort = usePlatformTableSort<LogSortField>('createdAt', 'desc');
   const requestIdRef = useRef(0);
@@ -251,20 +252,35 @@ export function PlatformBillingTransactionsSection({ defaultOrgId }: { defaultOr
   if (loading) emptyMessage = 'Loading logs…';
   else if (activeFilterChips.length > 0) emptyMessage = 'No logs match these filters';
 
-  const handleExportCsv = () => {
-    const stamp = new Date().toISOString().slice(0, 10);
-    downloadCSV(
-      `transactions-${stamp}`,
-      ['Organization', 'Amount', 'Status', 'Payment ID', 'Date', 'Failure Reason'],
-      logs.map((row) => [
-        row.organization?.name || 'No Organization',
-        row.amountCents ? (row.amountCents / 100).toFixed(2) : '0.00',
-        row.status,
-        row.stripePaymentIntentId || row.stripeSessionId || '',
-        formatDate(row.createdAt),
-        row.events?.[0]?.failureReason || '',
-      ])
-    );
+  const handleExportCsv = async () => {
+    if (exporting || total === 0) return;
+    setExporting(true);
+    try {
+      const exportParams: Record<string, string> = {
+        ...queryParams,
+        offset: '0',
+        limit: String(Math.min(Math.max(total, 1), 10000)),
+      };
+      const res = await fetchPaymentLogs(exportParams);
+      const rows = res.logs || [];
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadCSV(
+        `transactions-${stamp}`,
+        ['Organization', 'Amount', 'Status', 'Payment ID', 'Date', 'Failure Reason'],
+        rows.map((row) => [
+          row.organization?.name || 'No Organization',
+          row.amountCents ? (row.amountCents / 100).toFixed(2) : '0.00',
+          row.status,
+          row.stripePaymentIntentId || row.stripeSessionId || '',
+          formatDate(row.createdAt),
+          row.events?.[0]?.failureReason || '',
+        ])
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export transactions');
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -276,10 +292,10 @@ export function PlatformBillingTransactionsSection({ defaultOrgId }: { defaultOr
               size="small"
               startIcon={<DownloadOutlinedIcon />}
               onClick={handleExportCsv}
-              disabled={logs.length === 0}
+              disabled={total === 0 || exporting}
               sx={{ textTransform: 'none', color: cv.textSecondary }}
             >
-              Export to Excel
+              {exporting ? 'Exporting…' : 'Export to Excel'}
             </Button>
             {activeFilterChips.length > 0 && (
               <Button onClick={clearAllFilters} size="small" sx={{ textTransform: 'none' }}>
@@ -451,7 +467,17 @@ export function PlatformBillingTransactionsSection({ defaultOrgId }: { defaultOr
               <Typography variant="h6" sx={{ fontWeight: 700 }}>
                 Transaction Details
               </Typography>
-              <Typography variant="body2" sx={{ color: cv.textMuted }}>
+              <Typography variant="caption" sx={{ color: cv.textSecondary, display: 'block', mt: 0.5 }}>
+                Transaction GUID
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: cv.textMuted,
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                  wordBreak: 'break-all',
+                }}
+              >
                 {selectedLog?.id}
               </Typography>
             </Box>
