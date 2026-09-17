@@ -35,6 +35,28 @@ export function getDynamicPlanDetails(user: AuthSessionUser | null | undefined):
   const rawBillingCycle = (metadata?.billingCycle || 'annual').toLowerCase();
   const isMonthly = rawBillingCycle === 'monthly';
 
+  // Extract trial days from plan definition, metadata, or calculate from dates
+  let trialDays: number = 15;
+  if (typeof org?.currentPlan?.trialDays === 'number' && org.currentPlan.trialDays > 0) {
+    trialDays = org.currentPlan.trialDays;
+  } else if (typeof (org as any)?.trialDays === 'number' && (org as any).trialDays > 0) {
+    trialDays = (org as any).trialDays;
+  } else if (rawBillingCycle.includes('day')) {
+    const parsed = parseInt(rawBillingCycle, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      trialDays = parsed;
+    }
+  } else if (org?.planExpiresAt) {
+    const startStr = metadata?.planSelectedAt || (org as any)?.createdAt || (user as any)?.createdAt;
+    if (startStr) {
+      const diffMs = new Date(org.planExpiresAt).getTime() - new Date(startStr).getTime();
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      if (diffDays > 0) {
+        trialDays = diffDays;
+      }
+    }
+  }
+
   // Expiry date calculation: Prefer database planExpiresAt field first
   let expiryDate: Date;
   if (org?.planExpiresAt) {
@@ -43,7 +65,7 @@ export function getDynamicPlanDetails(user: AuthSessionUser | null | undefined):
     const creationDateStr = metadata?.planSelectedAt || (org as any)?.createdAt || (user as any)?.createdAt || new Date().toISOString();
     const creationDate = new Date(creationDateStr);
     expiryDate = new Date(isNaN(creationDate.getTime()) ? Date.now() : creationDate.getTime());
-    expiryDate.setDate(expiryDate.getDate() + 3);
+    expiryDate.setDate(expiryDate.getDate() + trialDays);
   } else if (metadata?.expiresAt) {
     expiryDate = new Date(metadata.expiresAt);
   } else {
@@ -68,7 +90,7 @@ export function getDynamicPlanDetails(user: AuthSessionUser | null | undefined):
 
   const billingTermLabel =
     rawPlanId === 'free'
-      ? '3 Days'
+      ? `${trialDays} Days`
       : isMonthly
       ? 'Monthly'
       : 'Annual (Billed Yearly)';
