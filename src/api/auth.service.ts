@@ -24,6 +24,9 @@ import type {
 
 import axios from "axios";
 
+// Ensure cross-origin requests include credentials so cookies can be set and sent
+axios.defaults.withCredentials = true;
+
 const API_BASE_URL = env.apiBaseUrl || '/api';
 
 export interface CompleteSignupPayload {

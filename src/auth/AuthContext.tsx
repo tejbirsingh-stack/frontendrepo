@@ -92,6 +92,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     registerAuthTokenBridge(
       () => accessTokenRef.current,
+      (token: string) => {
+        accessTokenRef.current = token;
+        setAccessToken(token);
+        // We might want to persist it as well, assuming sessionUser is already there
+        const persistedUser = readPersistedSessionUser();
+        if (persistedUser) {
+          persistSession(token, persistedUser);
+        }
+      },
       () => {
         void logout();
       },
@@ -119,6 +128,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccessToken(persistedToken);
       registerAuthTokenBridge(
         () => accessTokenRef.current,
+        (token: string) => {
+          accessTokenRef.current = token;
+          setAccessToken(token);
+          const persistedUser = readPersistedSessionUser();
+          if (persistedUser) {
+            persistSession(token, persistedUser);
+          }
+        },
         () => {
           void logout();
         },

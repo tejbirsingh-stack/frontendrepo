@@ -1,4 +1,4 @@
-import { getAccessToken, handleUnauthorized } from '../auth/authTokenBridge';
+import { getAccessToken, setAccessToken, handleUnauthorized } from '../auth/authTokenBridge';
 import { env } from '../config/env';
 import { ApiError, type ApiRequestOptions, type ApiResponse } from './types';
 
@@ -22,7 +22,23 @@ function mapStatusToCode(status: number): ApiError['code'] {
   return 'UNKNOWN';
 }
 
+
+let isRefreshing = false;
+let failedQueue: Array<{ resolve: (value?: unknown) => void; reject: (reason?: any) => void }> = [];
+
+const processQueue = (error: Error | null, token: string | null = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
 async function parseResponseBody(response: Response): Promise<unknown> {
+
   const contentType = response.headers.get('content-type') ?? '';
   if (contentType.includes('application/json')) {
     return response.json();
@@ -50,8 +66,9 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     }
   }
 
+
   try {
-    const response = await fetch(resolveUrl(path), {
+    let response = await fetch(resolveUrl(path), {
       ...rest,
       headers: requestHeaders,
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -59,9 +76,68 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
       credentials: 'include',
     });
 
-    const payload = await parseResponseBody(response);
+    let payload = await parseResponseBody(response);
+
+    if (response.status === 401 && !path.includes('/auth/login') && !path.includes('/auth/refresh') && !path.includes('/auth/logout')) {
+      if (isRefreshing) {
+        try {
+          const token = await new Promise<string | null>((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          });
+          if (token) {
+            requestHeaders.set('Authorization', `Bearer ${token}`);
+            response = await fetch(resolveUrl(path), {
+              ...rest,
+              headers: requestHeaders,
+              body: body === undefined ? undefined : JSON.stringify(body),
+              signal: controller.signal,
+              credentials: 'include',
+            });
+            payload = await parseResponseBody(response);
+          }
+        } catch (err) {
+          throw new ApiError('Request failed during token refresh', 401, 'UNAUTHORIZED');
+        }
+      } else {
+        isRefreshing = true;
+        try {
+          // Attempt to refresh the token
+          const refreshRes = await fetch(resolveUrl('/auth/refresh'), {
+            method: 'POST',
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include',
+          });
+          const refreshPayload: any = await parseResponseBody(refreshRes);
+
+          if (refreshRes.ok && refreshPayload?.success && refreshPayload?.accessToken) {
+            const newToken = refreshPayload.accessToken;
+            setAccessToken(newToken);
+            processQueue(null, newToken);
+
+            requestHeaders.set('Authorization', `Bearer ${newToken}`);
+            response = await fetch(resolveUrl(path), {
+              ...rest,
+              headers: requestHeaders,
+              body: body === undefined ? undefined : JSON.stringify(body),
+              signal: controller.signal,
+              credentials: 'include',
+            });
+            payload = await parseResponseBody(response);
+          } else {
+            throw new Error('Refresh failed');
+          }
+        } catch (refreshErr) {
+          processQueue(refreshErr as Error, null);
+          handleUnauthorized();
+          throw new ApiError('Unauthorized', 401, 'UNAUTHORIZED');
+        } finally {
+          isRefreshing = false;
+        }
+      }
+    }
 
     if (!response.ok) {
+
       const code = mapStatusToCode(response.status);
       if (
         (response.status === 401 && !path.includes('/auth/logout')) ||
