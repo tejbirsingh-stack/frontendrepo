@@ -17,6 +17,7 @@ import {
   ForgotPasswordPage,
   NotFoundPage,
   SignUpPage,
+  SignupCompletePage,
   SettingsSectionPage,
   TagsManagementPage,
   UserActivitiesPage,   
@@ -77,6 +78,14 @@ function App() {
               <GuestRoute>
                 <SignUpPage />
               </GuestRoute>
+            }
+          />
+          <Route
+            path="/signup/complete"
+            element={
+              <RouteErrorBoundary>
+                <SignupCompletePage />
+              </RouteErrorBoundary>
             }
           />
           <Route path="/platform/*" element={<PlatformApp />} />

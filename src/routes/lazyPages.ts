@@ -19,6 +19,7 @@ function lazyPage<T extends ComponentType<object>>(factory: () => Promise<{ defa
 export const MarketingLandingPage = lazyPage(() => import('../pages/MarketingLandingPage'));
 export const LoginPage = lazyPage(() => import('../pages/LoginPage'));
 export const SignUpPage = lazyPage(() => import('../pages/SignUpPage'));
+export const SignupCompletePage = lazyPage(() => import('../pages/SignupCompletePage'));
 export const DashboardPage = lazyPage(() => import('../pages/DashboardPage'));
 export const FolderPage = lazyPage(() => import('../pages/FolderPage'));
 export const ProjectPage = lazyPage(() => import('../pages/ProjectPage'));

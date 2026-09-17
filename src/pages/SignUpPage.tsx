@@ -43,6 +43,7 @@ import {
 } from '../api/auth.service';
 import { fetchGlobalSecuritySettings } from '../platform/api/platformApi';
 import { useUploadManager } from '../context/UploadManagerContext';
+import { saveFilesToIDB } from '../utils/signupFileStore';
 
 type SignupPhase = 'email' | 'verify' | 'workspace' | 'usage' | 'upload' | 'done' | 'plans';
 
@@ -260,6 +261,8 @@ export default function SignUpPage() {
   const [isChecking, setIsChecking] = useState(false);
   const [isSsoLoading, setIsSsoLoading] = useState(false);
 
+  const pendingAuthRef = useRef<{ token: string; user: any } | null>(null);
+
   const [ssoConfigured, setSsoConfigured] = useState<boolean>(true);
   const [ssoProvider, setSsoProvider] = useState<string>('google, microsoft');
 
@@ -289,6 +292,37 @@ export default function SignUpPage() {
       setShowPasswordFields(true);
     }
   }, [location.state]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('resume') !== 'true') {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('token');
+      localStorage.removeItem('noah_session_token');
+      localStorage.removeItem('noah_session_user');
+      return;
+    }
+    const raw = sessionStorage.getItem('signup_pending_data');
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw) as Record<string, string>;
+      if (data.email) setEmail(data.email);
+      if (data.firstName) setFirstName(data.firstName);
+      if (data.lastName) setLastName(data.lastName);
+      if (data.password) setPassword(data.password);
+      if (data.workspaceName) setWorkspaceName(data.workspaceName);
+      if (data.companyWebsite) setCompanyWebsite(data.companyWebsite);
+      if (data.mobileNumber) setMobileNumber(data.mobileNumber);
+      if (data.teamSize) setTeamSize(data.teamSize as TeamSizeOption);
+      if (data.firstFocus) setFirstFocus(data.firstFocus as FirstFocusOption);
+      // signup_pending_auth is intentionally kept — it lets handleFinalPlanSelect
+      // reuse the already-created account on retry without hitting "email exists".
+      setPhase('plans');
+    } catch (e) {
+      console.error('Failed to restore signup state from sessionStorage:', e);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const workspaceSlug = useMemo(() => slugifyWorkspaceName(workspaceName), [workspaceName]);
 
@@ -440,88 +474,126 @@ export default function SignUpPage() {
 
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
       const formattedWorkspaceName = formatWorkspaceNameWithSuffix(workspaceName);
-      const response = await completeSignupRequest({
-        email,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        name: fullName,
-        password,
-        workspaceName: formattedWorkspaceName,
-        companyWebsite,
-        mobileNumber,
-        teamSize,
-        firstFocus,
-        planId: 'free', // Always provision as free initially, upgrade happens via Stripe
-        billingCycle,
-        hubspotUtk: hubspotUtkCookie,
-      });
 
-      const activeToken = response?.accessToken || response?.token;
-      if (activeToken) {
+      // Reuse existing account if user canceled Stripe and returned to plans
+      const existingPendingRaw = sessionStorage.getItem('signup_pending_auth');
+      let response: any;
+      let activeToken: string | null = null;
+
+      if (existingPendingRaw) {
+        const existingPending = JSON.parse(existingPendingRaw);
+        activeToken = existingPending.token;
+        response = existingPending.response;
+      } else {
+        response = await completeSignupRequest({
+          email,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          name: fullName,
+          password,
+          workspaceName: formattedWorkspaceName,
+          companyWebsite,
+          mobileNumber,
+          teamSize,
+          firstFocus,
+          planId: 'free',
+          billingCycle,
+          hubspotUtk: hubspotUtkCookie,
+        });
+        activeToken = response?.accessToken || response?.token || null;
+      }
+
+      if (!activeToken) {
+        throw new Error('No access token received from signup.');
+      }
+
+      const mappedUser = mapAuthUserDtoToSessionUser(response?.user || response);
+
+      if (planId.toLowerCase() === 'free') {
         localStorage.setItem('accessToken', activeToken);
         localStorage.setItem('token', activeToken);
 
-        const mappedUser = mapAuthUserDtoToSessionUser(response?.user || response);
-        setSession(activeToken, mappedUser);
-        persistSession(activeToken, mappedUser);
-
-        try {
-          const currentUserDto = await fetchCurrentUserRequest();
-          if (currentUserDto) {
-            const updatedUser = mapAuthUserDtoToSessionUser(currentUserDto);
-            setSession(activeToken, updatedUser);
-            persistSession(activeToken, updatedUser);
-          }
-        } catch (fetchUserErr) {
-          console.warn('Failed to fetch full user profile after signup:', fetchUserErr);
+        if (uploadedFiles && uploadedFiles.length > 0) {
+          const targetWorkspaceId =
+            response?.workspace?.id || response?.user?.workspace?.id || response?.user?.orgId;
+          void enqueueFiles(uploadedFiles, { ownerType: 'WORKSPACE', ownerId: targetWorkspaceId });
         }
-      }
 
-      if (uploadedFiles && uploadedFiles.length > 0) {
-        const targetWorkspaceId = response?.workspace?.id || response?.user?.workspace?.id || response?.user?.orgId;
-        void enqueueFiles(uploadedFiles, {
-          ownerType: 'WORKSPACE',
-          ownerId: targetWorkspaceId,
-        });
-      }
+        sessionStorage.removeItem('signup_pending_data');
+        sessionStorage.removeItem('signup_pending_auth');
+        pendingAuthRef.current = { token: activeToken, user: mappedUser };
+        setPhase('done');
+      } else {
+        sessionStorage.setItem('signup_pending_auth', JSON.stringify({ token: activeToken, response }));
+        sessionStorage.setItem(
+          'signup_pending_data',
+          JSON.stringify({
+            email,
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            password,
+            workspaceName: formattedWorkspaceName,
+            companyWebsite,
+            mobileNumber,
+            teamSize,
+            firstFocus,
+            hubspotUtk: hubspotUtkCookie || '',
+          })
+        );
 
-      // If they chose a paid plan, redirect them to Stripe Checkout
-      if (planId && planId.toLowerCase() !== 'free') {
+        if (uploadedFiles && uploadedFiles.length > 0) {
+          await saveFilesToIDB(uploadedFiles);
+        }
+
         const { fetchPublicCatalogPlans } = await import('../platform/api/platformApi');
         const catalog = await fetchPublicCatalogPlans().catch(() => null);
         const match = catalog?.plans?.find(
-          (p: any) => p.name?.toLowerCase() === planId.toLowerCase() || p.id?.toLowerCase() === planId.toLowerCase()
+          (p: any) =>
+            p.name?.toLowerCase() === planId.toLowerCase() ||
+            p.id?.toLowerCase() === planId.toLowerCase()
         );
-        
-        let activePriceId = null;
+
+        let activePriceId: string | null = null;
         if (match) {
-          activePriceId = billingCycle === 'annual' ? (match.yearlyPriceId || match.monthlyPriceId) : match.monthlyPriceId;
+          activePriceId =
+            billingCycle === 'annual'
+              ? (match.yearlyPriceId || match.monthlyPriceId)
+              : match.monthlyPriceId;
         }
-        
-        if (activePriceId) {
+
+        if (!activePriceId) {
+          toast.error('Could not find pricing for the selected plan. Please try again.');
+          setIsChecking(false);
+          return;
+        }
+
+        // Temporarily set token so apiClient can authenticate the checkout request
+        localStorage.setItem('accessToken', activeToken);
+        localStorage.setItem('token', activeToken);
+        let checkoutRes: any;
+        try {
           const { billingService } = await import('../api/billing.service');
           toast.loading('Redirecting to secure checkout...', { id: 'stripe-signup-checkout' });
-          try {
-            const res: any = await billingService.createCheckoutSession(
-              activePriceId, 
-              false,
-              '/home?payment_success=true',
-              '/onboarding/plan?canceled=true'
-            );
-            if (res?.url) {
-              window.location.href = res.url;
-              return; // Halt navigation to /home, they go to Stripe
-            }
-          } catch (checkoutErr: any) {
-            console.error('Failed to initiate Stripe checkout:', checkoutErr);
-            toast.dismiss('stripe-signup-checkout');
-            toast.error('Could not start checkout. You have been placed on the Free plan.');
-            // Proceed to home
-          }
+          checkoutRes = await billingService.createCheckoutSession(
+            activePriceId,
+            false,
+            `/signup/complete?plan=${encodeURIComponent(planId)}&cycle=${encodeURIComponent(billingCycle)}`,
+            '/signup?resume=true'
+          );
+        } finally {
+          // Remove token — user stays unauthenticated until payment succeeds
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('token');
         }
-      }
 
-      navigate('/home', { replace: true });
+        if (checkoutRes?.url) {
+          window.location.href = checkoutRes.url;
+          return;
+        }
+
+        toast.dismiss('stripe-signup-checkout');
+        toast.error('Could not start checkout. Please try again.');
+      }
     } catch (err: any) {
       console.error('Failed to complete signup:', err);
       setError(err.response?.data?.message || err.message || 'Failed to complete signup. Please try again.');
@@ -582,7 +654,8 @@ export default function SignUpPage() {
       return;
     }
     setError('');
-    setPhase('done');
+    // Go directly to plan selection — account is NOT created yet
+    setPhase('plans');
   };
 
   const goBackToEmail = () => {
@@ -755,16 +828,29 @@ export default function SignUpPage() {
       }, index * PREPARING_STEP_MS),
     );
 
-    // After the preparing animation, show the plans screen (no dashboard redirect yet)
-    const plansTimer = window.setTimeout(() => {
-      setPhase('plans');
+    const plansTimer = window.setTimeout(async () => {
+      if (pendingAuthRef.current) {
+        setSession(pendingAuthRef.current.token, pendingAuthRef.current.user);
+        persistSession(pendingAuthRef.current.token, pendingAuthRef.current.user);
+        try {
+          const currentUserDto = await fetchCurrentUserRequest();
+          if (currentUserDto) {
+            const updatedUser = mapAuthUserDtoToSessionUser(currentUserDto);
+            setSession(pendingAuthRef.current.token, updatedUser);
+            persistSession(pendingAuthRef.current.token, updatedUser);
+          }
+        } catch (fetchUserErr) {
+          console.warn('Failed to fetch full user profile after signup:', fetchUserErr);
+        }
+      }
+      navigate('/home', { replace: true });
     }, PREPARING_SCREEN_MS);
 
     return () => {
       stepTimers.forEach((timer) => window.clearTimeout(timer));
       window.clearTimeout(plansTimer);
     };
-  }, [phase]);
+  }, [phase, setSession, navigate]);
 
   if (phase === 'plans') {
     return (
@@ -1764,7 +1850,8 @@ export default function SignUpPage() {
                 showSkip
                 onSkip={() => {
                   setError('');
-                  setPhase('done');
+                  // Skip upload → go to plan selection (account not created yet)
+                  setPhase('plans');
                 }}
                 onBack={() => {
                   setPhase('usage');

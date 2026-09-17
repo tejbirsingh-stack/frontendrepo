@@ -166,10 +166,16 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
   const [plans, setPlans] = useState<PlanDefinition[]>(FALLBACK_PLANS);
   const [plansEnabled, setPlansEnabled] = useState(true);
   const [savedCards, setSavedCards] = useState<any[]>([]);
-  const [paymentOption, setPaymentOption] = useState<'saved' | 'new'>('saved');
+  const [paymentOption, setPaymentOption] = useState<'saved' | 'new'>('new');
   const isSettingsFlow = Boolean(currentPlanId && currentPlanId.trim() !== '');
 
   useEffect(() => {
+    if (!isSettingsFlow) {
+      setSavedCards([]);
+      setPaymentOption('new');
+      return;
+    }
+
     billingService.getPaymentMethods()
       .then((res) => {
         if (res?.cards?.length) {
@@ -184,7 +190,7 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
         setSavedCards([]);
         setPaymentOption('new');
       });
-  }, []);
+  }, [isSettingsFlow]);
 
   useEffect(() => {
     if (currentPlanId) {
@@ -264,13 +270,13 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
     }
 
     setSelectedPlan(planId);
-    onSelectPlan?.(planId, billingCycle, selectedPriceId, paymentOption === 'saved' && savedCards.length > 0);
+    onSelectPlan?.(planId, billingCycle, selectedPriceId, isSettingsFlow && paymentOption === 'saved' && savedCards.length > 0);
   };
 
   const handleConfirmSwitch = () => {
     if (!confirmPlanModal) return;
     const { planId, priceId } = confirmPlanModal;
-    const useSaved = paymentOption === 'saved' && savedCards.length > 0;
+    const useSaved = isSettingsFlow && paymentOption === 'saved' && savedCards.length > 0;
     setConfirmPlanModal(null);
     setSelectedPlan(planId);
     onSelectPlan?.(planId, billingCycle, priceId, useSaved);
@@ -922,13 +928,23 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
           </Box>
 
           <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: '#ffffff', fontSize: '1.25rem' }}>
-            {confirmPlanModal?.isSamePlan ? 'Active Plan Selected' : 'Switch Subscription Plan?'}
+            {confirmPlanModal?.isSamePlan
+              ? 'Active Plan Selected'
+              : (confirmPlanModal?.planName || '').toLowerCase().includes('free')
+                ? 'Switch to Free Plan?'
+                : isSettingsFlow
+                  ? 'Switch Subscription Plan?'
+                  : `Subscribe to ${confirmPlanModal?.planName} Plan`}
           </Typography>
 
           <Typography variant="body2" sx={{ color: cv.textMuted, mb: 2.5, lineHeight: 1.6, fontSize: '0.875rem' }}>
             {confirmPlanModal?.isSamePlan
               ? `You are currently subscribed to the ${confirmPlanModal?.planName} plan.`
-              : `Are you sure you want to switch your organization's subscription to the ${confirmPlanModal?.planName} plan?`}
+              : (confirmPlanModal?.planName || '').toLowerCase().includes('free')
+                ? 'Are you sure you want to switch to the Free plan?'
+                : isSettingsFlow
+                  ? `Are you sure you want to switch your organization's subscription to the ${confirmPlanModal?.planName} plan?`
+                  : `You selected the ${confirmPlanModal?.planName} plan. You will be redirected to Stripe Checkout to enter your card details.`}
           </Typography>
 
           {!confirmPlanModal?.isSamePlan && (
@@ -949,99 +965,123 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
                   Target Plan
                 </Typography>
                 <Typography variant="subtitle2" sx={{ fontWeight: 700, color: cv.brandOrchid }}>
-                  {confirmPlanModal?.planName} ({billingCycle})
+                  {confirmPlanModal?.planName} ({(confirmPlanModal?.planName || '').toLowerCase().includes('free') ? 'forever' : billingCycle})
                 </Typography>
               </Box>
 
-              <Box sx={{ textAlign: 'left', mb: 3 }}>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: cv.textMuted,
-                    fontWeight: 600,
-                    display: 'block',
-                    mb: 1.25,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    fontSize: '0.75rem',
-                  }}
-                >
-                  Payment Method
-                </Typography>
+              {!(confirmPlanModal?.planName || '').toLowerCase().includes('free') && (
+                <Box sx={{ textAlign: 'left', mb: 3 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: cv.textMuted,
+                      fontWeight: 600,
+                      display: 'block',
+                      mb: 1.25,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    Payment Method
+                  </Typography>
 
-                <RadioGroup
-                  value={paymentOption}
-                  onChange={(e) => setPaymentOption(e.target.value as 'saved' | 'new')}
-                  sx={{ gap: 1.25 }}
-                >
-                  {savedCards.length > 0 && (
+                  {isSettingsFlow && savedCards.length > 0 ? (
+                    <RadioGroup
+                      value={paymentOption}
+                      onChange={(e) => setPaymentOption(e.target.value as 'saved' | 'new')}
+                      sx={{ gap: 1.25 }}
+                    >
+                      <Box
+                        onClick={() => setPaymentOption('saved')}
+                        sx={{
+                          p: 1.5,
+                          borderRadius: '12px',
+                          border: `1px solid ${paymentOption === 'saved' ? 'rgba(168, 85, 247, 0.6)' : 'rgba(255, 255, 255, 0.1)'}`,
+                          backgroundColor: paymentOption === 'saved' ? 'rgba(168, 85, 247, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          transition: 'all 0.2s',
+                          '&:hover': { borderColor: 'rgba(168, 85, 247, 0.4)' },
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                          <Radio
+                            value="saved"
+                            checked={paymentOption === 'saved'}
+                            sx={{ color: cv.textMuted, '&.Mui-checked': { color: cv.brandOrchid }, p: 0.25 }}
+                          />
+                          <CreditCardOutlinedIcon sx={{ color: cv.brandOrchid, fontSize: 20 }} />
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#ffffff', fontSize: '0.84rem' }}>
+                              {savedCards[0].brand?.toUpperCase() || 'Card'} ending in {savedCards[0].last4}
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: cv.textMuted, fontSize: '0.72rem' }}>
+                              Use existing saved card
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+
+                      <Box
+                        onClick={() => setPaymentOption('new')}
+                        sx={{
+                          p: 1.5,
+                          borderRadius: '12px',
+                          border: `1px solid ${paymentOption === 'new' ? 'rgba(168, 85, 247, 0.6)' : 'rgba(255, 255, 255, 0.1)'}`,
+                          backgroundColor: paymentOption === 'new' ? 'rgba(168, 85, 247, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          transition: 'all 0.2s',
+                          '&:hover': { borderColor: 'rgba(168, 85, 247, 0.4)' },
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                          <Radio
+                            value="new"
+                            checked={paymentOption === 'new'}
+                            sx={{ color: cv.textMuted, '&.Mui-checked': { color: cv.brandOrchid }, p: 0.25 }}
+                          />
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: '#ffffff', fontSize: '0.84rem' }}>
+                              Use a new payment card
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: cv.textMuted, fontSize: '0.72rem' }}>
+                              Opens secure Stripe Checkout page
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    </RadioGroup>
+                  ) : (
                     <Box
-                      onClick={() => setPaymentOption('saved')}
                       sx={{
                         p: 1.5,
                         borderRadius: '12px',
-                        border: `1px solid ${paymentOption === 'saved' ? 'rgba(168, 85, 247, 0.6)' : 'rgba(255, 255, 255, 0.1)'}`,
-                        backgroundColor: paymentOption === 'saved' ? 'rgba(168, 85, 247, 0.1)' : 'rgba(255, 255, 255, 0.02)',
-                        cursor: 'pointer',
+                        border: '1px solid rgba(168, 85, 247, 0.35)',
+                        backgroundColor: 'rgba(168, 85, 247, 0.08)',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        transition: 'all 0.2s',
-                        '&:hover': { borderColor: 'rgba(168, 85, 247, 0.4)' },
+                        gap: 1.25,
                       }}
                     >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                        <Radio
-                          value="saved"
-                          checked={paymentOption === 'saved'}
-                          sx={{ color: cv.textMuted, '&.Mui-checked': { color: cv.brandOrchid }, p: 0.25 }}
-                        />
-                        <CreditCardOutlinedIcon sx={{ color: cv.brandOrchid, fontSize: 20 }} />
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 600, color: '#ffffff', fontSize: '0.84rem' }}>
-                            {savedCards[0].brand?.toUpperCase() || 'Card'} ending in {savedCards[0].last4}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: cv.textMuted, fontSize: '0.72rem' }}>
-                            Use existing saved card
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Box>
-                  )}
-
-                  <Box
-                    onClick={() => setPaymentOption('new')}
-                    sx={{
-                      p: 1.5,
-                      borderRadius: '12px',
-                      border: `1px solid ${paymentOption === 'new' ? 'rgba(168, 85, 247, 0.6)' : 'rgba(255, 255, 255, 0.1)'}`,
-                      backgroundColor: paymentOption === 'new' ? 'rgba(168, 85, 247, 0.1)' : 'rgba(255, 255, 255, 0.02)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      transition: 'all 0.2s',
-                      '&:hover': { borderColor: 'rgba(168, 85, 247, 0.4)' },
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                      <Radio
-                        value="new"
-                        checked={paymentOption === 'new'}
-                        sx={{ color: cv.textMuted, '&.Mui-checked': { color: cv.brandOrchid }, p: 0.25 }}
-                      />
+                      <CreditCardOutlinedIcon sx={{ color: cv.brandOrchid, fontSize: 22 }} />
                       <Box>
                         <Typography variant="body2" sx={{ fontWeight: 600, color: '#ffffff', fontSize: '0.84rem' }}>
-                          Use a new payment card
+                          Credit or Debit Card
                         </Typography>
                         <Typography variant="caption" sx={{ color: cv.textMuted, fontSize: '0.72rem' }}>
                           Opens secure Stripe Checkout page
                         </Typography>
                       </Box>
                     </Box>
-                  </Box>
-                </RadioGroup>
-              </Box>
+                  )}
+                </Box>
+              )}
             </>
           )}
 
@@ -1066,9 +1106,11 @@ export default function ChoosePlanScreen({ onSelectPlan, currentPlanId }: Choose
                   },
                 }}
               >
-                {paymentOption === 'saved' && savedCards.length > 0
-                  ? 'Confirm & Pay with Saved Card'
-                  : 'Proceed to Stripe Payment'}
+                {(confirmPlanModal?.planName || '').toLowerCase().includes('free')
+                  ? 'Confirm Plan Change'
+                  : isSettingsFlow && paymentOption === 'saved' && savedCards.length > 0
+                    ? 'Confirm & Pay with Saved Card'
+                    : 'Proceed to Stripe Payment'}
               </Button>
             )}
 
