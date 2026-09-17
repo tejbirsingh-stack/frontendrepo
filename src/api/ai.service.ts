@@ -8,7 +8,7 @@ export interface TranscriptSegmentDto {
   ordinal: number;
 }
 
-export interface TranscriptResponseDto { 
+export interface TranscriptResponseDto {  
   success: boolean; 
   assetId: string;
   status: string;
