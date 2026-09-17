@@ -221,9 +221,10 @@ export default function PlatformOrganizationDetailPage() {
         <Panel>
           <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mb: 1 }}>Storage</Typography>
           <MetricBar
-            label={formatBytes(org.storageQuotaBytes as string)}
-            usedLabel={`${formatBytes(org.storageUsedBytes as string)} (${storagePct}%)`}
+            label={`Plan cap ${formatBytes(org.storageQuotaBytes as string)}`}
+            usedLabel={`${formatBytes(org.storageUsedBytes as string)} used (${storagePct}%)`}
             percent={storagePct}
+            tooltip={`${formatBytes(org.storageUsedBytes as string)} of ${formatBytes(org.storageQuotaBytes as string)} plan cap`}
           />
         </Panel>
       </Box>
