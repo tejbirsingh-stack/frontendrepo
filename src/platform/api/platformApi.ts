@@ -54,6 +54,17 @@ export async function platformLogout() {
   return platformRequest<{ success: boolean }>('/platform/auth/logout', { method: 'POST' });
 }
 
+export async function platformChangePassword(body: {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}) {
+  return platformRequest<{ success: boolean; message?: string }>('/platform/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function fetchDashboardSummary() {
   return platformRequest<{ success: boolean; summary: Record<string, unknown> }>(
     '/platform/dashboard/summary',

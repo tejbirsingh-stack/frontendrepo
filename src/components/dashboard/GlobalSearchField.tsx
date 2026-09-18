@@ -8,6 +8,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { cv } from '../../theme/cssVars';
 import { appendAuthTokenToUrl } from '../../auth/authTokenBridge';
+import { openDocumentInNewTab } from '../../utils/signedStreamUrl';
 import {
   Box,
   CircularProgress,
@@ -284,11 +285,8 @@ export default function GlobalSearchField({
     inputRef.current?.focus();
   };
 
-  const handleSelect = (result: MediaItem) => {
+  const handleSelect = async (result: MediaItem) => {
     const openPath = getMediaViewerPath(result);
-    const documentUrl =
-      result.videoSrc ||
-      (result.id ? `/api/media/${encodeURIComponent(result.id)}/stream` : undefined);
 
     handleClear();
 
@@ -297,8 +295,8 @@ export default function GlobalSearchField({
       return;
     }
 
-    if (result.type === 'document' && documentUrl) {
-      window.open(documentUrl, '_blank', 'noopener,noreferrer');
+    if (result.type === 'document' && result.id) {
+      await openDocumentInNewTab(result.id, 30);
     }
   };
 

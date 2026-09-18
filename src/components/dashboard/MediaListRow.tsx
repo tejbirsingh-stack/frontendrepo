@@ -18,6 +18,7 @@ import { getMediaViewerPath } from '../../utils/mediaNavigation';
 import { getMediaDragPayload, hasMediaDragPayload, setMediaDragPayload } from '../../utils/mediaDrag';
 import { removeMediaDragGhost, setMediaDragImage } from '../../utils/mediaDragPreview';
 import { resolveLibraryFolderColor } from '../../utils/folderColorStyle';
+import { openDocumentInNewTab } from '../../utils/signedStreamUrl';
 import TruncatedText from '../TruncatedText';
 import VideoHoverPreview from './VideoHoverPreview';
 import { formatFolderItemCount, getFolderChildCount } from '../../utils/folderItemCount';
@@ -89,15 +90,18 @@ export default function MediaListRow({
   const activeProjectId = pathProjectId || searchParams.get('projectId') || undefined;
 
   const openPath = getMediaViewerPath(item, activeProjectId);
-  const documentUrl = item.videoSrc || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : undefined);
-  const isClickable = (Boolean(openPath) || (item.type === 'document' && Boolean(documentUrl))) && !selectionActive;
+  // Documents open in a new tab via a signed/token-bearing stream URL (Bearer is not sent on bare navigation).
+  const isClickable =
+    (Boolean(openPath) || (item.type === 'document' && Boolean(item.id))) && !selectionActive;
 
-  const handleOpen = () => {
+  const handleOpen = async () => {
     if (!isClickable) return;
     if (openPath) {
       navigate(openPath);
-    } else if (item.type === 'document' && documentUrl) {
-      window.open(documentUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (item.type === 'document' && item.id) {
+      await openDocumentInNewTab(item.id, 30);
     }
   };
 

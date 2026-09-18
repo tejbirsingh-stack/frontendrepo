@@ -3,6 +3,12 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Avatar,
   Box,
+  Button,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   List,
   ListItemButton,
@@ -11,11 +17,17 @@ import {
   ListSubheader,
   Menu,
   MenuItem,
+  TextField,
+  IconButton,
+  InputAdornment,
   Tooltip,
   Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
+import VpnKeyOutlinedIcon from '@mui/icons-material/VpnKeyOutlined';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
@@ -29,10 +41,13 @@ import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import LanguageOutlinedIcon from '@mui/icons-material/LanguageOutlined';
 import FolderCopyOutlinedIcon from '@mui/icons-material/FolderCopyOutlined';
 import NotificationImportantOutlinedIcon from '@mui/icons-material/NotificationImportantOutlined';
+import { toast } from 'react-hot-toast';
 import NoahLogo from '../../components/NoahLogo';
 import DashboardNotificationPopup from '../../components/dashboard/DashboardNotificationPopup';
 import { DASHBOARD_TOP_BAR_HEIGHT } from '../../constants/layout';
+import { noahDialogSlotProps } from '../../constants/dialogStyles';
 import { cv } from '../../theme/cssVars';
+import { platformChangePassword } from '../api/platformApi';
 import { usePlatformAuth } from '../auth/PlatformAuthContext';
 
 const SIDEBAR_WIDTH = 264;
@@ -164,6 +179,15 @@ export default function PlatformLayout() {
   const navigate = useNavigate();
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const menuOpen = Boolean(menuAnchor);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const displayName = admin?.name?.trim() || 'Platform Admin';
   const displayEmail = admin?.email || '';
@@ -176,6 +200,62 @@ export default function PlatformLayout() {
     setMenuAnchor(null);
     await logout();
     navigate('/platform/login');
+  };
+
+  const openPasswordDialog = () => {
+    setMenuAnchor(null);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError('');
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setPasswordDialogOpen(true);
+  };
+
+  const closePasswordDialog = () => {
+    if (isSavingPassword) return;
+    setPasswordDialogOpen(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError('');
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+  };
+
+  const handleChangePassword = async () => {
+    setPasswordError('');
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordError('All password fields are required');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirm password must match');
+      return;
+    }
+
+    setIsSavingPassword(true);
+    try {
+      const res = await platformChangePassword({
+        currentPassword,
+        newPassword,
+        confirmPassword,
+      });
+      toast.success(res.message || 'Password changed successfully');
+      setPasswordDialogOpen(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to change password';
+      setPasswordError(msg);
+      toast.error(msg);
+    } finally {
+      setIsSavingPassword(false);
+    }
   };
 
   return (
@@ -480,6 +560,18 @@ export default function PlatformLayout() {
             </Box>
             <Divider sx={{ borderColor: cv.border }} />
             <MenuItem
+              onClick={openPasswordDialog}
+              sx={{
+                gap: 1.25,
+                py: 1.25,
+                color: cv.textPrimary,
+                '&:hover': { backgroundColor: cv.surfaceHover },
+              }}
+            >
+              <VpnKeyOutlinedIcon sx={{ fontSize: 18 }} />
+              Change password
+            </MenuItem>
+            <MenuItem
               onClick={() => void handleLogout()}
               sx={{
                 gap: 1.25,
@@ -511,6 +603,124 @@ export default function PlatformLayout() {
           <Outlet />
         </Box>
       </Box>
+
+      <Dialog
+        open={passwordDialogOpen}
+        onClose={closePasswordDialog}
+        fullWidth
+        maxWidth="xs"
+        slotProps={noahDialogSlotProps({ overflow: 'hidden' })}
+      >
+        <DialogTitle sx={{ fontWeight: 600, color: cv.textPrimary }}>
+          Change password
+        </DialogTitle>
+        <DialogContent sx={{ pt: '8px !important' }}>
+          {passwordError ? (
+            <Typography sx={{ color: cv.destructive, mb: 2 }} role="alert">
+              {passwordError}
+            </Typography>
+          ) : null}
+          <Box sx={{ display: 'grid', gap: 2 }}>
+            <TextField
+              label="Current password"
+              type={showCurrentPassword ? 'text' : 'password'}
+              size="small"
+              fullWidth
+              autoFocus
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
+                        onClick={() => setShowCurrentPassword((prev) => !prev)}
+                        edge="end"
+                        sx={{ color: cv.textMuted }}
+                      >
+                        {showCurrentPassword ? <Visibility fontSize="small" /> : <VisibilityOff fontSize="small" />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+            <TextField
+              label="New password"
+              type={showNewPassword ? 'text' : 'password'}
+              size="small"
+              fullWidth
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              helperText="At least 8 characters, with uppercase, lowercase, and a number"
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+                        onClick={() => setShowNewPassword((prev) => !prev)}
+                        edge="end"
+                        sx={{ color: cv.textMuted }}
+                      >
+                        {showNewPassword ? <Visibility fontSize="small" /> : <VisibilityOff fontSize="small" />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+            <TextField
+              label="Confirm new password"
+              type={showConfirmPassword ? 'text' : 'password'}
+              size="small"
+              fullWidth
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleChangePassword();
+              }}
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                        onClick={() => setShowConfirmPassword((prev) => !prev)}
+                        edge="end"
+                        sx={{ color: cv.textMuted }}
+                      >
+                        {showConfirmPassword ? <Visibility fontSize="small" /> : <VisibilityOff fontSize="small" />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, pt: 1, gap: 1 }}>
+          <Button
+            onClick={closePasswordDialog}
+            disabled={isSavingPassword}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => void handleChangePassword()}
+            disabled={isSavingPassword}
+            sx={{ textTransform: 'none', minWidth: 90 }}
+          >
+            {isSavingPassword ? <CircularProgress size={20} color="inherit" /> : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <DashboardNotificationPopup autoOpen={false} />
     </Box>

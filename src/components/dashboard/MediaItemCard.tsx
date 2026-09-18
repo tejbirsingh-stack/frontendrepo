@@ -27,6 +27,7 @@ import type { MediaItem, MediaType } from '../../data/mockMedia';
 import { getMediaViewerPath } from '../../utils/mediaNavigation';
 import { getMediaDragPayload, hasMediaDragPayload, setMediaDragPayload } from '../../utils/mediaDrag';
 import { removeMediaDragGhost, setMediaDragImage } from '../../utils/mediaDragPreview';
+import { openDocumentInNewTab } from '../../utils/signedStreamUrl';
 import {
   folderAccentBackground,
   folderAccentTint,
@@ -571,14 +572,9 @@ export default function MediaItemCard({
 
   const openPath = getMediaViewerPath(item, activeProjectId);
 
-  // Allow clicking if it's a navigatable path OR if it's a document (which opens in a new tab)
-  // But wait, the url is needed. Where is the url stored? Assuming `item.videoSrc` or similar for now?
-  // Let's assume the component consuming this has `item.videoSrc` or `item.thumbnail` or similar as the URL for the document.
-  // We'll use `item.videoSrc` as the generic raw asset URL fallback, or perhaps `item.customMetadata?.url`.
-  // Wait, the API sends `filePath`, we might need to rely on the backend signing logic.
-  // The frontend `MediaItem` has `videoSrc` mapped to the raw asset if it's not a video? Yes, it's mapped in `apiToFrontendMedia`.
-  const documentUrl = item.videoSrc || (item.id ? `/api/media/${encodeURIComponent(item.id)}/stream` : undefined);
-  const isClickable = (Boolean(openPath) || (item.type === 'document' && Boolean(documentUrl))) && !selectionActive;
+  // Documents open in a new tab via a signed/token-bearing stream URL (Bearer is not sent on bare navigation).
+  const isClickable =
+    (Boolean(openPath) || (item.type === 'document' && Boolean(item.id))) && !selectionActive;
 
   const fullSummary = item.summary?.trim() || '';
   const aiTagList = Array.isArray(item.aiTags)
@@ -590,12 +586,14 @@ export default function MediaItemCard({
     (hasSummaryContent || Boolean(item.hasAiInsights));
   const summaryPopoverOpen = Boolean(summaryAnchor);
 
-  const handleOpen = () => {
+  const handleOpen = async () => {
     if (!isClickable) return;
     if (openPath) {
       navigate(openPath);
-    } else if (item.type === 'document' && documentUrl) {
-      window.open(documentUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (item.type === 'document' && item.id) {
+      await openDocumentInNewTab(item.id, 30);
     }
   };
 

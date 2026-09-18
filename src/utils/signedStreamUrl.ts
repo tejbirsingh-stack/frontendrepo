@@ -36,3 +36,29 @@ export async function fetchSignedStreamUrl(assetId: string, expiresInMinutes: nu
     return tokenFallbackUrl();
   }
 }
+
+/**
+ * Open a document stream in a new tab using a signed/token-bearing URL.
+ * Opens a blank tab synchronously (keeps the user-gesture), then navigates
+ * after the signed URL is fetched — avoids popup blockers and false
+ * "allow pop-ups" toasts from window.open(..., 'noopener') returning null.
+ */
+export async function openDocumentInNewTab(
+  assetId: string,
+  expiresInMinutes: number = 30,
+): Promise<void> {
+  const tab = window.open('about:blank', '_blank');
+  if (!tab) {
+    console.error('Failed to open document: pop-up blocked');
+    return;
+  }
+
+  try {
+    const signedUrl = await fetchSignedStreamUrl(assetId, expiresInMinutes);
+    tab.opener = null;
+    tab.location.replace(signedUrl);
+  } catch (error) {
+    console.error('Failed to open document stream:', error);
+    tab.close();
+  }
+}
