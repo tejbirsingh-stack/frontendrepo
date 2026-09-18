@@ -2,9 +2,7 @@ import { useRef, useState } from 'react';
 import { cv } from '../../theme/cssVars';
 import { Box, Button, Typography } from '@mui/material';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
-import toast from 'react-hot-toast';
 import { UPLOAD_ACCEPT, getUploadableFiles } from '../../utils/fileMediaType';
-import { getUsageSummary } from '../../api/usage.service';
 
 interface UploadPanelProps {
   onUpload: (files: File[]) => number;
@@ -14,22 +12,8 @@ export default function UploadPanel({ onUpload }: UploadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const checkStorageBreached = async (): Promise<boolean> => {
-    try {
-      const summary = await getUsageSummary();
-      if (summary.storageWarningLevel === 'exceeded' || summary.storageUsedBytes >= summary.storageQuotaBytes) {
-        toast.error('Storage limit reached — Uploads are blocked until you free space or upgrade your plan.');
-        return true;
-      }
-    } catch (err) {}
-    return false;
-  };
-
-  const processFiles = async (fileList: FileList | File[] | null) => {
+  const processFiles = (fileList: FileList | File[] | null) => {
     if (!fileList) return;
-    const isBreached = await checkStorageBreached();
-    if (isBreached) return;
-
     const uploadable = getUploadableFiles(fileList);
     if (uploadable.length > 0) {
       onUpload(uploadable);
@@ -59,23 +43,20 @@ export default function UploadPanel({ onUpload }: UploadPanelProps) {
     }
   };
 
-  const handleDrop = async (event: React.DragEvent) => {
+  const handleDrop = (event: React.DragEvent) => {
     event.preventDefault();
     event.stopPropagation();
     setIsDragging(false);
-    await processFiles(event.dataTransfer.files);
+    processFiles(event.dataTransfer.files);
   };
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    void processFiles(event.target.files);
+    processFiles(event.target.files);
     event.target.value = '';
   };
 
-  const handleBrowseClick = async () => {
-    const isBreached = await checkStorageBreached();
-    if (!isBreached) {
-      inputRef.current?.click();
-    }
+  const handleBrowseClick = () => {
+    inputRef.current?.click();
   };
 
   return (
@@ -90,6 +71,16 @@ export default function UploadPanel({ onUpload }: UploadPanelProps) {
       />
 
       <Box
+        role="button"
+        tabIndex={0}
+        aria-label="Drop files to upload or click to browse"
+        onClick={handleBrowseClick}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            handleBrowseClick();
+          }
+        }}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -105,6 +96,7 @@ export default function UploadPanel({ onUpload }: UploadPanelProps) {
             ? cv.blueDragSurface
             : cv.surfaceMuted,
           textAlign: 'center',
+          cursor: 'pointer',
           transition: 'all 0.2s ease',
         }}
       >
@@ -133,9 +125,13 @@ export default function UploadPanel({ onUpload }: UploadPanelProps) {
           Images, video, audio, and documents
         </Typography>
         <Button
+          type="button"
           size="small"
           variant="outlined"
-          onClick={handleBrowseClick}
+          onClick={(event) => {
+            event.stopPropagation();
+            handleBrowseClick();
+          }}
           sx={{
             borderRadius: '8px',
             fontSize: '0.75rem',
