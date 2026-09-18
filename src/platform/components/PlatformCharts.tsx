@@ -297,7 +297,7 @@ export function RadialGauge({
         >
           <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
           <RadialBar
-            background={{ fill: 'rgba(255,255,255,0.06)' }}
+            background={{ fill: 'var(--noah-ink-overlay-10)' }}
             dataKey="value"
             cornerRadius={8}
             angleAxisId={0}

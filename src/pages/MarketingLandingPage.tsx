@@ -19,7 +19,18 @@ import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import VideoLibraryRoundedIcon from '@mui/icons-material/VideoLibraryRounded';
 import RateReviewRoundedIcon from '@mui/icons-material/RateReviewRounded';
 import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded';
+import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import HubRoundedIcon from '@mui/icons-material/HubRounded';
+import RecyclingRoundedIcon from '@mui/icons-material/RecyclingRounded';
+import LandscapeRoundedIcon from '@mui/icons-material/LandscapeRounded';
+import FaceRetouchingNaturalRoundedIcon from '@mui/icons-material/FaceRetouchingNaturalRounded';
+import DatasetRoundedIcon from '@mui/icons-material/DatasetRounded';
+import MovieFilterRoundedIcon from '@mui/icons-material/MovieFilterRounded';
+import HighQualityRoundedIcon from '@mui/icons-material/HighQualityRounded';
+import FolderSpecialRoundedIcon from '@mui/icons-material/FolderSpecialRounded';
+import DrawRoundedIcon from '@mui/icons-material/DrawRounded';
+import FolderOffRoundedIcon from '@mui/icons-material/FolderOffRounded';
 import NoahLogo from '../components/NoahLogo';
 import NoahMascot from '../components/NoahMascot';
 import WaveBackground from '../components/WaveBackground';
@@ -32,6 +43,8 @@ import {
   FRICTION,
   NAV_LINKS,
   PILLARS,
+  UPCYCLING_SECTION,
+  WHY_NOAH,
 } from '../components/landing/landingContent';
 import { useAuth } from '../auth/AuthContext';
 import { useForcedDarkTheme } from '../context/ThemePreferenceContext';
@@ -137,6 +150,31 @@ const PILLAR_ICONS = {
   library: VideoLibraryRoundedIcon,
   review: RateReviewRoundedIcon,
   share: IosShareRoundedIcon,
+} as const;
+
+const FLOW_ICONS = {
+  chaos: FolderOffRoundedIcon,
+  noah: HubRoundedIcon,
+  reuse: RecyclingRoundedIcon,
+} as const;
+
+const AI_ICONS = {
+  scene: LandscapeRoundedIcon,
+  face: FaceRetouchingNaturalRoundedIcon,
+  index: DatasetRoundedIcon,
+} as const;
+
+const STORY_ICONS = {
+  broll: MovieFilterRoundedIcon,
+  masters: HighQualityRoundedIcon,
+  assets: FolderSpecialRoundedIcon,
+} as const;
+
+const ACTION_ICONS = {
+  search: SearchRoundedIcon,
+  share: IosShareRoundedIcon,
+  access: CloudUploadRoundedIcon,
+  markup: DrawRoundedIcon,
 } as const;
 
 function heroAnim(delayMs: number) {
@@ -646,9 +684,85 @@ export default function MarketingLandingPage() {
                 Book a demo
               </Button>
             </Box>
-            <Box sx={{ mt: { xs: 5, md: 8 }, ...heroAnim(440) }}>
-              <NoahMascot pose="gesture" preset="hero" />
-              <ProductPreview />
+            <Box
+              sx={{
+                mt: { xs: 5, md: 6 },
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2rem',
+                ...heroAnim(440),
+              }}
+            >
+              <Box
+                aria-label="From chaos to upcycling"
+                sx={{
+                  display: 'flex',
+                  flexDirection: { xs: 'column', md: 'row' },
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: { xs: 1.5, md: 1 },
+                }}
+              >
+                {UPCYCLING_SECTION.flow.map((step, index) => {
+                  const Icon = FLOW_ICONS[step.id];
+                  const isNoah = step.id === 'noah';
+                  return (
+                    <Box key={step.id} sx={{ display: 'contents' }}>
+                      {index > 0 ? (
+                        <ArrowForwardRoundedIcon
+                          aria-hidden
+                          sx={{
+                            color: cv.brandOrchid,
+                            fontSize: 28,
+                            opacity: 0.7,
+                            transform: { xs: 'rotate(90deg)', md: 'none' },
+                            my: { xs: 0.25, md: 0 },
+                            mx: { xs: 0, md: 0.5 },
+                          }}
+                        />
+                      ) : null}
+                      <Box
+                        sx={{
+                          width: { xs: '100%', md: 220 },
+                          maxWidth: 280,
+                          p: 2.5,
+                          borderRadius: '20px',
+                          textAlign: 'center',
+                          border: `1px solid ${isNoah ? cv.purpleChipBorder : cv.border}`,
+                          background: isNoah
+                            ? `linear-gradient(180deg, ${cv.purpleSurfaceHover}, rgba(18,18,18,0.55))`
+                            : cv.surface,
+                          ...cardHoverSx,
+                        }}
+                      >
+                        <Box
+                          aria-hidden
+                          sx={{
+                            width: 64,
+                            height: 64,
+                            mx: 'auto',
+                            mb: 1.5,
+                            display: 'grid',
+                            placeItems: 'center',
+                            borderRadius: '18px',
+                            color: cv.brandOrchid,
+                            border: `1px solid ${cv.purpleChipBorder}`,
+                            background: cv.purpleSurface,
+                          }}
+                        >
+                          <Icon sx={{ fontSize: 32 }} />
+                        </Box>
+                        <Typography sx={{ fontWeight: 700, fontSize: '1.1rem' }}>{step.label}</Typography>
+                        <Typography sx={{ mt: 0.5, color: cv.textMuted, fontSize: '0.8125rem', lineHeight: 1.4 }}>{step.detail}</Typography>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+              <Box sx={{ position: 'relative' }}>
+                <NoahMascot pose="gesture" preset="hero" />
+                <ProductPreview />
+              </Box>
             </Box>
           </Box>
         </Box>
@@ -745,7 +859,7 @@ export default function MarketingLandingPage() {
               Transform chaos into content
             </Typography>
             <Typography sx={{ color: cv.textSecondary, mb: 4, maxWidth: 560 }}>
-              Creative teams do not need another island. They need the library, the review, and the share to be the same place.
+              Stop juggling tools. Give your team one place to store, review, and deliver — and win back hours every week.
             </Typography>
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
               <Box sx={{ p: { xs: 2.5, md: 3.5 }, borderRadius: '20px', border: `1px solid ${cv.border}`, background: cv.surfaceMuted, ...cardHoverSx }}>
@@ -775,6 +889,283 @@ export default function MarketingLandingPage() {
                     </Box>
                   ))}
                 </Box>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+
+        <Box
+          component="section"
+          id="why-noah"
+          aria-labelledby="why-title"
+          data-reveal
+          sx={{ ...sectionPad, pt: 0, scrollMarginTop: '104px' }}
+        >
+          <Box sx={{ maxWidth: MAX, mx: 'auto' }}>
+            <Typography
+              id="why-title"
+              component="h2"
+              sx={{ fontFamily: DISPLAY_FONT, fontSize: { xs: '2rem', md: '3rem' }, fontWeight: 600, letterSpacing: '-0.03em', mb: 1 }}
+            >
+              {WHY_NOAH.title}
+            </Typography>
+            <Typography sx={{ color: cv.textSecondary, mb: 4, maxWidth: 640, lineHeight: 1.6 }}>
+              {WHY_NOAH.subtitle}
+            </Typography>
+            <Box
+              sx={{
+                borderRadius: '20px',
+                border: `1px solid ${cv.purpleChipBorder}`,
+                overflow: 'hidden',
+                background: cv.surface,
+                boxShadow: '0 18px 48px rgba(0,0,0,0.22)',
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1.1fr 1fr 1.15fr', md: '1.2fr 1fr 1.15fr' },
+                  px: { xs: 1.5, md: 3 },
+                  py: 1.75,
+                  background: `linear-gradient(90deg, rgba(18,18,18,0.95), ${cv.purpleSurfaceHover})`,
+                  borderBottom: `1px solid ${cv.border}`,
+                }}
+              >
+                {WHY_NOAH.columns.map((column) => (
+                  <Typography
+                    key={column}
+                    sx={{
+                      fontWeight: 700,
+                      fontSize: { xs: '0.7rem', sm: '0.85rem', md: '0.95rem' },
+                      color: column === 'NOAH Cloud' ? cv.brandOrchid : cv.textPrimary,
+                      letterSpacing: column === 'NOAH Cloud' ? '0.02em' : 0,
+                    }}
+                  >
+                    {column}
+                  </Typography>
+                ))}
+              </Box>
+              {WHY_NOAH.rows.map((row, index) => (
+                <Box
+                  key={row.capability}
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1.1fr 1fr 1.15fr', md: '1.2fr 1fr 1.15fr' },
+                    px: { xs: 1.5, md: 3 },
+                    py: { xs: 1.5, md: 1.85 },
+                    borderTop: index === 0 ? 'none' : `1px solid ${cv.border}`,
+                    background: index % 2 === 1 ? cv.purpleSurface : 'transparent',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Typography sx={{ fontWeight: 700, fontSize: { xs: '0.8125rem', md: '0.95rem' } }}>{row.capability}</Typography>
+                  <Typography sx={{ color: cv.textMuted, fontSize: { xs: '0.75rem', md: '0.9rem' }, textDecoration: 'line-through', textDecorationColor: 'rgba(255,255,255,0.18)' }}>
+                    {row.traditional}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <CheckRoundedIcon sx={{ color: cv.brandOrchid, fontSize: { xs: 16, md: 18 }, flexShrink: 0 }} aria-hidden />
+                    <Typography sx={{ color: cv.brandOrchid, fontWeight: 700, fontSize: { xs: '0.75rem', md: '0.95rem' } }}>
+                      {row.noah}
+                    </Typography>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+            <Box sx={{ mt: 3.5, display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+              <Button onClick={openTrial} endIcon={<ArrowForwardRoundedIcon />} sx={primaryButtonSx({ px: 3 })}>
+                {WHY_NOAH.ctaPrimary}
+              </Button>
+              <Button onClick={openDemo} sx={ghostButtonSx({ px: 3 })}>
+                {WHY_NOAH.ctaSecondary}
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+
+        <Box
+          component="section"
+          id="upcycling"
+          aria-labelledby="upcycling-title"
+          data-reveal
+          sx={{
+            ...sectionPad,
+            scrollMarginTop: '104px',
+            background:
+              'radial-gradient(ellipse 70% 50% at 100% 0%, rgba(142,68,173,0.16), transparent 55%), radial-gradient(ellipse 50% 40% at 0% 100%, rgba(210,140,255,0.08), transparent 50%)',
+          }}
+        >
+          <Box sx={{ maxWidth: MAX, mx: 'auto' }}>
+            <Box sx={{ textAlign: 'center', maxWidth: 720, mx: 'auto', mb: { xs: 4, md: 5 } }}>
+              <Typography sx={{ color: cv.brandOrchid, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '0.75rem', mb: 1.5 }}>
+                {UPCYCLING_SECTION.kicker}
+              </Typography>
+              <Typography
+                id="upcycling-title"
+                component="h2"
+                sx={{ fontFamily: DISPLAY_FONT, fontSize: { xs: '2rem', md: '3rem' }, fontWeight: 600, letterSpacing: '-0.03em' }}
+              >
+                {UPCYCLING_SECTION.title}
+              </Typography>
+              <Typography sx={{ mt: 1.5, color: cv.textSecondary, fontSize: '1.05rem', lineHeight: 1.5 }}>
+                {UPCYCLING_SECTION.subtitle}
+              </Typography>
+            </Box>
+
+            {/* AI capabilities — icon grid */}
+            <Typography
+              component="h3"
+              sx={{
+                textAlign: 'center',
+                color: cv.brandOrchid,
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                mb: 2.5,
+              }}
+            >
+              Search less, find more
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 2, mb: { xs: 5, md: 6 } }}>
+              {UPCYCLING_SECTION.ai.map((item) => {
+                const Icon = AI_ICONS[item.id];
+                return (
+                  <Box
+                    key={item.id}
+                    sx={{
+                      p: 2.5,
+                      borderRadius: '20px',
+                      border: `1px solid ${cv.border}`,
+                      background: cv.surface,
+                      textAlign: 'center',
+                      ...cardHoverSx,
+                    }}
+                  >
+                    <Box
+                      aria-hidden
+                      sx={{
+                        width: 56,
+                        height: 56,
+                        mx: 'auto',
+                        mb: 1.5,
+                        display: 'grid',
+                        placeItems: 'center',
+                        borderRadius: '16px',
+                        color: cv.brandOrchid,
+                        border: `1px solid ${cv.purpleChipBorder}`,
+                        background: cv.purpleSurface,
+                      }}
+                    >
+                      <Icon sx={{ fontSize: 28 }} />
+                    </Box>
+                    <Typography sx={{ fontWeight: 700 }}>{item.label}</Typography>
+                    <Typography sx={{ mt: 0.75, color: cv.textMuted, fontSize: '0.875rem', lineHeight: 1.4 }}>{item.detail}</Typography>
+                  </Box>
+                );
+              })}
+            </Box>
+
+            {/* Creative story + actions + stat */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.4fr 0.8fr' }, gap: 2.5, alignItems: 'stretch' }}>
+              <Box>
+                <Typography component="h3" sx={{ fontFamily: DISPLAY_FONT, fontSize: '1.35rem', fontWeight: 600, mb: 2 }}>
+                  Store the entire creative story
+                </Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 1.5, mb: 2.5 }}>
+                  {UPCYCLING_SECTION.story.map((card) => {
+                    const Icon = STORY_ICONS[card.id];
+                    return (
+                      <Box
+                        key={card.id}
+                        sx={{
+                          p: 2,
+                          borderRadius: '16px',
+                          border: `1px solid ${cv.border}`,
+                          background: cv.surface,
+                          ...cardHoverSx,
+                        }}
+                      >
+                        <Icon aria-hidden sx={{ color: cv.brandOrchid, fontSize: 28, mb: 1 }} />
+                        <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{card.title}</Typography>
+                        <Typography sx={{ mt: 0.5, color: cv.textMuted, fontSize: '0.8rem' }}>{card.detail}</Typography>
+                      </Box>
+                    );
+                  })}
+                </Box>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(4, 1fr)' }, gap: 1.25 }}>
+                  {UPCYCLING_SECTION.actions.map((action) => {
+                    const Icon = ACTION_ICONS[action.id];
+                    return (
+                      <Box
+                        key={action.id}
+                        sx={{
+                          py: 1.5,
+                          px: 1,
+                          borderRadius: '14px',
+                          border: `1px solid ${cv.border}`,
+                          background: cv.bg,
+                          textAlign: 'center',
+                          transition: `border-color 0.3s ${EASE}, transform 0.3s ${EASE}`,
+                          '&:hover': { borderColor: cv.purpleChipBorder, transform: 'translateY(-3px)' },
+                        }}
+                      >
+                        <Icon aria-hidden sx={{ color: cv.brandOrchid, fontSize: 22, mb: 0.5 }} />
+                        <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, lineHeight: 1.3 }}>{action.title}</Typography>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </Box>
+
+              <Box
+                sx={{
+                  p: { xs: 3, md: 3.5 },
+                  borderRadius: '24px',
+                  border: `1px solid ${cv.purpleChipBorder}`,
+                  background: `linear-gradient(165deg, ${cv.purpleSurfaceHover}, rgba(18,18,18,0.7))`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  minHeight: { xs: 200, lg: 'auto' },
+                }}
+              >
+                <Box
+                  aria-hidden
+                  sx={{
+                    position: 'absolute',
+                    width: 180,
+                    height: 180,
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(210,140,255,0.25), transparent 70%)',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    pointerEvents: 'none',
+                  }}
+                />
+                <Typography
+                  sx={{
+                    position: 'relative',
+                    fontFamily: DISPLAY_FONT,
+                    fontSize: { xs: '4.5rem', md: '5.5rem' },
+                    fontWeight: 700,
+                    color: cv.brandOrchid,
+                    lineHeight: 1,
+                    letterSpacing: '-0.04em',
+                  }}
+                >
+                  {UPCYCLING_SECTION.excellence.stat}
+                </Typography>
+                <Typography sx={{ position: 'relative', mt: 1.5, fontWeight: 700, fontSize: '1.1rem' }}>
+                  {UPCYCLING_SECTION.excellence.headline}
+                </Typography>
+                <Typography sx={{ position: 'relative', mt: 0.75, color: cv.textSecondary, fontSize: '0.9rem', maxWidth: 200, lineHeight: 1.45 }}>
+                  {UPCYCLING_SECTION.excellence.body}
+                </Typography>
               </Box>
             </Box>
           </Box>

@@ -122,9 +122,9 @@ export function StatCard({
       elevation={0}
       sx={{
         p: 2.25,
-        borderRadius: '6px',
+        borderRadius: '8px',
         border: `1px solid ${cv.border}`,
-        background: `linear-gradient(165deg, ${cv.surfaceRaised} 0%, ${cv.surface} 55%)`,
+        background: cv.surface,
         boxShadow: cv.cardShadow,
         height: '100%',
         position: 'relative',
@@ -175,12 +175,12 @@ export function StatCard({
             sx={{
               width: 40,
               height: 40,
-              borderRadius: '6px',
+              borderRadius: '8px',
               display: 'grid',
               placeItems: 'center',
-              background: cv.purpleSurface,
+              background: tone === 'success' ? cv.successSurface : cv.purpleSurface,
               color: accent,
-              border: `1px solid ${cv.purpleChipBorder}`,
+              border: `1px solid ${tone === 'success' ? cv.success : cv.purpleChipBorder}`,
               flexShrink: 0,
             }}
           >
@@ -215,7 +215,7 @@ export function Panel({
       elevation={0}
       sx={{
         p: 2.25,
-        borderRadius: '6px',
+        borderRadius: '8px',
         border: `1px solid ${cv.border}`,
         background: cv.surface,
         boxShadow: cv.cardShadow,
@@ -361,7 +361,7 @@ export function QuickLinkCard({
         display: 'flex',
         flexDirection: 'column',
         p: 2,
-        borderRadius: '6px',
+        borderRadius: '8px',
         border: `1px solid ${cv.border}`,
         background: cv.surface,
         boxShadow: cv.cardShadow,

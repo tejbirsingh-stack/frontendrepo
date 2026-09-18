@@ -93,7 +93,19 @@ export default function PlatformDashboardPage() {
               component={RouterLink}
               to="/platform/organizations"
               variant="contained"
-              sx={{ textTransform: 'none', borderRadius: '6px', px: 2 }}
+              sx={{
+                textTransform: 'none',
+                borderRadius: '8px',
+                px: 2,
+                fontWeight: 600,
+                boxShadow: 'none',
+                background: cv.brandPurple,
+                '&:hover': {
+                  background: cv.brandPurple,
+                  filter: 'brightness(1.08)',
+                  boxShadow: cv.brandShadowSoft,
+                },
+              }}
             >
               Manage organizations
             </Button>
@@ -101,7 +113,19 @@ export default function PlatformDashboardPage() {
               component={RouterLink}
               to="/platform/users"
               variant="outlined"
-              sx={{ textTransform: 'none', borderRadius: '6px', px: 2 }}
+              sx={{
+                textTransform: 'none',
+                borderRadius: '8px',
+                px: 2,
+                fontWeight: 600,
+                borderColor: cv.brandPurple,
+                color: cv.brandPurple,
+                background: cv.surface,
+                '&:hover': {
+                  borderColor: cv.brandPurple,
+                  background: cv.purpleSurface,
+                },
+              }}
             >
               View users
             </Button>
@@ -135,6 +159,7 @@ export default function PlatformDashboardPage() {
           label="Users"
           value={loading ? '—' : String(summary?.totalUsers ?? 0)}
           hint={`${summary?.activeUsers ?? 0} active · ${summary?.suspendedUsers ?? 0} suspended`}
+          tone="brand"
           icon={<PeopleAltOutlinedIcon sx={iconSize} />}
           tooltip="All platform user accounts across every organization."
         />
@@ -142,6 +167,7 @@ export default function PlatformDashboardPage() {
           label="Workspaces"
           value={loading ? '—' : String(summary?.totalWorkspaces ?? 0)}
           hint={`${summary?.totalProjects ?? 0} projects · ${summary?.totalAssets ?? 0} assets`}
+          tone="brand"
           icon={<WorkspacesOutlinedIcon sx={iconSize} />}
           tooltip="Tenant workspaces with nested projects and media assets."
         />

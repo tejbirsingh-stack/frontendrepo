@@ -38,6 +38,18 @@ import { usePlatformAuth } from '../auth/PlatformAuthContext';
 const SIDEBAR_WIDTH = 264;
 const HEADER_HEIGHT = DASHBOARD_TOP_BAR_HEIGHT;
 
+/** Platform sidebar stays dark in both themes (matches Global Admin light-mode mock). */
+const SIDEBAR = {
+  bg: cv.sidebarSurface,
+  border: 'rgba(255, 255, 255, 0.08)',
+  text: 'rgba(248, 250, 252, 0.78)',
+  textMuted: 'rgba(248, 250, 252, 0.45)',
+  textActive: '#ffffff',
+  hover: 'rgba(255, 255, 255, 0.06)',
+  active: 'rgba(142, 68, 173, 0.92)',
+  activeSoft: 'rgba(210, 140, 255, 0.16)',
+} as const;
+
 type NavItem = { to: string; label: string; end?: boolean; icon: ReactNode; hint?: string };
 type NavSection = { title: string; items: NavItem[] };
 
@@ -192,14 +204,15 @@ export default function PlatformLayout() {
         sx={{
           width: SIDEBAR_WIDTH,
           flexShrink: 0,
-          borderRight: `1px solid ${cv.border}`,
-          background: `linear-gradient(180deg, ${cv.sidebarSurface} 0%, ${cv.bg} 100%)`,
+          borderRight: `1px solid ${SIDEBAR.border}`,
+          background: SIDEBAR.bg,
           display: 'flex',
           flexDirection: 'column',
           position: 'sticky',
           top: 0,
           height: '100vh',
           overflow: 'hidden',
+          color: SIDEBAR.text,
         }}
       >
         <Box
@@ -209,10 +222,10 @@ export default function PlatformLayout() {
             px: 2.25,
             display: 'flex',
             alignItems: 'center',
-            borderBottom: `1px solid ${cv.border}`,
+            borderBottom: `1px solid ${SIDEBAR.border}`,
             flexShrink: 0,
             overflow: 'hidden',
-            background: cv.headerBackground,
+            background: 'transparent',
           }}
         >
           <NoahLogo
@@ -224,37 +237,20 @@ export default function PlatformLayout() {
             align="left"
             ariaLabel="NOAH Platform Console"
             disableCustomBranding
-            sx={{ mb: 0, width: '100%', maxWidth: '100%' }}
+            sx={{
+              mb: 0,
+              width: '100%',
+              maxWidth: '100%',
+              // Sidebar is always dark — keep logo readable in light app theme
+              '& img': {
+                mixBlendMode: 'normal',
+                filter: 'brightness(1.05)',
+              },
+            }}
           />
         </Box>
 
-        <Box sx={{ px: 2.25, pt: 2, pb: 1.5 }}>
-          <Box
-            sx={{
-              px: 1.25,
-              py: 1.1,
-              borderRadius: '6px',
-              border: `1px solid ${cv.purpleChipBorder}`,
-              background: cv.purpleSurface,
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.65rem',
-                color: cv.brandOrchid,
-                fontWeight: 700,
-                letterSpacing: '0.1em',
-              }}
-            >
-              PLATFORM ADMIN
-            </Typography>
-            <Typography sx={{ fontSize: '0.7rem', color: cv.textMuted, mt: 0.35, lineHeight: 1.35 }}>
-            Admin Console for Super Admin & Admins
-            </Typography>
-          </Box>
-        </Box>
-
-        <Box sx={{ flex: 1, px: 1.5, pb: 2, pt: 0, overflow: 'auto' }}>
+        <Box sx={{ flex: 1, px: 1.5, pb: 2, pt: 1.5, overflow: 'auto' }}>
           {NAV_SECTIONS.map((section) => (
             <List
               key={section.title}
@@ -269,7 +265,7 @@ export default function PlatformLayout() {
                     mt: section.title === 'Overview' ? 0 : 1,
                     lineHeight: 1.2,
                     background: 'transparent',
-                    color: cv.textMuted,
+                    color: SIDEBAR.textMuted,
                     fontSize: '0.65rem',
                     fontWeight: 700,
                     letterSpacing: '0.1em',
@@ -294,24 +290,25 @@ export default function PlatformLayout() {
                     to={item.to}
                     end={item.end}
                     sx={{
-                      borderRadius: '6px',
+                      borderRadius: '8px',
                       mb: 0.35,
                       px: 1.25,
                       py: 0.85,
                       gap: 0.5,
                       position: 'relative',
-                      color: cv.textSecondary,
+                      color: SIDEBAR.text,
                       transition: 'background 0.15s ease, color 0.15s ease',
                       '&:hover': {
-                        background: cv.surfaceHover,
-                        color: cv.textPrimary,
+                        background: SIDEBAR.hover,
+                        color: SIDEBAR.textActive,
                       },
                       '&.active': {
-                        background: cv.purpleSelection,
-                        color: cv.textPrimary,
-                        boxShadow: `inset 3px 0 0 ${cv.brandOrchid}`,
+                        background: SIDEBAR.active,
+                        color: SIDEBAR.textActive,
+                        boxShadow: `0 0 0 1px ${SIDEBAR.activeSoft}`,
                         '& .MuiListItemIcon-root': {
-                          color: cv.brandOrchid,
+                          color: SIDEBAR.textActive,
+                          opacity: 1,
                         },
                       },
                       '&:focus-visible': {
@@ -348,11 +345,11 @@ export default function PlatformLayout() {
           sx={{
             px: 2,
             py: 1.75,
-            borderTop: `1px solid ${cv.border}`,
+            borderTop: `1px solid ${SIDEBAR.border}`,
             flexShrink: 0,
           }}
         >
-          <Typography sx={{ fontSize: '0.65rem', color: cv.textMuted, letterSpacing: '0.04em' }}>
+          <Typography sx={{ fontSize: '0.65rem', color: SIDEBAR.textMuted, letterSpacing: '0.04em' }}>
             NOAH Cloud · Global Admin
           </Typography>
         </Box>
@@ -376,10 +373,18 @@ export default function PlatformLayout() {
           }}
         >
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontWeight: 700, fontSize: '1rem', lineHeight: 1.2, letterSpacing: '-0.02em' }}>
-              NOAH Global Admin
-            </Typography>
-            <Typography sx={{ fontSize: '0.75rem', color: cv.textMuted, mt: 0.25 }}>
+            <Typography
+              sx={{
+                fontSize: '0.8125rem',
+                color: cv.textMuted,
+                lineHeight: 1.35,
+                letterSpacing: '-0.01em',
+              }}
+            >
+              <Box component="span" sx={{ color: cv.textSecondary, fontWeight: 600 }}>
+                NOAH Global Admin
+              </Box>
+              {' / '}
               Organizations · users · workspaces · billing · operations
             </Typography>
           </Box>
