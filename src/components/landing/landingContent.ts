@@ -2,6 +2,7 @@ export const DISPLAY_FONT = '"Fraunces", Georgia, "Times New Roman", serif';
 
 export const NAV_LINKS = [
   { href: '#features', label: 'Features' },
+  { href: '#upcycling', label: 'Upcycling' },
   { href: '#plans', label: 'Plans' },
 ] as const;
 
@@ -46,6 +47,54 @@ export const FRICTION = {
     'One library, one version history, one source of truth',
     'Clients review in the player — no extra transfers',
   ],
+} as const;
+
+export const WHY_NOAH = {
+  title: 'Why teams switch to NOAH Cloud',
+  subtitle:
+    'Replace scattered drives with AI search, frame-level review, and org-wide access — so creative work ships faster.',
+  columns: ['Capability', 'Traditional drives', 'NOAH Cloud'] as const,
+  rows: [
+    { capability: 'Search speed', traditional: 'Minutes to hours', noah: 'Instant, AI-powered' },
+    { capability: 'Asset visibility', traditional: 'Masters only', noah: 'Every frame & B-roll' },
+    { capability: 'Feedback', traditional: 'Email & timecodes', noah: 'Direct frame markup' },
+    { capability: 'Team access', traditional: 'Limited / physical', noah: 'Org-wide cloud' },
+  ],
+  ctaPrimary: 'Start free trial',
+  ctaSecondary: 'Book a demo',
+} as const;
+
+/** PDF homepage messaging — compact pictorial section on the landing page. */
+export const UPCYCLING_SECTION = {
+  kicker: 'Introducing the future',
+  title: 'Stop Searching. Start Upcycling.',
+  subtitle: 'Find any frame. Reuse every shoot. Share with control.',
+  flow: [
+    { id: 'chaos', label: 'Chaos', detail: 'Lost drives & buried B-roll' },
+    { id: 'noah', label: 'NOAH', detail: 'One intelligent library' },
+    { id: 'reuse', label: 'Upcycle', detail: 'Search, share, ship again' },
+  ],
+  ai: [
+    { id: 'scene', label: 'Scene Detection', detail: 'Sunset. Street. Instantly.' },
+    { id: 'face', label: 'Facial Recognition', detail: 'Find talent in every clip.' },
+    { id: 'index', label: 'Instant Indexing', detail: 'Metadata on every upload.' },
+  ],
+  story: [
+    { id: 'broll', title: 'Raw B-Roll', detail: 'Every take, kept.' },
+    { id: 'masters', title: 'Master Files', detail: 'Ready to distribute.' },
+    { id: 'assets', title: 'Project Assets', detail: 'One source of truth.' },
+  ],
+  actions: [
+    { id: 'search', title: 'Instant Search' },
+    { id: 'share', title: 'Global Share' },
+    { id: 'access', title: 'Anywhere Access' },
+    { id: 'markup', title: 'Frame Markup' },
+  ],
+  excellence: {
+    stat: '60%',
+    headline: 'Higher efficiency',
+    body: 'Less search waste. More production output.',
+  },
 } as const;
 
 export const TEAM_SIZE_OPTIONS = ['Solo', '2-10', '11-50', '50-100', '101-500', '501+'] as const;

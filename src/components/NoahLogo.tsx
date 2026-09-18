@@ -208,6 +208,19 @@ export default function NoahLogo({
             border: '1px solid rgba(255, 255, 255, 0.15)',
             p: '2px',
             flexShrink: 0,
+            // Keep org marks out of parent `& img { mix-blend-mode: lighten }`
+            // rules used for the default NOAH logo on dark surfaces.
+            isolation: 'isolate',
+            '& img': {
+              mixBlendMode: 'normal !important',
+              filter: 'none !important',
+              width: 'auto !important',
+              height: 'auto !important',
+              maxWidth: '100% !important',
+              maxHeight: '100% !important',
+              objectFit: 'contain !important',
+              transform: 'none !important',
+            },
           }}
         >
           <Box
@@ -217,8 +230,11 @@ export default function NoahLogo({
             sx={{
               maxHeight: '100%',
               maxWidth: '100%',
+              width: 'auto',
+              height: 'auto',
               objectFit: 'contain',
               display: 'block',
+              mixBlendMode: 'normal',
             }}
           />
         </Box>
