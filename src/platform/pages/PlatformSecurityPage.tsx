@@ -33,6 +33,7 @@ import AddIcon from '@mui/icons-material/Add';
 import { PageHeader, Panel } from '../components/PlatformUi';
 import { cv } from '../../theme/cssVars';
 import { fetchGlobalSecuritySettings, updateGlobalSecuritySettings } from '../api/platformApi';
+import { PlatformApiError } from '../api/platformClient';
 
 export default function PlatformSecurityPage() {
   const [loading, setLoading] = useState(true);
@@ -43,6 +44,7 @@ export default function PlatformSecurityPage() {
   const [ssoDomain, setSsoDomain] = useState('');
 
   const [sessionTimeoutDays, setSessionTimeoutDays] = useState(30);
+  const [draftSessionTimeoutDays, setDraftSessionTimeoutDays] = useState(30);
 
   // Platform Admin Security Settings
   const [platformIpRestrictionEnabled, setPlatformIpRestrictionEnabled] = useState(false);
@@ -176,19 +178,33 @@ export default function PlatformSecurityPage() {
     }
   };
 
+  const handleOpenSessionModal = () => {
+    setDraftSessionTimeoutDays(sessionTimeoutDays);
+    setSessionModalOpen(true);
+  };
+
+  const handleCloseSessionModal = () => {
+    setSessionModalOpen(false);
+  };
+
   const handleSaveSession = async () => {
     setSaving(true);
     try {
       const res = await updateGlobalSecuritySettings({
-        sessionTimeoutDays: Number(sessionTimeoutDays),
+        sessionTimeoutDays: Number(draftSessionTimeoutDays),
       });
       if (res?.success) {
+        setSessionTimeoutDays(draftSessionTimeoutDays);
         setSessionModalOpen(false);
-        showToast(`Session timeout updated to ${sessionTimeoutDays} days of inactivity in database.`);
+        showToast(`Session timeout updated to ${draftSessionTimeoutDays} days of inactivity in database.`);
       }
     } catch (err: any) {
       console.error('Error saving session timeout:', err);
-      showToast('Failed to save session timeout.');
+      if (err instanceof PlatformApiError && err.status === 401) {
+        showToast('Platform authentication required. Please sign in again as Platform Admin.');
+      } else {
+        showToast(err?.message || 'Failed to save session timeout.');
+      }
     } finally {
       setSaving(false);
     }
@@ -521,7 +537,7 @@ export default function PlatformSecurityPage() {
               <Button
                 variant="outlined"
                 size="small"
-                onClick={() => setSessionModalOpen(true)}
+                onClick={handleOpenSessionModal}
                 sx={{
                   height: 36,
                   minHeight: 36,
@@ -696,7 +712,7 @@ export default function PlatformSecurityPage() {
       {/* --- Session Timeout Dialog --- */}
       <Dialog
         open={sessionModalOpen}
-        onClose={() => setSessionModalOpen(false)}
+        onClose={handleCloseSessionModal}
         maxWidth="xs"
         fullWidth
         slotProps={{
@@ -722,8 +738,8 @@ export default function PlatformSecurityPage() {
             fullWidth
             size="small"
             label="Inactivity Limit (Days)"
-            value={sessionTimeoutDays}
-            onChange={(e) => setSessionTimeoutDays(Number(e.target.value))}
+            value={draftSessionTimeoutDays}
+            onChange={(e) => setDraftSessionTimeoutDays(Number(e.target.value))}
           >
             <MenuItem value={7}>7 days of inactivity</MenuItem>
             <MenuItem value={14}>14 days of inactivity</MenuItem>
@@ -733,7 +749,7 @@ export default function PlatformSecurityPage() {
           </TextField>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setSessionModalOpen(false)} sx={{ color: cv.textSecondary, textTransform: 'none' }}>
+          <Button onClick={handleCloseSessionModal} sx={{ color: cv.textSecondary, textTransform: 'none' }}>
             Cancel
           </Button>
           <Button

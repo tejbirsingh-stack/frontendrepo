@@ -44,7 +44,14 @@ export async function platformRequest<T>(
 
   if (!skipAuth) {
     const token = readPlatformToken();
-    if (token) requestHeaders.set('Authorization', `Bearer ${token}`);
+    if (!token) {
+      throw new PlatformApiError(
+        'Platform authentication required. Please sign in again.',
+        401,
+        { error: 'Unauthorized', message: 'Platform authentication required. Please sign in again.' },
+      );
+    }
+    requestHeaders.set('Authorization', `Bearer ${token}`);
   }
 
   const response = await fetch(resolveUrl(path), {

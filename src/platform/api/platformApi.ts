@@ -541,9 +541,7 @@ export type GlobalSecuritySettings = {
 };
 
 export async function fetchGlobalSecuritySettings() {
-  return platformRequest<{ success: boolean; settings: GlobalSecuritySettings }>('/platform/security', {
-    skipAuth: true,
-  });
+  return platformRequest<{ success: boolean; settings: GlobalSecuritySettings }>('/platform/security');
 }
 
 export async function updateGlobalSecuritySettings(body: Partial<GlobalSecuritySettings>) {
