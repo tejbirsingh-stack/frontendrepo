@@ -6,7 +6,7 @@ import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import AudioFileOutlinedIcon from '@mui/icons-material/AudioFileOutlined';
 import RestoreFromTrashOutlinedIcon from '@mui/icons-material/RestoreFromTrashOutlined';
 import type { MediaItem, MediaType } from '../../data/mockMedia';
-import { formatTrashDaysRemaining } from '../../utils/trashRetention';
+
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import TruncatedText from '../TruncatedText';
 
@@ -42,7 +42,7 @@ export default function TrashMediaListRow({
   onRestore,
 }: TrashMediaListRowProps) {
   const TypeIcon = typeIcons[item.type];
-  const daysLabel = formatTrashDaysRemaining(deletedAt);
+
   const deletedLabel = formatRelativeTime(new Date(deletedAt).getTime());
 
   return (
@@ -97,17 +97,7 @@ export default function TrashMediaListRow({
         </Typography>
       </Box>
 
-      <Typography
-        variant="caption"
-        sx={{
-          color: cv.textSecondary,
-          fontWeight: 600,
-          whiteSpace: 'nowrap',
-          display: { xs: 'none', sm: 'block' },
-        }}
-      >
-        {daysLabel}
-      </Typography>
+
 
       <Tooltip title="Restore to library" arrow placement="top">
         <Button

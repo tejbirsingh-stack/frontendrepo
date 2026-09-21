@@ -14,7 +14,7 @@ import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import RestoreFromTrashOutlinedIcon from '@mui/icons-material/RestoreFromTrashOutlined';
 import type { MediaItem, MediaType } from '../../data/mockMedia';
 import { folderAccentBackground, projectAccentBackground, resolveLibraryFolderColor } from '../../utils/folderColorStyle';
-import { formatTrashDaysRemaining } from '../../utils/trashRetention';
+
 import { formatRelativeTime } from '../../utils/formatRelativeTime';
 import TruncatedText from '../TruncatedText';
 import { formatFolderItemCount, getFolderChildCount } from '../../utils/folderItemCount';
@@ -162,7 +162,7 @@ export default function TrashMediaItemCard({
 }: TrashMediaItemCardProps) {
   const { mediaItems, trashedIds } = useDashboard();
   const config = typeConfig[item.type];
-  const daysLabel = formatTrashDaysRemaining(deletedAt);
+
   const deletedLabel = formatRelativeTime(new Date(deletedAt).getTime());
   const folderChildCount =
     item.type === 'folder'
@@ -207,23 +207,7 @@ export default function TrashMediaItemCard({
           </Tooltip>
         </Box>
 
-        <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
-          <Box
-            sx={{
-              px: 1,
-              py: 0.35,
-              borderRadius: '999px',
-              ...thumbnailOverlayChipStyles,
-            }}
-          >
-            <Typography
-              variant="caption"
-              sx={{ fontSize: '0.6875rem', fontWeight: 600, color: cv.textInverse }}
-            >
-              {daysLabel}
-            </Typography>
-          </Box>
-        </Box>
+
       </Box>
 
       <Box sx={{ p: 1.5 }}>
