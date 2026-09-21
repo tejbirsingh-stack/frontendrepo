@@ -14,7 +14,6 @@ import SettingsSidebar from '../components/settings/SettingsSidebar';
 import SettingsSidebarDrawer from '../components/settings/SettingsSidebarDrawer';
 import Header from '../components/dashboard/Header';
 import MediaUploadDetailsModal from '../components/dashboard/MediaUploadDetailsModal';
-import FloatingUploadProgressWidget from '../components/dashboard/FloatingUploadProgressWidget';
 import { SIDEBAR_DESKTOP_BREAKPOINT } from '../constants/layout';
 import { DashboardProvider, useDashboard } from '../context/DashboardContext';
 import { useUploadManager } from '../context/UploadManagerContext';
@@ -33,9 +32,11 @@ function DashboardLayoutContent() {
   const {
     pendingMediaUpload,
     pendingMediaUploadCount,
+    pendingMediaQueue,
     activeWorkspaceId,
     cancelMediaUpload,
     popPendingMediaUpload,
+    selectPendingMediaUpload,
   } = useDashboard();
 
   useEffect(() => {
@@ -175,12 +176,12 @@ function DashboardLayoutContent() {
       <MediaUploadDetailsModal
         open={Boolean(pendingMediaUpload)}
         pendingUpload={pendingMediaUpload}
+        pendingUploads={pendingMediaQueue}
         queueCount={pendingMediaUploadCount}
+        onSelectUpload={selectPendingMediaUpload}
         onClose={cancelMediaUpload}
         onUpload={handleCompleteMediaUpload}
       />
-
-      <FloatingUploadProgressWidget />
     </>
   );
 }

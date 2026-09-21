@@ -123,8 +123,10 @@ interface DashboardContextValue {
   updateSidebarFolderColor: (folderId: string, color: string) => Promise<void>;
   updateMediaFolderColor: (mediaId: string, color: string) => Promise<void>;
   uploadMediaFiles: (files: File[], options?: MediaUploadOptions) => number;
+  pendingMediaQueue: PendingMediaUpload[];
   pendingMediaUpload: PendingMediaUpload | null;
   pendingMediaUploadCount: number;
+  selectPendingMediaUpload: (id: string) => void;
   completeMediaUpload: (
     details: MediaUploadDetails,
     onProgress?: (progress: { loaded: number; total: number }) => void,
@@ -804,10 +806,18 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const [tagScopeColors, setTagScopeColors] = useState<TagScopeColors>(() => loadTagScopeColors());
   const [pendingMediaQueue, setPendingMediaQueue] = useState<PendingMediaUpload[]>([]);
+  const [activePendingMediaId, setActivePendingMediaId] = useState<string | null>(null);
   const pendingMediaQueueRef = useRef(pendingMediaQueue);
   pendingMediaQueueRef.current = pendingMediaQueue;
+  const activePendingMediaIdRef = useRef(activePendingMediaId);
+  activePendingMediaIdRef.current = activePendingMediaId;
 
-  const pendingMediaUpload = pendingMediaQueue[0] ?? null;
+  const pendingMediaUpload =
+    (activePendingMediaId
+      ? pendingMediaQueue.find((upload) => upload.id === activePendingMediaId)
+      : null) ??
+    pendingMediaQueue[0] ??
+    null;
   const pendingMediaUploadCount = pendingMediaQueue.length;
   const pendingVideoUpload = pendingMediaUpload;
   const pendingVideoUploadCount = pendingMediaUploadCount;
@@ -2374,6 +2384,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         });
 
         setPendingMediaQueue((prev) => [...prev, ...stagedUploads]);
+        setActivePendingMediaId((current) => current ?? stagedUploads[0]?.id ?? null);
       }).catch(() => {
         const parentFolderId = options?.parentFolderId ?? null;
         const linkedProjectId = options?.linkedProjectId ?? null;
@@ -2394,6 +2405,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           ];
         });
         setPendingMediaQueue((prev) => [...prev, ...stagedUploads]);
+        setActivePendingMediaId((current) => current ?? stagedUploads[0]?.id ?? null);
       });
 
       return uploadable.length;
@@ -2401,20 +2413,41 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const selectPendingMediaUpload = useCallback((id: string) => {
+    const exists = pendingMediaQueueRef.current.some((upload) => upload.id === id);
+    if (!exists) return;
+    setActivePendingMediaId(id);
+  }, []);
+
   const cancelMediaUpload = useCallback(() => {
     setPendingMediaQueue((prev) => {
       prev.forEach((upload) => URL.revokeObjectURL(upload.previewSrc));
       return [];
     });
+    setActivePendingMediaId(null);
   }, []);
 
   const popPendingMediaUpload = useCallback(() => {
-    setPendingMediaQueue((prev) => {
-      if (prev[0]?.previewSrc) {
-        URL.revokeObjectURL(prev[0].previewSrc);
-      }
-      return prev.slice(1);
-    });
+    const prev = pendingMediaQueueRef.current;
+    const idToRemove = activePendingMediaIdRef.current ?? prev[0]?.id;
+    if (!idToRemove) {
+      setPendingMediaQueue([]);
+      setActivePendingMediaId(null);
+      return;
+    }
+
+    const index = prev.findIndex((upload) => upload.id === idToRemove);
+    if (index < 0) return;
+
+    const removed = prev[index];
+    if (removed?.previewSrc) {
+      URL.revokeObjectURL(removed.previewSrc);
+    }
+
+    const next = [...prev.slice(0, index), ...prev.slice(index + 1)];
+    const nextActive = next[Math.min(index, Math.max(next.length - 1, 0))]?.id ?? null;
+    setPendingMediaQueue(next);
+    setActivePendingMediaId(nextActive);
   }, []);
 
   const completeMediaUpload = useCallback(
@@ -2422,7 +2455,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       details: MediaUploadDetails,
       onProgress?: (progress: { loaded: number; total: number }) => void,
     ) => {
-      const current = pendingMediaQueueRef.current[0];
+      const queue = pendingMediaQueueRef.current;
+      const activeId = activePendingMediaIdRef.current;
+      const current =
+        (activeId ? queue.find((upload) => upload.id === activeId) : null) ?? queue[0];
       if (!current) return;
 
       const trimmedTitle = details.title.trim();
@@ -2573,8 +2609,19 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         URL.revokeObjectURL(current.previewSrc);
       }
 
-      setPendingMediaQueue((prev) => prev.slice(1));
-      
+      const queueAfterUpload = pendingMediaQueueRef.current.filter(
+        (upload) => upload.id !== current.id,
+      );
+      const removedIndex = pendingMediaQueueRef.current.findIndex(
+        (upload) => upload.id === current.id,
+      );
+      const nextActive =
+        queueAfterUpload[
+          Math.min(Math.max(removedIndex, 0), Math.max(queueAfterUpload.length - 1, 0))
+        ]?.id ?? null;
+      setPendingMediaQueue(queueAfterUpload);
+      setActivePendingMediaId(nextActive);
+
       return uploadedAssetDto?.folderId;
     },
     [activeWorkspaceId, fetchWorkspaceData],
@@ -2934,8 +2981,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       updateSidebarFolderColor,
       updateMediaFolderColor,
       uploadMediaFiles,
+      pendingMediaQueue,
       pendingMediaUpload,
       pendingMediaUploadCount,
+      selectPendingMediaUpload,
       completeMediaUpload,
       cancelMediaUpload,
       popPendingMediaUpload,
@@ -3026,10 +3075,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       updateSidebarFolderColor,
       updateMediaFolderColor,
       uploadMediaFiles,
+      pendingMediaQueue,
       pendingMediaUpload,
       pendingMediaUploadCount,
+      selectPendingMediaUpload,
       completeMediaUpload,
       cancelMediaUpload,
+      popPendingMediaUpload,
       pendingVideoUpload,
       pendingVideoUploadCount,
       completeVideoUpload,
