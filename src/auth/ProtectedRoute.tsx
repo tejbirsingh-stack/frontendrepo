@@ -2,6 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { getSkeletonForPath } from '../components/loading/RouteLoadingFallback';
 import { useAuth } from './AuthContext';
 import PlanExpiredModal from '../components/common/PlanExpiredModal';
+import FloatingUploadProgressWidget from '../components/dashboard/FloatingUploadProgressWidget';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isInitializing } = useAuth();
@@ -19,6 +20,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     <>
       <PlanExpiredModal />
       {children}
+      <FloatingUploadProgressWidget />
     </>
   );
 }

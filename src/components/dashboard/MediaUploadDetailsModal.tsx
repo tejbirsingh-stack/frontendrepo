@@ -31,6 +31,7 @@ import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded';
 import KeyboardArrowUpRoundedIcon from '@mui/icons-material/KeyboardArrowUpRounded';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
+import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import { dropdownMenuPaperSx, dropdownMenuProps } from '../../constants/dropdownMenu';
 import CreateTagModal from './CreateTagModal';
 import NewFolderModal from './NewFolderModal';
@@ -52,12 +53,25 @@ import AiFeatureCheckboxGroup, {
 interface MediaUploadDetailsModalProps {
   open: boolean;
   pendingUpload: PendingMediaUpload | null;
+  pendingUploads?: PendingMediaUpload[];
   queueCount: number;
+  onSelectUpload?: (id: string) => void;
   onClose: () => void;
   onUpload: (
     details: MediaUploadDetails,
     onProgress?: (progress: { loaded: number; total: number }) => void,
   ) => Promise<void> | void;
+}
+
+interface UploadFormDraft {
+  title: string;
+  summary: string;
+  thumbnail: string | null;
+  duration: string | undefined;
+  selectedTags: ManagedTag[];
+  folderId: string;
+  visibility: 'public' | 'private';
+  aiFeatureSelection: Record<AiAnalyzeFeature, boolean>;
 }
 
 const mediaTypeCopy: Record<
@@ -399,7 +413,9 @@ function TagPickerDropdown({
 export default function MediaUploadDetailsModal({
   open,
   pendingUpload,
+  pendingUploads = [],
   queueCount,
+  onSelectUpload,
   onClose,
   onUpload,
 }: MediaUploadDetailsModalProps) {
@@ -414,6 +430,8 @@ export default function MediaUploadDetailsModal({
     managedTags,
   } = useDashboard();
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
+  const draftsRef = useRef<Map<string, UploadFormDraft>>(new Map());
+  const formSnapshotRef = useRef<UploadFormDraft | null>(null);
 
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
@@ -427,10 +445,22 @@ export default function MediaUploadDetailsModal({
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [createTagOpen, setCreateTagOpen] = useState(false);
+  const [stripThumbnails, setStripThumbnails] = useState<Record<string, string>>({});
   const aiEntitled = useAiEntitled();
   const [aiFeatureSelection, setAiFeatureSelection] = useState<Record<AiAnalyzeFeature, boolean>>(() =>
     defaultSelection('video'),
   );
+
+  formSnapshotRef.current = {
+    title,
+    summary,
+    thumbnail,
+    duration,
+    selectedTags,
+    folderId,
+    visibility,
+    aiFeatureSelection,
+  };
 
   const assignableTags = useMemo(
     () => getAssignableTags(activeWorkspace.id),
@@ -451,9 +481,74 @@ export default function MediaUploadDetailsModal({
   const isImage = mediaType === 'image';
   const isAudio = mediaType === 'audio';
   const isDocument = mediaType === 'document';
+  const showQueueStrip = pendingUploads.length > 1;
+
+  useEffect(() => {
+    if (!open) {
+      draftsRef.current.clear();
+      setStripThumbnails({});
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !showQueueStrip) return;
+
+    let cancelled = false;
+    const pendingIds = new Set(pendingUploads.map((item) => item.id));
+
+    setStripThumbnails((prev) => {
+      const next: Record<string, string> = {};
+      Object.entries(prev).forEach(([id, src]) => {
+        if (pendingIds.has(id)) next[id] = src;
+      });
+      return next;
+    });
+
+    pendingUploads.forEach((item) => {
+      if (item.type === 'image') {
+        setStripThumbnails((prev) =>
+          prev[item.id] ? prev : { ...prev, [item.id]: item.previewSrc },
+        );
+        return;
+      }
+
+      if (item.type !== 'video') return;
+
+      captureVideoThumbnail(item.previewSrc, { seekSeconds: 1 })
+        .then((result) => {
+          if (cancelled) return;
+          setStripThumbnails((prev) =>
+            prev[item.id] ? prev : { ...prev, [item.id]: result.thumbnail },
+          );
+        })
+        .catch(() => {
+          /* strip falls back to type icon */
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, showQueueStrip, pendingUploads]);
 
   useEffect(() => {
     if (!open || !pendingUpload) return;
+
+    const existingDraft = draftsRef.current.get(pendingUpload.id);
+    if (existingDraft) {
+      setTitle(existingDraft.title);
+      setSummary(existingDraft.summary);
+      setThumbnail(existingDraft.thumbnail);
+      setDuration(existingDraft.duration);
+      setSelectedTags(existingDraft.selectedTags);
+      setFolderId(existingDraft.folderId);
+      setVisibility(existingDraft.visibility);
+      setAiFeatureSelection(existingDraft.aiFeatureSelection);
+      setIsUploading(false);
+      setUploadProgress(null);
+      setIsGeneratingThumbnail(false);
+      return;
+    }
 
     setTitle(pendingUpload.defaultTitle);
     setSummary('');
@@ -475,6 +570,9 @@ export default function MediaUploadDetailsModal({
           if (cancelled) return;
           setThumbnail(result.thumbnail);
           setDuration(result.duration);
+          setStripThumbnails((prev) =>
+            prev[pendingUpload.id] ? prev : { ...prev, [pendingUpload.id]: result.thumbnail },
+          );
         })
         .catch(() => {
           if (cancelled) return;
@@ -489,6 +587,7 @@ export default function MediaUploadDetailsModal({
         .then((dataUrl) => {
           if (cancelled) return;
           setThumbnail(dataUrl);
+          setStripThumbnails((prev) => ({ ...prev, [pendingUpload.id]: dataUrl }));
         })
         .catch(() => {
           if (cancelled) return;
@@ -519,6 +618,22 @@ export default function MediaUploadDetailsModal({
       cancelled = true;
     };
   }, [open, pendingUpload]);
+
+  const handleSelectQueuedUpload = (id: string) => {
+    if (!pendingUpload || !onSelectUpload || id === pendingUpload.id || isUploading) return;
+    const snapshot = formSnapshotRef.current;
+    if (snapshot) {
+      draftsRef.current.set(pendingUpload.id, snapshot);
+    }
+    onSelectUpload(id);
+  };
+
+  useEffect(() => {
+    if (!pendingUpload?.id || !thumbnail) return;
+    setStripThumbnails((prev) =>
+      prev[pendingUpload.id] === thumbnail ? prev : { ...prev, [pendingUpload.id]: thumbnail },
+    );
+  }, [pendingUpload?.id, thumbnail]);
 
   const handleAutoCreateThumbnail = async () => {
     if (!pendingUpload || !isVideo) return;
@@ -598,6 +713,9 @@ export default function MediaUploadDetailsModal({
     setIsUploading(true);
     try {
       const trimmedSummary = summary.trim();
+      if (pendingUpload) {
+        draftsRef.current.delete(pendingUpload.id);
+      }
       await onUpload({
         title: title.trim(),
         ...(trimmedSummary ? { summary: trimmedSummary } : {}),
@@ -651,6 +769,134 @@ export default function MediaUploadDetailsModal({
       </DialogTitle>
 
       <DialogContent sx={{ pt: '8px !important' }}>
+        {showQueueStrip ? (
+          <Box sx={{ mb: 2.5 }}>
+            <Typography sx={{ ...fieldLabelSx, mb: 1 }}>
+              Selected files
+            </Typography>
+            <Box
+              sx={{
+                display: 'flex',
+                gap: 1.25,
+                overflowX: 'auto',
+                pb: 0.5,
+                mx: -0.5,
+                px: 0.5,
+                '&::-webkit-scrollbar': { height: 6 },
+                '&::-webkit-scrollbar-thumb': {
+                  backgroundColor: 'var(--noah-border)',
+                  borderRadius: 999,
+                },
+              }}
+            >
+              {pendingUploads.map((item, index) => {
+                const isActive = item.id === pendingUpload?.id;
+                const stripThumb = stripThumbnails[item.id];
+                return (
+                  <Tooltip key={item.id} title={item.defaultTitle} arrow>
+                    <Box
+                      component="button"
+                      type="button"
+                      onClick={() => handleSelectQueuedUpload(item.id)}
+                      disabled={isUploading}
+                      aria-label={`Select ${item.defaultTitle}`}
+                      aria-pressed={isActive}
+                      sx={{
+                        flex: '0 0 auto',
+                        width: 88,
+                        p: 0,
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: isUploading ? 'default' : 'pointer',
+                        opacity: isUploading && !isActive ? 0.55 : 1,
+                        textAlign: 'left',
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          position: 'relative',
+                          width: 88,
+                          height: 56,
+                          borderRadius: '10px',
+                          overflow: 'hidden',
+                          border: isActive
+                            ? `2px solid ${cv.brandPurple}`
+                            : '1px solid var(--noah-border)',
+                          backgroundColor: 'var(--noah-surface-elevated, rgba(255,255,255,0.04))',
+                          boxShadow: isActive ? `0 0 0 2px ${cv.brandPurpleLight}` : 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'border-color 120ms ease, box-shadow 120ms ease',
+                        }}
+                      >
+                        {stripThumb ? (
+                          <Box
+                            component="img"
+                            src={stripThumb}
+                            alt=""
+                            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : item.type === 'audio' ? (
+                          <GraphicEqIcon sx={{ fontSize: 22, color: cv.textMuted }} />
+                        ) : item.type === 'document' ? (
+                          <InsertDriveFileOutlinedIcon sx={{ fontSize: 22, color: cv.textMuted }} />
+                        ) : (
+                          <Box
+                            sx={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: '50%',
+                              border: `2px solid ${cv.textMuted}`,
+                              borderTopColor: 'transparent',
+                              animation: 'spin 0.8s linear infinite',
+                              '@keyframes spin': {
+                                to: { transform: 'rotate(360deg)' },
+                              },
+                            }}
+                          />
+                        )}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            top: 4,
+                            left: 4,
+                            minWidth: 18,
+                            height: 18,
+                            px: 0.5,
+                            borderRadius: '999px',
+                            backgroundColor: 'rgba(0,0,0,0.65)',
+                            color: '#fff',
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            lineHeight: 1,
+                          }}
+                        >
+                          {index + 1}
+                        </Box>
+                      </Box>
+                      <Typography
+                        noWrap
+                        sx={{
+                          mt: 0.5,
+                          fontSize: '0.7rem',
+                          color: isActive ? cv.textPrimary : cv.textMuted,
+                          fontWeight: isActive ? 600 : 500,
+                        }}
+                      >
+                        {item.defaultTitle}
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                );
+              })}
+            </Box>
+          </Box>
+        ) : null}
+
         <Box
           sx={{
             display: 'grid',
